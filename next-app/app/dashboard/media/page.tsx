@@ -18,7 +18,7 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
             id: item.Id,
             title: item.Name,
             name: item.Name,
-            poster_path: item.ImageTags?.Primary ? `/api/media/image/${item.Id}?type=Primary&maxHeight=400&maxWidth=267&quality=90` : null,
+            poster_path: item.ProviderIds?.Tmdb ? `https://image.tmdb.org/t/p/w500${item.ProviderIds.Tmdb}.jpg` : (item.ImageTags?.Primary ? `/api/media/image/${item.Id}?type=Primary&maxHeight=400&maxWidth=267&quality=90` : null),
             media_type: item.Type === 'Movie' ? 'movie' : 'tv',
             overview: item.Overview,
             emby_id: item.Id,
