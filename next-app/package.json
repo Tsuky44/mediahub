@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NODE_OPTIONS='--openssl-legacy-provider' next dev",
+    "dev": "NODE_OPTIONS='--openssl-legacy-provider' next dev -p ${PORT:-3000}",
     "build": "NODE_OPTIONS='--openssl-legacy-provider' next build",
-    "start": "NODE_OPTIONS='--openssl-legacy-provider' next start",
+    "start": "NODE_OPTIONS='--openssl-legacy-provider' next start -p ${PORT:-3000}",
     "lint": "eslint"
   },
   "dependencies": {
