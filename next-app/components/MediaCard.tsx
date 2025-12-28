@@ -26,10 +26,10 @@ export function MediaCard({ item }: { item: MediaItem }) {
 
   let posterUrl = '/placeholder.png'
   if (item.poster_path) {
-      if (item.poster_path.startsWith('http')) {
+      if (item.poster_path.startsWith('http') || item.poster_path.startsWith('/api')) {
           posterUrl = item.poster_path
       } else {
-          posterUrl = `https://image.tmdb.org/t/p/w500${item.poster_path}`
+          posterUrl = `https://image.tmdb.org/t/p/w500${item.poster_path.startsWith('/') ? '' : '/'}${item.poster_path}`
       }
   }
 

@@ -169,6 +169,28 @@ export class TmdbService {
     }
   }
 
+  private posterPathCache = new Map<string, string>()
+
+  async getPosterPath(id: number, type: 'movie' | 'tv') {
+    const cacheKey = `${type}-${id}`
+    if (this.posterPathCache.has(cacheKey)) {
+        return this.posterPathCache.get(cacheKey)
+    }
+
+    try {
+        const client = await this.getClient()
+        if (!client) return null
+        const response = await client.get(`/${type}/${id}`)
+        const path = response.data.poster_path
+        if (path) {
+            this.posterPathCache.set(cacheKey, path)
+        }
+        return path
+    } catch (e) {
+        return null
+    }
+  }
+
   async getDetails(id: number, type: 'movie' | 'tv') {
     const client = await this.getClient()
     if (!client) return null
