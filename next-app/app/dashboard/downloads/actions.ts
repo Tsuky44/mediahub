@@ -1,0 +1,83 @@
+'use server'
+
+import { qbittorrentService } from '@/lib/services/qbittorrent'
+import { smbService } from '@/lib/services/smb'
+import { revalidatePath } from 'next/cache'
+
+export async function getTorrents(filter: string = 'all') {
+  try {
+    return await qbittorrentService.getTorrents(filter)
+  } catch (e) {
+    console.error('Failed to get torrents', e)
+    return []
+  }
+}
+
+export async function addTorrent(formData: FormData) {
+  try {
+    const urls = formData.get('urls') as string | null
+    const files = formData.getAll('torrents') as File[]
+    
+    // Check if we have either urls or files
+    if (!urls && (!files || files.length === 0)) {
+        return { success: false, error: 'No torrents provided' }
+    }
+    
+    // Filter out empty files if any (sometimes empty input sends empty file)
+    const validFiles = files.filter(f => f.size > 0)
+
+    await qbittorrentService.addTorrent(urls, validFiles)
+    revalidatePath('/dashboard/downloads')
+    return { success: true }
+  } catch (e) {
+    console.error('Failed to add torrent', e)
+    return { success: false, error: 'Failed to add torrent' }
+  }
+}
+
+export async function deleteTorrents(hashes: string[], deleteFiles: boolean) {
+  try {
+    await qbittorrentService.deleteTorrents(hashes, deleteFiles)
+    revalidatePath('/dashboard/downloads')
+    return { success: true }
+  } catch (e) {
+    console.error('Failed to delete torrents', e)
+    return { success: false, error: 'Failed to delete torrents' }
+  }
+}
+
+export async function pauseTorrents(hashes: string[]) {
+  try {
+    await qbittorrentService.pauseTorrents(hashes)
+    revalidatePath('/dashboard/downloads')
+    return { success: true }
+  } catch (e) {
+    console.error('Failed to pause torrents', e)
+    return { success: false, error: 'Failed to pause torrents' }
+  }
+}
+
+export async function resumeTorrents(hashes: string[]) {
+  try {
+    await qbittorrentService.resumeTorrents(hashes)
+    revalidatePath('/dashboard/downloads')
+    return { success: true }
+  } catch (e) {
+    console.error('Failed to resume torrents', e)
+    return { success: false, error: 'Failed to resume torrents' }
+  }
+}
+
+export async function deleteSmbPath(path: string) {
+  try {
+    await smbService.delete(path)
+    revalidatePath('/dashboard/downloads')
+    return { success: true }
+  } catch (e: any) {
+    console.error('Failed to delete SMB path', e)
+    return { 
+      success: false, 
+      error: e.message || 'Erreur lors de la suppression' 
+    }
+  }
+}
