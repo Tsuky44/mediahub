@@ -44,13 +44,13 @@ export const authOptions: NextAuthOptions = {
                     update: {
                         embyUserId: embyUser.User.Id,
                         name: embyUser.User.Name,
-                        image: embyUser.User.PrimaryImageTag ? `${process.env.EMBY_URL}/Items/${embyUser.User.Id}/Images/Primary` : null
+                        image: embyUser.User.PrimaryImageTag ? `/api/media/image/${embyUser.User.Id}?type=Primary` : null
                     },
                     create: {
                         email,
                         name: embyUser.User.Name,
                         embyUserId: embyUser.User.Id,
-                        image: embyUser.User.PrimaryImageTag ? `${process.env.EMBY_URL}/Items/${embyUser.User.Id}/Images/Primary` : null,
+                        image: embyUser.User.PrimaryImageTag ? `/api/media/image/${embyUser.User.Id}?type=Primary` : null,
                         role: embyUser.User.Policy?.IsAdministrator ? 'admin' : 'user'
                     }
                 })
