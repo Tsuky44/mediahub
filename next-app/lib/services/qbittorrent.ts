@@ -1,6 +1,20 @@
 import axios, { AxiosInstance } from 'axios'
 import { getSetting } from '@/lib/settings'
 
+export interface Torrent {
+  hash: string
+  name: string
+  state: string
+  progress: number
+  dlspeed: number
+  upspeed: number
+  eta: number
+  size: number
+  num_seeds: number
+  num_leechs: number
+  added_on: number
+}
+
 export class QBittorrentService {
   private client: AxiosInstance | null = null
   private baseUrl: string | null = null
@@ -86,7 +100,7 @@ export class QBittorrentService {
   }
 
   async getTorrents(filter: string = 'all') {
-    return this.request({
+    return this.request<Torrent[]>({
         method: 'GET',
         url: '/api/v2/torrents/info',
         params: { filter }

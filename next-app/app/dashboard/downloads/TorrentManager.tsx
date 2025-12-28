@@ -2,22 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { getTorrents, addTorrent, deleteTorrents, pauseTorrents, resumeTorrents } from './actions'
+import { Torrent } from '@/lib/services/qbittorrent'
 import { Plus, Trash2, Pause, Play, Download, Upload, Clock, FileDown, HardDrive, Search } from 'lucide-react'
 import clsx from 'clsx'
-
-interface Torrent {
-    hash: string
-    name: string
-    state: string
-    progress: number
-    dlspeed: number
-    upspeed: number
-    eta: number
-    size: number
-    num_seeds: number
-    num_leechs: number
-    added_on: number
-}
 
 export function TorrentManager() {
     const [torrents, setTorrents] = useState<Torrent[]>([])

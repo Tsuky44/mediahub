@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import LoginForm from './LoginForm'
+import { Suspense } from 'react'
 
 export const metadata: Metadata = {
   title: 'Connexion - MediaHub',
@@ -17,7 +18,13 @@ export default function LoginPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-gray-800 px-4 py-8 shadow sm:rounded-lg sm:px-10 border border-gray-700">
-          <LoginForm />
+          <Suspense fallback={
+            <div className="flex justify-center items-center py-10">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            </div>
+          }>
+            <LoginForm />
+          </Suspense>
         </div>
       </div>
     </div>

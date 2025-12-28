@@ -1,10 +1,10 @@
 'use server'
 
-import { qbittorrentService } from '@/lib/services/qbittorrent'
+import { qbittorrentService, Torrent } from '@/lib/services/qbittorrent'
 import { smbService } from '@/lib/services/smb'
 import { revalidatePath } from 'next/cache'
 
-export async function getTorrents(filter: string = 'all') {
+export async function getTorrents(filter: string = 'all'): Promise<Torrent[]> {
   try {
     return await qbittorrentService.getTorrents(filter)
   } catch (e) {
