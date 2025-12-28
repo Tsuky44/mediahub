@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "ssh2-sftp-client": "^12.0.1"
+  },
+  "devDependencies": {
+    "@types/ssh2-sftp-client": "^9.0.6",
+    "@types/uuid": "^10.0.0"
+  }
+}
