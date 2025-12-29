@@ -3,10 +3,10 @@ module.exports = {
     {
       name: 'emby-next-app',
       script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3000',
+      args: 'start -p 3008',
       cwd: './next-app',
-      instances: 'max',
-      exec_mode: 'cluster',
+      instances: 1,
+      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         NODE_OPTIONS: '--openssl-legacy-provider',
