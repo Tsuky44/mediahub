@@ -48,7 +48,7 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
     
     setIsDeleting(requestId)
     try {
-      const res = await fetch(`/api/media/${tmdbId}/manage?action=request&targetId=${requestId}`, {
+      const res = await fetch(`/api/media/${tmdbId}/manage?action=request&targetId=${requestId}&type=${mediaType}`, {
         method: 'DELETE'
       })
       if (res.ok) {
@@ -67,7 +67,7 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
     
     setIsDeleting(mediaId)
     try {
-      const res = await fetch(`/api/media/${tmdbId}/manage?action=media&targetId=${mediaId}`, {
+      const res = await fetch(`/api/media/${tmdbId}/manage?action=media&targetId=${mediaId}&type=${mediaType}`, {
         method: 'DELETE'
       })
       if (res.ok) {

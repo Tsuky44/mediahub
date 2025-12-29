@@ -2,10 +2,29 @@
 
 import { tmdbService } from '@/lib/services/tmdb'
 import { jellyseerrService } from '@/lib/services/jellyseerr'
+import { getWatchLaterList, isInWatchLater } from '../media/watch-later-actions'
 
-export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv', search?: string, filters?: any) {
+export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'watch-later', search?: string, filters?: any) {
   try {
     let data;
+    if (type === 'watch-later') {
+        const watchLaterItems = await getWatchLaterList()
+        // Format for MediaCard
+        const results = await Promise.all(watchLaterItems.map(async (item) => {
+            const availability = await jellyseerrService.getMediaAvailability(parseInt(item.tmdbId || item.mediaId), item.mediaType as 'movie' | 'tv')
+            return {
+                id: item.mediaId,
+                tmdbId: item.tmdbId,
+                title: item.title,
+                poster_path: item.posterPath,
+                media_type: item.mediaType,
+                media_status: availability,
+                isWatchLater: true
+            }
+        }))
+        return { results, total_pages: 1, total_results: results.length }
+    }
+
     if (search) {
       data = await tmdbService.searchMulti(search, page)
     } else if (filters && Object.keys(filters).length > 0) {
@@ -29,7 +48,8 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv', sea
             
             try {
                 const availability = await jellyseerrService.getMediaAvailability(item.id, mediaType)
-                return { ...item, media_status: availability }
+                const isWatchLater = await isInWatchLater(item.id.toString(), mediaType)
+                return { ...item, media_status: availability, isWatchLater }
             } catch (e) {
                 return item
             }

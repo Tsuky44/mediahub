@@ -8,11 +8,13 @@ import { Loader2 } from 'lucide-react'
 
 interface InfiniteEmbyListProps {
   initialItems: any[]
-  type: 'movie' | 'tv'
+  type: 'movie' | 'tv' | 'all'
   query?: string
+  favoritesOnly?: boolean
+  watchLaterOnly?: boolean
 }
 
-export function InfiniteEmbyList({ initialItems, type, query }: InfiniteEmbyListProps) {
+export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, watchLaterOnly }: InfiniteEmbyListProps) {
   const [items, setItems] = useState(initialItems)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
@@ -26,14 +28,14 @@ export function InfiniteEmbyList({ initialItems, type, query }: InfiniteEmbyList
     setItems(initialItems)
     setPage(1)
     setHasMore(true)
-  }, [initialItems, type, query])
+  }, [initialItems, type, query, favoritesOnly, watchLaterOnly])
 
   const loadMore = async () => {
     if (loading || !hasMore) return
     
     setLoading(true)
     const nextPage = page + 1
-    const data = await fetchEmbyMedia(nextPage, type, query)
+    const data = await fetchEmbyMedia(nextPage, type, query, favoritesOnly, watchLaterOnly)
     
     if (data.results.length > 0) {
         setItems(prev => {
@@ -60,11 +62,11 @@ export function InfiniteEmbyList({ initialItems, type, query }: InfiniteEmbyList
 
   return (
     <div className="space-y-6">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {items.map((item) => (
-                <MediaCard key={item.id} item={item} />
-            ))}
-        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+        {items.map((item) => (
+          <MediaCard key={item.id} item={item} showFavoriteButton={true} />
+        ))}
+      </div>
         
         {hasMore && (
             <div ref={ref} className="flex justify-center p-8">

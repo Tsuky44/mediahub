@@ -13,7 +13,9 @@ import { CastList } from '@/components/CastList'
 import { TrailerButton } from '@/components/TrailerButton'
 import { MediaSlider } from '@/components/MediaSlider'
 import FavoriteButton from './FavoriteButton'
+import WatchLaterButton from './WatchLaterButton'
 import { ManageMediaButton } from './ManageMediaButton'
+import { isInWatchLater } from '../watch-later-actions'
 
 async function getImdbRating(imdbId: string) {
     try {
@@ -50,6 +52,7 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   const cast = credits.cast ? credits.cast.slice(0, 25) : [] // Limit to top 25 cast members for scroll view
 
   const availability = await jellyseerrService.getMediaAvailability(tmdbId, mediaType)
+  const isWatchLaterItem = await isInWatchLater(id, mediaType)
 
   // TMDB Ratings and External IDs
   const ratingImdb = details.external_ids?.imdb_id ? await getImdbRating(details.external_ids.imdb_id) : null
@@ -228,10 +231,22 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
 
                         {/* Action Buttons aligned right */}
                         <div className="flex items-center gap-3">
+                            <WatchLaterButton 
+                                mediaId={embyItem ? embyItem.Id : id}
+                                tmdbId={id}
+                                mediaType={mediaType}
+                                title={title}
+                                posterPath={details.poster_path}
+                                isEmbyItem={!!embyItem}
+                                initialIsWatchLater={isWatchLaterItem}
+                            />
+                            
                             {embyItem && (
                                 <FavoriteButton 
                                     embyItemId={embyItem.Id} 
                                     initialIsFavorite={embyItem.UserData?.IsFavorite || false} 
+                                    tmdbId={id}
+                                    mediaType={mediaType}
                                 />
                             )}
                             

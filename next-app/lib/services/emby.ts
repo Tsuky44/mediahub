@@ -81,6 +81,30 @@ export class EmbyService {
     return response.data
   }
 
+  async getResumeItems(userId: string, limit: number = 4) {
+    const client = await this.getClient()
+    const response = await client.get(`/Users/${userId}/Items/Resume`, {
+      params: {
+        Limit: limit,
+        Fields: 'Overview,PrimaryImageAspectRatio,ProviderIds,UserData,SeriesInfo,ParentIndexNumber,IndexNumber,SeasonName,SeriesName,SeriesId'
+      }
+    })
+    return response.data
+  }
+
+  async getRecentlyPlayedItems(userId: string, limit: number = 4) {
+    // We use getUserItems with SortBy DatePlayed to get history
+    return this.getUserItems(userId, {
+        SortBy: 'DatePlayed',
+        SortOrder: 'Descending',
+        Filters: 'IsPlayed',
+        Limit: limit,
+        Recursive: true,
+        IncludeItemTypes: 'Movie,Episode',
+        Fields: 'Overview,PrimaryImageAspectRatio,ProviderIds,UserData,SeriesInfo,ParentIndexNumber,IndexNumber,SeasonName,SeriesName,SeriesId'
+    })
+  }
+
   async getUserItems(userId: string, filters: any = {}) {
     const client = await this.getClient()
     const params = {
@@ -98,10 +122,20 @@ export class EmbyService {
     const url = userId ? `/Users/${userId}/Items/${itemId}` : `/Items/${itemId}`
     const response = await client.get(url, {
         params: {
-            Fields: 'UserData,ProviderIds'
+            Fields: 'Overview,PrimaryImageAspectRatio,ProviderIds,UserData'
         }
     })
     return response.data
+  }
+
+  async updateFavoriteStatus(userId: string, itemId: string, isFavorite: boolean) {
+    const client = await this.getClient()
+    const url = `/Users/${userId}/FavoriteItems/${itemId}`
+    if (isFavorite) {
+        await client.post(url)
+    } else {
+        await client.delete(url)
+    }
   }
 
   async getItemByTmdbId(userId: string, tmdbId: number, type: 'Movie' | 'Series' | 'Episode') {

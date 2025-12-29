@@ -9,11 +9,12 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
   const { q: query, filter } = await searchParams
   let results: any[] = []
   let title = 'Demander'
-  let currentType: 'all' | 'movie' | 'tv' = 'all'
+  let currentType: 'all' | 'movie' | 'tv' | 'watch-later' = 'all'
 
   // Determine type based on filter
   if (filter === 'movie') currentType = 'movie'
   else if (filter === 'tv') currentType = 'tv'
+  else if (filter === 'watch-later') currentType = 'watch-later'
   else currentType = 'all'
 
   try {
@@ -27,6 +28,8 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
           title = 'Films Populaires'
       } else if (currentType === 'tv') {
           title = 'Séries Populaires'
+      } else if (currentType === 'watch-later') {
+          title = 'À regarder plus tard'
       } else {
           title = 'Tendances'
       }

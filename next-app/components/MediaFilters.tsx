@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Filter, X, ChevronDown, ChevronUp, Check } from 'lucide-react'
+import { Filter, X, ChevronDown, ChevronUp, Check, SortDesc, Calendar, Globe, Monitor, RotateCcw } from 'lucide-react'
 import { getFilterOptions, getWatchProviders } from '@/app/dashboard/requests/actions'
 import clsx from 'clsx'
 
@@ -35,7 +35,6 @@ const LANGUAGES = [
 ]
 
 export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
-    const [isOpen, setIsOpen] = useState(false)
     const [genres, setGenres] = useState<any[]>([])
     const [providers, setProviders] = useState<any[]>([])
     const [showAllProviders, setShowAllProviders] = useState(false)
@@ -115,112 +114,91 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
     if (type === 'all' && false) return null // Force enable
 
     return (
-        <>
-            {/* Mobile Toggle */}
-            <button 
-                onClick={() => setIsOpen(true)}
-                className="lg:hidden fixed bottom-6 right-6 z-40 bg-indigo-600 p-4 rounded-full shadow-lg text-white"
-            >
-                <Filter className="h-6 w-6" />
-            </button>
+        <div className="space-y-8 pb-10">
+            {/* Quick Reset & Header */}
+            <div className="flex justify-between items-center border-b border-gray-800 pb-4">
+                <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Configuration des filtres</h4>
+                <button 
+                    onClick={resetFilters}
+                    className="text-xs flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-400/10 px-3 py-1.5 rounded-full"
+                >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Réinitialiser tout
+                </button>
+            </div>
 
-            {/* Backdrop */}
-            {isOpen && (
-                <div 
-                    className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-                    onClick={() => setIsOpen(false)}
-                />
-            )}
-
-            {/* Sidebar */}
-            <div className={clsx(
-                "fixed inset-y-0 right-0 z-50 w-80 bg-gray-900 border-l border-gray-800 transform transition-transform duration-300 ease-in-out overflow-y-auto p-6",
-                "lg:relative lg:translate-x-0 lg:w-72 lg:border-none lg:bg-transparent lg:p-0",
-                isOpen ? "translate-x-0" : "translate-x-full"
-            )}>
-                <div className="flex items-center justify-between mb-6 lg:hidden">
-                    <h3 className="text-xl font-bold text-white">Filtres</h3>
-                    <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-white">
-                        <X className="h-6 w-6" />
-                    </button>
-                </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {/* Column 1: Sort & Dates & Language */}
                 <div className="space-y-8">
                     {/* Sort */}
-                    <div>
-                        <h4 className="font-semibold text-white mb-3">Trier par</h4>
-                        <select 
-                            value={filters.sort_by}
-                            onChange={(e) => handleChange('sort_by', e.target.value)}
-                            className="w-full bg-gray-800 border-gray-700 rounded-md text-white px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                        >
-                            <option value="popularity.desc">Popularité (décroissante)</option>
-                            <option value="popularity.asc">Popularité (croissante)</option>
-                            <option value="vote_average.desc">Note (décroissante)</option>
-                            <option value="vote_average.asc">Note (croissante)</option>
-                            <option value="release_date.desc">Date (récent)</option>
-                            <option value="release_date.asc">Date (ancien)</option>
-                        </select>
-                    </div>
-
-                    {/* Dates */}
-                    <div>
-                        <h4 className="font-semibold text-white mb-3">Date de sortie</h4>
-                        <div className="space-y-2">
-                            <div>
-                                <label className="text-xs text-gray-400">De</label>
-                                <input 
-                                    type="date" 
-                                    value={filters.start_date}
-                                    onChange={(e) => handleChange('start_date', e.target.value)}
-                                    className="w-full bg-gray-800 border-gray-700 rounded-md text-white px-3 py-2 text-sm"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-400">À</label>
-                                <input 
-                                    type="date" 
-                                    value={filters.end_date}
-                                    onChange={(e) => handleChange('end_date', e.target.value)}
-                                    className="w-full bg-gray-800 border-gray-700 rounded-md text-white px-3 py-2 text-sm"
-                                />
-                            </div>
+                    <div className="bg-gray-800/40 p-5 rounded-2xl border border-gray-700/50 shadow-sm">
+                        <div className="flex items-center gap-2 mb-4 text-indigo-400">
+                            <SortDesc className="h-4 w-4" />
+                            <h4 className="font-bold text-white">Trier par</h4>
                         </div>
-                    </div>
-
-                    {/* Genres */}
-                    <div>
-                        <h4 className="font-semibold text-white mb-3">Genres</h4>
-                        <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                            {genres.map(genre => (
-                                <label key={genre.id} className="flex items-center space-x-2 cursor-pointer group">
-                                    <div className={clsx(
-                                        "w-4 h-4 rounded border flex items-center justify-center transition-colors",
-                                        filters.genres.includes(genre.id) 
-                                            ? "bg-indigo-600 border-indigo-600" 
-                                            : "border-gray-600 group-hover:border-gray-500"
-                                    )}>
-                                        {filters.genres.includes(genre.id) && <Check className="h-3 w-3 text-white" />}
-                                    </div>
-                                    <span className="text-sm text-gray-300 group-hover:text-white">{genre.name}</span>
-                                    <input 
-                                        type="checkbox" 
-                                        className="hidden"
-                                        checked={filters.genres.includes(genre.id)}
-                                        onChange={() => toggleGenre(genre.id)}
-                                    />
-                                </label>
+                        <div className="grid grid-cols-1 gap-2">
+                            {[
+                                { value: 'popularity.desc', label: 'Popularité (décr.)' },
+                                { value: 'popularity.asc', label: 'Popularité (crois.)' },
+                                { value: 'vote_average.desc', label: 'Note (décr.)' },
+                                { value: 'vote_average.asc', label: 'Note (crois.)' },
+                                { value: 'release_date.desc', label: 'Date (récent)' },
+                                { value: 'release_date.asc', label: 'Date (ancien)' },
+                            ].map((opt) => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => handleChange('sort_by', opt.value)}
+                                    className={clsx(
+                                        "text-left px-4 py-2.5 rounded-xl text-sm transition-all border",
+                                        filters.sort_by === opt.value
+                                            ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-400 font-semibold shadow-sm"
+                                            : "bg-transparent border-transparent text-gray-400 hover:bg-gray-700/50 hover:text-gray-200"
+                                    )}
+                                >
+                                    {opt.label}
+                                </button>
                             ))}
                         </div>
                     </div>
 
+                    {/* Dates */}
+                    <div className="bg-gray-800/40 p-5 rounded-2xl border border-gray-700/50 shadow-sm">
+                        <div className="flex items-center gap-2 mb-4 text-indigo-400">
+                            <Calendar className="h-4 w-4" />
+                            <h4 className="font-bold text-white">Période</h4>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase px-1">De</label>
+                                <input 
+                                    type="date" 
+                                    value={filters.start_date}
+                                    onChange={(e) => handleChange('start_date', e.target.value)}
+                                    className="w-full bg-gray-900 border-gray-700 rounded-xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase px-1">À</label>
+                                <input 
+                                    type="date" 
+                                    value={filters.end_date}
+                                    onChange={(e) => handleChange('end_date', e.target.value)}
+                                    className="w-full bg-gray-900 border-gray-700 rounded-xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Language */}
-                    <div>
-                        <h4 className="font-semibold text-white mb-3">Langue</h4>
+                    <div className="bg-gray-800/40 p-5 rounded-2xl border border-gray-700/50 shadow-sm">
+                        <div className="flex items-center gap-2 mb-4 text-indigo-400">
+                            <Globe className="h-4 w-4" />
+                            <h4 className="font-bold text-white">Langue</h4>
+                        </div>
                         <select 
                             value={filters.language}
                             onChange={(e) => handleChange('language', e.target.value)}
-                            className="w-full bg-gray-800 border-gray-700 rounded-md text-white px-3 py-2 text-sm"
+                            className="w-full bg-gray-900 border-gray-700 rounded-xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all appearance-none"
                         >
                             <option value="all">Toutes les langues</option>
                             {LANGUAGES.map(lang => (
@@ -228,47 +206,90 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                             ))}
                         </select>
                     </div>
+                </div>
 
-                    {/* Watch Providers */}
-                    <div>
-                        <h4 className="font-semibold text-white mb-3">Streaming</h4>
-                        <select 
-                            value={filters.watch_region}
-                            onChange={(e) => handleChange('watch_region', e.target.value)}
-                            className="w-full bg-gray-800 border-gray-700 rounded-md text-white px-3 py-2 text-sm mb-3"
-                        >
-                            {REGIONS.map(region => (
-                                <option key={region.value} value={region.value}>{region.label}</option>
-                            ))}
-                        </select>
+                {/* Column 2: Genres */}
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 text-indigo-400">
+                            <Filter className="h-4 w-4" />
+                            <h4 className="font-bold text-white">Genres</h4>
+                        </div>
+                        <span className="text-[10px] bg-indigo-500/20 px-2.5 py-1 rounded-full text-indigo-400 font-bold border border-indigo-500/30">
+                            {filters.genres.length} sélectionné{filters.genres.length > 1 ? 's' : ''}
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 bg-gray-800/20 p-2 rounded-2xl border border-gray-800/50">
+                        {genres.map(genre => (
+                            <button 
+                                key={genre.id} 
+                                onClick={() => toggleGenre(genre.id)}
+                                className={clsx(
+                                    "flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-all border group",
+                                    filters.genres.includes(genre.id)
+                                        ? "bg-indigo-500 border-indigo-400 text-white font-semibold shadow-md shadow-indigo-500/20"
+                                        : "bg-gray-800/50 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:text-gray-200"
+                                )}
+                            >
+                                <span className="truncate">{genre.name}</span>
+                                {filters.genres.includes(genre.id) ? (
+                                    <Check className="h-3.5 w-3.5 shrink-0 ml-1" />
+                                ) : (
+                                    <div className="h-3.5 w-3.5 rounded-full border border-gray-600 group-hover:border-gray-500" />
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Column 3: Streaming */}
+                <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-indigo-400 mb-2">
+                        <Monitor className="h-4 w-4" />
+                        <h4 className="font-bold text-white">Streaming</h4>
+                    </div>
+                    <div className="bg-gray-800/40 p-5 rounded-2xl border border-gray-700/50 shadow-sm space-y-5">
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Région</label>
+                            <select 
+                                value={filters.watch_region}
+                                onChange={(e) => handleChange('watch_region', e.target.value)}
+                                className="w-full bg-gray-900 border-gray-700 rounded-xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                            >
+                                {REGIONS.map(region => (
+                                    <option key={region.value} value={region.value}>{region.label}</option>
+                                ))}
+                            </select>
+                        </div>
 
                         {loadingProviders ? (
-                            <div className="flex justify-center py-4">
-                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500"></div>
+                            <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                                <p className="text-xs text-gray-500 animate-pulse">Chargement des services...</p>
                             </div>
                         ) : providers.length > 0 ? (
-                            <div className="space-y-2">
-                                <div className="flex flex-wrap gap-2">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                                     {(showAllProviders ? providers : providers.slice(0, 12)).map(provider => (
                                         <button
                                             key={provider.provider_id}
                                             onClick={() => toggleProvider(provider.provider_id)}
                                             className={clsx(
-                                                "relative rounded-lg p-1 transition-all",
+                                                "relative aspect-square rounded-2xl p-1.5 transition-all border group overflow-hidden",
                                                 filters.watch_providers.includes(provider.provider_id)
-                                                    ? "bg-gray-600 ring-2 ring-indigo-500"
-                                                    : "bg-gray-800 hover:bg-gray-700"
+                                                    ? "bg-indigo-500/10 border-indigo-500 ring-2 ring-indigo-500/50"
+                                                    : "bg-gray-900 border-gray-700 hover:border-gray-500"
                                             )}
                                             title={provider.provider_name}
                                         >
                                             <img 
                                                 src={`https://image.tmdb.org/t/p/original${provider.logo_path}`} 
                                                 alt={provider.provider_name}
-                                                className="w-10 h-10 object-contain rounded"
+                                                className="w-full h-full object-contain rounded-xl"
                                             />
                                             {filters.watch_providers.includes(provider.provider_id) && (
-                                                <div className="absolute -top-1 -right-1 bg-indigo-600 rounded-full p-0.5">
-                                                    <Check className="h-3 w-3 text-white" />
+                                                <div className="absolute top-1 right-1 bg-indigo-500 rounded-full p-1 shadow-lg border border-white/20">
+                                                    <Check className="h-2.5 w-2.5 text-white" />
                                                 </div>
                                             )}
                                         </button>
@@ -277,27 +298,24 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                                 {providers.length > 12 && (
                                     <button 
                                         onClick={() => setShowAllProviders(!showAllProviders)}
-                                        className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                                        className="w-full py-3 bg-gray-900/50 rounded-xl text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-indigo-400 hover:bg-indigo-400/5 flex items-center justify-center gap-2 transition-all border border-gray-800/50 hover:border-indigo-500/30"
                                     >
-                                        {showAllProviders ? 'Voir moins' : 'Voir plus'}
+                                        {showAllProviders ? 'Voir moins' : `+ ${providers.length - 12} autres services`}
                                         {showAllProviders ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                                     </button>
                                 )}
                             </div>
                         ) : (
-                            <p className="text-xs text-gray-500">Aucun service disponible</p>
+                            <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-2 bg-gray-900/50 rounded-2xl border border-dashed border-gray-700">
+                                <Monitor className="h-8 w-8 text-gray-700" />
+                                <p className="text-xs text-gray-500 font-medium">
+                                    Aucun service de streaming disponible pour cette région.
+                                </p>
+                            </div>
                         )}
                     </div>
-
-                    {/* Reset */}
-                    <button 
-                        onClick={resetFilters}
-                        className="w-full py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors"
-                    >
-                        Réinitialiser
-                    </button>
                 </div>
             </div>
-        </>
+        </div>
     )
 }

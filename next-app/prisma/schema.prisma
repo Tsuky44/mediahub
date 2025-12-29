@@ -24,8 +24,46 @@ model User {
   sessions      Session[]
   requests      MediaRequest[]
   watchEvents   WatchEvent[]
+  watchLater    WatchLater[]
+  notifications Notification[]
 
   @@map("users")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String
+  message   String
+  type      String   // e.g., "media_available"
+  mediaId   String?  @map("media_id") // Emby ID ou TMDB ID
+  mediaType String?  @map("media_type") // movie, tv
+  posterPath String? @map("poster_path")
+  isRead    Boolean  @default(false) @map("is_read")
+  link      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model WatchLater {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  mediaId     String   @map("media_id") // Emby ID ou TMDB ID
+  tmdbId      String?  @map("tmdb_id")
+  mediaType   String   @map("media_type") // movie, tv
+  title       String
+  posterPath  String?  @map("poster_path")
+  isEmbyItem  Boolean  @default(false) @map("is_emby_item")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId, mediaType])
+  @@map("watch_later")
 }
 
 model Account {

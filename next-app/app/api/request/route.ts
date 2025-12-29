@@ -3,6 +3,7 @@ import { jellyseerrService } from '@/lib/services/jellyseerr'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getSetting } from '@/lib/settings'
+import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { tmdbId, mediaType, title } = body
+    const { tmdbId, mediaType, title, posterPath } = body
 
     if (!tmdbId || !mediaType) {
         return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
@@ -38,6 +39,29 @@ export async function POST(request: NextRequest) {
     const result = await jellyseerrService.requestMedia(tmdbId, mediaType, title, jellyseerrUserId || undefined)
     
     if (result.success) {
+        // Enregistrer la demande localement pour le système de notifications
+        try {
+            const dbUser = await prisma.user.findUnique({
+                where: { email: session.user?.email || '' }
+            })
+            
+            if (dbUser) {
+                await prisma.mediaRequest.create({
+                    data: {
+                        userId: dbUser.id,
+                        mediaType,
+                        tmdbId: String(tmdbId),
+                        title,
+                        status: 'pending',
+                        metadata: JSON.stringify({ posterPath })
+                    }
+                })
+            }
+        } catch (dbError) {
+            console.error('[Database] Failed to save local request:', dbError)
+            // On ne bloque pas la réponse car la demande Jellyseerr a réussi
+        }
+
         return NextResponse.json(result)
     } else {
         return NextResponse.json({ error: result.message }, { status: 500 })

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { jellyseerrService } from '@/lib/services/jellyseerr'
 import { getCurrentUser } from '@/lib/auth'
 
+import { forget } from '@/lib/cache'
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -9,7 +11,7 @@ export async function GET(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id } = await params
+  const { id: tmdbIdStr } = await params
   const { searchParams } = new URL(request.url)
   const mediaType = searchParams.get('type') as 'movie' | 'tv'
 
@@ -18,7 +20,7 @@ export async function GET(
   }
 
   try {
-    const tmdbId = parseInt(id)
+    const tmdbId = parseInt(tmdbIdStr)
     const media = await jellyseerrService.getMedia(tmdbId, mediaType)
     
     if (!media) {
@@ -39,12 +41,11 @@ export async function DELETE(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Only allow admins to delete media (assuming we have a way to check, 
-  // for now we'll allow it if they are logged in, but in a real app check role)
-
+  const { id: tmdbIdStr } = await params
   const { searchParams } = new URL(request.url)
   const action = searchParams.get('action') // 'media' or 'request'
   const targetId = searchParams.get('targetId')
+  const mediaType = searchParams.get('type') as 'movie' | 'tv'
 
   if (!action || !targetId) {
     return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
@@ -52,6 +53,8 @@ export async function DELETE(
 
   try {
     const id = parseInt(targetId)
+    const tmdbId = parseInt(tmdbIdStr)
+    
     let result
     if (action === 'media') {
       result = await jellyseerrService.deleteMedia(id)
@@ -60,6 +63,13 @@ export async function DELETE(
     }
 
     if (result?.success) {
+      // Invalidate the availability cache for this media
+      if (mediaType && !isNaN(tmdbId)) {
+        const cacheKey = `jellyseerr_availability_${mediaType}_${tmdbId}`
+        console.log(`[API Manage] Invalidating cache for: ${cacheKey}`)
+        forget(cacheKey)
+      }
+      
       return NextResponse.json({ success: true })
     } else {
       return NextResponse.json({ error: 'Action failed' }, { status: 500 })

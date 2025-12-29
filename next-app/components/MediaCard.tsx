@@ -1,8 +1,13 @@
+'use client'
+
 import Image from 'next/image'
-import { Link, Film, Tv, Check, Clock } from 'lucide-react'
+import { Link, Film, Tv, Check, Clock, Heart } from 'lucide-react'
+import { toggleFavorite } from '@/app/dashboard/media/actions'
+import { toggleWatchLater } from '@/app/dashboard/media/watch-later-actions'
+import { useState } from 'react'
 
 interface MediaItem {
-  id: number
+  id: string | number
   title?: string
   name?: string
   poster_path: string | null
@@ -13,12 +18,62 @@ interface MediaItem {
       status: string
       message: string
   }
-  tmdbId?: number
+  tmdbId?: string | number
+  isFavorite?: boolean
+  isWatchLater?: boolean
 }
 
-export function MediaCard({ item }: { item: MediaItem }) {
+export function MediaCard({ item, showFavoriteButton = false }: { item: MediaItem, showFavoriteButton?: boolean }) {
+  const [isFavorite, setIsFavorite] = useState(item.isFavorite)
+  const [isWatchLater, setIsWatchLater] = useState(item.isWatchLater)
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false)
+  const [isTogglingWatchLater, setIsTogglingWatchLater] = useState(false)
   const title = item.title || item.name || 'Untitled'
   
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (isTogglingFavorite) return
+
+    setIsTogglingFavorite(true)
+    const newStatus = !isFavorite
+    const success = await toggleFavorite(item.id.toString(), newStatus)
+    if (success) {
+      setIsFavorite(newStatus)
+    }
+    setIsTogglingFavorite(false)
+  }
+
+  const handleToggleWatchLater = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    console.log('[MediaCard] Clicked watch later for:', title)
+    if (isTogglingWatchLater) return
+
+    setIsTogglingWatchLater(true)
+    try {
+        const res = await toggleWatchLater({
+            mediaId: item.id.toString(),
+            tmdbId: item.tmdbId?.toString() || item.id.toString(),
+            mediaType: (item.media_type as 'movie' | 'tv') || 'movie',
+            title: title,
+            posterPath: item.poster_path,
+            isEmbyItem: !!item.tmdbId
+        })
+        
+        console.log('[MediaCard] Toggle result:', res)
+        if (res.success) {
+            setIsWatchLater(res.action === 'added')
+        } else {
+            alert(`Erreur: ${res.error || 'Une erreur est survenue'}`)
+        }
+    } catch (err) {
+        console.error('[MediaCard] Toggle error:', err)
+    } finally {
+        setIsTogglingWatchLater(false)
+    }
+  }
+
   // Use TMDB ID for linking if available, otherwise fallback to item.id (which might be Emby ID)
   // If item has tmdbId property (from Emby mapping), use it.
   // Otherwise use item.id (standard TMDB result).
@@ -79,6 +134,34 @@ export function MediaCard({ item }: { item: MediaItem }) {
         )}
         
         {getStatusBadge()}
+        
+        {/* Favorite Button */}
+        {showFavoriteButton && (
+            <button
+                onClick={handleToggleFavorite}
+                disabled={isTogglingFavorite}
+                className={`absolute bottom-2 right-2 p-1.5 rounded-full backdrop-blur-md transition-all duration-300 z-20 ${
+                    isFavorite 
+                        ? 'bg-red-500 text-white shadow-lg scale-110' 
+                        : 'bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-black/60'
+                }`}
+            >
+                <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+            </button>
+        )}
+
+        <button
+            onClick={handleToggleWatchLater}
+            disabled={isTogglingWatchLater}
+            className={`absolute bottom-2 left-2 p-1.5 rounded-full backdrop-blur-md transition-all duration-300 z-20 ${
+                isWatchLater 
+                    ? 'bg-blue-500 text-white shadow-lg scale-110' 
+                    : 'bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-black/60'
+            }`}
+            title="À regarder plus tard"
+        >
+            <Tv className="w-4 h-4" />
+        </button>
         
         {/* Type Badge */}
         {item.media_type && (

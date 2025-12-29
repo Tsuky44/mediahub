@@ -1,26 +1,22 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { useDebounce } from 'use-debounce'
 
-export function SearchInput() {
+export function SearchInput({ placeholder }: { placeholder?: string }) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const initialQuery = searchParams.get('q') || ''
   
   const [text, setText] = useState(initialQuery)
   const [query] = useDebounce(text, 500)
 
   useEffect(() => {
-    // Only push if query changed or if we are not on the initial load with same query
-    // But since this is a controlled component with URL sync, we just sync query to URL
-    
-    // Check if query actually changed compared to URL to avoid loops or unnecessary pushes
     const currentQ = searchParams.get('q') || ''
-    if (query === currentQ && query === '') return // Both empty, do nothing
-    if (query === currentQ) return // Same query, do nothing
+    if (query === currentQ) return 
     
     const params = new URLSearchParams(searchParams)
     
@@ -30,12 +26,10 @@ export function SearchInput() {
       params.delete('q')
     }
     
-    // When searching, we usually want to reset pagination?
-    // The page component handles fetching page 1.
-    // We should replace or push? Push allows back button.
-    router.push(`/dashboard/requests?${params.toString()}`)
+    // Stay on the current page instead of redirecting to /dashboard/requests
+    router.push(`${pathname}?${params.toString()}`)
     
-  }, [query, router, searchParams])
+  }, [query, router, searchParams, pathname])
 
   return (
     <div className="relative w-full max-w-md">
@@ -45,7 +39,7 @@ export function SearchInput() {
       <input
         type="text"
         className="block w-full rounded-full border-0 bg-gray-800 py-2 pl-10 pr-4 text-white placeholder-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-        placeholder="Rechercher un film ou une série..."
+        placeholder={placeholder || "Rechercher..."}
         value={text}
         onChange={(e) => setText(e.target.value)}
       />

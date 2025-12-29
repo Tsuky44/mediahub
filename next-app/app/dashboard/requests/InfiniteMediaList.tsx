@@ -11,7 +11,7 @@ import { Loader2, SlidersHorizontal, X } from 'lucide-react'
 
 interface InfiniteMediaListProps {
   initialItems: any[]
-  initialType: 'all' | 'movie' | 'tv'
+  initialType: 'all' | 'movie' | 'tv' | 'watch-later'
   initialSearch?: string
 }
 
@@ -69,7 +69,7 @@ export function InfiniteMediaList({ initialItems, initialType, initialSearch }: 
     }
   }, [inView])
 
-  const handleFilterChange = (type: 'all' | 'movie' | 'tv') => {
+  const handleFilterChange = (type: 'all' | 'movie' | 'tv' | 'watch-later') => {
       const params = new URLSearchParams(searchParams)
       if (type === 'all') {
           params.delete('filter')
@@ -82,7 +82,7 @@ export function InfiniteMediaList({ initialItems, initialType, initialSearch }: 
   const onSideFilterChange = async (filters: any) => {
       setActiveFilters(filters)
       setPage(1)
-      setHasMore(true)
+      setHasMore(initialType !== 'watch-later')
       setLoading(true)
       // Fetch page 1 with new filters
       const data = await fetchMedia(1, initialType, initialSearch, filters)
@@ -97,7 +97,7 @@ export function InfiniteMediaList({ initialItems, initialType, initialSearch }: 
            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
                <div className="absolute inset-0 bg-gray-900/95 backdrop-blur-sm" onClick={() => setShowFilters(false)} />
                
-               <div className="relative w-full max-w-2xl bg-gray-900 rounded-2xl shadow-2xl border border-gray-800 flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+               <div className="relative w-full max-w-5xl bg-gray-900 rounded-2xl shadow-2xl border border-gray-800 flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
                        <div className="flex items-center gap-3">
                            <SlidersHorizontal className="h-5 w-5 text-indigo-500" />
@@ -112,7 +112,10 @@ export function InfiniteMediaList({ initialItems, initialType, initialSearch }: 
                    </div>
                    
                    <div className="flex-1 overflow-y-auto p-6">
-                        <MediaFilters type={initialType} onFilterChange={onSideFilterChange} />
+                        <MediaFilters 
+                            type={initialType === 'watch-later' ? 'all' : initialType} 
+                            onFilterChange={onSideFilterChange} 
+                        />
                    </div>
                    
                    <div className="p-6 border-t border-gray-800 bg-gray-900/50 rounded-b-2xl flex justify-end">
@@ -172,6 +175,17 @@ export function InfiniteMediaList({ initialItems, initialType, initialSearch }: 
                             )}
                         >
                             Séries
+                        </button>
+                        <button
+                            onClick={() => handleFilterChange('watch-later')}
+                            className={clsx(
+                                'px-6 py-2 text-sm font-medium rounded-lg transition-all',
+                                initialType === 'watch-later' 
+                                    ? 'bg-gray-800 text-white shadow-sm' 
+                                    : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                            )}
+                        >
+                            À regarder plus tard
                         </button>
                 </div>
             </div>

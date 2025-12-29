@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Home, Film, ListPlus, Settings, LogOut, Search, Download } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
+import { NotificationBell } from './NotificationBell'
 import clsx from 'clsx'
 
 const navigation = [
@@ -62,7 +63,9 @@ export function Navbar() {
                 />
             </div>
 
-            {session?.user?.name === 'mathis' && (
+            <NotificationBell />
+
+             {session?.user?.name === 'mathis' && (
               <Link href="/dashboard/settings" className="rounded-full bg-gray-800 p-1 text-gray-400 hover:text-white">
                   <Settings className="h-6 w-6" aria-hidden="true" />
               </Link>
