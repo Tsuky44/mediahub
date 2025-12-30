@@ -141,8 +141,8 @@ export async function syncJellyseerrRequests() {
                     })
                 }
 
-                // Find existing request
-                const existingRequest = await (prisma as any).mediaRequest.findUnique({
+                // Find existing request by externalId
+                const existingRequest = await (prisma as any).mediaRequest.findFirst({
                     where: { externalId: externalId }
                 })
 
