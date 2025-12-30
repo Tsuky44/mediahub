@@ -72,14 +72,14 @@ export async function syncJellyseerrRequests() {
         // 4. Process each request
         for (const jr of jellyRequests) {
             try {
-                if (!jr.media || !jr.media.tmdbId) {
-                    console.warn(`[Sync] Skipping request ${jr.id} - missing media data`)
+                const externalId = jr.id.toString()
+                const tmdbId = (jr.media?.tmdbId || jr.tmdbId)?.toString()
+                const mediaType = jr.type || jr.media?.mediaType
+
+                if (!tmdbId) {
+                    console.warn(`[Sync] Skipping request ${jr.id} - missing tmdbId`, jr)
                     continue
                 }
-
-                const externalId = jr.id.toString()
-                const tmdbId = jr.media.tmdbId.toString()
-                const mediaType = jr.type
 
                 // Find corresponding local user
                 const requesterEmail = jr.requestedBy?.email
