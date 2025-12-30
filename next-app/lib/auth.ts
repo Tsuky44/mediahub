@@ -61,6 +61,7 @@ export const authOptions: NextAuthOptions = {
                 email: user.email,
                 name: user.name,
                 image: user.image,
+                embyUserId: user.embyUserId
             }
         }
 
@@ -76,10 +77,22 @@ export const authOptions: NextAuthOptions = {
     signIn: '/login',
   },
   callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        // @ts-ignore
+        token.embyUserId = user.embyUserId
+      } else {
+        // If it's a subsequent call, we might need to fetch it from DB if not in token
+        // But since we set it on initial login, it should persist in the JWT
+      }
+      return token
+    },
     async session({ session, token }) {
       if (token && session.user) {
         // @ts-ignore
         session.user.id = token.sub
+        // @ts-ignore
+        session.user.embyUserId = token.embyUserId || token.sub // Fallback au sub si embyUserId est manquant
       }
       return session
     }

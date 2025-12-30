@@ -148,6 +148,43 @@ export async function getWatchLaterList() {
     }
 }
 
+export async function areInWatchLater(items: { id: string, mediaType: string }[]) {
+    try {
+        const user = await getCurrentUser()
+        if (!user || !(user as any).id) return []
+
+        const userId = parseInt((user as any).id)
+
+        let watchLater = (prisma as any).watchLater;
+        if (!watchLater) {
+             try {
+                 const freshClient = new PrismaClient();
+                 watchLater = (freshClient as any).watchLater;
+             } catch (e) {}
+        }
+        if (!watchLater) return [];
+
+        const ids = items.map(i => i.id)
+        
+        const existing = await watchLater.findMany({
+            where: {
+                userId,
+                OR: [
+                    { mediaId: { in: ids } },
+                    { tmdbId: { in: ids } }
+                ]
+            },
+            select: { mediaId: true, tmdbId: true, mediaType: true }
+        })
+
+        // Return an array of keys "mediaType:id" that are in watch later
+        return existing.map((item: any) => `${item.mediaType}:${item.tmdbId || item.mediaId}`)
+    } catch (error) {
+        console.error('Failed to check watch later status batch:', error)
+        return []
+    }
+}
+
 export async function isInWatchLater(id: string, mediaType: string) {
     try {
         const user = await getCurrentUser()

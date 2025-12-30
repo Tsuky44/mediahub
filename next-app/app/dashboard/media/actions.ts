@@ -173,6 +173,215 @@ export async function fetchRecentlyWatchedItems() {
     }
 }
 
+export async function fetchUserRecommendations(page: number = 1) {
+    try {
+        const user = await getCurrentUser()
+        if (!user || !user.email) return { results: [], total_pages: 0 }
+
+        const dbUser = await prisma.user.findUnique({
+            where: { email: user.email }
+        })
+
+        if (!dbUser) return { results: [], total_pages: 0 }
+
+        // 1. Get user's recent watch history from Emby
+        let history: any[] = []
+        if (dbUser.embyUserId) {
+            const data = await embyService.getRecentlyPlayedItems(dbUser.embyUserId, 15)
+            history = data.Items || []
+        }
+
+        // 2. Get user's recent requests from local DB
+        const requests = await (prisma as any).mediaRequest.findMany({
+            where: {
+                OR: [
+                    { requesterEmail: user.email },
+                    { userId: dbUser.id }
+                ]
+            },
+            orderBy: { requestedAt: 'desc' },
+            take: 10
+        })
+
+        // Combine history and requests to find seed TMDB IDs
+        const seeds: { id: number; type: 'movie' | 'tv' }[] = []
+        
+        // Process history
+        for (const item of history) {
+            let tmdbId = item.ProviderIds?.Tmdb
+            const type = item.Type === 'Movie' ? 'movie' : (item.Type === 'Series' || item.Type === 'Episode' ? 'tv' : null)
+            
+            if (item.Type === 'Episode' && item.SeriesId && dbUser.embyUserId) {
+                const series = await embyService.getItemDetails(item.SeriesId, dbUser.embyUserId)
+                tmdbId = series.ProviderIds?.Tmdb
+            }
+
+            if (tmdbId && type && !seeds.some(s => s.id === parseInt(tmdbId))) {
+                seeds.push({ id: parseInt(tmdbId), type })
+            }
+            if (seeds.length >= 5) break
+        }
+
+        // Process requests if not enough seeds
+        if (seeds.length < 10) {
+            for (const req of requests) {
+                if (req.tmdbId && !seeds.some(s => s.id === req.tmdbId)) {
+                    seeds.push({ id: req.tmdbId, type: req.mediaType as 'movie' | 'tv' })
+                }
+                if (seeds.length >= 10) break
+            }
+        }
+
+        if (seeds.length === 0) {
+            // Fallback to trending if no history/requests
+            const trending = await tmdbService.getTrending('movie', page)
+            return {
+                results: (trending.results || []).map((m: any) => ({
+                    ...m,
+                    media_type: 'movie',
+                    id: m.id.toString(),
+                    tmdbId: m.id
+                })),
+                total_pages: trending.total_pages || 1
+            }
+        }
+
+        // 3. Get recommendations for each seed in parallel
+        // For pagination, we'll fetch from all seeds but offset the results
+        const allRecommendations = await Promise.all(
+            seeds.map(seed => tmdbService.getRecommendations(seed.id, seed.type, page))
+        )
+
+        // 4. Flatten, deduplicate and shuffle
+        const combinedResults = allRecommendations.flatMap((res, index) => 
+            (res.results || []).map((item: any) => ({
+                ...item,
+                media_type: seeds[index].type,
+                id: item.id.toString(),
+                tmdbId: item.id
+            }))
+        )
+
+        // Deduplicate by TMDB ID
+        const uniqueResults = Array.from(new Map(combinedResults.map(item => [`${item.media_type}-${item.id}`, item])).values())
+        
+        // Find the max total pages among all seed recommendations
+        const maxTotalPages = Math.max(...allRecommendations.map(res => res.total_pages || 0))
+
+        return {
+            results: uniqueResults.sort(() => 0.5 - Math.random()),
+            total_pages: Math.min(maxTotalPages, 10) // Limit to 10 pages for sanity
+        }
+
+    } catch (e) {
+        console.error('[fetchUserRecommendations] Failed', e)
+        return { results: [], total_pages: 0 }
+    }
+}
+
+export async function fetchServerTrends(page: number = 1) {
+    try {
+        const thirtyDaysAgo = new Date()
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+        // 1. Get most watched items from WatchEvent
+        const topWatched = await prisma.watchEvent.groupBy({
+            by: ['itemId', 'itemType', 'itemName', 'seriesName'],
+            _count: {
+                itemId: true
+            },
+            where: {
+                playedAt: {
+                    gte: thirtyDaysAgo
+                }
+            },
+            orderBy: {
+                _count: {
+                    itemId: 'desc'
+                }
+            },
+            take: 20
+        })
+
+        // 2. Get most requested items from MediaRequest
+        const topRequested = await prisma.mediaRequest.groupBy({
+            by: ['tmdbId', 'mediaType', 'title'],
+            _count: {
+                tmdbId: true
+            },
+            where: {
+                requestedAt: {
+                    gte: thirtyDaysAgo
+                }
+            },
+            orderBy: {
+                _count: {
+                    tmdbId: 'desc'
+                }
+            },
+            take: 20
+        })
+
+        // 3. Unify and enrich
+        const trendItems: any[] = []
+        const seenTmdbIds = new Set<string>()
+
+        // Process watched items first
+        for (const watch of topWatched) {
+            try {
+                const itemDetails = await embyService.getItemDetails(watch.itemId)
+                const tmdbId = itemDetails.ProviderIds?.Tmdb
+                const mediaType = watch.itemType?.toLowerCase() === 'series' || watch.itemType?.toLowerCase() === 'episode' ? 'tv' : 'movie'
+                
+                if (tmdbId) {
+                    seenTmdbIds.add(tmdbId)
+                    const poster_path = await tmdbService.getPosterPath(parseInt(tmdbId), mediaType)
+                    trendItems.push({
+                        id: watch.itemId,
+                        title: watch.itemName || watch.seriesName,
+                        name: watch.itemName || watch.seriesName,
+                        poster_path,
+                        media_type: mediaType,
+                        tmdbId: parseInt(tmdbId),
+                        trendingReason: 'Populaire sur le serveur'
+                    })
+                }
+            } catch (e) {
+                continue
+            }
+        }
+
+        // Add requested items that aren't already there
+        for (const req of topRequested) {
+            if (seenTmdbIds.has(req.tmdbId)) continue
+            
+            try {
+                const mediaType = req.mediaType as 'movie' | 'tv'
+                const poster_path = await tmdbService.getPosterPath(parseInt(req.tmdbId), mediaType)
+                trendItems.push({
+                    id: req.tmdbId,
+                    title: req.title,
+                    name: req.title,
+                    poster_path,
+                    media_type: mediaType,
+                    tmdbId: parseInt(req.tmdbId),
+                    trendingReason: 'Fortement demandé'
+                })
+            } catch (e) {
+                continue
+            }
+        }
+
+        return {
+            results: trendItems.sort(() => 0.5 - Math.random()),
+            total_pages: 1
+        }
+    } catch (e) {
+        console.error('[fetchServerTrends] Failed', e)
+        return { results: [], total_pages: 0 }
+    }
+}
+
 export async function toggleFavorite(itemId: string, isFavorite: boolean) {
     try {
         const user = await getCurrentUser()

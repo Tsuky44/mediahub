@@ -72,13 +72,25 @@ export class EmbyService {
 
   async getUserPlayedItems(userId: string) {
     const client = await this.getClient()
-    const response = await client.get(`/Users/${userId}/PlayedItems`, {
-      params: {
-        IncludeExternalContent: false,
-        Limit: 5000
-      }
-    })
-    return response.data
+    try {
+        // L'endpoint /Users/{Id}/PlayedItems n'existe pas ou est différent sur certaines versions
+        // On utilise /Users/{Id}/Items avec des filtres pour obtenir l'historique
+        const response = await client.get(`/Users/${userId}/Items`, {
+            params: {
+                Recursive: true,
+                IsPlayed: true,
+                SortBy: 'DatePlayed',
+                SortOrder: 'Descending',
+                IncludeItemTypes: 'Movie,Episode',
+                Fields: 'Overview,PrimaryImageAspectRatio,ProviderIds,UserData',
+                Limit: 500
+            }
+        })
+        return response.data
+    } catch (e) {
+        console.error(`[EmbyService] Failed to get played items for user ${userId}:`, e)
+        return { Items: [] }
+    }
   }
 
   async getResumeItems(userId: string, limit: number = 4) {
@@ -185,6 +197,48 @@ export class EmbyService {
 
       const items = await this.getUserItems(userId, filters)
       return items.Items || []
+  }
+
+  /**
+   * Récupère les données du plugin "Playback Reporting" d'Emby
+   * Ce plugin expose généralement ses données via /PlaybackReporting/...
+   */
+  async getPlaybackReportingStats(days: number = 30) {
+    const client = await this.getClient()
+    try {
+        // Le plugin Playback Reporting utilise souvent ces paramètres pour ses rapports
+        // Note: On essaye l'URL du log d'activité qui est la plus commune
+        const response = await client.get('/PlaybackReporting/ActivityLog', {
+            params: {
+                MinDate: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+                IsIntermediate: false,
+                UserId: '',
+                StartIndex: 0,
+                Limit: 10000
+            }
+        })
+        
+        // Si /ActivityLog ne marche pas, on essaye /Report
+        if (!response.data || !response.data.Items) {
+            const reportResponse = await client.get('/PlaybackReporting/Report', {
+                params: {
+                    MinDate: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+                }
+            })
+            return reportResponse.data.Items || reportResponse.data
+        }
+
+        return response.data.Items
+    } catch (e) {
+        console.warn('[EmbyService] Playback Reporting plugin error:', e)
+        // Tentative désespérée sur un autre endpoint connu
+        try {
+            const queryResponse = await client.get('/PlaybackReporting/Query')
+            return queryResponse.data.Items || queryResponse.data
+        } catch (e2) {
+            return null
+        }
+    }
   }
 
   // Simplified version of getServerStats

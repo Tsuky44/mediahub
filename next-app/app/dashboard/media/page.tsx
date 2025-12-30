@@ -6,7 +6,7 @@ import { RecentlyWatched } from './RecentlyWatched'
 
 export const dynamic = 'force-dynamic'
 
-export default async function MediaPage({ searchParams }: { searchParams: Promise<{ q?: string; type?: string; favorites?: string; watchLater?: string }> }) {
+export default async function MediaPage({ searchParams }: { searchParams: Promise<any> }) {
   const { q: query, type = 'all', favorites = 'false', watchLater = 'false' } = await searchParams
   const currentType = (type === 'tv' || type === 'movie' || type === 'all') ? type : 'all'
   const isFavoritesOnly = favorites === 'true'
@@ -18,12 +18,21 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
   const showRecentlyWatched = currentType === 'all' && !query && !isFavoritesOnly && !isWatchLaterOnly
 
   try {
-    const [mediaData, recentData] = await Promise.all([
-        fetchEmbyMedia(1, currentType, query, isFavoritesOnly, isWatchLaterOnly),
-        showRecentlyWatched ? fetchRecentlyWatchedItems() : Promise.resolve([])
-    ])
-    initialData = mediaData
-    recentlyWatchedItems = recentData
+    const promises: Promise<any>[] = []
+    
+    promises.push(fetchEmbyMedia(1, currentType as 'movie' | 'tv' | 'all', query, isFavoritesOnly, isWatchLaterOnly))
+
+    if (showRecentlyWatched) {
+        promises.push(fetchRecentlyWatchedItems())
+    }
+
+    const results = await Promise.all(promises)
+    
+    initialData = results[0]
+
+    if (showRecentlyWatched) {
+        recentlyWatchedItems = results[results.length - 1]
+    }
   } catch (e) {
       console.error('Failed to fetch media', e)
   }
@@ -96,17 +105,19 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
             </div>
           </div>
 
-          {showRecentlyWatched && recentlyWatchedItems.length > 0 && (
-            <RecentlyWatched items={recentlyWatchedItems} />
-          )}
+          <>
+              {showRecentlyWatched && recentlyWatchedItems.length > 0 && (
+                <RecentlyWatched items={recentlyWatchedItems} />
+              )}
 
-          <InfiniteEmbyList 
-            initialItems={initialData.results} 
-            type={currentType} 
-            query={query} 
-            favoritesOnly={isFavoritesOnly}
-            watchLaterOnly={isWatchLaterOnly}
-          />
+              <InfiniteEmbyList 
+                 initialItems={initialData.results} 
+                 type={currentType as 'all' | 'movie' | 'tv'} 
+                 query={query} 
+                 favoritesOnly={isFavoritesOnly} 
+                 watchLaterOnly={isWatchLaterOnly}
+               />
+          </>
       </div>
   )
 }

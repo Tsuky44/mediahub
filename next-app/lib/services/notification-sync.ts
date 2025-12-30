@@ -1,14 +1,20 @@
 import { prisma } from '@/lib/prisma'
 import { jellyseerrService } from './jellyseerr'
+import { syncJellyseerrRequests } from './request-sync'
 
 export async function syncMediaNotifications() {
-  console.log('[Sync] Starting media notification sync...')
+  console.log('[Sync] Starting global sync...')
   
   try {
-    // 1. Récupérer toutes les demandes en attente
-    const pendingRequests = await prisma.mediaRequest.findMany({
+    // 1. Synchroniser les demandes depuis Jellyseerr vers la DB locale
+    const syncResult = await syncJellyseerrRequests()
+    const syncedCount = syncResult.count || 0
+
+    // 2. Récupérer toutes les demandes en attente dans notre DB locale (code numérique Jellyseerr)
+    // Statuts Jellyseerr : 1=PENDING, 2=APPROVED, 3=PROCESSING, 4=PARTIAL, 5=AVAILABLE
+    const pendingRequests = await (prisma as any).mediaRequest.findMany({
       where: {
-        status: 'pending'
+        status: { in: [1, 2, 3] } 
       }
     })
 
@@ -34,25 +40,27 @@ export async function syncMediaNotifications() {
             } catch (e) {}
           }
 
-          // 3. Créer une notification pour l'utilisateur
-          await prisma.notification.create({
-            data: {
-              userId: request.userId,
-              title: 'Média disponible !',
-              message: `Votre demande pour "${request.title}" est maintenant disponible sur Emby.`,
-              type: 'media_available',
-              mediaId: request.tmdbId,
-              mediaType: request.mediaType,
-              posterPath: posterPath,
-              link: `/dashboard/media`,
-              isRead: false
-            }
-          })
+          // 3. Créer une notification pour l'utilisateur (seulement s'il est lié)
+          if (request.userId) {
+            await (prisma as any).notification.create({
+              data: {
+                userId: request.userId,
+                title: 'Média disponible !',
+                message: `Votre demande pour "${request.title}" est maintenant disponible sur Emby.`,
+                type: 'media_available',
+                mediaId: request.tmdbId,
+                mediaType: request.mediaType,
+                posterPath: posterPath,
+                link: `/dashboard/media`,
+                isRead: false
+              }
+            })
+          }
 
           // 4. Mettre à jour le statut de la demande locale
-          await prisma.mediaRequest.update({
+          await (prisma as any).mediaRequest.update({
             where: { id: request.id },
-            data: { status: 'available' }
+            data: { status: 5 } // 5 = Available in Jellyseerr
           })
           
           console.log(`[Sync] Notification created and request updated for "${request.title}"`)
@@ -62,7 +70,7 @@ export async function syncMediaNotifications() {
       }
     }
 
-    return { success: true, processed: pendingRequests.length }
+    return { success: true, processed: pendingRequests.length, syncedCount }
   } catch (error) {
     console.error('[Sync] Critical error during notification sync:', error)
     return { success: false, error }

@@ -107,21 +107,28 @@ model VerificationToken {
 
 model MediaRequest {
   id          Int       @id @default(autoincrement())
-  userId      Int       @map("user_id")
+  userId      Int?      @map("user_id")
   mediaType   String    @map("media_type") // movie, tv
   tmdbId      String    @map("tmdb_id")
   title       String
   description String?
-  status      String    @default("pending") // pending, approved, rejected, downloading, completed
-  externalId  String?   @map("external_id")
-  metadata    String?
+  status      Int       @default(1) // jellyseerr status code
+  externalId  String?   @unique @map("external_id") // jellyseerr request id
+  metadata    String?   // JSON data for poster, etc.
   notes       String?
   requestedAt DateTime  @default(now()) @map("requested_at")
   processedAt DateTime? @map("processed_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Additional fields for local sync
+  isOnEmby    Boolean   @default(false) @map("is_on_emby")
+  embyItemId  String?   @map("emby_item_id")
+  requesterName String? @map("requester_name")
+  requesterEmail String? @map("requester_email")
+  requesterAvatar String? @map("requester_avatar")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([mediaType, status])

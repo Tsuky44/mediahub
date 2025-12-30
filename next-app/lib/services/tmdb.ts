@@ -233,6 +233,34 @@ export class TmdbService {
         return null
     }
   }
+
+  async getRecommendations(id: number, type: 'movie' | 'tv', page = 1) {
+    const client = await this.getClient()
+    if (!client) return { results: [] }
+    
+    try {
+        const response = await client.get(`/${type}/${id}/recommendations`, {
+            params: { page }
+        })
+        return response.data
+    } catch (e) {
+        console.error(`Failed to get recommendations for ${type} ${id}`, e)
+        return { results: [] }
+    }
+  }
+
+  async getSimilar(id: number, type: 'movie' | 'tv') {
+    const client = await this.getClient()
+    if (!client) return { results: [] }
+    
+    try {
+        const response = await client.get(`/${type}/${id}/similar`)
+        return response.data
+    } catch (e) {
+        console.error(`Failed to get similar for ${type} ${id}`, e)
+        return { results: [] }
+    }
+  }
 }
 
 export const tmdbService = new TmdbService()

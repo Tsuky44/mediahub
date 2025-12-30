@@ -49,6 +49,7 @@ export class JellyseerrService {
                 take,
                 skip,
                 sort: 'added',
+                filter: 'all' // Récupérer TOUTES les demandes de TOUS les utilisateurs
             }
         })
         

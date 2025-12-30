@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Film, ListPlus, Settings, LogOut, Search, Download } from 'lucide-react'
+import Image from 'next/image'
+import { Home, Film, ListPlus, Settings, LogOut, Search, Download, BarChart3, User } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { NotificationBell } from './NotificationBell'
 import clsx from 'clsx'
@@ -11,6 +12,7 @@ const navigation = [
   { name: 'Demander', href: '/dashboard/requests', icon: Home },
   { name: 'Mes demandes', href: '/dashboard/requests/list', icon: ListPlus },
   { name: 'Ma médiathèque', href: '/dashboard/media', icon: Film },
+  { name: 'Statistiques', href: '/dashboard/stats', icon: BarChart3 },
   { name: 'Téléchargements', href: '/dashboard/downloads', icon: Download },
 ]
 
@@ -64,6 +66,30 @@ export function Navbar() {
             </div>
 
             <NotificationBell />
+            
+            {session?.user && (
+              <Link 
+                // @ts-ignore
+                href={session.user.embyUserId ? `/dashboard/stats/user/${session.user.embyUserId}` : '/dashboard/stats'}
+                className="flex items-center gap-2 group transition-all duration-200"
+                title="Mes statistiques"
+              >
+                <div className="relative h-9 w-9 overflow-hidden rounded-full border-2 border-gray-700 group-hover:border-indigo-500 transition-all duration-300 group-hover:scale-105 shadow-lg shadow-black/20">
+                  {session.user.image ? (
+                    <Image 
+                      src={session.user.image} 
+                      alt={session.user.name || 'User'} 
+                      fill
+                      className="object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 text-sm font-bold text-gray-300">
+                      {session.user.name?.charAt(0).toUpperCase() || <User className="w-4 h-4" />}
+                    </div>
+                  )}
+                </div>
+              </Link>
+            )}
 
              {session?.user?.name === 'mathis' && (
               <Link href="/dashboard/settings" className="rounded-full bg-gray-800 p-1 text-gray-400 hover:text-white">

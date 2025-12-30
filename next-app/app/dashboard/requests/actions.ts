@@ -2,11 +2,18 @@
 
 import { tmdbService } from '@/lib/services/tmdb'
 import { jellyseerrService } from '@/lib/services/jellyseerr'
-import { getWatchLaterList, isInWatchLater } from '../media/watch-later-actions'
-
-export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'watch-later', search?: string, filters?: any) {
-  try {
-    let data;
+import { getWatchLaterList, isInWatchLater, areInWatchLater } from '../media/watch-later-actions'
+  import { fetchUserRecommendations, fetchServerTrends } from '../media/actions'
+  
+  export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations' | 'trends', search?: string, filters?: any) {
+    try {
+      if (type === 'recommendations') {
+          return await fetchUserRecommendations(page)
+      }
+      if (type === 'trends') {
+          return await fetchServerTrends(page)
+      }
+      let data;
     if (type === 'watch-later') {
         const watchLaterItems = await getWatchLaterList()
         // Format for MediaCard
@@ -39,16 +46,27 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
 
     // Enrich with Jellyseerr status
     if (data.results && data.results.length > 0) {
+        // Pre-check watch later in batch
+        const itemsToCheck = data.results
+            .map((item: any) => ({
+                id: item.id.toString(),
+                mediaType: item.media_type || (type === 'all' ? undefined : type)
+            }))
+            .filter((i: any) => i.mediaType === 'movie' || i.mediaType === 'tv')
+
+        const watchLaterStatuses = await areInWatchLater(itemsToCheck)
+        const watchLaterSet = new Set(watchLaterStatuses)
+
         const enrichedResults = await Promise.all(data.results.map(async (item: any) => {
             const mediaType = item.media_type || (type === 'all' ? undefined : type)
-            // If mediaType is still undefined (e.g. person in search results), skip
             if (!mediaType || (mediaType !== 'movie' && mediaType !== 'tv')) {
                 return item
             }
             
             try {
+                // Jellyseerr availability check (cached)
                 const availability = await jellyseerrService.getMediaAvailability(item.id, mediaType)
-                const isWatchLater = await isInWatchLater(item.id.toString(), mediaType)
+                const isWatchLater = watchLaterSet.has(`${mediaType}:${item.id}`)
                 return { ...item, media_status: availability, isWatchLater }
             } catch (e) {
                 return item

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { Search } from 'lucide-react'
+import { Search, Loader2 } from 'lucide-react'
 import { useDebounce } from 'use-debounce'
 
 export function SearchInput({ placeholder }: { placeholder?: string }) {
@@ -13,6 +13,7 @@ export function SearchInput({ placeholder }: { placeholder?: string }) {
   
   const [text, setText] = useState(initialQuery)
   const [query] = useDebounce(text, 500)
+  const [isPending, startTransition] = useTransition()
 
   useEffect(() => {
     const currentQ = searchParams.get('q') || ''
@@ -26,15 +27,20 @@ export function SearchInput({ placeholder }: { placeholder?: string }) {
       params.delete('q')
     }
     
-    // Stay on the current page instead of redirecting to /dashboard/requests
-    router.push(`${pathname}?${params.toString()}`)
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`)
+    })
     
   }, [query, router, searchParams, pathname])
 
   return (
     <div className="relative w-full max-w-md">
       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-        <Search className="h-5 w-5 text-gray-400" aria-hidden="true" />
+        {isPending ? (
+          <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
+        ) : (
+          <Search className="h-5 w-5 text-gray-400" aria-hidden="true" />
+        )}
       </div>
       <input
         type="text"

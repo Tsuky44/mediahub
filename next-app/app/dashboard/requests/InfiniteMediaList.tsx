@@ -1,25 +1,28 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useInView } from 'react-intersection-observer'
 import { MediaCard } from '@/components/MediaCard'
 import { MediaFilters } from '@/components/MediaFilters'
 import { fetchMedia } from './actions'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import clsx from 'clsx'
 import { Loader2, SlidersHorizontal, X } from 'lucide-react'
 
 interface InfiniteMediaListProps {
   initialItems: any[]
-  initialType: 'all' | 'movie' | 'tv' | 'watch-later'
+  initialType: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations' | 'trends'
   initialSearch?: string
+  showTabs?: boolean
 }
 
-export function InfiniteMediaList({ initialItems, initialType, initialSearch }: InfiniteMediaListProps) {
+export function InfiniteMediaList({ initialItems, initialType, initialSearch, showTabs = true }: InfiniteMediaListProps) {
   const [items, setItems] = useState(initialItems)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [isPending, startTransition] = useTransition()
   const [activeFilters, setActiveFilters] = useState<any>({})
   const [showFilters, setShowFilters] = useState(false)
   
@@ -29,18 +32,15 @@ export function InfiniteMediaList({ initialItems, initialType, initialSearch }: 
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Reset when filter/search changes from parent (URL)
+  // Update items when initialItems changes (from server)
   useEffect(() => {
     setItems(initialItems)
     setPage(1)
     setHasMore(true)
-    setActiveFilters({}) // Reset active filters on type change if needed, but usually we want to keep them if compatible? 
-    // Actually, type change might invalidate filters (like studios for TV). 
-    // The MediaFilters component handles its own state reset on type change.
-  }, [initialItems, initialType, initialSearch])
+  }, [initialItems])
 
   const loadMore = async () => {
-    if (loading || !hasMore) return
+    if (loading || !hasMore || isPending) return
     
     setLoading(true)
     const nextPage = page + 1
@@ -69,14 +69,19 @@ export function InfiniteMediaList({ initialItems, initialType, initialSearch }: 
     }
   }, [inView])
 
-  const handleFilterChange = (type: 'all' | 'movie' | 'tv' | 'watch-later') => {
+  const handleFilterChange = (type: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations') => {
+      if (type === initialType) return;
+      
       const params = new URLSearchParams(searchParams)
       if (type === 'all') {
           params.delete('filter')
       } else {
           params.set('filter', type)
       }
-      router.push(`/dashboard/requests?${params.toString()}`)
+      
+      startTransition(() => {
+          router.push(`/dashboard/requests?${params.toString()}`)
+      })
   }
 
   const onSideFilterChange = async (filters: any) => {
@@ -113,7 +118,7 @@ export function InfiniteMediaList({ initialItems, initialType, initialSearch }: 
                    
                    <div className="flex-1 overflow-y-auto p-6">
                         <MediaFilters 
-                            type={initialType === 'watch-later' ? 'all' : initialType} 
+                            type={initialType === 'watch-later' || initialType === 'recommendations' || initialType === 'trends' ? 'all' : initialType} 
                             onFilterChange={onSideFilterChange} 
                         />
                    </div>
@@ -139,56 +144,84 @@ export function InfiniteMediaList({ initialItems, initialType, initialSearch }: 
            <SlidersHorizontal className="h-6 w-6 group-hover:rotate-180 transition-transform duration-500" />
        </button>
 
-       <div className="flex-1 space-y-6 w-full">
+       <div className={clsx("flex-1 space-y-6 w-full transition-opacity duration-300", isPending && "opacity-50 pointer-events-none")}>
             {/* Type Filters */}
-            <div className="flex items-center justify-center border-b border-gray-800 pb-4">
-                <div className="flex space-x-2 bg-gray-900/50 p-1 rounded-xl border border-gray-800">
-                        <button
-                            onClick={() => handleFilterChange('all')}
-                            className={clsx(
-                                'px-6 py-2 text-sm font-medium rounded-lg transition-all',
-                                initialType === 'all' 
-                                    ? 'bg-gray-800 text-white shadow-sm' 
-                                    : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+            {showTabs && (
+                <div className="flex items-center justify-center border-b border-gray-800 pb-4">
+                    <div className="flex space-x-2 bg-gray-900/50 p-1 rounded-xl border border-gray-800 relative">
+                            {isPending && (
+                                <div className="absolute -top-1 left-1/2 -translate-x-1/2">
+                                    <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                                </div>
                             )}
-                        >
-                            Tout
-                        </button>
-                        <button
-                            onClick={() => handleFilterChange('movie')}
-                            className={clsx(
-                                'px-6 py-2 text-sm font-medium rounded-lg transition-all',
-                                initialType === 'movie' 
-                                    ? 'bg-gray-800 text-white shadow-sm' 
-                                    : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-                            )}
-                        >
-                            Films
-                        </button>
-                        <button
-                            onClick={() => handleFilterChange('tv')}
-                            className={clsx(
-                                'px-6 py-2 text-sm font-medium rounded-lg transition-all',
-                                initialType === 'tv' 
-                                    ? 'bg-gray-800 text-white shadow-sm' 
-                                    : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-                            )}
-                        >
-                            Séries
-                        </button>
-                        <button
-                            onClick={() => handleFilterChange('watch-later')}
-                            className={clsx(
-                                'px-6 py-2 text-sm font-medium rounded-lg transition-all',
-                                initialType === 'watch-later' 
-                                    ? 'bg-gray-800 text-white shadow-sm' 
-                                    : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-                            )}
-                        >
-                            À regarder plus tard
-                        </button>
+                            <button
+                                onClick={() => handleFilterChange('all')}
+                                disabled={isPending}
+                                className={clsx(
+                                    'px-6 py-2 text-sm font-medium rounded-lg transition-all',
+                                    initialType === 'all' 
+                                        ? 'bg-gray-800 text-white shadow-sm' 
+                                        : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
+                                    isPending && initialType === 'all' && 'animate-pulse'
+                                )}
+                            >
+                                Tout
+                            </button>
+                            <button
+                                onClick={() => handleFilterChange('movie')}
+                                disabled={isPending}
+                                className={clsx(
+                                    'px-6 py-2 text-sm font-medium rounded-lg transition-all',
+                                    initialType === 'movie' 
+                                        ? 'bg-gray-800 text-white shadow-sm' 
+                                        : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
+                                    isPending && initialType === 'movie' && 'animate-pulse'
+                                )}
+                            >
+                                Films
+                            </button>
+                            <button
+                                onClick={() => handleFilterChange('tv')}
+                                disabled={isPending}
+                                className={clsx(
+                                    'px-6 py-2 text-sm font-medium rounded-lg transition-all',
+                                    initialType === 'tv' 
+                                        ? 'bg-gray-800 text-white shadow-sm' 
+                                        : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
+                                    isPending && initialType === 'tv' && 'animate-pulse'
+                                )}
+                            >
+                                Séries
+                            </button>
+                            <button
+                                onClick={() => handleFilterChange('recommendations')}
+                                disabled={isPending}
+                                className={clsx(
+                                    'px-6 py-2 text-sm font-medium rounded-lg transition-all',
+                                    initialType === 'recommendations' 
+                                        ? 'bg-gray-800 text-white shadow-sm' 
+                                        : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
+                                    isPending && initialType === 'recommendations' && 'animate-pulse'
+                                )}
+                            >
+                                Recommandés
+                            </button>
+                            <button
+                                onClick={() => handleFilterChange('watch-later')}
+                                disabled={isPending}
+                                className={clsx(
+                                    'px-6 py-2 text-sm font-medium rounded-lg transition-all',
+                                    initialType === 'watch-later' 
+                                        ? 'bg-gray-800 text-white shadow-sm' 
+                                        : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
+                                    isPending && initialType === 'watch-later' && 'animate-pulse'
+                                )}
+                            >
+                                À regarder plus tard
+                            </button>
+                    </div>
                 </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                 {items.map((item) => (
