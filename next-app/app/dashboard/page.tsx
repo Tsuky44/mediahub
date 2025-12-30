@@ -20,7 +20,7 @@ export default async function DashboardPage() {
     ])
     stats = statsResult
     recentlyWatched = watchedResult
-    recommendations = recsResult
+    recommendations = Array.isArray(recsResult) ? recsResult : (recsResult as any).results || []
   } catch (e) {
     console.error('Failed to fetch dashboard data', e)
     stats = {
