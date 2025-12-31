@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
                         mediaType,
                         tmdbId: String(tmdbId),
                         title,
-                        status: 'pending',
+                        status: 1 as any, // 1 = PENDING in Prisma schema
                         metadata: JSON.stringify({ posterPath })
                     }
                 })
