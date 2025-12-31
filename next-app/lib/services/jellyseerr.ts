@@ -293,7 +293,7 @@ export class JellyseerrService {
                 const settings = settingsRes.data
                 // Get the first enabled server
                 const server = settings.find((s: any) => s.isDefault) || settings[0]
-                if (server) {
+                if (server && server.hostname) {
                     const baseUrl = server.hostname.startsWith('http') ? server.hostname : `http://${server.hostname}`
                     const port = server.port ? `:${server.port}` : ''
                     const urlBase = `${baseUrl}${port}${server.urlBase || ''}`

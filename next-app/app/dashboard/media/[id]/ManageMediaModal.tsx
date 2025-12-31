@@ -164,49 +164,55 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
                 </h3>
                 <div className="space-y-3">
                   {requests.length > 0 ? (
-                    requests.map((req: any) => (
-                      <div key={req.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between hover:bg-white/10 transition-colors">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-3">
-                            <div className="h-8 w-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
-                              <User className="h-4 w-4" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-white">{req.requestedBy?.displayName || req.requestedBy?.email || 'Inconnu'}</p>
-                              <div className="flex items-center gap-2 text-[10px] text-gray-500 uppercase tracking-wider">
-                                <Calendar className="h-3 w-3" />
-                                {new Date(req.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    requests.map((req: any) => {
+                      if (!req) return null;
+                      return (
+                        <div key={req.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between hover:bg-white/10 transition-colors">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-3">
+                              <div className="h-8 w-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                                <User className="h-4 w-4" />
                               </div>
+                              <div>
+                                <p className="text-sm font-bold text-white">{req.requestedBy?.displayName || req.requestedBy?.email || 'Inconnu'}</p>
+                                <div className="flex items-center gap-2 text-[10px] text-gray-500 uppercase tracking-wider">
+                                  <Calendar className="h-3 w-3" />
+                                  {req.createdAt ? new Date(req.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Date inconnue'}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-2">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                                req.status === 2 ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'
+                              }`}>
+                                {req.status === 2 ? 'Validé' : 'En attente'}
+                              </span>
+                              {req.seasons?.length > 0 && (
+                                <div className="flex gap-1">
+                                  {req.seasons.map((s: any) => {
+                                    if (!s) return null;
+                                    return (
+                                      <span key={s.id} className="w-5 h-5 flex items-center justify-center bg-indigo-500/20 text-indigo-400 text-[10px] font-bold rounded-full border border-indigo-500/30">
+                                        {s.seasonNumber}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           </div>
                           
-                          <div className="flex flex-wrap gap-2">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                              req.status === 2 ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'
-                            }`}>
-                              {req.status === 2 ? 'Validé' : 'En attente'}
-                            </span>
-                            {req.seasons?.length > 0 && (
-                              <div className="flex gap-1">
-                                {req.seasons.map((s: any) => (
-                                  <span key={s.id} className="w-5 h-5 flex items-center justify-center bg-indigo-500/20 text-indigo-400 text-[10px] font-bold rounded-full border border-indigo-500/30">
-                                    {s.seasonNumber}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                          <button 
+                            onClick={() => handleDeleteRequest(req.id)}
+                            disabled={isDeleting === req.id}
+                            className="p-2.5 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+                          >
+                            {isDeleting === req.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
+                          </button>
                         </div>
-                        
-                        <button 
-                          onClick={() => handleDeleteRequest(req.id)}
-                          disabled={isDeleting === req.id}
-                          className="p-2.5 text-gray-500 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
-                        >
-                          {isDeleting === req.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
-                        </button>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="text-gray-500 text-sm italic py-4 text-center bg-white/5 rounded-xl border border-dashed border-white/10">Aucune demande active.</p>
                   )}
@@ -240,11 +246,11 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
                     )}
                     
                     <button 
-                      onClick={() => handleDeleteMedia(mediaInfo.mediaInfo.id, true)}
-                      disabled={isDeleting === mediaInfo.mediaInfo.id}
+                      onClick={() => mediaInfo?.mediaInfo?.id && handleDeleteMedia(mediaInfo.mediaInfo.id, true)}
+                      disabled={isDeleting === mediaInfo?.mediaInfo?.id}
                       className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl text-sm font-bold text-red-500 transition-all"
                     >
-                        {isDeleting === mediaInfo.mediaInfo.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        {isDeleting === mediaInfo?.mediaInfo?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                         Supprimer de {mediaType === 'tv' ? 'Sonarr' : 'Radarr'}
                     </button>
                     <p className="text-[10px] text-gray-500 italic text-center px-4">* Cela supprimera irréversiblement ce(tte) {mediaType === 'tv' ? 'série' : 'film'} de {mediaType === 'tv' ? 'Sonarr' : 'Radarr'}, y compris tous les fichiers.</p>
@@ -258,19 +264,19 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
                   <h3 className="text-lg font-bold text-white">Avancé</h3>
                   <div className="grid gap-3">
                     <button 
-                      onClick={() => handleMarkAsAvailable(mediaInfo.mediaInfo.id)}
-                      disabled={isDeleting === mediaInfo.mediaInfo.id}
+                      onClick={() => mediaInfo?.mediaInfo?.id && handleMarkAsAvailable(mediaInfo.mediaInfo.id)}
+                      disabled={isDeleting === mediaInfo?.mediaInfo?.id}
                       className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-green-600/20 hover:bg-green-600/30 border border-green-600/30 rounded-xl text-sm font-bold text-green-500 transition-all"
                     >
-                        {isDeleting === mediaInfo.mediaInfo.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                        {isDeleting === mediaInfo?.mediaInfo?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                         Marquer comme disponible
                     </button>
                     <button 
-                      onClick={() => handleDeleteMedia(mediaInfo.mediaInfo.id, false)}
-                      disabled={isDeleting === mediaInfo.mediaInfo.id}
+                      onClick={() => mediaInfo?.mediaInfo?.id && handleDeleteMedia(mediaInfo.mediaInfo.id, false)}
+                      disabled={isDeleting === mediaInfo?.mediaInfo?.id}
                       className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 rounded-xl text-sm font-bold text-red-500 transition-all"
                     >
-                        {isDeleting === mediaInfo.mediaInfo.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                        {isDeleting === mediaInfo?.mediaInfo?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
                         Effacer les données
                     </button>
                     <p className="text-[10px] text-gray-500 italic text-center px-4">* Ceci supprimera de manière irréversible toutes les données de ce(tte) {mediaType === 'tv' ? 'série' : 'film'} dans Jellyseerr. Si cet élément existe dans votre bibliothèque Emby, les informations sur le média seront recréées lors de la prochaine analyse.</p>
