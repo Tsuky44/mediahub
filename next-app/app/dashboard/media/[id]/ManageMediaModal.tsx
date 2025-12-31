@@ -43,7 +43,8 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
     }
   }
 
-  const handleDeleteRequest = async (requestId: number) => {
+  const handleDeleteRequest = async (requestId: number | undefined) => {
+    if (!requestId) return;
     if (!confirm('Voulez-vous vraiment supprimer cette demande ?')) return
     
     setIsDeleting(requestId)
@@ -62,7 +63,9 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
     }
   }
 
-  const handleDeleteMedia = async (mediaId: number, deleteFiles: boolean = false) => {
+  const handleDeleteMedia = async (mediaId: number | undefined, deleteFiles: boolean = false) => {
+    if (!mediaId) return;
+    
     const message = deleteFiles 
       ? `Voulez-vous vraiment supprimer ce média de ${mediaType === 'tv' ? 'Sonarr' : 'Radarr'} ? Cela supprimera également tous les fichiers.`
       : 'Voulez-vous vraiment effacer les données de ce média dans Jellyseerr ? (Les fichiers ne seront pas supprimés)';
@@ -89,7 +92,8 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
     }
   }
 
-  const handleMarkAsAvailable = async (mediaId: number) => {
+  const handleMarkAsAvailable = async (mediaId: number | undefined) => {
+    if (!mediaId) return;
     if (!confirm('Voulez-vous vraiment marquer ce média comme disponible ?')) return
     
     setIsDeleting(mediaId)
@@ -110,9 +114,19 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
 
   if (!isOpen) return null
 
-  const requests = mediaInfo?.mediaInfo?.requests || []
+  const requests = Array.isArray(mediaInfo?.mediaInfo?.requests) ? mediaInfo.mediaInfo.requests : []
   const mediaStatus = mediaInfo?.mediaInfo?.status
   const hasMediaInfo = !!mediaInfo?.mediaInfo
+
+  console.log('[ManageMediaModal] Render state:', { 
+    tmdbId, 
+    hasMediaInfo, 
+    requestsCount: requests.length,
+    loading,
+    error,
+    mediaInfoType: typeof mediaInfo,
+    hasInternalMediaInfo: !!mediaInfo?.mediaInfo
+  })
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
@@ -188,7 +202,7 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
                               }`}>
                                 {req.status === 2 ? 'Validé' : 'En attente'}
                               </span>
-                              {req.seasons?.length > 0 && (
+                              {Array.isArray(req.seasons) && req.seasons.length > 0 && (
                                 <div className="flex gap-1">
                                   {req.seasons.map((s: any) => {
                                     if (!s) return null;
@@ -228,7 +242,7 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
                   </h3>
                   <div className="grid gap-3">
                     {/* Actions dynamically based on status */}
-                    {mediaInfo.mediaInfo?.externalServiceUrl ? (
+                    {mediaInfo?.mediaInfo?.externalServiceUrl ? (
                       <a 
                         href={mediaInfo.mediaInfo.externalServiceUrl}
                         target="_blank"
