@@ -150,7 +150,7 @@ export class JellyseerrService {
         forget(cacheKey)
     }
 
-    return remember(cacheKey, 1000 * 60 * 5, async () => {
+    return remember(cacheKey, 1000 * 30, async () => { // Reduced to 30 seconds for better sync
         const client = await this.getClient()
         if (!client) {
             return { available: false, status: 'unknown', message: 'Jellyseerr not configured', seasons: [] }
@@ -279,6 +279,11 @@ export class JellyseerrService {
         const endpoint = mediaType === 'movie' ? 'movie' : 'tv'
         const response = await client.get(`/api/v1/${endpoint}/${tmdbId}`)
         const data = response.data
+
+        // Force invalidate availability cache when fetching full media info
+        // to ensure the status is fresh if accessed right after
+        const cacheKey = `jellyseerr_availability_${mediaType}_${tmdbId}`
+        forget(cacheKey)
 
         // Try to enrich with service URLs
         if (data.mediaInfo?.externalServiceId) {
