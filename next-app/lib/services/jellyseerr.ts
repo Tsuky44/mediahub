@@ -165,7 +165,9 @@ export class JellyseerrService {
                 const mediaInfo = media.mediaInfo
                 
                 if (mediaInfo) {
-                    console.log(`[Jellyseerr] MediaInfo for ${tmdbId}:`, JSON.stringify(mediaInfo, null, 2))
+                    console.log(`[Jellyseerr Debug] TMDB ID: ${tmdbId} | MediaInfo Status: ${mediaInfo.status} | DownloadStatus: ${mediaInfo.downloadStatus}`);
+                    console.log(`[Jellyseerr Debug] Full Media Object:`, JSON.stringify(media, (key, value) => key === 'overview' ? undefined : value, 2));
+                    
                     const result = this.mapJellyseerrStatus(
                         mediaInfo.status, 
                         mediaInfo.downloadStatus, 
@@ -226,42 +228,46 @@ export class JellyseerrService {
   }
 
   private mapJellyseerrStatus(status: number, downloadStatus: number, mediaAdded: boolean, mediaData: any) {
-    // Status codes:
-    // 5: AVAILABLE
+    // Status codes (MediaInfo status):
+    // 1: UNKNOWN
+    // 2: PENDING (Request exists but not yet approved/synced)
+    // 3: PROCESSING (Approved and sent to Radarr/Sonarr)
     // 4: PARTIALLY_AVAILABLE
-    // 3: PROCESSING
-    // 2: PENDING
+    // 5: AVAILABLE
     
     const base = { seasons: [] as any[] }
     
-    // Check if there are any active requests
-    // Filter out declined requests (status 3 in Jellyseerr request object)
-    const activeRequests = (mediaData.mediaInfo?.requests || mediaData.requests || [])
-        .filter((req: any) => req.status !== 3);
-    
+    // Check for requests in various places (Jellyseerr sometimes nests them differently)
+    const requests = mediaData.mediaInfo?.requests || mediaData.requests || [];
+    const activeRequests = requests.filter((req: any) => req.status !== 3 && req.status !== 4); // Filter out DECLINED (3) or VOID (4)
     const hasActiveRequests = activeRequests.length > 0;
 
-    // Check if it's actually in Radarr/Sonarr
-    const hasExternalService = !!mediaData.mediaInfo?.externalServiceId || !!mediaData.externalServiceId;
+    // Check for external service ID (Radarr/Sonarr)
+    const externalServiceId = mediaData.mediaInfo?.externalServiceId || mediaData.externalServiceId;
+    const hasExternalService = !!externalServiceId;
 
+    console.log(`[Jellyseerr Status Mapping] TMDB: ${mediaData.id} | Status: ${status} | hasRequests: ${hasActiveRequests} | hasService: ${hasExternalService}`);
+
+    // If fully available in Jellyseerr or Emby (mediaAdded)
     if (status === 5 || mediaAdded) {
         return { ...base, available: true, status: 'available', message: 'Disponible' }
     }
+
+    // Partially available (usually for TV shows)
     if (status === 4) {
         return { ...base, available: true, status: 'partial', message: 'Partiellement disponible' }
     }
     
-    // If no active requests AND no external service, it's not available anymore
-    if (!hasActiveRequests && !hasExternalService) {
-        return { ...base, available: false, status: 'not_available', message: 'Non disponible' }
-    }
-
-    // Status 2 (Pending) or 3 (Processing) or Unknown (1) with active requests
-    if (status === 2 || status === 3 || (status === 1 && hasActiveRequests)) {
+    // THE CORE LOGIC FOR "PROCESSING" (En cours de traitement)
+    // It should be considered "processing" if:
+    // 1. Jellyseerr status is PENDING (2) or PROCESSING (3)
+    // 2. OR there is an active request (even if status is 1/UNKNOWN)
+    // 3. OR there is an external service ID (meaning it's already in Radarr/Sonarr)
+    if (status === 2 || status === 3 || hasActiveRequests || hasExternalService) {
         return { ...base, available: false, status: 'processing', message: 'En cours de traitement' }
     }
 
-    // Fallback for ghost records or truly not available
+    // If none of the above, and it's not available, it's "Not Available"
     return { ...base, available: false, status: 'not_available', message: 'Non disponible', seasons: [] }
   }
 
