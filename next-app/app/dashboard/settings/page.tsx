@@ -35,6 +35,12 @@ export default async function SettingsPage() {
   const currentSmbShare = await getSetting('smb_share')
   const currentSmbPath = await getSetting('smb_path')
   
+  // Get current Radarr/Sonarr settings
+  const currentRadarrUrl = await getSetting('radarr_url')
+  const currentRadarrKey = await getSetting('radarr_api_key')
+  const currentSonarrUrl = await getSetting('sonarr_url')
+  const currentSonarrKey = await getSetting('sonarr_api_key')
+  
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <h2 className="text-2xl font-bold text-white">Paramètres</h2>
@@ -57,6 +63,10 @@ export default async function SettingsPage() {
                 currentSmbPass={currentSmbPass}
                 currentSmbShare={currentSmbShare}
                 currentSmbPath={currentSmbPath}
+                currentRadarrUrl={currentRadarrUrl}
+                currentRadarrKey={currentRadarrKey}
+                currentSonarrUrl={currentSonarrUrl}
+                currentSonarrKey={currentSonarrKey}
              />
           </div>
         </div>

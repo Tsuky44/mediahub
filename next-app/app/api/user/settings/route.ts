@@ -21,7 +21,11 @@ export async function POST(request: NextRequest) {
         smb_username,
         smb_password,
         smb_share,
-        smb_path
+        smb_path,
+        radarr_url,
+        radarr_api_key,
+        sonarr_url,
+        sonarr_api_key
     } = body
 
     // Update Global Settings
@@ -35,6 +39,10 @@ export async function POST(request: NextRequest) {
         { key: 'smb_password', value: smb_password },
         { key: 'smb_share', value: smb_share },
         { key: 'smb_path', value: smb_path },
+        { key: 'radarr_url', value: radarr_url },
+        { key: 'radarr_api_key', value: radarr_api_key },
+        { key: 'sonarr_url', value: sonarr_url },
+        { key: 'sonarr_api_key', value: sonarr_api_key },
     ]
 
     for (const setting of settingsToUpdate) {

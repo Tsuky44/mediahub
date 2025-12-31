@@ -62,16 +62,43 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
     }
   }
 
-  const handleDeleteMedia = async (mediaId: number) => {
-    if (!confirm('Voulez-vous vraiment supprimer ce média de Jellyseerr ? Cela supprimera également les fichiers si configuré.')) return
+  const handleDeleteMedia = async (mediaId: number, deleteFiles: boolean = false) => {
+    const message = deleteFiles 
+      ? `Voulez-vous vraiment supprimer ce média de ${mediaType === 'tv' ? 'Sonarr' : 'Radarr'} ? Cela supprimera également tous les fichiers.`
+      : 'Voulez-vous vraiment effacer les données de ce média dans Jellyseerr ? (Les fichiers ne seront pas supprimés)';
+    
+    if (!confirm(message)) return
     
     setIsDeleting(mediaId)
     try {
-      const res = await fetch(`/api/media/${tmdbId}/manage?action=media&targetId=${mediaId}&type=${mediaType}`, {
+      const res = await fetch(`/api/media/${tmdbId}/manage?action=media&targetId=${mediaId}&type=${mediaType}&deleteFiles=${deleteFiles}`, {
         method: 'DELETE'
       })
       if (res.ok) {
-        onClose()
+        if (deleteFiles) {
+          onClose()
+        } else {
+          fetchMediaInfo()
+        }
+        router.refresh()
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsDeleting(null)
+    }
+  }
+
+  const handleMarkAsAvailable = async (mediaId: number) => {
+    if (!confirm('Voulez-vous vraiment marquer ce média comme disponible ?')) return
+    
+    setIsDeleting(mediaId)
+    try {
+      const res = await fetch(`/api/media/${tmdbId}/manage?action=status&targetId=${mediaId}&type=${mediaType}`, {
+        method: 'POST'
+      })
+      if (res.ok) {
+        fetchMediaInfo()
         router.refresh()
       }
     } catch (err) {
@@ -85,6 +112,7 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
 
   const requests = mediaInfo?.mediaInfo?.requests || []
   const mediaStatus = mediaInfo?.mediaInfo?.status
+  const hasMediaInfo = !!mediaInfo?.mediaInfo
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
@@ -116,6 +144,15 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
                 <p>{error}</p>
               </div>
               <button onClick={fetchMediaInfo} className="block mx-auto text-indigo-400 hover:underline text-sm">Réessayer</button>
+            </div>
+          ) : !hasMediaInfo && requests.length === 0 ? (
+            <div className="py-10 text-center space-y-4">
+              <div className="bg-indigo-500/10 text-indigo-400 p-4 rounded-xl border border-indigo-500/20 inline-block">
+                <Settings className="h-8 w-8 mx-auto mb-2" />
+                <p>Aucune donnée de gestion trouvée pour ce média.</p>
+                <p className="text-xs text-gray-500 mt-2">Le média a probablement été supprimé de Jellyseerr.</p>
+              </div>
+              <button onClick={onClose} className="block mx-auto text-indigo-400 hover:underline text-sm">Fermer</button>
             </div>
           ) : (
             <>
@@ -177,45 +214,69 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
               </section>
 
               {/* Media Management Section */}
-              <section className="space-y-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-indigo-400" />
-                  Média(s)
-                </h3>
-                <div className="grid gap-3">
-                   {/* Actions dynamically based on status */}
-                   <button className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-white transition-all">
-                      <ExternalLink className="h-4 w-4" />
-                      Ouvrir dans {mediaType === 'tv' ? 'Sonarr' : 'Radarr'}
-                   </button>
-                   
-                   <button 
-                    onClick={() => handleDeleteMedia(mediaInfo.mediaInfo.id)}
-                    disabled={isDeleting === mediaInfo.mediaInfo.id}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl text-sm font-bold text-red-500 transition-all"
-                   >
-                      {isDeleting === mediaInfo.mediaInfo.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                      Supprimer de {mediaType === 'tv' ? 'Sonarr' : 'Radarr'}
-                   </button>
-                   <p className="text-[10px] text-gray-500 italic text-center px-4">* Cela supprimera irréversiblement ce(tte) {mediaType === 'tv' ? 'série' : 'film'} de {mediaType === 'tv' ? 'Sonarr' : 'Radarr'}, y compris tous les fichiers.</p>
-                </div>
-              </section>
+              {hasMediaInfo && (
+                <section className="space-y-4">
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-indigo-400" />
+                    Média(s)
+                  </h3>
+                  <div className="grid gap-3">
+                    {/* Actions dynamically based on status */}
+                    {mediaInfo.mediaInfo?.externalServiceUrl ? (
+                      <a 
+                        href={mediaInfo.mediaInfo.externalServiceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-white transition-all"
+                      >
+                          <ExternalLink className="h-4 w-4" />
+                          Ouvrir dans {mediaType === 'tv' ? 'Sonarr' : 'Radarr'}
+                      </a>
+                    ) : (
+                      <div className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-white/5 opacity-50 border border-white/10 rounded-xl text-sm font-bold text-white cursor-not-allowed">
+                          <ExternalLink className="h-4 w-4" />
+                          Lien {mediaType === 'tv' ? 'Sonarr' : 'Radarr'} non disponible
+                      </div>
+                    )}
+                    
+                    <button 
+                      onClick={() => handleDeleteMedia(mediaInfo.mediaInfo.id, true)}
+                      disabled={isDeleting === mediaInfo.mediaInfo.id}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl text-sm font-bold text-red-500 transition-all"
+                    >
+                        {isDeleting === mediaInfo.mediaInfo.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        Supprimer de {mediaType === 'tv' ? 'Sonarr' : 'Radarr'}
+                    </button>
+                    <p className="text-[10px] text-gray-500 italic text-center px-4">* Cela supprimera irréversiblement ce(tte) {mediaType === 'tv' ? 'série' : 'film'} de {mediaType === 'tv' ? 'Sonarr' : 'Radarr'}, y compris tous les fichiers.</p>
+                  </div>
+                </section>
+              )}
 
               {/* Advanced Actions */}
-              <section className="space-y-4 pt-4 border-t border-white/5">
-                <h3 className="text-lg font-bold text-white">Avancé</h3>
-                <div className="grid gap-3">
-                   <button className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-green-600/20 hover:bg-green-600/30 border border-green-600/30 rounded-xl text-sm font-bold text-green-500 transition-all">
-                      <CheckCircle2 className="h-4 w-4" />
-                      Marquer toutes les saisons comme disponibles
-                   </button>
-                   <button className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 rounded-xl text-sm font-bold text-red-500 transition-all">
-                      <FileText className="h-4 w-4" />
-                      Effacer les données
-                   </button>
-                   <p className="text-[10px] text-gray-500 italic text-center px-4">* Ceci supprimera de manière irréversible toutes les données de ce(tte) {mediaType === 'tv' ? 'série' : 'film'}, y compris les demandes éventuelles. Si cet élément existe dans votre bibliothèque Emby, les informations sur le média seront recréées lors de la prochaine analyse.</p>
-                </div>
-              </section>
+              {hasMediaInfo && (
+                <section className="space-y-4 pt-4 border-t border-white/5">
+                  <h3 className="text-lg font-bold text-white">Avancé</h3>
+                  <div className="grid gap-3">
+                    <button 
+                      onClick={() => handleMarkAsAvailable(mediaInfo.mediaInfo.id)}
+                      disabled={isDeleting === mediaInfo.mediaInfo.id}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-green-600/20 hover:bg-green-600/30 border border-green-600/30 rounded-xl text-sm font-bold text-green-500 transition-all"
+                    >
+                        {isDeleting === mediaInfo.mediaInfo.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                        Marquer comme disponible
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteMedia(mediaInfo.mediaInfo.id, false)}
+                      disabled={isDeleting === mediaInfo.mediaInfo.id}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 rounded-xl text-sm font-bold text-red-500 transition-all"
+                    >
+                        {isDeleting === mediaInfo.mediaInfo.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                        Effacer les données
+                    </button>
+                    <p className="text-[10px] text-gray-500 italic text-center px-4">* Ceci supprimera de manière irréversible toutes les données de ce(tte) {mediaType === 'tv' ? 'série' : 'film'} dans Jellyseerr. Si cet élément existe dans votre bibliothèque Emby, les informations sur le média seront recréées lors de la prochaine analyse.</p>
+                  </div>
+                </section>
+              )}
             </>
           )}
         </div>

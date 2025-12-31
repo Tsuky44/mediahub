@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { getSetting } from '@/lib/settings'
 import { prisma } from '@/lib/prisma'
-import { remember } from '@/lib/cache'
+import { remember, forget } from '@/lib/cache'
 
 export class JellyseerrService {
   private baseUrl: string | null = null
@@ -144,8 +144,13 @@ export class JellyseerrService {
     }
   }
 
-  async getMediaAvailability(tmdbId: number, mediaType: 'movie' | 'tv') {
-    return remember(`jellyseerr_availability_${mediaType}_${tmdbId}`, 1000 * 60 * 5, async () => {
+  async getMediaAvailability(tmdbId: number, mediaType: 'movie' | 'tv', bypassCache = false) {
+    const cacheKey = `jellyseerr_availability_${mediaType}_${tmdbId}`
+    if (bypassCache) {
+        forget(cacheKey)
+    }
+
+    return remember(cacheKey, 1000 * 60 * 5, async () => {
         const client = await this.getClient()
         if (!client) {
             return { available: false, status: 'unknown', message: 'Jellyseerr not configured', seasons: [] }
@@ -221,10 +226,6 @@ export class JellyseerrService {
   }
 
   private mapJellyseerrStatus(status: number, downloadStatus: number, mediaAdded: boolean, mediaData: any) {
-    // For series, check if we can get detailed season info, otherwise fallback to global status
-    // mediaData.mediaInfo.seasons might contain the actual status if populated, 
-    // but usually status arg (mediaInfo.status) is the reliable aggregate.
-    
     // Status codes:
     // 5: AVAILABLE
     // 4: PARTIALLY_AVAILABLE
@@ -233,28 +234,34 @@ export class JellyseerrService {
     
     const base = { seasons: [] as any[] }
     
-    if (status === 5) {
+    // Check if there are any active requests
+    // Filter out declined requests (status 3 in Jellyseerr request object)
+    const activeRequests = (mediaData.mediaInfo?.requests || mediaData.requests || [])
+        .filter((req: any) => req.status !== 3);
+    
+    const hasActiveRequests = activeRequests.length > 0;
+
+    // Check if it's actually in Radarr/Sonarr
+    const hasExternalService = !!mediaData.mediaInfo?.externalServiceId || !!mediaData.externalServiceId;
+
+    if (status === 5 || mediaAdded) {
         return { ...base, available: true, status: 'available', message: 'Disponible' }
     }
     if (status === 4) {
-        // Try to count seasons if possible
-        // Note: mediaData.seasons is from TMDB, usually doesn't have status. 
-        // We would need mediaData.mediaInfo.seasons or similar.
-        // But for now, just returning "Partiellement disponible" is safe.
         return { ...base, available: true, status: 'partial', message: 'Partiellement disponible' }
     }
-    if (status === 3) {
-        return { ...base, available: false, status: 'processing', message: 'En cours de traitement' }
-    }
-    if (status === 2) {
-        return { ...base, available: false, status: 'pending', message: 'En attente' }
-    }
     
-    // Fallback if status is unknown but mediaAdded is true (untracked by Jellyseerr requests but present?)
-    if (mediaAdded) {
-         return { ...base, available: true, status: 'available', message: 'Disponible', seasons: [] }
+    // If no active requests AND no external service, it's not available anymore
+    if (!hasActiveRequests && !hasExternalService) {
+        return { ...base, available: false, status: 'not_available', message: 'Non disponible' }
     }
 
+    // Status 2 (Pending) or 3 (Processing) or Unknown (1) with active requests
+    if (status === 2 || status === 3 || (status === 1 && hasActiveRequests)) {
+        return { ...base, available: false, status: 'processing', message: 'En cours de traitement' }
+    }
+
+    // Fallback for ghost records or truly not available
     return { ...base, available: false, status: 'not_available', message: 'Non disponible', seasons: [] }
   }
 
@@ -265,35 +272,96 @@ export class JellyseerrService {
     try {
         const endpoint = mediaType === 'movie' ? 'movie' : 'tv'
         const response = await client.get(`/api/v1/${endpoint}/${tmdbId}`)
-        return response.data
+        const data = response.data
+
+        // Try to enrich with service URLs
+        if (data.mediaInfo?.externalServiceId) {
+            const serviceType = mediaType === 'movie' ? 'radarr' : 'sonarr'
+            try {
+                const settingsRes = await client.get(`/api/v1/settings/${serviceType}`)
+                const settings = settingsRes.data
+                // Get the first enabled server
+                const server = settings.find((s: any) => s.isDefault) || settings[0]
+                if (server) {
+                    const baseUrl = server.hostname.startsWith('http') ? server.hostname : `http://${server.hostname}`
+                    const port = server.port ? `:${server.port}` : ''
+                    const urlBase = `${baseUrl}${port}${server.urlBase || ''}`
+                    
+                    if (mediaType === 'movie') {
+                        data.mediaInfo.externalServiceUrl = `${urlBase}/movie/${data.mediaInfo.externalServiceId}`
+                    } else {
+                        // For Sonarr, it's usually /series/{slug} or /series/{id}
+                        // Jellyseerr doesn't always provide the slug here, but let's try ID
+                        data.mediaInfo.externalServiceUrl = `${urlBase}/series/${data.mediaInfo.externalServiceId}`
+                    }
+                }
+            } catch (e) {
+                // Ignore errors fetching settings
+            }
+        }
+
+        return data
     } catch (e) {
         return null
     }
   }
 
-  async deleteMedia(mediaId: number) {
+  async deleteMedia(mediaId: number, deleteFiles: boolean = false) {
     const client = await this.getClient()
-    if (!client) return { success: false }
+    if (!client) return { success: false, message: 'Non configuré' }
 
     try {
-        await client.delete(`/api/v1/media/${mediaId}`)
+        console.log(`[Jellyseerr] Deleting media ${mediaId} (deleteFiles requested: ${deleteFiles})`);
+        
+        // Some versions of Jellyseerr don't support deleteFiles parameter and throw 400/500
+        // We handle direct deletion via Radarr/Sonarr in the API route, 
+        // so we can try to delete from Jellyseerr without the parameter if it fails.
+        try {
+            const response = await client.delete(`/api/v1/media/${mediaId}`, {
+                params: deleteFiles ? { deleteFiles: true } : {}
+            });
+            return { success: true };
+        } catch (e: any) {
+            if (deleteFiles && (e.response?.status === 400 || e.response?.data?.message?.includes('deleteFiles'))) {
+                console.warn(`[Jellyseerr] deleteFiles parameter not supported, retrying without it...`);
+                await client.delete(`/api/v1/media/${mediaId}`);
+                return { success: true, message: 'Deleted without files (parameter not supported)' };
+            }
+            throw e;
+        }
+    } catch (e: any) {
+        const errorMsg = e.response?.data?.message || e.message;
+        const errorData = e.response?.data;
+        console.error(`[Jellyseerr] Failed to delete media ${mediaId}:`, errorMsg, errorData);
+        return { success: false, message: errorMsg };
+    }
+  }
+
+  async updateMediaStatus(mediaId: number, status: 'available' | 'unavailable' | 'processing' | 'pending') {
+    const client = await this.getClient()
+    if (!client) return { success: false, message: 'Non configuré' }
+
+    try {
+        await client.post(`/api/v1/media/${mediaId}/${status}`)
         return { success: true }
-    } catch (e) {
-        console.error('Failed to delete media', e)
-        return { success: false }
+    } catch (e: any) {
+        const errorMsg = e.response?.data?.message || e.message
+        console.error('Failed to update media status', errorMsg)
+        return { success: false, message: errorMsg }
     }
   }
 
   async deleteRequest(requestId: number) {
     const client = await this.getClient()
-    if (!client) return { success: false }
+    if (!client) return { success: false, message: 'Non configuré' }
 
     try {
         await client.delete(`/api/v1/request/${requestId}`)
         return { success: true }
-    } catch (e) {
-        console.error('Failed to delete request', e)
-        return { success: false }
+    } catch (e: any) {
+        const errorMsg = e.response?.data?.message || e.message
+        console.error('Failed to delete request', errorMsg)
+        return { success: false, message: errorMsg }
     }
   }
 }

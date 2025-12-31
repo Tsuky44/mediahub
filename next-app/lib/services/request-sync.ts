@@ -70,9 +70,12 @@ export async function syncJellyseerrRequests() {
         }
 
         // 4. Process each request
+        const currentJellyIds = new Set<string>()
+        
         for (const jr of jellyRequests) {
             try {
                 const externalId = jr.id.toString()
+                currentJellyIds.add(externalId)
                 const tmdbId = (jr.media?.tmdbId || jr.tmdbId)?.toString()
                 const mediaType = jr.type || jr.media?.mediaType
 
@@ -183,6 +186,22 @@ export async function syncJellyseerrRequests() {
             } catch (err) {
                 console.error(`[Sync] Error processing request ${jr.id}:`, err)
             }
+        }
+
+        // 5. Cleanup: Delete local requests that are no longer in Jellyseerr
+        const localRequests = await (prisma as any).mediaRequest.findMany({
+            select: { id: true, externalId: true, title: true }
+        })
+
+        const toDelete = localRequests.filter((lr: any) => lr.externalId && !currentJellyIds.has(lr.externalId))
+        
+        if (toDelete.length > 0) {
+            console.log(`[Sync] Deleting ${toDelete.length} requests that were removed from Jellyseerr:`, toDelete.map((r: any) => r.title).join(', '))
+            await (prisma as any).mediaRequest.deleteMany({
+                where: {
+                    id: { in: toDelete.map((r: any) => r.id) }
+                }
+            })
         }
 
         console.log('[Sync] Jellyseerr requests sync finished')

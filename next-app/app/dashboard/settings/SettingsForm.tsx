@@ -22,6 +22,10 @@ interface SettingsFormProps {
     currentSmbPass?: string
     currentSmbShare?: string
     currentSmbPath?: string
+    currentRadarrUrl?: string
+    currentRadarrKey?: string
+    currentSonarrUrl?: string
+    currentSonarrKey?: string
 }
 
 export default function SettingsForm({ 
@@ -34,7 +38,11 @@ export default function SettingsForm({
     currentSmbUser,
     currentSmbPass,
     currentSmbShare,
-    currentSmbPath
+    currentSmbPath,
+    currentRadarrUrl,
+    currentRadarrKey,
+    currentSonarrUrl,
+    currentSonarrKey
 }: SettingsFormProps) {
     const [selectedId, setSelectedId] = useState(currentJellyseerrId)
     const [qbitUrl, setQbitUrl] = useState(currentQbitUrl || '')
@@ -45,6 +53,12 @@ export default function SettingsForm({
     const [smbPass, setSmbPass] = useState(currentSmbPass || '')
     const [smbShare, setSmbShare] = useState(currentSmbShare || 'dl')
     const [smbPath, setSmbPath] = useState(currentSmbPath || '')
+    
+    const [radarrUrl, setRadarrUrl] = useState(currentRadarrUrl || '')
+    const [radarrKey, setRadarrKey] = useState(currentRadarrKey || '')
+    const [sonarrUrl, setSonarrUrl] = useState(currentSonarrUrl || '')
+    const [sonarrKey, setSonarrKey] = useState(currentSonarrKey || '')
+
     const [loading, setLoading] = useState(false)
     const [testingSmb, setTestingSmb] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
@@ -89,7 +103,11 @@ export default function SettingsForm({
                     smb_username: smbUser,
                     smb_password: smbPass,
                     smb_share: smbShare,
-                    smb_path: smbPath
+                    smb_path: smbPath,
+                    radarr_url: radarrUrl,
+                    radarr_api_key: radarrKey,
+                    sonarr_url: sonarrUrl,
+                    sonarr_api_key: sonarrKey
                 })
             })
 
@@ -277,6 +295,68 @@ export default function SettingsForm({
                             {testResult.message}
                         </div>
                     )}
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Radarr</h4>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label htmlFor="radarrUrl" className="block text-sm font-medium text-gray-300">
+                            URL
+                        </label>
+                        <input
+                            type="text"
+                            id="radarrUrl"
+                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            placeholder="http://192.168.1.x:7878"
+                            value={radarrUrl}
+                            onChange={(e) => setRadarrUrl(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="radarrKey" className="block text-sm font-medium text-gray-300">
+                            Clé API
+                        </label>
+                        <input
+                            type="text"
+                            id="radarrKey"
+                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            value={radarrKey}
+                            onChange={(e) => setRadarrKey(e.target.value)}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Sonarr</h4>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label htmlFor="sonarrUrl" className="block text-sm font-medium text-gray-300">
+                            URL
+                        </label>
+                        <input
+                            type="text"
+                            id="sonarrUrl"
+                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            placeholder="http://192.168.1.x:8989"
+                            value={sonarrUrl}
+                            onChange={(e) => setSonarrUrl(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="sonarrKey" className="block text-sm font-medium text-gray-300">
+                            Clé API
+                        </label>
+                        <input
+                            type="text"
+                            id="sonarrKey"
+                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            value={sonarrKey}
+                            onChange={(e) => setSonarrKey(e.target.value)}
+                        />
+                    </div>
                 </div>
             </div>
 

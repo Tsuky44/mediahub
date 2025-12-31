@@ -8,59 +8,56 @@ datasource db {
 }
 
 model User {
-  id            Int            @id @default(autoincrement())
-  name          String
-  email         String         @unique
-  emailVerified DateTime?
-  password      String?
-  image         String?
-  embyUserId    String?        @map("emby_user_id")
-  jellyseerrUserId String?     @map("jellyseerr_user_id")
-  role          String         @default("user")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  
-  accounts      Account[]
-  sessions      Session[]
-  requests      MediaRequest[]
-  watchEvents   WatchEvent[]
-  watchLater    WatchLater[]
-  notifications Notification[]
+  id               Int            @id @default(autoincrement())
+  name             String
+  email            String         @unique
+  emailVerified    DateTime?
+  password         String?
+  image            String?
+  embyUserId       String?        @map("emby_user_id")
+  jellyseerrUserId String?        @map("jellyseerr_user_id")
+  role             String         @default("user")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  accounts         Account[]
+  requests         MediaRequest[]
+  notifications    Notification[]
+  sessions         Session[]
+  watchEvents      WatchEvent[]
+  watchLater       WatchLater[]
 
   @@map("users")
 }
 
 model Notification {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  title     String
-  message   String
-  type      String   // e.g., "media_available"
-  mediaId   String?  @map("media_id") // Emby ID ou TMDB ID
-  mediaType String?  @map("media_type") // movie, tv
-  posterPath String? @map("poster_path")
-  isRead    Boolean  @default(false) @map("is_read")
-  link      String?
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  title      String
+  message    String
+  type       String
+  mediaId    String?  @map("media_id")
+  mediaType  String?  @map("media_type")
+  posterPath String?  @map("poster_path")
+  isRead     Boolean  @default(false) @map("is_read")
+  link       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
   @@map("notifications")
 }
 
 model WatchLater {
-  id          Int      @id @default(autoincrement())
-  userId      Int      @map("user_id")
-  mediaId     String   @map("media_id") // Emby ID ou TMDB ID
-  tmdbId      String?  @map("tmdb_id")
-  mediaType   String   @map("media_type") // movie, tv
-  title       String
-  posterPath  String?  @map("poster_path")
-  isEmbyItem  Boolean  @default(false) @map("is_emby_item")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  mediaId    String   @map("media_id")
+  tmdbId     String?  @map("tmdb_id")
+  mediaType  String   @map("media_type")
+  title      String
+  posterPath String?  @map("poster_path")
+  isEmbyItem Boolean  @default(false) @map("is_emby_item")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, mediaId, mediaType])
   @@map("watch_later")
@@ -79,8 +76,7 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
@@ -106,29 +102,26 @@ model VerificationToken {
 }
 
 model MediaRequest {
-  id          Int       @id @default(autoincrement())
-  userId      Int?      @map("user_id")
-  mediaType   String    @map("media_type") // movie, tv
-  tmdbId      String    @map("tmdb_id")
-  title       String
-  description String?
-  status      Int       @default(1) // jellyseerr status code
-  externalId  String?   @unique @map("external_id") // jellyseerr request id
-  metadata    String?   // JSON data for poster, etc.
-  notes       String?
-  requestedAt DateTime  @default(now()) @map("requested_at")
-  processedAt DateTime? @map("processed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-
-  // Additional fields for local sync
-  isOnEmby    Boolean   @default(false) @map("is_on_emby")
-  embyItemId  String?   @map("emby_item_id")
-  requesterName String? @map("requester_name")
-  requesterEmail String? @map("requester_email")
-  requesterAvatar String? @map("requester_avatar")
-
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              Int       @id @default(autoincrement())
+  userId          Int?      @map("user_id")
+  mediaType       String    @map("media_type")
+  tmdbId          String    @map("tmdb_id")
+  title           String
+  description     String?
+  status          Int       @default(1)
+  externalId      String?   @unique @map("external_id")
+  metadata        String?
+  notes           String?
+  requestedAt     DateTime  @default(now()) @map("requested_at")
+  processedAt     DateTime? @map("processed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  isOnEmby        Boolean   @default(false) @map("is_on_emby")
+  embyItemId      String?   @map("emby_item_id")
+  requesterName   String?   @map("requester_name")
+  requesterEmail  String?   @map("requester_email")
+  requesterAvatar String?   @map("requester_avatar")
+  user            User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([mediaType, status])
@@ -149,8 +142,7 @@ model WatchEvent {
   playedAt        DateTime @map("played_at")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
-
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user            User?    @relation(fields: [userId], references: [id])
 
   @@unique([embyUserId, itemId, playedAt])
   @@map("watch_events")
@@ -169,26 +161,26 @@ model Setting {
 }
 
 model MediaAvailabilityIndex {
-  id                   Int      @id @default(autoincrement())
-  tmdbId               String   @unique @map("tmdb_id")
-  mediaType            String   @map("media_type")
-  isAvailable          Boolean  @default(false) @map("is_available")
-  availabilityData     String?    @map("availability_data")
-  jellyseerrStatus     Int?     @map("jellyseerr_status")
-  lastCheckedAt        DateTime @default(now()) @map("last_checked_at")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  id               Int      @id @default(autoincrement())
+  tmdbId           String   @unique @map("tmdb_id")
+  mediaType        String   @map("media_type")
+  isAvailable      Boolean  @default(false) @map("is_available")
+  availabilityData String?  @map("availability_data")
+  jellyseerrStatus Int?     @map("jellyseerr_status")
+  lastCheckedAt    DateTime @default(now()) @map("last_checked_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@index([mediaType, isAvailable])
   @@map("media_availability_index")
 }
 
 model FileShare {
-  id        String   @id @default(uuid())
-  filePath  String   @map("file_path")
-  token     String   @unique
+  id        String    @id @default(uuid())
+  filePath  String    @map("file_path")
+  token     String    @unique
   expiresAt DateTime? @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   @@map("file_shares")
 }

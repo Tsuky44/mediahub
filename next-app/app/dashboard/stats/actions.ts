@@ -2,9 +2,22 @@
 
 import { prisma } from '@/lib/prisma'
 import { embyService } from '@/lib/services/emby'
+import { syncActiveSessions } from '@/lib/services/watch-sync'
+import { getSetting, setSetting } from '@/lib/settings'
 
 export async function fetchAdvancedStats() {
   try {
+    // Synchronisation automatique en arrière-plan (toutes les 2 minutes par exemple)
+    const lastSyncStr = await getSetting('last_watch_sync')
+    const lastSync = lastSyncStr ? parseInt(lastSyncStr) : 0
+    const now = Date.now()
+    
+    if (now - lastSync > 120000) { // 2 minutes
+        syncActiveSessions().then(() => {
+            setSetting('last_watch_sync', Date.now().toString())
+        }).catch(err => console.error('Auto watch sync failed', err))
+    }
+
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
@@ -46,15 +59,26 @@ export async function fetchAdvancedStats() {
       const item = session.NowPlayingItem
       if (!item) return
 
+      const isPaused = session.PlayState?.IsPaused
       const name = (item.Type === 'Episode' && item.SeriesName) ? item.SeriesName : (item.Name || 'Inconnu')
       const type = item.Type === 'Episode' ? 'Série' : 'Film'
-      const currentMinutes = session.PlayState?.PositionTicks ? Math.round(session.PlayState.PositionTicks / 600000000) : 0
+      
+      // On n'ajoute les minutes que si la session n'est pas en pause
+      const currentMinutes = (!isPaused && session.PlayState?.PositionTicks) 
+        ? Math.round(session.PlayState.PositionTicks / 600000000) 
+        : 0
 
       if (!mediaMap[name]) {
         mediaMap[name] = { name, type, plays: 0, minutes: 0 }
       }
-      // On ajoute la session actuelle (1 play et les minutes déjà vues)
-      mediaMap[name].plays += 1
+      
+      // On n'ajoute une "vue" que si cet item précis n'est pas déjà dans les topWatched de la DB
+      // (On simplifie ici car topWatched est déjà groupé par itemName)
+      const alreadyInDB = topWatched.some(dbItem => dbItem.itemName === item.Name || dbItem.seriesName === item.SeriesName)
+      
+      if (!alreadyInDB) {
+        mediaMap[name].plays += 1
+      }
       mediaMap[name].minutes += currentMinutes
     })
 
@@ -107,7 +131,12 @@ export async function fetchAdvancedStats() {
       const embyUserId = session.UserId
       const name = session.UserName
       const itemType = session.NowPlayingItem?.Type
-      const currentMinutes = session.PlayState?.PositionTicks ? Math.round(session.PlayState.PositionTicks / 600000000) : 0
+      const isPaused = session.PlayState?.IsPaused
+      
+      // On n'ajoute les minutes que si la session n'est pas en pause
+      const currentMinutes = (!isPaused && session.PlayState?.PositionTicks) 
+        ? Math.round(session.PlayState.PositionTicks / 600000000) 
+        : 0
 
       if (!userStatsMap[embyUserId]) {
         userStatsMap[embyUserId] = {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, Download, Loader2, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { SeasonSelectorModal } from '@/components/SeasonSelectorModal'
@@ -20,6 +20,35 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
     const [showSeasonModal, setShowSeasonModal] = useState(false)
     const router = useRouter()
 
+    // Sync state with props when they change (e.g. after router.refresh())
+    useEffect(() => {
+        setStatus(initialStatus)
+    }, [initialStatus])
+
+    // Polling for status updates if pending or processing
+    useEffect(() => {
+        if (status !== 'pending' && status !== 'processing') return
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/media/availability/${tmdbId}?type=${mediaType}&refresh=true`)
+                if (res.ok) {
+                    const data = await res.json()
+                    if (data.status !== status) {
+                        setStatus(data.status)
+                        if (data.status === 'available' || data.status === 'partial') {
+                            router.refresh()
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Polling failed:', e)
+            }
+        }, 10000) // Poll every 10 seconds
+
+        return () => clearInterval(interval)
+    }, [status, tmdbId, mediaType, router])
+
     const handleRequest = async () => {
         if (mediaType === 'tv' && seasons && seasons.length > 0) {
             setShowSeasonModal(true)
@@ -38,7 +67,7 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
             
             const data = await res.json()
             if (res.ok && data.success) {
-                setStatus('pending')
+                setStatus('processing')
                 router.refresh()
             } else {
                 alert('Request failed: ' + (data.error || data.message || 'Unknown error'))
@@ -55,14 +84,14 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
         return (
             <>
                 <div className="flex gap-2">
-                    <button disabled className="flex items-center gap-2 rounded-md bg-purple-600 px-6 py-3 font-semibold text-white opacity-75 cursor-default">
+                    <button disabled className="flex items-center gap-2 rounded-md bg-purple-600/20 px-6 py-3 font-semibold text-purple-500 border border-purple-600/30 cursor-default">
                         <Check className="h-5 w-5" />
                         Partiellement disponible
                     </button>
                     {mediaType === 'tv' && (
                         <button 
                             onClick={() => setShowSeasonModal(true)}
-                            className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 transition-colors"
+                            className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
                         >
                             <Plus className="h-5 w-5" />
                             Compléter
@@ -88,7 +117,7 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
 
     if (status === 'available') {
         return (
-            <button disabled className="flex items-center gap-2 rounded-md bg-green-600 px-6 py-3 font-semibold text-white opacity-75 cursor-default">
+            <button disabled className="flex items-center gap-2 rounded-md bg-green-600/20 px-6 py-3 font-semibold text-green-500 border border-green-600/30 cursor-default">
                 <Check className="h-5 w-5" />
                 Disponible sur Emby
             </button>
@@ -97,9 +126,9 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
 
     if (status === 'pending' || status === 'processing') {
          return (
-            <button disabled className="flex items-center gap-2 rounded-md bg-yellow-600 px-6 py-3 font-semibold text-white opacity-75 cursor-default">
+            <button disabled className="flex items-center gap-2 rounded-md bg-yellow-600/20 px-6 py-3 font-semibold text-yellow-500 border border-yellow-600/30 cursor-default">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                {status === 'processing' ? 'En cours de traitement...' : 'Déjà demandé'}
+                En cours de traitement...
             </button>
         )
     }
@@ -123,7 +152,7 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
                     seasons={seasons}
                     seasonStatuses={seasonStatuses}
                     onSuccess={() => {
-                        setStatus('pending') // Optimistic update if needed or rely on refresh
+                        setStatus('processing') // Optimistic update
                         router.refresh()
                     }}
                 />

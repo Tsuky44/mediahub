@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getSetting } from '@/lib/settings'
 import { prisma } from '@/lib/prisma'
+import { forget } from '@/lib/cache'
+import { revalidatePath } from 'next/cache'
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -39,6 +41,10 @@ export async function POST(request: NextRequest) {
     const result = await jellyseerrService.requestMedia(tmdbId, mediaType, title, jellyseerrUserId || undefined)
     
     if (result.success) {
+        // Invalidate cache
+        forget(`jellyseerr_availability_${mediaType}_${tmdbId}`)
+        revalidatePath(`/dashboard/media/${tmdbId}`)
+
         // Enregistrer la demande localement pour le système de notifications
         try {
             const dbUser = await prisma.user.findUnique({
