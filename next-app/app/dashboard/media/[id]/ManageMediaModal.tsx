@@ -116,17 +116,8 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
 
   const requests = Array.isArray(mediaInfo?.mediaInfo?.requests) ? mediaInfo.mediaInfo.requests : []
   const mediaStatus = mediaInfo?.mediaInfo?.status
-  const hasMediaInfo = !!mediaInfo?.mediaInfo
-
-  console.log('[ManageMediaModal] Render state:', { 
-    tmdbId, 
-    hasMediaInfo, 
-    requestsCount: requests.length,
-    loading,
-    error,
-    mediaInfoType: typeof mediaInfo,
-    hasInternalMediaInfo: !!mediaInfo?.mediaInfo
-  })
+  const hasMediaInfo = !!mediaInfo?.mediaInfo && typeof mediaInfo.mediaInfo === 'object'
+  const internalMediaId = mediaInfo?.mediaInfo?.id
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
@@ -260,11 +251,11 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
                     )}
                     
                     <button 
-                      onClick={() => mediaInfo?.mediaInfo?.id && handleDeleteMedia(mediaInfo.mediaInfo.id, true)}
-                      disabled={isDeleting === mediaInfo?.mediaInfo?.id}
+                      onClick={() => internalMediaId && handleDeleteMedia(internalMediaId, true)}
+                      disabled={isDeleting === internalMediaId}
                       className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl text-sm font-bold text-red-500 transition-all"
                     >
-                        {isDeleting === mediaInfo?.mediaInfo?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        {isDeleting === internalMediaId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                         Supprimer de {mediaType === 'tv' ? 'Sonarr' : 'Radarr'}
                     </button>
                     <p className="text-[10px] text-gray-500 italic text-center px-4">* Cela supprimera irréversiblement ce(tte) {mediaType === 'tv' ? 'série' : 'film'} de {mediaType === 'tv' ? 'Sonarr' : 'Radarr'}, y compris tous les fichiers.</p>
@@ -278,19 +269,19 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
                   <h3 className="text-lg font-bold text-white">Avancé</h3>
                   <div className="grid gap-3">
                     <button 
-                      onClick={() => mediaInfo?.mediaInfo?.id && handleMarkAsAvailable(mediaInfo.mediaInfo.id)}
-                      disabled={isDeleting === mediaInfo?.mediaInfo?.id}
+                      onClick={() => internalMediaId && handleMarkAsAvailable(internalMediaId)}
+                      disabled={isDeleting === internalMediaId}
                       className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-green-600/20 hover:bg-green-600/30 border border-green-600/30 rounded-xl text-sm font-bold text-green-500 transition-all"
                     >
-                        {isDeleting === mediaInfo?.mediaInfo?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                        {isDeleting === internalMediaId ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                         Marquer comme disponible
                     </button>
                     <button 
-                      onClick={() => mediaInfo?.mediaInfo?.id && handleDeleteMedia(mediaInfo.mediaInfo.id, false)}
-                      disabled={isDeleting === mediaInfo?.mediaInfo?.id}
+                      onClick={() => internalMediaId && handleDeleteMedia(internalMediaId, false)}
+                      disabled={isDeleting === internalMediaId}
                       className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-red-600/20 hover:bg-red-600/30 border border-red-600/30 rounded-xl text-sm font-bold text-red-500 transition-all"
                     >
-                        {isDeleting === mediaInfo?.mediaInfo?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                        {isDeleting === internalMediaId ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
                         Effacer les données
                     </button>
                     <p className="text-[10px] text-gray-500 italic text-center px-4">* Ceci supprimera de manière irréversible toutes les données de ce(tte) {mediaType === 'tv' ? 'série' : 'film'} dans Jellyseerr. Si cet élément existe dans votre bibliothèque Emby, les informations sur le média seront recréées lors de la prochaine analyse.</p>
