@@ -1,1 +1,0 @@
-ALTER TABLE "settings" ADD COLUMN "mobile_enabled" boolean DEFAULT false NOT NULL;

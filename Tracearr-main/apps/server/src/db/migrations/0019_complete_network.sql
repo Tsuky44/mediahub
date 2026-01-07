@@ -1,1 +1,0 @@
-ALTER TABLE "settings" ADD COLUMN "ntfy_auth_token" text;

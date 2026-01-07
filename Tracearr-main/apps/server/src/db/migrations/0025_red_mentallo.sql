@@ -1,1 +1,0 @@
-CREATE INDEX "violations_dedup_idx" ON "violations" USING btree ("server_user_id","acknowledged_at","created_at");

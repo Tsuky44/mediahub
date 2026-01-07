@@ -1,1 +1,0 @@
-ALTER TABLE "mobile_sessions" ADD COLUMN "device_secret" varchar(64);

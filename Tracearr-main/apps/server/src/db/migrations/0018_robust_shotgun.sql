@@ -1,2 +1,0 @@
-ALTER TABLE "notification_channel_routing" ADD COLUMN "web_toast_enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
-ALTER TABLE "settings" ADD COLUMN "unit_system" varchar(20) DEFAULT 'metric' NOT NULL;
