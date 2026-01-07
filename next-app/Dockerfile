@@ -24,7 +24,7 @@ RUN npm run build
 
 # Stage 3: Production runner
 FROM node:20-alpine AS runner
-RUN apk add --no-cache openssl libssl1.1 || apk add --no-cache openssl
+RUN apk add --no-cache openssl libssl1.1 su-exec || apk add --no-cache openssl su-exec
 WORKDIR /app
 
 ENV NODE_ENV production
@@ -50,7 +50,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/start.sh ./start.sh
 # Make start.sh executable
 USER root
 RUN chmod +x start.sh
-USER nextjs
 
 EXPOSE 3000
 
