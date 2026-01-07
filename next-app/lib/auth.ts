@@ -16,6 +16,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) {
+          console.log("[Auth] Missing credentials")
           return null
         }
 
@@ -23,7 +24,14 @@ export const authOptions: NextAuthOptions = {
 
         // Try to authenticate with Emby first
         try {
+          console.log(`[Auth] Calling Emby service for ${credentials.username}...`)
           const embyUser = await embyService.authenticate(credentials.username, credentials.password)
+          
+          if (!embyUser) {
+            console.log(`[Auth] Emby authentication returned no user for ${credentials.username}`)
+            return null
+          }
+
           console.log(`[Auth] Emby auth successful for ${credentials.username}`)
 
           if (embyUser && embyUser.User) {

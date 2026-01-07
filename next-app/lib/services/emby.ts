@@ -1,10 +1,14 @@
 import axios from 'axios'
+import https from 'https'
 import { getSetting } from '@/lib/settings'
 import { prisma } from '@/lib/prisma'
 
 export class EmbyService {
   private baseUrl: string | null = null
   private apiKey: string | null = null
+  private httpsAgent = new https.Agent({
+    rejectUnauthorized: false
+  })
 
   private async init() {
     if (!this.baseUrl) {
@@ -32,6 +36,7 @@ export class EmbyService {
         api_key: this.apiKey
       },
       timeout,
+      httpsAgent: this.httpsAgent,
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
@@ -62,6 +67,7 @@ export class EmbyService {
                 'X-Emby-Authorization': `MediaBrowser Client="Emby-App", Device="Web", DeviceId="12345", Version="1.0.0"`,
                 'Content-Type': 'application/json'
             },
+            httpsAgent: this.httpsAgent,
             timeout: 10000
         })
         return response.data
