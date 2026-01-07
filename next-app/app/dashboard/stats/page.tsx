@@ -25,6 +25,44 @@ async function getEmbyImageUrl(itemId: string, jellystat?: JellystatService | nu
   }
 }
 
+/**
+ * Sanitizes playback duration to avoid absurd values (e.g., 346m for a 43m episode)
+ * when a session gets stuck or paused for too long.
+ * Now supports actual duration if provided.
+ */
+function sanitizePlaybackDuration(durationInSeconds: number, type: string, actualDurationInSeconds?: number): number {
+  if (!durationInSeconds) return 0;
+  
+  // If we have the actual duration of the media, use it as the absolute maximum + 5% margin for credits/intro
+  if (actualDurationInSeconds && actualDurationInSeconds > 0) {
+    const margin = actualDurationInSeconds * 0.05;
+    const absoluteMax = actualDurationInSeconds + margin;
+    if (durationInSeconds > absoluteMax) {
+      return actualDurationInSeconds;
+    }
+    return durationInSeconds;
+  }
+  
+  const minutes = durationInSeconds / 60;
+  
+  // Fallback thresholds if actual duration is not available
+  let maxMinutes = 180; // Default 3h
+  
+  if (type === 'Episode' || type === 'Series') {
+    maxMinutes = 80; // Episodes rarely exceed 80m
+  } else if (type === 'Movie') {
+    maxMinutes = 240; // Movies rarely exceed 4h
+  } else if (type === 'Audio') {
+    maxMinutes = 15; // Songs rarely exceed 15m
+  }
+  
+  if (minutes > maxMinutes) {
+    return maxMinutes * 60;
+  }
+  
+  return durationInSeconds;
+}
+
 interface StatsPageProps {
   searchParams: Promise<{
     period?: string;
@@ -122,7 +160,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   // 3. Fetch Data (Parallel)
   const emby = new EmbyService()
   const historyLimit = period === 'year' ? 3000 : 1000
-  const [historyRaw, watchStats, libraryStats, userStats, libraryViews, mostViewedData, embySessions] = await Promise.all([
+  const [historyRaw, watchStats, libraryStats, _userStats, libraryViews, _mostViewedData, embySessions] = await Promise.all([
     jellystat.getHistory(historyLimit, 0, effectiveDays).catch(e => { console.error('History fetch failed:', e); return []; }),
     jellystat.getWatchStats(effectiveDays).catch(e => { console.error('WatchStats fetch failed:', e); return null; }),
     jellystat.getLibraryStats().catch(e => { console.error('LibraryStats fetch failed:', e); return []; }),
@@ -138,9 +176,18 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     return itemDate >= startDate && itemDate <= endDate
   })
 
+  // 3.5. Fetch actual media durations from Emby for precise sanitization
+  const uniqueItemIds = Array.from(new Set(historyArray.map((item: any) => item.NowPlayingItemId || item.ItemId).filter(Boolean))) as string[]
+  const itemDurations = await emby.getItemsDurations(uniqueItemIds)
+
   // Process Most Viewed from filtered history
   const mostViewedMap = new Map()
   historyArray.forEach((item: any) => {
+    const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie');
+    const itemId = item.NowPlayingItemId || item.ItemId;
+    const actualDuration = itemDurations[itemId];
+    const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration);
+
     const isSeries = item.Type === 'Episode' || !!item.SeriesName
     const key = isSeries ? (item.SeriesId || item.SeriesName) : (item.NowPlayingItemId || item.Id)
     
@@ -151,13 +198,13 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
          ...item,
          Name: isSeries ? item.SeriesName : (item.NowPlayingItemName || item.Name),
          count: 1,
-         totalDuration: item.PlaybackDuration || 0,
+         totalDuration: sanitizedDuration,
          lastView: new Date(item.ActivityDateInserted || item.DateCreated)
        })
      } else {
        const existing = mostViewedMap.get(key)
        existing.count += 1
-       existing.totalDuration += (item.PlaybackDuration || 0)
+       existing.totalDuration += sanitizedDuration
        const currentDate = new Date(item.ActivityDateInserted || item.DateCreated)
        if (currentDate > existing.lastView) {
          existing.lastView = currentDate
@@ -224,31 +271,19 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     dailyActivity[4], dailyActivity[5], dailyActivity[6], dailyActivity[0]
   ]
 
-  // Process Library Distribution
-  let libraryDistribution: { name: string, value: number }[] = []
-  
-  if (libraryViews && libraryViews.length > 0) {
-    const supported = ["Movie", "Series", "Audio", "Other"]
-    const mapped: Record<string, number> = {}
-
-    libraryViews.forEach((lib: any) => {
-      let type = lib.LibraryType || lib.name || 'Other'
-      // Normalisation des types
-      if (type === 'Episode' || type === 'tvshows' || type === 'tvshow' || type === 'Series') type = 'Series'
-      if (type === 'Movie' || type === 'movies') type = 'Movie'
-      if (type === 'Audio' || type === 'music') type = 'Audio'
-      
-      if (!supported.includes(type)) type = 'Other'
-      
-      mapped[type] = (mapped[type] || 0) + (lib.ViewCount || lib.value || 0)
+  // Monthly activity for yearly view
+  let monthlyActivity: { name: string, value: number }[] | undefined = undefined
+  if (period === 'year') {
+    const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']
+    const activity = monthNames.map(month => ({ name: month, value: 0 }))
+    historyArray.forEach((item: WatchHistoryItem) => {
+      const dateString = item.ActivityDateInserted || item.DateCreated || (item as any).DateInserted
+      if (!dateString) return
+      const date = new Date(dateString)
+      const monthIdx = date.getMonth()
+      if (activity[monthIdx]) activity[monthIdx].value++
     })
-
-    libraryDistribution = Object.entries(mapped).map(([name, value]) => ({ name, value }))
-  } else if (libraryStats && libraryStats.length > 0) {
-    libraryDistribution = libraryStats.map((lib: any) => ({ 
-      name: lib.LibraryName, 
-      value: lib.TotalItems 
-    }))
+    monthlyActivity = activity
   }
 
   // Aggregate Recent History to merge duplicate views of the same content within the same week
@@ -256,13 +291,17 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const historyMap = new Map<string, any>()
 
   historyArray.forEach((item: any) => {
-    const itemId = item.NowPlayingItemId
+    const itemId = item.NowPlayingItemId || item.ItemId
     const userId = item.UserId || item.UserName
     const date = new Date(item.ActivityDateInserted || item.DateCreated)
     
     // Create a key based on Item and User
     const key = `${itemId}-${userId}`
     
+    const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie')
+    const actualDuration = itemDurations[itemId]
+    const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration)
+
     if (historyMap.has(key)) {
       const existing = historyMap.get(key)
       const existingDate = new Date(existing.ActivityDateInserted || existing.DateCreated)
@@ -273,7 +312,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       
       if (diffDays <= 7) {
         // Merge them
-        existing.PlaybackDuration = (existing.PlaybackDuration || 0) + (item.PlaybackDuration || 0)
+        existing.PlaybackDuration = (existing.PlaybackDuration || 0) + sanitizedDuration
         // Keep the most recent date
         if (date > existingDate) {
           existing.ActivityDateInserted = item.ActivityDateInserted
@@ -287,7 +326,10 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     
     // If no existing entry or not within 7 days, add a new one
     // We clone the item to avoid modifying the original array if needed
-    const newItem = { ...item }
+    const newItem = { 
+      ...item, 
+      PlaybackDuration: sanitizedDuration
+    }
     historyMap.set(key, newItem)
     aggregatedHistory.push(newItem)
   })
@@ -342,7 +384,12 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
 
   // 4. Calculate Stats from Filtered Data
   // We prioritize historyArray for watch time as it's the most accurate source we have filtered locally
-  const totalWatchTimeSeconds = historyArray.reduce((acc: number, item: any) => acc + (item.PlaybackDuration || 0), 0)
+  const totalWatchTimeSeconds = historyArray.reduce((acc: number, item: any) => {
+    const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie');
+    const itemId = item.NowPlayingItemId || item.ItemId;
+    const actualDuration = itemDurations[itemId];
+    return acc + sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration);
+  }, 0)
   const totalHours = Math.round(totalWatchTimeSeconds / 3600)
   
   // Use watchStats for total plays if available, otherwise use historyArray length
@@ -444,7 +491,8 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       {/* Charts */}
       <StatsCharts 
         hourlyActivity={hourlyActivity} 
-        dailyActivity={orderedDailyActivity} 
+        dailyActivity={orderedDailyActivity}
+        monthlyActivity={monthlyActivity}
       />
 
       {/* Top Content & History */}
@@ -473,7 +521,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
             <Clock className="h-5 w-5 text-blue-500" />
             Historique récent
           </h2>
-          <div className="rounded-xl bg-gray-800 border border-gray-700 overflow-hidden">
+          <div className="rounded-xl bg-gray-900/40 border border-gray-700/50 overflow-hidden backdrop-blur-md shadow-2xl ring-1 ring-white/5">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-900/50 text-gray-400 text-xs uppercase tracking-wider">
@@ -484,33 +532,67 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700">
-                {aggregatedHistory.slice(0, 50).map((item: any) => (
-                  <tr key={item.Id || `${item.NowPlayingItemId}-${item.ActivityDateInserted}`} className="hover:bg-gray-700/30 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="relative h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-gray-900">
-                           <EmbyImage itemId={item.NowPlayingItemId} alt={item.NowPlayingItemName} jellystat={jellystat} />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
-                            {item.NowPlayingItemName}
+                {aggregatedHistory.slice(0, 50).map((item: any) => {
+                  const isSeries = item.ItemType === 'Episode' || item.Type === 'Episode' || !!item.SeriesName;
+                  
+                  // For episodes, we want the episode name as title
+                  const isEpisode = item.Type === 'Episode' || item.ItemType === 'Episode';
+                  const displayName = isEpisode 
+                    ? (item.Name || item.ItemName || item.NowPlayingItemName)
+                    : (isSeries ? (item.SeriesName || item.Name) : (item.NowPlayingItemName || item.Name || item.ItemName));
+
+                  // Construct subtitle: Series Name • S1 E3
+                  let subName = null;
+                  if (isSeries) {
+                    const parts = [];
+                    if (item.SeriesName && item.SeriesName !== displayName) {
+                      parts.push(item.SeriesName);
+                    }
+                    if (item.ParentIndexNumber !== undefined && item.IndexNumber !== undefined) {
+                      parts.push(`S${item.ParentIndexNumber} • Épisode ${item.IndexNumber}`);
+                    } else if (item.NowPlayingItemName && item.NowPlayingItemName !== displayName && item.NowPlayingItemName !== item.SeriesName) {
+                      parts.push(item.NowPlayingItemName);
+                    }
+                    subName = parts.length > 0 ? parts.join(' • ') : null;
+                  }
+
+                  return (
+                    <tr key={item.Id || `${item.NowPlayingItemId}-${item.ActivityDateInserted}`} className="hover:bg-blue-500/5 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="relative h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-gray-900 border border-gray-700/50">
+                             <EmbyImage itemId={item.NowPlayingItemId || item.ItemId || item.Id} alt={displayName} jellystat={jellystat} />
                           </div>
-                          <div className="text-xs text-gray-500">{item.SeriesName ? 'Épisode' : 'Film'}</div>
+                          <div>
+                            <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
+                              {displayName}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-900 text-gray-500 font-medium border border-gray-700">
+                                {isSeries ? 'Série' : 'Film'}
+                              </span>
+                              {subName && (
+                                <span className="text-[10px] text-gray-500 truncate max-w-[250px]">
+                                  {subName}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-300">{item.Client}</div>
-                      <div className="text-xs text-gray-500">{item.DeviceName}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-400">
-                      {formatDistanceToNow(new Date(item.ActivityDateInserted || item.DateCreated), { addSuffix: true, locale: fr })}
-                    </td>
-                    <td className="px-6 py-4 text-right text-sm font-mono text-gray-400">
-                      {Math.floor((item.PlaybackDuration || 0) / 60)}m
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-300">{item.Client || item.ClientName || 'Client web'}</div>
+                        <div className="text-xs text-gray-500">{item.DeviceName || 'Inconnu'}</div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-400">
+                        {formatDistanceToNow(new Date(item.ActivityDateInserted || item.DateCreated), { addSuffix: true, locale: fr })}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-mono text-blue-400">
+                        {Math.floor((item.PlaybackDuration || 0) / 60)}m
+                      </td>
+                    </tr>
+                  );
+                })}
                 {aggregatedHistory.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-6 py-10 text-center text-gray-500 italic">
@@ -581,7 +663,7 @@ function TopItemCard({ item, rank, jellystat }: { item: any, rank: number, jelly
         <div className="text-sm font-semibold text-white truncate group-hover:text-blue-400 transition-colors">
           {name}
         </div>
-        <div className="text-xs text-gray-500 truncate">{subText}</div>
+        <div className="text-xs text-gray-500 truncate group-hover:text-blue-400/60 transition-colors">{subText}</div>
       </div>
     </div>
   )

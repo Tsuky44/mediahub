@@ -1,0 +1,26 @@
+[JellystatService] GET Fetching: https://stats.tsuky.ovh/stats/getPlaybackActivity
+ITEM: {
+  "Id": "2963",
+  "IsPaused": false,
+  "UserId": "5b4ad72e15124140b8e855edb3caed47",
+  "UserName": "mathis",
+  "Client": "Emby for macOS",
+  "DeviceName": "macOS",
+  "DeviceId": null,
+  "ApplicationVersion": null,
+  "NowPlayingItemId": "39609",
+  "NowPlayingItemName": "The Witcher - s03e03 - Retrouvailles",
+  "SeasonId": "39612",
+  "SeriesName": "The Witcher",
+  "EpisodeId": "39609",
+  "PlaybackDuration": 1603,
+  "ActivityDateInserted": "2026-01-06T19:34:21.373Z",
+  "PlayMethod": "DirectStream",
+  "MediaStreams": null,
+  "TranscodingInfo": null,
+  "PlayState": null,
+  "OriginalContainer": null,
+  "RemoteEndPoint": null,
+  "ServerId": null,
+  "imported": true
+}

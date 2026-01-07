@@ -3,8 +3,8 @@ import { JellystatService, WatchHistoryItem } from '@/lib/services/jellystat'
 import { EmbyService } from '@/lib/services/emby'
 import { getSetting } from '@/lib/settings'
 import { StatsCharts } from '../StatsCharts'
-import { ChevronLeft, ChevronRight, Clock, Film, Play, User, Activity, TrendingUp, Calendar } from 'lucide-react'
-import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks } from 'date-fns'
+import { ChevronLeft, ChevronRight, Clock, Film, Play, Activity, TrendingUp, Calendar } from 'lucide-react'
+import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -23,6 +23,44 @@ async function getEmbyImageUrl(itemId: string, jellystat?: JellystatService | nu
   } catch (e) {
     return null
   }
+}
+
+/**
+ * Sanitizes playback duration to avoid absurd values (e.g., 346m for a 43m episode)
+ * when a session gets stuck or paused for too long.
+ * Now supports actual duration if provided.
+ */
+function sanitizePlaybackDuration(durationInSeconds: number, type: string, actualDurationInSeconds?: number): number {
+  if (!durationInSeconds) return 0;
+  
+  // If we have the actual duration of the media, use it as the absolute maximum + 5% margin for credits/intro
+  if (actualDurationInSeconds && actualDurationInSeconds > 0) {
+    const margin = actualDurationInSeconds * 0.05;
+    const absoluteMax = actualDurationInSeconds + margin;
+    if (durationInSeconds > absoluteMax) {
+      return actualDurationInSeconds;
+    }
+    return durationInSeconds;
+  }
+  
+  const minutes = durationInSeconds / 60;
+  
+  // Fallback thresholds if actual duration is not available
+  let maxMinutes = 180; // Default 3h
+  
+  if (type === 'Episode' || type === 'Series') {
+    maxMinutes = 80; // Episodes rarely exceed 80m
+  } else if (type === 'Movie') {
+    maxMinutes = 240; // Movies rarely exceed 4h
+  } else if (type === 'Audio') {
+    maxMinutes = 15; // Songs rarely exceed 15m
+  }
+  
+  if (minutes > maxMinutes) {
+    return maxMinutes * 60;
+  }
+  
+  return durationInSeconds;
 }
 
 async function EmbyImage({ itemId, alt, jellystat }: { itemId: string, alt: string, jellystat: JellystatService | null }) {
@@ -50,33 +88,25 @@ async function TopItemCard({ item, rank, jellystat }: TopItemCardProps) {
   const name = (isEpisode ? (item.SeriesName || item.Name || item.ItemName) : (item.Name || item.ItemName || item.NowPlayingItemName)) || 'Inconnu'
   const itemId = item.NowPlayingItemId || item.ItemId || item.Id || item.id
   
+  const count = item.ViewCount || item.count || 0
+  
   return (
-    <div className="flex items-center gap-4 p-3 rounded-xl bg-gray-900/50 border border-gray-700/50 hover:border-indigo-500/50 transition-all group">
-      <div className="relative flex-shrink-0">
-        <div className="absolute -top-2 -left-2 w-6 h-6 bg-indigo-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center z-10 shadow-lg border border-indigo-400">
-          {rank}
-        </div>
-        <div className="w-12 h-18 rounded overflow-hidden bg-gray-800 border border-gray-700">
-          {itemId ? (
-            <EmbyImage itemId={itemId} alt={name} jellystat={jellystat} />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Film className="w-6 h-6 text-gray-600" />
-            </div>
-          )}
-        </div>
+    <div className="flex items-center gap-4 p-3 rounded-lg bg-gray-900/50 border border-gray-800 hover:border-gray-700 transition-all group">
+      <div className="text-lg font-bold text-gray-600 w-4">{rank}</div>
+      <div className="relative h-16 w-11 flex-shrink-0 overflow-hidden rounded bg-gray-800">
+        {itemId ? (
+          <EmbyImage itemId={itemId} alt={name} jellystat={jellystat} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gray-800">
+            <Film className="h-4 w-4 text-gray-600" />
+          </div>
+        )}
       </div>
       <div className="flex-1 min-w-0">
-        <h4 className="text-sm font-semibold text-white truncate group-hover:text-indigo-400 transition-colors">
+        <div className="text-sm font-semibold text-white truncate group-hover:text-blue-400 transition-colors">
           {name}
-        </h4>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 font-medium">
-            {isEpisode ? 'Série' : 'Film'}
-          </span>
-          <span className="text-[10px] text-gray-500">•</span>
-          <span className="text-[10px] text-indigo-400 font-semibold">{item.ViewCount || item.count} vues</span>
         </div>
+        <div className="text-xs text-gray-500 truncate">{count} vues</div>
       </div>
     </div>
   )
@@ -84,19 +114,13 @@ async function TopItemCard({ item, rank, jellystat }: TopItemCardProps) {
 
 function StatCard({ title, value, subValue, icon }: { title: string, value: string, subValue: string, icon: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-gray-800 p-6 shadow-sm border border-gray-700 hover:border-gray-600 transition-all">
-      <div className="flex items-center justify-between mb-4">
-        <div className="p-2 bg-gray-900 rounded-xl border border-gray-700">
-          {icon}
-        </div>
+    <div className="rounded-xl bg-gray-800 p-6 shadow-sm border border-gray-700 hover:border-gray-600 transition-colors">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-medium text-gray-400">{title}</span>
+        {icon}
       </div>
-      <div className="space-y-1">
-        <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">{title}</h3>
-        <div className="flex items-baseline gap-2">
-          <p className="text-3xl font-bold text-white">{value}</p>
-        </div>
-        <p className="text-xs text-gray-500 font-medium">{subValue}</p>
-      </div>
+      <div className="text-2xl font-bold text-white">{value}</div>
+      <p className="text-xs text-gray-500 mt-1">{subValue}</p>
     </div>
   )
 }
@@ -105,10 +129,10 @@ function PeriodButton({ active, href, label }: { active: boolean, href: string, 
   return (
     <a 
       href={href}
-      className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
         active 
-          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
-          : 'text-gray-400 hover:text-white hover:bg-gray-700'
+          ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' 
+          : 'bg-transparent text-gray-400 hover:text-white hover:bg-gray-700/50'
       }`}
     >
       {label}
@@ -199,24 +223,35 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
     return isPeriodMatch && isUserMatch
   })
 
+  // 3.5. Fetch actual media durations from Emby for precise sanitization
+  const emby = new EmbyService()
+  const uniqueItemIds = Array.from(new Set(historyArray.map((item: any) => item.NowPlayingItemId || item.ItemId).filter(Boolean))) as string[]
+  const itemDurations = await emby.getItemsDurations(uniqueItemIds)
+
   // Process Most Viewed for the user
   const mostViewedMap = new Map()
   historyArray.forEach((item: any) => {
+    const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie');
+    const itemId = item.NowPlayingItemId || item.ItemId;
+    const actualDuration = itemDurations[itemId];
+    const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration);
+
     const isSeries = item.Type === 'Episode' || !!item.SeriesName
     const key = isSeries ? (item.SeriesId || item.SeriesName) : (item.NowPlayingItemId || item.Id)
     if (!key) return
+
     if (!mostViewedMap.has(key)) {
        mostViewedMap.set(key, {
          ...item,
          Name: isSeries ? item.SeriesName : (item.NowPlayingItemName || item.Name),
          count: 1,
-         totalDuration: item.PlaybackDuration || 0,
+         totalDuration: sanitizedDuration,
          lastView: new Date(item.ActivityDateInserted || item.DateCreated)
        })
      } else {
        const existing = mostViewedMap.get(key)
        existing.count += 1
-       existing.totalDuration += (item.PlaybackDuration || 0)
+       existing.totalDuration += sanitizedDuration
        const currentDate = new Date(item.ActivityDateInserted || item.DateCreated)
        if (currentDate > existing.lastView) {
          existing.lastView = currentDate
@@ -247,7 +282,29 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
     dailyActivity[4], dailyActivity[5], dailyActivity[6], dailyActivity[0]
   ]
 
-  const totalWatchTimeSeconds = historyArray.reduce((acc: number, item: any) => acc + (item.PlaybackDuration || 0), 0)
+  // Monthly activity for yearly view
+  let monthlyActivity: { name: string, value: number }[] | undefined = undefined
+  if (period === 'year') {
+    const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']
+    const activity = monthNames.map(month => ({ name: month, value: 0 }))
+    historyArray.forEach((item: WatchHistoryItem) => {
+      const dateString = item.ActivityDateInserted || item.DateCreated || (item as any).DateInserted
+      if (!dateString) return
+      const date = new Date(dateString)
+      const monthIdx = date.getMonth()
+      if (activity[monthIdx]) activity[monthIdx].value++
+    })
+    monthlyActivity = activity
+  }
+
+
+
+  const totalWatchTimeSeconds = historyArray.reduce((acc: number, item: any) => {
+    const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie')
+    const itemId = item.NowPlayingItemId || item.ItemId;
+    const actualDuration = itemDurations[itemId];
+    return acc + sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration)
+  }, 0)
   const totalHours = Math.round(totalWatchTimeSeconds / 3600)
   const totalPlays = historyArray.length
   const subValueLabel = period === 'week' ? '7 jours' : period === 'year' ? 'Année' : 'Mois'
@@ -259,12 +316,15 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
     const itemId = item.NowPlayingItemId
     const date = new Date(item.ActivityDateInserted || item.DateCreated)
     const key = `${itemId}`
+    const itemType = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie')
+    const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, itemType)
+
     if (historyMap.has(key)) {
       const existing = historyMap.get(key)
       const existingDate = new Date(existing.ActivityDateInserted || existing.DateCreated)
       const diffDays = Math.abs(date.getTime() - existingDate.getTime()) / (1000 * 60 * 60 * 24)
       if (diffDays <= 7) {
-        existing.PlaybackDuration = (existing.PlaybackDuration || 0) + (item.PlaybackDuration || 0)
+        existing.PlaybackDuration = (existing.PlaybackDuration || 0) + sanitizedDuration
         if (date > existingDate) {
           existing.ActivityDateInserted = item.ActivityDateInserted
           existing.DateCreated = item.DateCreated
@@ -272,7 +332,10 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
         return
       }
     }
-    const newItem = { ...item }
+    const newItem = { 
+      ...item,
+      PlaybackDuration: sanitizedDuration
+    }
     historyMap.set(key, newItem)
     aggregatedHistory.push(newItem)
   })
@@ -284,7 +347,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
         <div className="flex flex-col gap-1">
           <h1 className="text-3xl font-bold text-white tracking-tight">Mes Statistiques</h1>
           <div className="flex items-center gap-2 text-gray-400">
-            <span className="text-sm font-medium px-2 py-0.5 bg-gray-800 rounded text-indigo-400 border border-gray-700">
+            <span className="text-sm font-medium px-2 py-0.5 bg-gray-800 rounded text-blue-400 border border-gray-700">
               {periodTitle}
             </span>
             <span className="text-gray-600">•</span>
@@ -312,13 +375,17 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Mon temps de visionnage" value={`${totalHours}h`} subValue={`Total ${subValueLabel}`} icon={<Clock className="h-5 w-5 text-indigo-500" />} />
+        <StatCard title="Mon temps de visionnage" value={`${totalHours}h`} subValue={`Total ${subValueLabel}`} icon={<Clock className="h-5 w-5 text-blue-500" />} />
         <StatCard title="Mes contenus vus" value={totalPlays.toString()} subValue={`Films & Épisodes (${subValueLabel})`} icon={<Play className="h-5 w-5 text-green-500" />} />
         <StatCard title="Mon activité récente" value={historyArray.length > 0 ? formatDistanceToNow(new Date(historyArray[0].ActivityDateInserted || historyArray[0].DateCreated), { addSuffix: true, locale: fr }) : 'Aucune'} subValue="Dernière session" icon={<Activity className="h-5 w-5 text-purple-500" />} />
         <StatCard title="Ma moyenne journalière" value={Math.round(totalHours / (days || 1)).toString() + 'h'} subValue="Heures / jour" icon={<TrendingUp className="h-5 w-5 text-orange-500" />} />
       </div>
 
-      <StatsCharts hourlyActivity={hourlyActivity} dailyActivity={orderedDailyActivity} />
+      <StatsCharts 
+        hourlyActivity={hourlyActivity} 
+        dailyActivity={orderedDailyActivity} 
+        monthlyActivity={monthlyActivity}
+      />
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-1 space-y-4">
@@ -330,40 +397,89 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
         </div>
 
         <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-xl font-semibold text-white flex items-center gap-2"><Clock className="h-5 w-5 text-blue-500" /> Mon historique</h2>
-          <div className="rounded-xl bg-gray-800 border border-gray-700 overflow-hidden">
+          <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+            <Clock className="h-5 w-5 text-blue-500" /> 
+            Mon historique
+          </h2>
+          <div className="rounded-xl bg-gray-900/40 border border-gray-700/50 overflow-hidden backdrop-blur-md shadow-2xl ring-1 ring-white/5">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-900/50 text-gray-400 text-xs uppercase tracking-wider">
                   <th className="px-6 py-4 font-medium">Contenu</th>
-                  <th className="px-6 py-4 font-medium">Appareil</th>
+                  <th className="px-6 py-4 font-medium">Client / Appareil</th>
                   <th className="px-6 py-4 font-medium">Date</th>
                   <th className="px-6 py-4 font-medium text-right">Durée</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700">
-                {aggregatedHistory.slice(0, 50).map((item: any) => (
-                  <tr key={item.Id} className="hover:bg-gray-700/30 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-white group-hover:text-indigo-400 transition-colors">{item.SeriesName || item.NowPlayingItemName || item.Name}</span>
-                        <span className="text-[10px] text-gray-500">{item.Type === 'Episode' ? `S${item.ParentIndexNumber} • E${item.IndexNumber}` : 'Film'}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-xs text-gray-300">{item.DeviceName || 'Inconnu'}</span>
-                        <span className="text-[10px] text-gray-500">{item.Client || 'Client web'}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-xs text-gray-400">
-                      {new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(item.ActivityDateInserted || item.DateCreated))}
-                    </td>
-                    <td className="px-6 py-4 text-right text-xs font-mono text-indigo-400">
-                      {Math.floor((item.PlaybackDuration || 0) / 60)} min
+              <tbody className="divide-y divide-gray-700/50">
+                {aggregatedHistory.slice(0, 50).map((item: any) => {
+                  const isSeries = item.ItemType === 'Episode' || item.Type === 'Episode' || !!item.SeriesName;
+                  
+                  // For episodes, we want the episode name as title
+                  const isEpisode = item.Type === 'Episode' || item.ItemType === 'Episode';
+                  const displayName = isEpisode 
+                    ? (item.Name || item.ItemName || item.NowPlayingItemName)
+                    : (isSeries ? (item.SeriesName || item.Name) : (item.NowPlayingItemName || item.Name || item.ItemName));
+
+                  // Construct subtitle: Series Name • S1 E3
+                  let subName = null;
+                  if (isSeries) {
+                    const parts = [];
+                    if (item.SeriesName && item.SeriesName !== displayName) {
+                      parts.push(item.SeriesName);
+                    }
+                    if (item.ParentIndexNumber !== undefined && item.IndexNumber !== undefined) {
+                      parts.push(`S${item.ParentIndexNumber} • Épisode ${item.IndexNumber}`);
+                    } else if (item.NowPlayingItemName && item.NowPlayingItemName !== displayName && item.NowPlayingItemName !== item.SeriesName) {
+                      parts.push(item.NowPlayingItemName);
+                    }
+                    subName = parts.length > 0 ? parts.join(' • ') : null;
+                  }
+
+                  return (
+                    <tr key={item.Id || `${item.NowPlayingItemId}-${item.ActivityDateInserted}`} className="hover:bg-blue-500/5 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="relative h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-gray-900 border border-gray-700/50">
+                             <EmbyImage itemId={item.NowPlayingItemId || item.ItemId || item.Id} alt={displayName} jellystat={jellystat} />
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
+                              {displayName}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-900 text-gray-500 font-medium border border-gray-700">
+                                {isSeries ? 'Série' : 'Film'}
+                              </span>
+                              {subName && (
+                                <span className="text-[10px] text-gray-500 truncate max-w-[250px]">
+                                  {subName}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-300">{item.Client || item.ClientName || 'Client web'}</div>
+                        <div className="text-xs text-gray-500">{item.DeviceName || 'Inconnu'}</div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-400">
+                        {formatDistanceToNow(new Date(item.ActivityDateInserted || item.DateCreated), { addSuffix: true, locale: fr })}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-mono text-blue-400">
+                        {Math.floor((item.PlaybackDuration || 0) / 60)}m
+                      </td>
+                    </tr>
+                  );
+                })}
+                {aggregatedHistory.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-10 text-center text-gray-500 italic">
+                      Aucun historique de visionnage trouvé
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

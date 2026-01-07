@@ -91,6 +91,33 @@ export class EmbyService {
     }
   }
 
+  async getItemsDurations(itemIds: string[]) {
+    if (!itemIds || itemIds.length === 0) return {}
+    try {
+      const client = await this.getClient(5000)
+      const response = await client.get('/Items', {
+        params: {
+          Ids: itemIds.join(','),
+          Fields: 'RunTimeTicks'
+        }
+      })
+      
+      const durations: Record<string, number> = {}
+      if (response.data && response.data.Items) {
+        response.data.Items.forEach((item: any) => {
+          if (item.RunTimeTicks) {
+            // Convert ticks to seconds (1 tick = 100ns = 10^-7s)
+            durations[item.Id] = item.RunTimeTicks / 10000000
+          }
+        })
+      }
+      return durations
+    } catch (e) {
+      console.error('[EmbyService] getItemsDurations failed:', e)
+      return {}
+    }
+  }
+
   async getItemImageUrl(itemId: string) {
     await this.init()
     return `${this.baseUrl}/Items/${itemId}/Images/Primary?api_key=${this.apiKey}`
