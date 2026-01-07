@@ -118,9 +118,32 @@ export class EmbyService {
     }
   }
 
-  async getItemImageUrl(itemId: string) {
+  async getItemImageUrl(itemId: string, type: string = 'Primary') {
     await this.init()
-    return `${this.baseUrl}/Items/${itemId}/Images/Primary?api_key=${this.apiKey}`
+    return `${this.baseUrl}/Items/${itemId}/Images/${type}?api_key=${this.apiKey}`
+  }
+
+  async getPublicItems(limit: number = 20) {
+    try {
+      const users = await this.getUsers()
+      if (users.length === 0) return []
+      
+      const client = await this.getClient()
+      const response = await client.get(`/Users/${users[0].Id}/Items`, {
+        params: {
+          SortBy: 'Random',
+          IncludeItemTypes: 'Movie,Series',
+          Recursive: true,
+          Fields: 'ProviderIds,RunTimeTicks',
+          Limit: limit,
+          HasBackdrop: true
+        }
+      })
+      return response.data.Items || []
+    } catch (e) {
+      console.error('[EmbyService] getPublicItems failed:', e)
+      return []
+    }
   }
 
   async getUserPlayedItems(userId: string) {

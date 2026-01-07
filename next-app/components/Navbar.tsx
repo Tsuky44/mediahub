@@ -45,12 +45,15 @@ export function Navbar() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center">
           {/* Logo à gauche */}
-          <Link href="/dashboard" className="flex-shrink-0 flex items-center gap-2.5 group transition-all duration-300">
-             <div className="relative">
-               <div className="absolute inset-0 bg-indigo-500 blur-md opacity-20 group-hover:opacity-40 transition-opacity" />
-               <div className="relative flex items-center justify-center w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-                 <Play className="w-5 h-5 text-white fill-white ml-0.5" />
-               </div>
+          <Link href="/dashboard" className="flex-shrink-0 flex items-center gap-3 group transition-all duration-300">
+             <div className="relative w-9 h-9 transition-transform duration-300 group-hover:scale-110">
+               <Image 
+                 src="/logo.png" 
+                 alt="Logo" 
+                 width={36} 
+                 height={36}
+                 className="object-contain"
+               />
              </div>
              <div className="flex flex-col leading-none">
                 <span className="text-lg font-black tracking-tight text-white group-hover:text-indigo-400 transition-colors">

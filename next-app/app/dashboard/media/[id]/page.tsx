@@ -56,6 +56,8 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
 
   // TMDB Ratings and External IDs
   const ratingImdb = details.external_ids?.imdb_id ? await getImdbRating(details.external_ids.imdb_id) : null
+  const watchProviders = (details['watch/providers']?.results?.FR?.flatrate || [])
+    .filter((p: any) => !p.provider_name.toLowerCase().includes('ads'))
   const keywords = (details.keywords?.keywords || details.keywords?.results || []).slice(0, 15)
   const director = credits.crew?.find((c: any) => c.job === 'Director')?.name
   const writers = credits.crew?.filter((c: any) => ['Screenplay', 'Writer', 'Story'].includes(c.job)).slice(0, 3).map((c: any) => c.name)
@@ -430,17 +432,27 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                             </div>
                         </div>
 
-                        {/* External Links Row */}
-                        <div className="flex items-center justify-center gap-4 py-4 border-t border-white/5">
-                            <a href={`https://www.themoviedb.org/${mediaType}/${tmdbId}`} target="_blank" className="opacity-50 hover:opacity-100 transition">
-                                <img src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537f4c4f0f7d9b09ef2e05927d1519d31c693a27a4e224a03D-9452F8B6.svg" className="w-5 h-5" alt="TMDB" />
-                            </a>
-                            {details.external_ids?.imdb_id && (
-                                <a href={`https://www.imdb.com/title/${details.external_ids.imdb_id}`} target="_blank" className="opacity-50 hover:opacity-100 transition">
-                                    <img src="https://upload.wikimedia.org/wikipedia/commons/6/69/IMDB_Logo_2016.svg" className="w-8 h-4" alt="IMDb" />
-                                </a>
-                            )}
-                        </div>
+                        {/* Watch Providers - Integrated Row */}
+                        {watchProviders.length > 0 && (
+                            <div className="px-4 py-3 flex items-center justify-between border-t border-white/5 bg-white/[0.02]">
+                                <span className="text-gray-500 text-[11px] font-bold">Disponible sur</span>
+                                <div className="flex gap-2">
+                                    {watchProviders.map((provider: any) => (
+                                        <div key={provider.provider_id} className="group relative">
+                                            <img 
+                                                src={`https://image.tmdb.org/t/p/original${provider.logo_path}`} 
+                                                alt={provider.provider_name}
+                                                className="w-5 h-5 rounded-md shadow-md border border-white/10 group-hover:scale-110 transition duration-300"
+                                                title={provider.provider_name}
+                                            />
+                                            <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-[9px] rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-50 pointer-events-none border border-white/10">
+                                                {provider.provider_name}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

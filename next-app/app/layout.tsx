@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Media Dashboard",
   description: "Next.js Media Dashboard",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

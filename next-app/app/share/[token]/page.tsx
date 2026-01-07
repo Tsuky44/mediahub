@@ -18,7 +18,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
     const fileName = share.filePath.split('/').pop() || 'Fichier';
 
     return (
-        <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-4">
+        <div className="min-h-screen flex flex-col items-center justify-center p-4">
             <div className="max-w-md w-full bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl overflow-hidden">
                 <div className="p-8 flex flex-col items-center text-center">
                     <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6">

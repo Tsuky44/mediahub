@@ -12,10 +12,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@body {
-  background: var(--background);
+body {
+  background: radial-gradient(circle at top center, #2d3e5a 0%, #020617 100%);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  min-height: 100vh;
+  background-attachment: fixed;
 }
 
 @layer utilities {

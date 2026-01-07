@@ -261,6 +261,33 @@ export class TmdbService {
         return { results: [] }
     }
   }
+
+  async getPersonDetails(id: number) {
+    const client = await this.getClient()
+    if (!client) return null
+    try {
+        const response = await client.get(`/person/${id}`, {
+            params: { 
+                append_to_response: 'combined_credits,external_ids,images',
+                language: 'fr-FR'
+            }
+        })
+        return response.data
+    } catch (e: any) {
+        // Si l'erreur est un 404 avec les paramètres, on réessaie sans les paramètres
+        if (e.response?.status === 404) {
+            try {
+                const simpleResponse = await client.get(`/person/${id}`)
+                return simpleResponse.data
+            } catch (innerError) {
+                console.error(`Total failure for person ${id}`, innerError)
+                return null
+            }
+        }
+        console.error(`Failed to get person details for ${id}`, e)
+        return null
+    }
+  }
 }
 
 export const tmdbService = new TmdbService()
