@@ -1,0 +1,20 @@
+services:
+  mediahub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mediahub
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=file:/app/data/dev.db
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=votre_secret_ici
+      - TMDB_API_KEY=votre_cle_tmdb
+      # Ajoutez ici toutes les autres variables d'environnement de votre .env
+    volumes:
+      - mediahub_data:/app/data
+    restart: always
+
+volumes:
+  mediahub_data:
