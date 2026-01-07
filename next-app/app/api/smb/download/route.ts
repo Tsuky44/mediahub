@@ -6,7 +6,8 @@ import { Readable } from 'stream';
 
 export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    const userRole = (session?.user as any)?.role || 'user';
+    if (!session || !session.user || (userRole !== 'admin' && userRole !== 'user_plus')) {
         return new NextResponse('Unauthorized', { status: 401 });
     }
 

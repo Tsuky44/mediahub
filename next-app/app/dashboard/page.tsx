@@ -5,16 +5,21 @@ import { RecentlyWatched } from './media/RecentlyWatched'
 import { Recommendations } from './media/Recommendations'
 import { RecentRequests } from './RecentRequests'
 import { QuickActions } from './QuickActions'
-import { getCurrentUser } from '@/lib/auth'
 import { getSetting } from '@/lib/settings'
 import { AlertCircle, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { getTorrents } from './downloads/actions'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
-  const user = await getCurrentUser()
+  const session = await getServerSession(authOptions)
+  const user = session?.user as any
+  const userRole = user?.role || 'user'
+  const isAdminOrUserPlus = userRole === 'admin' || userRole === 'user_plus'
+
   const embyUrl = await getSetting('emby_url')
   const jellystatUrl = await getSetting('jellystat_url')
 
@@ -99,34 +104,29 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="space-y-12 pb-20">
-      {/* Barre de recherche centrale et Widgets d'état */}
-      <section>
-        <QuickActions initialTorrents={activeTorrents} userName={user?.name || user?.email?.split('@')[0]} />
-      </section>
-
-      {/* Activité en direct & Dernières Demandes */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          {recommendations.length > 0 && (
-            <div className="bg-gray-900/40 border border-gray-700/50 rounded-3xl p-6 backdrop-blur-md shadow-2xl ring-1 ring-white/5">
-              <Recommendations items={recommendations} />
-            </div>
-          )}
-          {recentlyWatched.length > 0 && (
-            <div className="bg-gray-900/40 border border-gray-700/50 rounded-3xl p-6 backdrop-blur-md shadow-2xl ring-1 ring-white/5">
-              <RecentlyWatched items={recentlyWatched} />
-            </div>
-          )}
+    <div className="min-h-screen flex flex-col space-y-8 pb-8">
+      {/* Barre de recherche et Actions Rapides (Largeur totale) */}
+      <div className="flex-shrink-0">
+        <QuickActions 
+          initialTorrents={activeTorrents} 
+          userName={user?.name || ''} 
+          isAdmin={isAdminOrUserPlus}
+        />
+      </div>
+      
+      {/* Zone de contenu scindée */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
+        {/* Colonne de Gauche : Médias (Prend toute sa hauteur, pas de scroll interne) */}
+        <div className="xl:col-span-2 space-y-8">
+          <RecentlyWatched items={recentlyWatched} />
+          <Recommendations items={recommendations} />
         </div>
-        <div className="lg:col-span-1 relative">
-          <div className="lg:absolute lg:inset-0">
-            <div className="bg-gray-900/40 border border-gray-700/50 rounded-3xl p-6 backdrop-blur-md shadow-2xl h-full ring-1 ring-white/5">
-              <RecentRequests requests={recentRequests} />
-            </div>
-          </div>
+        
+        {/* Colonne de Droite : Dernières demandes (Fixe et défilante) */}
+        <div className="xl:sticky xl:top-8 h-[calc(100vh-160px)] overflow-hidden">
+          <RecentRequests requests={recentRequests} />
         </div>
-      </section>
+      </div>
     </div>
   )
 }

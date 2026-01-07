@@ -22,6 +22,14 @@ export function Navbar() {
   const pathname = usePathname()
   const { data: session } = useSession()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const userRole = (session?.user as any)?.role || 'user'
+
+  const filteredNavigation = navigation.filter(item => {
+    if (item.href === '/dashboard/downloads') {
+      return userRole === 'admin' || userRole === 'user_plus'
+    }
+    return true
+  })
 
   // Fermer le dropdown quand on clique ailleurs
   useEffect(() => {
@@ -65,7 +73,7 @@ export function Navbar() {
           {/* Navigation centrée */}
           <div className="hidden md:flex flex-1 justify-center">
             <div className="flex items-center space-x-1">
-              {navigation.map((item) => {
+              {filteredNavigation.map((item) => {
                  const isActive = pathname === item.href
                  return (
                   <Link

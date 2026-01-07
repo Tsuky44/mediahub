@@ -19,9 +19,12 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
+        console.log(`[Auth] Attempting login for ${credentials.username}`)
+
         // Try to authenticate with Emby first
         try {
           const embyUser = await embyService.authenticate(credentials.username, credentials.password)
+          console.log(`[Auth] Emby auth successful for ${credentials.username}`)
 
           if (embyUser && embyUser.User) {
               // Check if user exists in our DB
@@ -30,14 +33,7 @@ export const authOptions: NextAuthOptions = {
               })
 
               if (!user) {
-                  // Check by email if possible or username
-                  // Emby might not return email in this call depending on privacy settings
-                  // We'll create a new user or link by username
-                  // For safety, let's look up by username if email is missing (assuming username uniqueness locally)
-                  
-                  // Note: We need a unique email for Prisma User model. 
-                  // If Emby doesn't give one, we might need to fake it or ask user.
-                  // For now, let's assume we can construct one or use what we have.
+                  console.log(`[Auth] User not found in DB, creating/updating...`)
                   const email = embyUser.User.Email || `${embyUser.User.Name.toLowerCase()}@emby.local`
                   
                   user = await prisma.user.upsert({
@@ -57,21 +53,23 @@ export const authOptions: NextAuthOptions = {
                   })
               }
 
+              console.log(`[Auth] Returning user object for ${user.name} with role ${user.role}`)
               return {
-                  id: user.id.toString(),
-                  email: user.email,
-                  name: user.name,
-                  image: user.image,
-                  embyUserId: user.embyUserId,
-                  role: user.role
-              }
+                    id: user.id.toString(),
+                    email: user.email,
+                    name: user.name,
+                    image: user.image,
+                    embyUserId: user.embyUserId,
+                    role: user.role,
+                    // @ts-ignore
+                    roleVersion: user.roleVersion
+                }
           }
         } catch (error: any) {
-          console.error("Authorize error:", error.message)
-          throw new Error(error.message)
+          console.error("[Auth] Authorize error:", error.message)
+          return null // Return null instead of throwing to avoid 500 error
         }
         
-        // Fallback to local auth if Emby fails (optional)
         return null
       }
     })
@@ -83,13 +81,48 @@ export const authOptions: NextAuthOptions = {
     signIn: '/login',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         // @ts-ignore
         token.embyUserId = user.embyUserId
         // @ts-ignore
         token.role = user.role
+        // @ts-ignore
+        token.roleVersion = user.roleVersion
       }
+
+      // Check for role change on every request to force logout if needed
+      if (token.sub && !user) { // Only check on subsequent requests, not on initial login
+        try {
+          const userId = parseInt(token.sub)
+          if (!isNaN(userId)) {
+            const dbUser = await prisma.user.findUnique({
+              where: { id: userId },
+              select: { 
+                // @ts-ignore
+                roleVersion: true, 
+                role: true 
+              }
+            })
+
+            if (dbUser) {
+              // If the role version in DB is different from the one in token, 
+              // it means the role was changed. We force a logout by throwing or 
+              // we could update the token, but the user wants a forced logout.
+              // @ts-ignore
+              if (dbUser.roleVersion !== token.roleVersion) {
+                // By returning null or throwing, we invalidate the session
+                return null as any
+              }
+            }
+          }
+        } catch (error) {
+          console.error("JWT verification error:", error)
+          // On error, we might want to continue or logout. 
+          // Let's continue to avoid locking out users if DB is temporarily down.
+        }
+      }
+      
       return token
     },
     async session({ session, token }) {

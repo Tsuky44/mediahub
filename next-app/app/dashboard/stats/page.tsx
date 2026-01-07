@@ -1,4 +1,7 @@
 import React from 'react'
+import Link from 'next/link'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { JellystatService, WatchHistoryItem } from '@/lib/services/jellystat'
 import { EmbyService } from '@/lib/services/emby'
 import { getSetting } from '@/lib/settings'
@@ -73,6 +76,24 @@ interface StatsPageProps {
 }
 
 export default async function StatsPage({ searchParams }: StatsPageProps) {
+  // Check authorization
+  const session = await getServerSession(authOptions)
+  
+  if (!session) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
+          <AlertCircle size={48} />
+        </div>
+        <h2 className="text-2xl font-bold text-white">Accès restreint</h2>
+        <p className="text-gray-400">Veuillez vous connecter pour voir les statistiques.</p>
+        <Link href="/api/auth/signin" className="text-indigo-400 hover:text-indigo-300 transition-colors">
+          Se connecter
+        </Link>
+      </div>
+    )
+  }
+
   // 0. Unwrap searchParams (Next.js 15 requirement)
   const params = await searchParams
   

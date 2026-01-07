@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Film, ListPlus, Settings, LogOut, BarChart2 } from 'lucide-react'
+import { Home, Film, ListPlus, Settings, LogOut, BarChart2, CloudDownload } from 'lucide-react'
 import Image from 'next/image'
 import { signOut, useSession } from 'next-auth/react'
 import clsx from 'clsx'
@@ -12,11 +12,20 @@ const navigation = [
   { name: 'Médiathèque', href: '/dashboard/media', icon: Film },
   { name: 'Statistiques', href: '/dashboard/stats', icon: BarChart2 },
   { name: 'Demandes', href: '/dashboard/requests', icon: ListPlus },
+  { name: 'Téléchargements', href: '/dashboard/downloads', icon: CloudDownload },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
   const { data: session } = useSession()
+  const userRole = (session?.user as any)?.role || 'user'
+
+  const filteredNavigation = navigation.filter(item => {
+    if (item.href === '/dashboard/downloads') {
+      return userRole === 'admin' || userRole === 'user_plus'
+    }
+    return true
+  })
 
   return (
     <div className="flex h-screen w-64 flex-col bg-gray-900 text-white">
@@ -29,7 +38,7 @@ export function Sidebar() {
         </Link>
       </div>
       <nav className="flex-1 space-y-1 px-2 py-4">
-        {navigation.map((item) => {
+        {filteredNavigation.map((item) => {
           const isActive = pathname === item.href
           return (
             <Link
@@ -54,7 +63,7 @@ export function Sidebar() {
           )
         })}
 
-        {(session?.user as any)?.role === 'admin' && (
+        {userRole === 'admin' && (
           <Link
             href="/dashboard/settings"
             className={clsx(

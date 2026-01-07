@@ -14,9 +14,10 @@ model User {
   emailVerified    DateTime?
   password         String?
   image            String?
-  embyUserId       String?        @map("emby_user_id")
+  embyUserId       String?        @unique @map("emby_user_id")
   jellyseerrUserId String?        @map("jellyseerr_user_id")
   role             String         @default("user")
+  roleVersion      Int            @default(0) @map("role_version")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
   accounts         Account[]
@@ -137,22 +138,19 @@ model WatchEvent {
   itemType        String?  @map("item_type")
   itemName        String?  @map("item_name")
   seriesName      String?  @map("series_name")
-  seasonName      String?  @map("season_name")
-  episodeNumber   Int?     @map("episode_number")
-  userName        String?  @map("user_name")
-  
-  // Extended Stats (Tracearr-like)
-  sessionId       String?  @map("session_id")
-  client          String?
-  device          String?
-  ipAddress       String?  @map("ip_address")
-  playMethod      String?  @map("play_method") // DirectPlay, Transcode, DirectStream
-  
   durationMinutes Int      @default(0) @map("duration_minutes")
   plays           Int      @default(1)
   playedAt        DateTime @map("played_at")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
+  client          String?
+  device          String?
+  episodeNumber   Int?     @map("episode_number")
+  ipAddress       String?  @map("ip_address")
+  playMethod      String?  @map("play_method")
+  seasonName      String?  @map("season_name")
+  sessionId       String?  @map("session_id")
+  userName        String?  @map("user_name")
   user            User?    @relation(fields: [userId], references: [id])
 
   @@unique([embyUserId, itemId, playedAt])

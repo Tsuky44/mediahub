@@ -3,9 +3,20 @@
 import { qbittorrentService, Torrent } from '@/lib/services/qbittorrent'
 import { smbService } from '@/lib/services/smb'
 import { revalidatePath } from 'next/cache'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+
+async function checkAccess() {
+  const session = await getServerSession(authOptions)
+  const role = (session?.user as any)?.role
+  if (!session || !session.user || (role !== 'admin' && role !== 'user_plus')) {
+    throw new Error('Unauthorized')
+  }
+}
 
 export async function getTorrents(filter: string = 'all'): Promise<Torrent[]> {
   try {
+    await checkAccess()
     return await qbittorrentService.getTorrents(filter)
   } catch (e) {
     console.error('Failed to get torrents', e)
@@ -15,6 +26,7 @@ export async function getTorrents(filter: string = 'all'): Promise<Torrent[]> {
 
 export async function addTorrent(formData: FormData) {
   try {
+    await checkAccess()
     const urls = formData.get('urls') as string | null
     const files = formData.getAll('torrents') as File[]
     
@@ -37,6 +49,7 @@ export async function addTorrent(formData: FormData) {
 
 export async function deleteTorrents(hashes: string[], deleteFiles: boolean) {
   try {
+    await checkAccess()
     await qbittorrentService.deleteTorrents(hashes, deleteFiles)
     revalidatePath('/dashboard/downloads')
     return { success: true }
@@ -48,6 +61,7 @@ export async function deleteTorrents(hashes: string[], deleteFiles: boolean) {
 
 export async function pauseTorrents(hashes: string[]) {
   try {
+    await checkAccess()
     await qbittorrentService.pauseTorrents(hashes)
     revalidatePath('/dashboard/downloads')
     return { success: true }
@@ -59,6 +73,7 @@ export async function pauseTorrents(hashes: string[]) {
 
 export async function resumeTorrents(hashes: string[]) {
   try {
+    await checkAccess()
     await qbittorrentService.resumeTorrents(hashes)
     revalidatePath('/dashboard/downloads')
     return { success: true }
@@ -70,6 +85,7 @@ export async function resumeTorrents(hashes: string[]) {
 
 export async function deleteSmbPath(path: string) {
   try {
+    await checkAccess()
     await smbService.delete(path)
     revalidatePath('/dashboard/downloads')
     return { success: true }

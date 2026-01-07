@@ -9,9 +9,10 @@ import { checkServicesHealth, liveSearch } from './dashboard-actions'
 interface QuickActionsProps {
   initialTorrents?: any[]
   userName?: string
+  isAdmin?: boolean
 }
 
-export function QuickActions({ initialTorrents = [], userName }: QuickActionsProps) {
+export function QuickActions({ initialTorrents = [], userName, isAdmin }: QuickActionsProps) {
   const [torrents, setTorrents] = useState(initialTorrents)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
@@ -164,7 +165,9 @@ export function QuickActions({ initialTorrents = [], userName }: QuickActionsPro
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Status et Téléchargements (Uniquement Admin) */}
+      {isAdmin && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Status Services */}
         <div className="bg-gray-900/40 border border-gray-800/50 p-4 rounded-2xl backdrop-blur-sm">
           <div className="flex items-center justify-between mb-3">
@@ -263,6 +266,7 @@ export function QuickActions({ initialTorrents = [], userName }: QuickActionsPro
           </div>
         </div>
       </div>
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import SettingsForm from './SettingsForm'
+import UserManagement from './UserManagement'
 import { getSetting } from '@/lib/settings'
 
 export const dynamic = 'force-dynamic'
@@ -19,7 +20,12 @@ export default async function SettingsPage() {
       )
   }
 
-  // Fetch users from Jellyseerr
+  // Fetch users from DB for role management
+  const dbUsers = await prisma.user.findMany({
+    orderBy: { name: 'asc' }
+  })
+
+  // Fetch users from Jellyseerr for sync setting
   const jellyseerrUsers = await jellyseerrService.getUsers()
 
   // Get current global settings
@@ -50,28 +56,36 @@ export default async function SettingsPage() {
   const currentEmbyKey = await getSetting('emby_api_key')
   
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <h2 className="text-2xl font-bold text-white">Paramètres</h2>
-      <SettingsForm 
-        users={jellyseerrUsers} 
-        currentJellyseerrId={currentJellyseerrId || ''}
-        currentQbitUrl={currentQbitUrl}
-        currentQbitUser={currentQbitUser}
-        currentQbitPass={currentQbitPass}
-        currentSmbHost={currentSmbHost}
-        currentSmbUser={currentSmbUser}
-        currentSmbPass={currentSmbPass}
-        currentSmbShare={currentSmbShare}
-        currentSmbPath={currentSmbPath}
-        currentRadarrUrl={currentRadarrUrl}
-        currentRadarrKey={currentRadarrKey}
-        currentSonarrUrl={currentSonarrUrl}
-        currentSonarrKey={currentSonarrKey}
-        currentJellystatUrl={currentJellystatUrl}
-        currentJellystatKey={currentJellystatKey}
-        currentEmbyUrl={currentEmbyUrl}
-        currentEmbyKey={currentEmbyKey}
-      />
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-black text-white tracking-tight">Paramètres</h2>
+      </div>
+
+      <UserManagement initialUsers={dbUsers} />
+
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
+        <h3 className="text-xl font-bold text-white mb-6">Configuration des services</h3>
+        <SettingsForm 
+          users={jellyseerrUsers} 
+          currentJellyseerrId={currentJellyseerrId || ''}
+          currentQbitUrl={currentQbitUrl}
+          currentQbitUser={currentQbitUser}
+          currentQbitPass={currentQbitPass}
+          currentSmbHost={currentSmbHost}
+          currentSmbUser={currentSmbUser}
+          currentSmbPass={currentSmbPass}
+          currentSmbShare={currentSmbShare}
+          currentSmbPath={currentSmbPath}
+          currentRadarrUrl={currentRadarrUrl}
+          currentRadarrKey={currentRadarrKey}
+          currentSonarrUrl={currentSonarrUrl}
+          currentSonarrKey={currentSonarrKey}
+          currentJellystatUrl={currentJellystatUrl}
+          currentJellystatKey={currentJellystatKey}
+          currentEmbyUrl={currentEmbyUrl}
+          currentEmbyKey={currentEmbyKey}
+        />
+      </div>
     </div>
   )
 }
