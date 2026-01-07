@@ -5,10 +5,11 @@ services:
       dockerfile: Dockerfile
     container_name: mediahub
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     env_file:
       - .env
     environment:
+      - PORT=${PORT:-3000}
       - DATABASE_URL=file:/app/prisma/dev.db
     volumes:
       - ./prisma:/app/prisma
