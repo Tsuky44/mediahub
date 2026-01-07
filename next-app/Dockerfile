@@ -6,7 +6,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-RUN npm ci
+# Use npm install instead of npm ci to regenerate lockfile and avoid platform mismatch from local lockfile
+RUN npm install
 
 # Stage 2: Build the application
 FROM node:20-slim AS builder
