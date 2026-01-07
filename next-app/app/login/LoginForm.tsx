@@ -28,7 +28,12 @@ export default function LoginForm() {
       })
 
       if (result?.error) {
-        setError('Nom d\'utilisateur ou mot de passe incorrect')
+        // Show the actual error message if available, otherwise generic
+        const errorMessage = result.error === 'CredentialsSignin' 
+          ? 'Nom d\'utilisateur ou mot de passe incorrect'
+          : result.error.replace('Error: ', '')
+        
+        setError(errorMessage)
       } else {
         router.push(callbackUrl)
         router.refresh()

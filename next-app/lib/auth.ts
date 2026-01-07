@@ -20,52 +20,57 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Try to authenticate with Emby first
-        const embyUser = await embyService.authenticate(credentials.username, credentials.password)
+        try {
+          const embyUser = await embyService.authenticate(credentials.username, credentials.password)
 
-        if (embyUser && embyUser.User) {
-            // Check if user exists in our DB
-            let user = await prisma.user.findFirst({
-                where: { embyUserId: embyUser.User.Id }
-            })
+          if (embyUser && embyUser.User) {
+              // Check if user exists in our DB
+              let user = await prisma.user.findFirst({
+                  where: { embyUserId: embyUser.User.Id }
+              })
 
-            if (!user) {
-                // Check by email if possible or username
-                // Emby might not return email in this call depending on privacy settings
-                // We'll create a new user or link by username
-                // For safety, let's look up by username if email is missing (assuming username uniqueness locally)
-                
-                // Note: We need a unique email for Prisma User model. 
-                // If Emby doesn't give one, we might need to fake it or ask user.
-                // For now, let's assume we can construct one or use what we have.
-                const email = embyUser.User.Email || `${embyUser.User.Name.toLowerCase()}@emby.local`
-                
-                user = await prisma.user.upsert({
-                    where: { email },
-                    update: {
-                        embyUserId: embyUser.User.Id,
-                        name: embyUser.User.Name,
-                        image: embyUser.User.PrimaryImageTag ? `/api/media/image/${embyUser.User.Id}?type=Primary` : null
-                    },
-                    create: {
-                        email,
-                        name: embyUser.User.Name,
-                        embyUserId: embyUser.User.Id,
-                        image: embyUser.User.PrimaryImageTag ? `/api/media/image/${embyUser.User.Id}?type=Primary` : null,
-                        role: embyUser.User.Policy?.IsAdministrator ? 'admin' : 'user'
-                    }
-                })
-            }
+              if (!user) {
+                  // Check by email if possible or username
+                  // Emby might not return email in this call depending on privacy settings
+                  // We'll create a new user or link by username
+                  // For safety, let's look up by username if email is missing (assuming username uniqueness locally)
+                  
+                  // Note: We need a unique email for Prisma User model. 
+                  // If Emby doesn't give one, we might need to fake it or ask user.
+                  // For now, let's assume we can construct one or use what we have.
+                  const email = embyUser.User.Email || `${embyUser.User.Name.toLowerCase()}@emby.local`
+                  
+                  user = await prisma.user.upsert({
+                      where: { email },
+                      update: {
+                          embyUserId: embyUser.User.Id,
+                          name: embyUser.User.Name,
+                          image: embyUser.User.PrimaryImageTag ? `/api/media/image/${embyUser.User.Id}?type=Primary` : null
+                      },
+                      create: {
+                          email,
+                          name: embyUser.User.Name,
+                          embyUserId: embyUser.User.Id,
+                          image: embyUser.User.PrimaryImageTag ? `/api/media/image/${embyUser.User.Id}?type=Primary` : null,
+                          role: embyUser.User.Policy?.IsAdministrator ? 'admin' : 'user'
+                      }
+                  })
+              }
 
-            return {
-                id: user.id.toString(),
-                email: user.email,
-                name: user.name,
-                image: user.image,
-                embyUserId: user.embyUserId,
-                role: user.role
-            }
+              return {
+                  id: user.id.toString(),
+                  email: user.email,
+                  name: user.name,
+                  image: user.image,
+                  embyUserId: user.embyUserId,
+                  role: user.role
+              }
+          }
+        } catch (error: any) {
+          console.error("Authorize error:", error.message)
+          throw new Error(error.message)
         }
-
+        
         // Fallback to local auth if Emby fails (optional)
         return null
       }

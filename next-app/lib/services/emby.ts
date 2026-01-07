@@ -19,6 +19,7 @@ export class EmbyService {
     }
     
     if (!this.baseUrl || !this.apiKey) {
+      console.error('[EmbyService] Missing configuration. URL:', this.baseUrl, 'API Key present:', !!this.apiKey)
       throw new Error('Emby not configured')
     }
   }
@@ -51,6 +52,7 @@ export class EmbyService {
 
   async authenticate(username: string, pw: string) {
     await this.init()
+    console.log(`[EmbyService] Authenticating user '${username}' against ${this.baseUrl}`)
     try {
         const response = await axios.post(`${this.baseUrl}/Users/AuthenticateByName`, {
             Username: username,
@@ -63,9 +65,10 @@ export class EmbyService {
             timeout: 10000
         })
         return response.data
-    } catch (e) {
-        console.error('[EmbyService] Auth failed:', e)
-        throw e
+    } catch (e: any) {
+        const errorMsg = e.response?.data ? JSON.stringify(e.response.data) : e.message
+        console.error(`[EmbyService] Auth failed for ${username} at ${this.baseUrl}:`, errorMsg)
+        throw new Error(`Emby Auth Error: ${errorMsg} (URL: ${this.baseUrl})`)
     }
   }
 
