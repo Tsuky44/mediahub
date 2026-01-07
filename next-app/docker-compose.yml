@@ -10,14 +10,7 @@ services:
       - .env
     environment:
       - PORT=${PORT:-3000}
-      # Utilisation d'un chemin absolu dans le volume persisté
-      - DATABASE_URL=file:/app/data/mediahub.db
+      - DATABASE_URL=file:/app/prisma/dev.db
       - NEXT_TELEMETRY_DISABLED=1
       - NODE_ENV=production
-    volumes:
-      # Montage du volume pour la persistance des données
-      - mediahub_data:/app/data
     restart: unless-stopped
-
-volumes:
-  mediahub_data:
