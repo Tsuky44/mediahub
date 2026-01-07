@@ -73,6 +73,7 @@ export async function PATCH(request: Request) {
     where: { id: parseInt(id) },
     data: { 
       role,
+      // @ts-ignore
       roleVersion: { increment: 1 }
     }
   })
