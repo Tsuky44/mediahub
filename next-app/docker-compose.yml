@@ -10,6 +10,14 @@ services:
       - .env
     environment:
       - PORT=${PORT:-3000}
-      - DATABASE_URL=file:/app/prisma/dev.db
-    # Suppression du volume pour que la DB soit directement dans l'image
-    restart: always
+      # Utilisation d'un chemin absolu dans le volume persisté
+      - DATABASE_URL=file:/app/data/mediahub.db
+      - NEXT_TELEMETRY_DISABLED=1
+      - NODE_ENV=production
+    volumes:
+      # Montage du volume pour la persistance des données
+      - mediahub_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  mediahub_data:

@@ -24,7 +24,7 @@ RUN npm run build
 
 # Stage 3: Production runner
 FROM node:20-slim AS runner
-RUN apt-get update && apt-get install -y openssl libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y openssl libssl3 ca-certificates sqlite3 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 ENV NODE_ENV production
