@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`
 
-  if (!session?.user?.name?.includes('mathis') && !isCron) {
+  if ((session?.user as any)?.role !== 'admin' && !isCron) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

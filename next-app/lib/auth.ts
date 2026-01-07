@@ -61,7 +61,8 @@ export const authOptions: NextAuthOptions = {
                 email: user.email,
                 name: user.name,
                 image: user.image,
-                embyUserId: user.embyUserId
+                embyUserId: user.embyUserId,
+                role: user.role
             }
         }
 
@@ -81,9 +82,8 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         // @ts-ignore
         token.embyUserId = user.embyUserId
-      } else {
-        // If it's a subsequent call, we might need to fetch it from DB if not in token
-        // But since we set it on initial login, it should persist in the JWT
+        // @ts-ignore
+        token.role = user.role
       }
       return token
     },
@@ -92,7 +92,9 @@ export const authOptions: NextAuthOptions = {
         // @ts-ignore
         session.user.id = token.sub
         // @ts-ignore
-        session.user.embyUserId = token.embyUserId || token.sub // Fallback au sub si embyUserId est manquant
+        session.user.embyUserId = token.embyUserId || token.sub
+        // @ts-ignore
+        session.user.role = token.role
       }
       return session
     }

@@ -6,8 +6,8 @@ import { setSetting } from '@/lib/settings'
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
   
-  if (!session || !session.user || session.user.name !== 'mathis') {
-    return NextResponse.json({ error: 'Unauthorized. Only mathis can manage settings.' }, { status: 401 })
+  if (!session || !session.user || (session.user as any).role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized. Only admins can manage settings.' }, { status: 401 })
   }
 
   try {

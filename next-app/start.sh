@@ -1,13 +1,14 @@
 #!/bin/sh
 
-# S'assurer que le dossier prisma appartient à l'utilisateur courant et est accessible en écriture
-# Note: Dans Docker, l'utilisateur nextjs a l'UID 1001
-echo "Setting permissions for database..."
-# On vérifie si on est root pour pouvoir changer les permissions
+# S'assurer que les dossiers nécessaires existent et ont les bonnes permissions
+echo "Setting permissions for database and data directory..."
 if [ "$(id -u)" = "0" ]; then
+    mkdir -p /app/data
     chown -R 1001:1001 /app/prisma
+    chown -R 1001:1001 /app/data
 fi
 chmod -R 777 /app/prisma
+chmod -R 777 /app/data
 
 # Appliquer les migrations Prisma
 echo "Applying prisma migrations..."

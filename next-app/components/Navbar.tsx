@@ -137,7 +137,7 @@ export function Navbar() {
                           Mes Statistiques
                         </Link>
                         
-                        {session?.user?.name === 'mathis' && (
+                        {(session?.user as any)?.role === 'admin' && (
                           <Link 
                             href="/dashboard/settings" 
                             className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors group"

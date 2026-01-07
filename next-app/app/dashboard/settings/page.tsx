@@ -10,11 +10,11 @@ export const dynamic = 'force-dynamic'
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
   
-  if (!session || !session.user || session.user.name !== 'mathis') {
+  if (!session || !session.user || (session.user as any).role !== 'admin') {
       return (
         <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
           <h2 className="text-2xl font-bold text-white">Accès restreint</h2>
-          <p className="text-gray-400">Seul l'administrateur (mathis) peut modifier les paramètres globaux.</p>
+          <p className="text-gray-400">Seul l'administrateur peut modifier les paramètres globaux.</p>
         </div>
       )
   }

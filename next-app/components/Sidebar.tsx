@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Home, Film, ListPlus, Settings, LogOut, BarChart2 } from 'lucide-react'
-import { signOut } from 'next-auth/react'
+import Image from 'next/image'
+import { signOut, useSession } from 'next-auth/react'
 import clsx from 'clsx'
 
 const navigation = [
@@ -11,16 +12,21 @@ const navigation = [
   { name: 'Médiathèque', href: '/dashboard/media', icon: Film },
   { name: 'Statistiques', href: '/dashboard/stats', icon: BarChart2 },
   { name: 'Demandes', href: '/dashboard/requests', icon: ListPlus },
-  { name: 'Paramètres', href: '/dashboard/settings', icon: Settings },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { data: session } = useSession()
 
   return (
     <div className="flex h-screen w-64 flex-col bg-gray-900 text-white">
-      <div className="flex h-16 items-center justify-center border-b border-gray-800">
-        <h1 className="text-xl font-bold">MediaHub</h1>
+      <div className="flex h-16 items-center px-6 border-b border-gray-800">
+        <Link href="/dashboard" className="flex items-center gap-3">
+          <Image src="/logo.png" alt="Logo" width={32} height={32} />
+          <h1 className="text-xl font-bold tracking-tight">
+            MEDIA<span className="text-indigo-500">HUB</span>
+          </h1>
+        </Link>
       </div>
       <nav className="flex-1 space-y-1 px-2 py-4">
         {navigation.map((item) => {
@@ -47,6 +53,27 @@ export function Sidebar() {
             </Link>
           )
         })}
+
+        {(session?.user as any)?.role === 'admin' && (
+          <Link
+            href="/dashboard/settings"
+            className={clsx(
+              pathname === '/dashboard/settings'
+                ? 'bg-gray-800 text-white'
+                : 'text-gray-400 hover:bg-gray-800 hover:text-white',
+              'group flex items-center rounded-md px-2 py-2 text-sm font-medium'
+            )}
+          >
+            <Settings
+              className={clsx(
+                pathname === '/dashboard/settings' ? 'text-white' : 'text-gray-400 group-hover:text-white',
+                'mr-3 h-6 w-6 flex-shrink-0'
+              )}
+              aria-hidden="true"
+            />
+            Paramètres
+          </Link>
+        )}
       </nav>
       <div className="border-t border-gray-800 p-4">
         <button
