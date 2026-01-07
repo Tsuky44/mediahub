@@ -1,6 +1,6 @@
 # Stage 1: Install dependencies
-FROM node:20-alpine AS deps
-RUN apk add --no-cache libc6-compat openssl
+FROM node:20-slim AS deps
+RUN apt-get update && apt-get install -y openssl libssl-dev
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -9,8 +9,8 @@ COPY prisma ./prisma/
 RUN npm ci
 
 # Stage 2: Build the application
-FROM node:20-alpine AS builder
-RUN apk add --no-cache openssl
+FROM node:20-slim AS builder
+RUN apt-get update && apt-get install -y openssl
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -23,13 +23,14 @@ ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
 
 # Stage 3: Production runner
-FROM node:20-alpine AS runner
-RUN apk add --no-cache openssl libssl1.1 su-exec || apk add --no-cache openssl su-exec
+FROM node:20-slim AS runner
+RUN apt-get update && apt-get install -y openssl libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# Créer un utilisateur non-root pour la sécurité
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
@@ -43,11 +44,9 @@ RUN chown nextjs:nodejs .next
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/start.sh ./start.sh
 
-# Make start.sh executable
+# S'assurer que le script est exécutable
 USER root
 RUN chmod +x start.sh
 

@@ -15,4 +15,4 @@ npx prisma migrate deploy
 
 # Démarrer l'application en tant qu'utilisateur nextjs
 echo "Starting application as nextjs..."
-exec su-exec nextjs node server.js
+exec runuser -u nextjs -- node server.js
