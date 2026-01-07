@@ -10,7 +10,10 @@ services:
       - .env
     environment:
       - PORT=${PORT:-3000}
-      - DATABASE_URL=file:/app/prisma/dev.db
+      - DATABASE_URL=file:/app/data/dev.db
     volumes:
-      - ./prisma:/app/prisma
+      - mediahub_data:/app/data
     restart: always
+
+volumes:
+  mediahub_data:
