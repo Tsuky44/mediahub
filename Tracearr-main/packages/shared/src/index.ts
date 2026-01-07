@@ -1,0 +1,267 @@
+/**
+ * @tracearr/shared - Shared types, schemas, and constants
+ */
+
+// Type exports
+export type {
+  // Server
+  ServerType,
+  Server,
+  // User
+  User,
+  ServerUser,
+  ServerUserWithIdentity,
+  ServerUserDetail,
+  ServerUserFullDetail,
+  ViolationSummary,
+  UserRole,
+  AuthUser,
+  UserLocation,
+  UserDevice,
+  // Session
+  SessionState,
+  MediaType,
+  Session,
+  SessionWithDetails,
+  ActiveSession,
+  // Rule
+  RuleType,
+  ImpossibleTravelParams,
+  SimultaneousLocationsParams,
+  DeviceVelocityParams,
+  ConcurrentStreamsParams,
+  GeoRestrictionMode,
+  GeoRestrictionParams,
+  RuleParams,
+  Rule,
+  // Violation
+  ViolationSeverity,
+  Violation,
+  ViolationWithDetails,
+  ViolationSessionInfo,
+  // Stats
+  DashboardStats,
+  PlayStats,
+  UserStats,
+  LocationStats,
+  LocationStatsSummary,
+  LocationStatsResponse,
+  LibraryStats,
+  DayOfWeekStats,
+  HourOfDayStats,
+  QualityStats,
+  TopUserStats,
+  TopContentStats,
+  PlatformStats,
+  // Server resource stats
+  ServerResourceDataPoint,
+  ServerResourceStats,
+  // Settings
+  Settings,
+  WebhookFormat,
+  UnitSystem,
+  // Tautulli import
+  TautulliImportProgress,
+  TautulliImportResult,
+  // Jellystat import
+  JellystatImportProgress,
+  JellystatImportResult,
+  // Maintenance jobs
+  MaintenanceJobType,
+  MaintenanceJobStatus,
+  MaintenanceJobProgress,
+  MaintenanceJobResult,
+  // WebSocket
+  ServerToClientEvents,
+  ClientToServerEvents,
+  // API
+  PaginatedResponse,
+  ApiError,
+  // History page types
+  HistoryAggregates,
+  HistorySessionResponse,
+  FilterOptionItem,
+  UserFilterOption,
+  HistoryFilterOptions,
+  // Mobile
+  MobileToken,
+  MobileSession,
+  MobileConfig,
+  MobilePairRequest,
+  MobilePairResponse,
+  MobilePairTokenResponse,
+  MobileQRPayload,
+  NotificationEventType,
+  NotificationPreferences,
+  RateLimitStatus,
+  NotificationPreferencesWithStatus,
+  NotificationChannel,
+  NotificationChannelRouting,
+  EncryptedPushPayload,
+  PushNotificationPayload,
+  // SSE (Server-Sent Events)
+  SSEConnectionState,
+  PlexSSENotification,
+  PlexPlaySessionNotification,
+  PlexActivityNotification,
+  PlexStatusNotification,
+  PlexTranscodeNotification,
+  SSEConnectionStatus,
+  // Termination logs
+  TerminationTrigger,
+  TerminationLogWithDetails,
+  // Plex server discovery
+  PlexDiscoveredConnection,
+  PlexDiscoveredServer,
+  PlexAvailableServersResponse,
+  // Plex account management
+  PlexAccount,
+  PlexAccountsResponse,
+  LinkPlexAccountRequest,
+  LinkPlexAccountResponse,
+  UnlinkPlexAccountResponse,
+  // Version
+  VersionInfo,
+  // Engagement tracking
+  EngagementTier,
+  UserBehaviorType,
+  ContentEngagement,
+  TopContentEngagement,
+  ShowEngagement,
+  UserEngagementProfile,
+  EngagementTierBreakdown,
+  EngagementStats,
+  ShowStatsResponse,
+} from './types.js';
+
+// Schema exports
+export {
+  // Common
+  uuidSchema,
+  paginationSchema,
+  // Auth
+  loginSchema,
+  callbackSchema,
+  // Server
+  createServerSchema,
+  serverIdParamSchema,
+  // User
+  updateUserSchema,
+  updateUserIdentitySchema,
+  userIdParamSchema,
+  // Session
+  sessionQuerySchema,
+  historyQuerySchema,
+  sessionIdParamSchema,
+  terminateSessionBodySchema,
+  // Rule
+  impossibleTravelParamsSchema,
+  simultaneousLocationsParamsSchema,
+  deviceVelocityParamsSchema,
+  concurrentStreamsParamsSchema,
+  geoRestrictionParamsSchema,
+  ruleParamsSchema,
+  createRuleSchema,
+  updateRuleSchema,
+  ruleIdParamSchema,
+  // Violation
+  violationQuerySchema,
+  violationIdParamSchema,
+  // Stats
+  serverIdFilterSchema,
+  dashboardQuerySchema,
+  timezoneSchema,
+  statsQuerySchema,
+  locationStatsQuerySchema,
+  // Settings
+  updateSettingsSchema,
+  // Tautulli import
+  tautulliImportSchema,
+  // Jellystat import
+  jellystatPlayStateSchema,
+  jellystatTranscodingInfoSchema,
+  jellystatPlaybackActivitySchema,
+  jellystatBackupSchema,
+  jellystatImportBodySchema,
+  importJobStatusSchema,
+  // Engagement tracking
+  engagementTierSchema,
+  userBehaviorTypeSchema,
+  engagementQuerySchema,
+  showsQuerySchema,
+} from './schemas.js';
+
+// Schema input type exports
+export type {
+  LoginInput,
+  CallbackInput,
+  CreateServerInput,
+  UpdateUserInput,
+  UpdateUserIdentityInput,
+  SessionQueryInput,
+  HistoryQueryInput,
+  CreateRuleInput,
+  UpdateRuleInput,
+  ViolationQueryInput,
+  ServerIdFilterInput,
+  DashboardQueryInput,
+  StatsQueryInput,
+  LocationStatsQueryInput,
+  UpdateSettingsInput,
+  TautulliImportInput,
+  // Jellystat types
+  JellystatPlayState,
+  JellystatTranscodingInfo,
+  JellystatPlaybackActivity,
+  JellystatBackup,
+  JellystatImportBody,
+  ImportJobStatus,
+  // Engagement tracking
+  EngagementQueryInput,
+  ShowsQueryInput,
+} from './schemas.js';
+
+// Constant exports
+export {
+  RULE_DEFAULTS,
+  RULE_DISPLAY_NAMES,
+  SEVERITY_LEVELS,
+  getSeverityPriority,
+  type SeverityPriority,
+  WS_EVENTS,
+  REDIS_KEYS,
+  CACHE_TTL,
+  NOTIFICATION_EVENTS,
+  API_VERSION,
+  API_BASE_PATH,
+  JWT_CONFIG,
+  POLLING_INTERVALS,
+  PAGINATION,
+  GEOIP_CONFIG,
+  TIME_MS,
+  SESSION_LIMITS,
+  SERVER_STATS_CONFIG,
+  // SSE
+  SSE_CONFIG,
+  PLEX_SSE_EVENTS,
+  SSE_STATE,
+  // Unit conversion
+  UNIT_CONVERSION,
+  kmToMiles,
+  milesToKm,
+  formatDistance,
+  formatSpeed,
+  getDistanceUnit,
+  getSpeedUnit,
+  toMetricDistance,
+  fromMetricDistance,
+  // Timezone utilities
+  getClientTimezone,
+  isValidTimezone,
+} from './constants.js';
+
+// Role helper exports
+export { ROLE_PERMISSIONS, canLogin, hasMinRole, isOwner, isActive } from './types.js';
+
+// Session constants
+export { MEDIA_TYPES } from './types.js';

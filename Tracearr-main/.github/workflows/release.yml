@@ -1,0 +1,491 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  # github.repository must be lowercased for Docker registry compatibility
+  IMAGE_NAME: ${{ github.repository_owner }}/tracearr
+  HUSKY: 0
+
+jobs:
+  # Run the same checks as CI
+  lint-and-typecheck:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Cache Turborepo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-${{ hashFiles('**/pnpm-lock.yaml') }}-
+            ${{ runner.os }}-turbo-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  test:
+    name: Test (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [unit, services, routes, security]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Cache Turborepo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-${{ hashFiles('**/pnpm-lock.yaml') }}-
+            ${{ runner.os }}-turbo-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build dependencies (shared, test-utils)
+        run: pnpm turbo run build --filter=@tracearr/shared --filter=@tracearr/test-utils
+
+      - name: Run ${{ matrix.group }} tests
+        run: pnpm --filter @tracearr/server test:${{ matrix.group }}
+
+  # Integration tests require real database - run separately from unit tests
+  test-integration:
+    name: Test (integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TEST_DATABASE_URL: postgresql://test:test@localhost:5433/tracearr_test
+      TEST_REDIS_URL: redis://localhost:6380
+
+    services:
+      timescale:
+        image: timescale/timescaledb:latest-pg15
+        ports:
+          - 5433:5432
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: tracearr_test
+        options: >-
+          --health-cmd "pg_isready -U test -d tracearr_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Cache Turborepo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-${{ hashFiles('**/pnpm-lock.yaml') }}-
+            ${{ runner.os }}-turbo-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build dependencies (shared, test-utils)
+        run: pnpm turbo run build --filter=@tracearr/shared --filter=@tracearr/test-utils
+
+      - name: Run integration tests
+        run: pnpm --filter @tracearr/server test:integration
+
+  # Determine if this is a prerelease (alpha, beta, rc, etc.)
+  check-release-type:
+    name: Check Release Type
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test, test-integration]
+    outputs:
+      prerelease: ${{ steps.check.outputs.prerelease }}
+
+    steps:
+      - name: Check if prerelease
+        id: check
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "This is a prerelease: $TAG"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "This is a stable release: $TAG"
+          fi
+
+  # Build each platform natively in parallel (much faster than QEMU emulation)
+  build-docker:
+    name: Build Docker (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    needs: [check-release-type]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update GeoIP database
+        run: |
+          echo "Downloading latest GeoLite2-City database..."
+          curl -sSL "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXMIND_LICENSE_KEY }}&suffix=tar.gz" \
+            -o /tmp/geolite2.tar.gz && \
+          tar -xzf /tmp/geolite2.tar.gz -C /tmp && \
+          mv /tmp/GeoLite2-City_*/GeoLite2-City.mmdb data/GeoLite2-City.mmdb && \
+          echo "Successfully updated GeoLite2-City.mmdb" || \
+          echo "Download failed, using existing database as fallback"
+          ls -la data/GeoLite2-City.mmdb
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=docker-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=docker-${{ matrix.arch }}
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+            APP_TAG=${{ github.ref_name }}
+            APP_COMMIT=${{ github.sha }}
+            APP_BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-docker-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Merge platform-specific images into multi-arch manifest
+  merge-docker:
+    name: Merge Docker Manifest
+    runs-on: ubuntu-latest
+    needs: [check-release-type, build-docker]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-docker-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.check-release-type.outputs.prerelease == 'false' }}
+            type=semver,pattern={{major}},enable=${{ needs.check-release-type.outputs.prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ needs.check-release-type.outputs.prerelease == 'false' }}
+            type=raw,value=next,enable=${{ needs.check-release-type.outputs.prerelease == 'true' }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          if [ -z "$(ls -A .)" ]; then
+            echo "Error: No digests found!"
+            exit 1
+          fi
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+
+  # Build supervised image on each platform
+  build-supervised:
+    name: Build Supervised (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    needs: [check-release-type]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            arch: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update GeoIP database
+        run: |
+          echo "Downloading latest GeoLite2-City database..."
+          curl -sSL "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXMIND_LICENSE_KEY }}&suffix=tar.gz" \
+            -o /tmp/geolite2.tar.gz && \
+          tar -xzf /tmp/geolite2.tar.gz -C /tmp && \
+          mv /tmp/GeoLite2-City_*/GeoLite2-City.mmdb data/GeoLite2-City.mmdb && \
+          echo "Successfully updated GeoLite2-City.mmdb" || \
+          echo "Download failed, using existing database as fallback"
+          ls -la data/GeoLite2-City.mmdb
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile.supervised
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=supervised-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=supervised-${{ matrix.arch }}
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+            APP_TAG=supervised-${{ github.ref_name }}
+            APP_COMMIT=${{ github.sha }}
+            APP_BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-supervised-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Merge supervised multi-arch manifest
+  merge-supervised:
+    name: Merge Supervised Manifest
+    runs-on: ubuntu-latest
+    needs: [check-release-type, build-supervised]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-supervised-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Use flavor prefix for reliable tag prefixing
+          # latest=false prevents supervised from overwriting the :latest tag
+          flavor: |
+            prefix=supervised-,onlatest=false
+            latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=supervised,enable=${{ needs.check-release-type.outputs.prerelease == 'false' }},prefix=
+            type=raw,value=supervised-next,enable=${{ needs.check-release-type.outputs.prerelease == 'true' }},prefix=
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          if [ -z "$(ls -A .)" ]; then
+            echo "Error: No digests found!"
+            exit 1
+          fi
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [check-release-type, merge-docker, merge-supervised]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get tag annotation
+        id: tag_info
+        run: |
+          # Get the tag message (annotation)
+          TAG_MESSAGE=$(git tag -l --format='%(contents)' ${{ github.ref_name }})
+          # Write to file to preserve newlines
+          echo "$TAG_MESSAGE" > tag_message.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: tag_message.txt
+          prerelease: ${{ needs.check-release-type.outputs.prerelease }}
+          generate_release_notes: false

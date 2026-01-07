@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { jellyseerrService } from './jellyseerr'
 import { tmdbService } from './tmdb'
 import { embyService } from './emby'
+import { forget } from '@/lib/cache'
 
 export async function syncJellyseerrRequests() {
     console.log('[Sync] Starting Jellyseerr requests sync...')
@@ -149,6 +150,11 @@ export async function syncJellyseerrRequests() {
                     where: { externalId: externalId }
                 })
 
+                // Invalidate availability cache for this media to ensure UI sync
+                if (tmdbId && mediaType) {
+                    forget(`jellyseerr_availability_${mediaType}_${tmdbId}`)
+                }
+
                 const requestData = {
                     status: jr.media.status,
                     isOnEmby,
@@ -156,7 +162,11 @@ export async function syncJellyseerrRequests() {
                     metadata,
                     updatedAt: new Date(),
                     // Update user link if found
-                    userId: localUser ? localUser.id : null
+                    userId: localUser ? localUser.id : null,
+                    // Update requester info
+                    requesterName: jr.requestedBy?.displayName || jr.requestedBy?.email?.split('@')[0],
+                    requesterEmail: jr.requestedBy?.email,
+                    requesterAvatar: jr.requestedBy?.avatar
                 }
 
                 if (existingRequest) {
@@ -190,13 +200,21 @@ export async function syncJellyseerrRequests() {
 
         // 5. Cleanup: Delete local requests that are no longer in Jellyseerr
         const localRequests = await (prisma as any).mediaRequest.findMany({
-            select: { id: true, externalId: true, title: true }
+            select: { id: true, externalId: true, title: true, tmdbId: true, mediaType: true }
         })
 
         const toDelete = localRequests.filter((lr: any) => lr.externalId && !currentJellyIds.has(lr.externalId))
         
         if (toDelete.length > 0) {
             console.log(`[Sync] Deleting ${toDelete.length} requests that were removed from Jellyseerr:`, toDelete.map((r: any) => r.title).join(', '))
+            
+            // Invalidate cache for deleted items
+            for (const item of toDelete) {
+                if (item.tmdbId && item.mediaType) {
+                    forget(`jellyseerr_availability_${item.mediaType}_${item.tmdbId}`)
+                }
+            }
+
             await (prisma as any).mediaRequest.deleteMany({
                 where: {
                     id: { in: toDelete.map((r: any) => r.id) }

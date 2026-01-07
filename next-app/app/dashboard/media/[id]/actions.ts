@@ -9,39 +9,40 @@ import { prisma } from '@/lib/prisma'
 export async function getSeasonDetails(tvId: number, seasonNumber: number) {
   try {
     const tmdbData = await tmdbService.getSeasonDetails(tvId, seasonNumber)
-    
-    // Fetch Emby data to check played status
+    if (!tmdbData) return null
+
+    // Fetch user info for filtering
     const user = await getCurrentUser()
+    let embyUserId: string | undefined = undefined
     if (user && user.email) {
         const dbUser = await prisma.user.findUnique({ where: { email: user.email } })
         if (dbUser && dbUser.embyUserId) {
-             // We need the Emby Series ID first. 
-             // We can search for the series by TMDB ID.
-             const embySeries = await embyService.getItemByTmdbId(dbUser.embyUserId, tvId, 'Series')
-             
-             if (embySeries) {
-                 const embyEpisodes = await embyService.getEpisodes(dbUser.embyUserId, embySeries.Id, seasonNumber)
-                 
-                 // Merge Emby status into TMDB episodes
-                 if (tmdbData.episodes) {
-                     tmdbData.episodes = tmdbData.episodes.map((ep: any) => {
-                         // Match by episode number
-                         // Emby IndexNumber usually matches TMDB episode_number
-                         const embyEp = embyEpisodes.find((e: any) => e.IndexNumber === ep.episode_number)
-                         if (embyEp && embyEp.UserData) {
-                             return {
-                                 ...ep,
-                                 userData: {
-                                     played: embyEp.UserData.Played,
-                                     playedPercentage: embyEp.UserData.PlayedPercentage
-                                 }
-                             }
-                         }
-                         return ep
-                     })
-                 }
-             }
+            embyUserId = dbUser.embyUserId
         }
+    }
+
+    // Fetch Emby data to check played status
+    let embyEpisodes: any[] = []
+    if (embyUserId) {
+         const embySeries = await embyService.getItemByTmdbId(embyUserId, tvId, 'Series')
+         if (embySeries) {
+             embyEpisodes = await embyService.getEpisodes(embyUserId, embySeries.Id, seasonNumber)
+         }
+    }
+
+    // Merge everything into TMDB episodes
+    if (tmdbData.episodes) {
+        tmdbData.episodes = tmdbData.episodes.map((ep: any) => {
+            const embyEp = embyEpisodes.find((e: any) => e.IndexNumber === ep.episode_number)
+            
+            return {
+                ...ep,
+                userData: {
+                    played: embyEp?.UserData?.Played || false,
+                    playedPercentage: embyEp?.UserData?.PlayedPercentage
+                }
+            }
+        })
     }
 
     return tmdbData

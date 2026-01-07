@@ -22,6 +22,7 @@ export async function syncActiveSessions() {
         for (const session of livePlaying) {
             try {
                 const embyUserId = session.UserId
+                const embyUserName = session.UserName
                 const item = session.NowPlayingItem
                 const playbackInfo = session.PlayState
                 const itemId = String(item.Id)

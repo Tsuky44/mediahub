@@ -6,6 +6,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { forget } from '@/lib/cache'
 import { revalidatePath } from 'next/cache'
+import { syncJellyseerrRequests } from '@/lib/services/request-sync'
 
 export async function POST(
   request: Request,
@@ -146,8 +147,18 @@ export async function DELETE(
         console.log(`[API Manage] Invalidating cache for: ${cacheKey}`)
         forget(cacheKey)
         
-        // Trigger Next.js revalidation for the media page
+        // Trigger Next.js revalidation for the media page AND the requests list immediately
         revalidatePath(`/dashboard/media/${tmdbIdStr}`)
+        revalidatePath('/dashboard/requests/list')
+
+        // Petit délai pour laisser le temps à Jellyseerr de mettre à jour son état
+        // Et forcer un second recheck après 2 secondes pour être sûr
+        setTimeout(() => {
+          forget(cacheKey)
+          syncJellyseerrRequests().then(() => {
+            revalidatePath('/dashboard/requests/list')
+          }).catch(err => console.error('[Sync] Background sync failed after deletion:', err))
+        }, 2000)
       }
       
       return NextResponse.json({ success: true })
@@ -162,4 +173,3 @@ export async function DELETE(
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
-

@@ -40,14 +40,15 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
     const lastSyncStr = await getSetting('last_requests_sync')
     const lastSync = lastSyncStr ? parseInt(lastSyncStr) : 0
     const now = Date.now()
-    const fiveMinutes = 5 * 60 * 1000
+    const tenMinutes = 10 * 60 * 1000
 
-    if (now - lastSync > fiveMinutes) {
+    if (now - lastSync > tenMinutes) {
         // Trigger sync in background (fire and forget pattern)
         // Note: In some serverless environments this might not finish, but for persistent server it works.
         // We catch errors to avoid blocking the read.
         syncJellyseerrRequests().then(async () => {
              await setSetting('last_requests_sync', Date.now().toString())
+             revalidatePath('/dashboard/requests/list')
         }).catch((err: any) => console.error('Background sync failed:', err))
     }
 

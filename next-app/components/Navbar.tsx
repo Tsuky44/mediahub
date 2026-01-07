@@ -1,15 +1,17 @@
 'use client'
 
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import Image from 'next/image'
-import { Home, Film, ListPlus, Settings, LogOut, Search, Download, BarChart3, User } from 'lucide-react'
+import { Home, Film, ListPlus, Settings, LogOut, Search, Download, BarChart3, User, Play } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { NotificationBell } from './NotificationBell'
 import clsx from 'clsx'
 
 const navigation = [
-  { name: 'Demander', href: '/dashboard/requests', icon: Home },
+  { name: 'Dashboard', href: '/dashboard', icon: Home },
+  { name: 'Demander', href: '/dashboard/requests', icon: Search },
   { name: 'Mes demandes', href: '/dashboard/requests/list', icon: ListPlus },
   { name: 'Ma médiathèque', href: '/dashboard/media', icon: Film },
   { name: 'Statistiques', href: '/dashboard/stats', icon: BarChart3 },
@@ -19,90 +21,144 @@ const navigation = [
 export function Navbar() {
   const pathname = usePathname()
   const { data: session } = useSession()
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+
+  // Fermer le dropdown quand on clique ailleurs
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const dropdown = document.getElementById('user-dropdown-container')
+      if (dropdown && !dropdown.contains(event.target as Node)) {
+        setIsDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Fermer le dropdown quand on change de page
+  useEffect(() => {
+    setIsDropdownOpen(false)
+  }, [pathname])
 
   return (
     <nav className="sticky top-0 z-50 w-full bg-gray-900 border-b border-gray-800 shadow-xl">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-               <span className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-600">
-                 MediaHub
-               </span>
-            </div>
-            <div className="hidden md:block">
-              <div className="ml-10 flex items-baseline space-x-4">
-                {navigation.map((item) => {
-                   const isActive = pathname === item.href
-                   return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className={clsx(
-                        isActive
-                          ? 'bg-gray-800 text-white'
-                          : 'text-gray-300 hover:bg-gray-700 hover:text-white',
-                        'rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200'
-                      )}
-                    >
-                      {item.name}
-                    </Link>
-                  )
-                })}
+        <div className="flex h-16 items-center">
+          {/* Logo à gauche */}
+          <Link href="/dashboard" className="flex-shrink-0 flex items-center gap-2.5 group transition-all duration-300">
+             <div className="relative">
+               <div className="absolute inset-0 bg-indigo-500 blur-md opacity-20 group-hover:opacity-40 transition-opacity" />
+               <div className="relative flex items-center justify-center w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
+                 <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+               </div>
+             </div>
+             <div className="flex flex-col leading-none">
+                <span className="text-lg font-black tracking-tight text-white group-hover:text-indigo-400 transition-colors">
+                  MEDIA<span className="text-indigo-500">HUB</span>
+                </span>
               </div>
+          </Link>
+
+          {/* Navigation centrée */}
+          <div className="hidden md:flex flex-1 justify-center">
+            <div className="flex items-center space-x-1">
+              {navigation.map((item) => {
+                 const isActive = pathname === item.href
+                 return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={clsx(
+                      'relative px-4 py-2 text-sm font-medium transition-all duration-300 rounded-xl group',
+                      isActive
+                        ? 'text-white'
+                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    )}
+                  >
+                    {item.name}
+                    {isActive && (
+                      <div className="absolute inset-0 bg-indigo-500/10 border border-indigo-500/20 rounded-xl -z-10 shadow-[0_0_20px_rgba(99,102,241,0.1)]" />
+                    )}
+                    {isActive && (
+                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-indigo-500 rounded-full mb-1" />
+                    )}
+                  </Link>
+                )
+              })}
             </div>
           </div>
           
+          {/* Actions à droite */}
           <div className="flex items-center gap-4">
-            <div className="relative hidden sm:block">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                    <Search className="h-5 w-5 text-gray-400" aria-hidden="true" />
-                </div>
-                <input
-                    type="text"
-                    className="block w-full rounded-full border-0 bg-gray-800 py-1.5 pl-10 pr-3 text-gray-300 placeholder:text-gray-400 focus:bg-gray-700 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                    placeholder="Search..."
-                />
-            </div>
-
             <NotificationBell />
             
             {session?.user && (
-              <Link 
-                // @ts-ignore
-                href={session.user.embyUserId ? `/dashboard/stats/user/${session.user.embyUserId}` : '/dashboard/stats'}
-                className="flex items-center gap-2 group transition-all duration-200"
-                title="Mes statistiques"
-              >
-                <div className="relative h-9 w-9 overflow-hidden rounded-full border-2 border-gray-700 group-hover:border-indigo-500 transition-all duration-300 group-hover:scale-105 shadow-lg shadow-black/20">
-                  {session.user.image ? (
-                    <Image 
-                      src={session.user.image} 
-                      alt={session.user.name || 'User'} 
-                      fill
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 text-sm font-bold text-gray-300">
-                      {session.user.name?.charAt(0).toUpperCase() || <User className="w-4 h-4" />}
+              <div className="flex items-center gap-3">
+                <div className="relative" id="user-dropdown-container">
+                  <button 
+                    className="flex items-center gap-2 focus:outline-none"
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  >
+                    <div className="relative h-9 w-9 overflow-hidden rounded-full border-2 border-gray-700 hover:border-indigo-500 transition-all duration-300 hover:scale-105 shadow-lg shadow-black/20">
+                      {session.user.image ? (
+                        <Image 
+                          src={session.user.image} 
+                          alt={session.user.name || 'User'} 
+                          fill
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 text-sm font-bold text-gray-300">
+                          {session.user.name?.charAt(0).toUpperCase() || <User className="w-4 h-4" />}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {isDropdownOpen && (
+                    <div 
+                      className="absolute right-0 mt-2 w-56 origin-top-right rounded-xl bg-gray-900 border border-gray-800 shadow-2xl py-1 z-[60] overflow-hidden backdrop-blur-xl bg-gray-900/95"
+                    >
+                      <div className="px-4 py-3 border-b border-gray-800 bg-gray-800/50">
+                        <p className="text-sm font-semibold text-white truncate">{session.user.name}</p>
+                        <p className="text-xs text-gray-400 truncate mt-0.5">{session.user.email || 'Utilisateur Emby'}</p>
+                      </div>
+
+                      <div className="py-1">
+                        <Link 
+                          href="/dashboard/stats/me" 
+                          className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors group"
+                        >
+                          <BarChart3 className="h-4 w-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+                          Mes Statistiques
+                        </Link>
+                        
+                        {session?.user?.name === 'mathis' && (
+                          <Link 
+                            href="/dashboard/settings" 
+                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors group"
+                          >
+                            <Settings className="h-4 w-4 text-gray-400 group-hover:rotate-45 transition-transform" />
+                            Paramètres
+                          </Link>
+                        )}
+                      </div>
+
+                      <div className="border-t border-gray-800 py-1">
+                        <button
+                          onClick={() => signOut()}
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          Déconnexion
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
-              </Link>
+              </div>
             )}
-
-             {session?.user?.name === 'mathis' && (
-              <Link href="/dashboard/settings" className="rounded-full bg-gray-800 p-1 text-gray-400 hover:text-white">
-                  <Settings className="h-6 w-6" aria-hidden="true" />
-              </Link>
-            )}
-
-            <button
-              onClick={() => signOut()}
-              className="rounded-full bg-gray-800 p-1 text-gray-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-gray-800"
-            >
-              <LogOut className="h-6 w-6" aria-hidden="true" />
-            </button>
           </div>
         </div>
       </div>

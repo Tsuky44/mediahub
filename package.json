@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "recharts": "^3.6.0",
     "ssh2-sftp-client": "^12.0.1"
   },
   "devDependencies": {

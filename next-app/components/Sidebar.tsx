@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Film, ListPlus, Settings, LogOut } from 'lucide-react'
+import { Home, Film, ListPlus, Settings, LogOut, BarChart2 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import clsx from 'clsx'
 
 const navigation = [
   { name: 'Tableau de bord', href: '/dashboard', icon: Home },
   { name: 'Médiathèque', href: '/dashboard/media', icon: Film },
+  { name: 'Statistiques', href: '/dashboard/stats', icon: BarChart2 },
   { name: 'Demandes', href: '/dashboard/requests', icon: ListPlus },
   { name: 'Paramètres', href: '/dashboard/settings', icon: Settings },
 ]

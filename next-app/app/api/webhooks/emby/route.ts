@@ -24,10 +24,12 @@ export async function POST(req: NextRequest) {
 
     const eventType = payload.Event
     const embyUserId = payload.User?.Id
+    const embyUserName = payload.User?.Name
     const item = payload.Item
     const playbackInfo = payload.PlaybackInfo
+    const session = payload.Session
 
-    console.log(`[Webhook] Received event: ${eventType} for ${item?.Name} (User: ${payload.User?.Name})`)
+    console.log(`[Webhook] Received event: ${eventType} for ${item?.Name} (User: ${embyUserName})`)
 
     // On enregistre à l'arrêt OU lors d'une progression significative
     // PlaybackProgress permet d'avoir les stats même si la personne ne "finit" pas l'épisode proprement
@@ -38,6 +40,18 @@ export async function POST(req: NextRequest) {
       // Calcul de la durée en minutes (ticks -> minutes)
       const positionTicks = playbackInfo?.PositionTicks || 0
       const durationMinutes = Math.round(positionTicks / 600000000)
+
+      // Extraire les infos de session enrichies (style Tracearr)
+      const sessionId = session?.Id
+      const client = session?.Client
+      const device = session?.DeviceName
+      const deviceDeviceId = session?.DeviceId
+      const ipAddress = session?.RemoteEndPoint
+      const playMethod = session?.PlayState?.PlayMethod || playbackInfo?.PlayMethod
+      
+      // Infos média supplémentaires
+      const seasonName = item.SeasonName
+      const episodeNumber = item.IndexNumber
 
       // On n'enregistre que si la durée est significative (ex: > 1 min)
       if (durationMinutes >= 1) {
@@ -60,12 +74,12 @@ export async function POST(req: NextRequest) {
         })
 
         if (existingEvent) {
-          // Mise à jour de l'événement existant avec la nouvelle durée
+          // Mise à jour de l'événement existant avec la nouvelle durée et infos
           await prisma.watchEvent.update({
             where: { id: existingEvent.id },
             data: {
               durationMinutes: Math.max(existingEvent.durationMinutes, durationMinutes),
-              playedAt: new Date() // On actualise la date pour le "vu récemment"
+              playedAt: new Date(), // On actualise la date pour le "vu récemment"
             }
           })
           console.log(`[Webhook] Updated playback for ${item.Name} (${durationMinutes} min)`)
@@ -81,7 +95,7 @@ export async function POST(req: NextRequest) {
               seriesName: item.SeriesName,
               durationMinutes,
               playedAt,
-              plays: 1
+              plays: 1,
             }
           })
           console.log(`[Webhook] Recorded new playback for ${item.Name} (${durationMinutes} min)`)

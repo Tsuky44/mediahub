@@ -137,6 +137,17 @@ model WatchEvent {
   itemType        String?  @map("item_type")
   itemName        String?  @map("item_name")
   seriesName      String?  @map("series_name")
+  seasonName      String?  @map("season_name")
+  episodeNumber   Int?     @map("episode_number")
+  userName        String?  @map("user_name")
+  
+  // Extended Stats (Tracearr-like)
+  sessionId       String?  @map("session_id")
+  client          String?
+  device          String?
+  ipAddress       String?  @map("ip_address")
+  playMethod      String?  @map("play_method") // DirectPlay, Transcode, DirectStream
+  
   durationMinutes Int      @default(0) @map("duration_minutes")
   plays           Int      @default(1)
   playedAt        DateTime @map("played_at")

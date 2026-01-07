@@ -23,21 +23,30 @@ export class EmbyService {
     }
   }
 
-  private async getClient() {
+  private async getClient(timeout: number = 10000) {
     await this.init()
     return axios.create({
       baseURL: this.baseUrl!,
       params: {
         api_key: this.apiKey
       },
-      timeout: 30000
+      timeout,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
     })
   }
 
   async getSystemInfo() {
-    const client = await this.getClient()
-    const response = await client.get('/System/Info/Public')
-    return response.data
+    try {
+      const client = await this.getClient(5000) // 5s for system info
+      const response = await client.get('/System/Info/Public')
+      return response.data
+    } catch (e) {
+      console.error('[EmbyService] getSystemInfo failed:', e)
+      return null
+    }
   }
 
   async authenticate(username: string, pw: string) {
@@ -48,26 +57,43 @@ export class EmbyService {
             Pw: pw
         }, {
             headers: {
-                'X-Emby-Authorization': `MediaBrowser Client="NextApp", Device="NextApp", DeviceId="NextApp", Version="1.0.0"`
-            }
+                'X-Emby-Authorization': `MediaBrowser Client="Emby-App", Device="Web", DeviceId="12345", Version="1.0.0"`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 10000
         })
         return response.data
     } catch (e) {
-        console.error('Emby authentication failed', e)
-        return null
+        console.error('[EmbyService] Auth failed:', e)
+        throw e
     }
   }
 
   async getUsers() {
-    const client = await this.getClient()
-    const response = await client.get('/Users')
-    return response.data
+    try {
+      const client = await this.getClient(10000) // 10s for users
+      const response = await client.get('/Users')
+      return response.data
+    } catch (e) {
+      console.error('[EmbyService] getUsers failed:', e)
+      return []
+    }
   }
 
   async getSessions() {
-    const client = await this.getClient()
-    const response = await client.get('/Sessions')
-    return response.data
+    try {
+      const client = await this.getClient(3000) // 3s timeout
+      const response = await client.get('/Sessions')
+      return response.data
+    } catch (e) {
+      console.error('[EmbyService] getSessions failed:', e)
+      return []
+    }
+  }
+
+  async getItemImageUrl(itemId: string) {
+    await this.init()
+    return `${this.baseUrl}/Items/${itemId}/Images/Primary?api_key=${this.apiKey}`
   }
 
   async getUserPlayedItems(userId: string) {
@@ -94,18 +120,22 @@ export class EmbyService {
   }
 
   async getResumeItems(userId: string, limit: number = 4) {
-    const client = await this.getClient()
-    const response = await client.get(`/Users/${userId}/Items/Resume`, {
-      params: {
-        Limit: limit,
-        Fields: 'Overview,PrimaryImageAspectRatio,ProviderIds,UserData,SeriesInfo,ParentIndexNumber,IndexNumber,SeasonName,SeriesName,SeriesId'
-      }
-    })
-    return response.data
+    try {
+      const client = await this.getClient(5000)
+      const response = await client.get(`/Users/${userId}/Items/Resume`, {
+        params: {
+          Limit: limit,
+          Fields: 'Overview,PrimaryImageAspectRatio,ProviderIds,UserData,SeriesInfo,ParentIndexNumber,IndexNumber,SeasonName,SeriesName,SeriesId'
+        }
+      })
+      return response.data
+    } catch (e) {
+      console.error('[EmbyService] getResumeItems failed:', e)
+      return { Items: [] }
+    }
   }
 
   async getRecentlyPlayedItems(userId: string, limit: number = 4) {
-    // We use getUserItems with SortBy DatePlayed to get history
     return this.getUserItems(userId, {
         SortBy: 'DatePlayed',
         SortOrder: 'Descending',
@@ -118,35 +148,49 @@ export class EmbyService {
   }
 
   async getUserItems(userId: string, filters: any = {}) {
-    const client = await this.getClient()
-    const params = {
-      IncludeExternalContent: false,
-      Recursive: true,
-      Fields: 'UserData,SeriesInfo',
-      ...filters
+    try {
+      const client = await this.getClient(4000) // 4s timeout for general items
+      const params = {
+        IncludeExternalContent: false,
+        Recursive: true,
+        Fields: 'UserData,SeriesInfo',
+        ...filters
+      }
+      const response = await client.get(`/Users/${userId}/Items`, { params })
+      return response.data
+    } catch (e) {
+      console.error('[EmbyService] getUserItems failed:', e)
+      return { Items: [] }
     }
-    const response = await client.get(`/Users/${userId}/Items`, { params })
-    return response.data
   }
 
   async getItemDetails(itemId: string, userId?: string) {
-    const client = await this.getClient()
-    const url = userId ? `/Users/${userId}/Items/${itemId}` : `/Items/${itemId}`
-    const response = await client.get(url, {
-        params: {
-            Fields: 'Overview,PrimaryImageAspectRatio,ProviderIds,UserData'
-        }
-    })
-    return response.data
+    try {
+      const client = await this.getClient(3000) // 3s timeout
+      const url = userId ? `/Users/${userId}/Items/${itemId}` : `/Items/${itemId}`
+      const response = await client.get(url, {
+          params: {
+              Fields: 'Overview,PrimaryImageAspectRatio,ProviderIds,UserData'
+          }
+      })
+      return response.data
+    } catch (e) {
+      console.error('[EmbyService] getItemDetails failed:', e)
+      return null
+    }
   }
 
   async updateFavoriteStatus(userId: string, itemId: string, isFavorite: boolean) {
-    const client = await this.getClient()
-    const url = `/Users/${userId}/FavoriteItems/${itemId}`
-    if (isFavorite) {
-        await client.post(url)
-    } else {
-        await client.delete(url)
+    try {
+      const client = await this.getClient()
+      const url = `/Users/${userId}/FavoriteItems/${itemId}`
+      if (isFavorite) {
+          await client.post(url)
+      } else {
+          await client.delete(url)
+      }
+    } catch (e) {
+      console.error('[EmbyService] updateFavoriteStatus failed:', e)
     }
   }
 
@@ -173,14 +217,19 @@ export class EmbyService {
   }
 
   async toggleFavorite(userId: string, itemId: string, isFavorite: boolean) {
-      const client = await this.getClient()
-      const method = isFavorite ? 'post' : 'delete'
-      const url = `/Users/${userId}/FavoriteItems/${itemId}`
-      const response = await client.request({
-          method,
-          url
-      })
-      return response.data
+      try {
+        const client = await this.getClient()
+        const method = isFavorite ? 'post' : 'delete'
+        const url = `/Users/${userId}/FavoriteItems/${itemId}`
+        const response = await client.request({
+            method,
+            url
+        })
+        return response.data
+      } catch (e) {
+        console.error('[EmbyService] toggleFavorite failed:', e)
+        return null
+      }
   }
 
   async getEpisodes(userId: string, seriesId: string, seasonNumber?: number) {

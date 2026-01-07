@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Save, Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
-import { testSmbConnection } from '../downloads/file-actions'
+import { testSmbConnection, testJellystatConnection, testEmbyConnection } from '../downloads/file-actions'
 
 interface User {
     id: number
@@ -26,6 +26,10 @@ interface SettingsFormProps {
     currentRadarrKey?: string
     currentSonarrUrl?: string
     currentSonarrKey?: string
+    currentJellystatUrl?: string
+    currentJellystatKey?: string
+    currentEmbyUrl?: string
+    currentEmbyKey?: string
 }
 
 export default function SettingsForm({ 
@@ -42,7 +46,11 @@ export default function SettingsForm({
     currentRadarrUrl,
     currentRadarrKey,
     currentSonarrUrl,
-    currentSonarrKey
+    currentSonarrKey,
+    currentJellystatUrl,
+    currentJellystatKey,
+    currentEmbyUrl,
+    currentEmbyKey
 }: SettingsFormProps) {
     const [selectedId, setSelectedId] = useState(currentJellyseerrId)
     const [qbitUrl, setQbitUrl] = useState(currentQbitUrl || '')
@@ -59,9 +67,22 @@ export default function SettingsForm({
     const [sonarrUrl, setSonarrUrl] = useState(currentSonarrUrl || '')
     const [sonarrKey, setSonarrKey] = useState(currentSonarrKey || '')
 
+    const [jellystatUrl, setJellystatUrl] = useState(currentJellystatUrl || '')
+    const [jellystatKey, setJellystatKey] = useState(currentJellystatKey || '')
+
+    const [embyUrl, setEmbyUrl] = useState(currentEmbyUrl || '')
+    const [embyKey, setEmbyKey] = useState(currentEmbyKey || '')
+
     const [loading, setLoading] = useState(false)
     const [testingSmb, setTestingSmb] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+    
+    const [testingJellystat, setTestingJellystat] = useState(false)
+    const [jellystatTestResult, setJellystatTestResult] = useState<{ success: boolean; message: string } | null>(null)
+    
+    const [testingEmby, setTestingEmby] = useState(false)
+    const [embyTestResult, setEmbyTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
     const router = useRouter()
 
     const handleTestSmb = async () => {
@@ -86,6 +107,40 @@ export default function SettingsForm({
         }
     }
 
+    const handleTestJellystat = async () => {
+        setTestingJellystat(true)
+        setJellystatTestResult(null)
+        try {
+            const res = await testJellystatConnection(jellystatUrl, jellystatKey)
+            if (res.success) {
+                setJellystatTestResult({ success: true, message: 'Connexion réussie !' })
+            } else {
+                setJellystatTestResult({ success: false, message: res.error || 'Échec de la connexion' })
+            }
+        } catch (error) {
+            setJellystatTestResult({ success: false, message: 'Erreur lors du test' })
+        } finally {
+            setTestingJellystat(false)
+        }
+    }
+
+    const handleTestEmby = async () => {
+        setTestingEmby(true)
+        setEmbyTestResult(null)
+        try {
+            const res = await testEmbyConnection(embyUrl, embyKey)
+            if (res.success) {
+                setEmbyTestResult({ success: true, message: 'Connexion Emby réussie !' })
+            } else {
+                setEmbyTestResult({ success: false, message: res.error || 'Échec de la connexion' })
+            }
+        } catch (error) {
+            setEmbyTestResult({ success: false, message: 'Erreur lors du test' })
+        } finally {
+            setTestingEmby(false)
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
@@ -107,8 +162,12 @@ export default function SettingsForm({
                     radarr_url: radarrUrl,
                     radarr_api_key: radarrKey,
                     sonarr_url: sonarrUrl,
-                    sonarr_api_key: sonarrKey
-                })
+                    sonarr_api_key: sonarrKey,
+                    jellystat_url: jellystatUrl,
+            jellystat_api_key: jellystatKey,
+            emby_url: embyUrl,
+            emby_api_key: embyKey
+        })
             })
 
             if (res.ok) {
@@ -357,6 +416,124 @@ export default function SettingsForm({
                             onChange={(e) => setSonarrKey(e.target.value)}
                         />
                     </div>
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Jellystat</h4>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label htmlFor="jellystatUrl" className="block text-sm font-medium text-gray-300">
+                            URL de l'instance
+                        </label>
+                        <input
+                            type="text"
+                            id="jellystatUrl"
+                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            placeholder="http://192.168.1.123:3076"
+                            value={jellystatUrl}
+                            onChange={(e) => setJellystatUrl(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="jellystatKey" className="block text-sm font-medium text-gray-300">
+                            Clé API
+                        </label>
+                        <input
+                            type="password"
+                            id="jellystatKey"
+                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            placeholder="Votre clé API Jellystat"
+                            value={jellystatKey}
+                            onChange={(e) => setJellystatKey(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                <div className="flex items-center space-x-4 pt-2">
+                    <button
+                        type="button"
+                        onClick={handleTestJellystat}
+                        disabled={testingJellystat}
+                        className="flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors disabled:opacity-50 text-sm"
+                    >
+                        {testingJellystat ? (
+                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                        )}
+                        Tester la connexion
+                    </button>
+                    
+                    {jellystatTestResult && (
+                        <div className={`flex items-center text-sm ${jellystatTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                            {jellystatTestResult.success ? (
+                                <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                            ) : (
+                                <XCircle className="w-4 h-4 mr-1.5" />
+                            )}
+                            {jellystatTestResult.message}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Emby</h4>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label htmlFor="embyUrl" className="block text-sm font-medium text-gray-300">
+                            URL Emby
+                        </label>
+                        <input
+                            type="text"
+                            id="embyUrl"
+                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            placeholder="http://192.168.1.100:8096"
+                            value={embyUrl}
+                            onChange={(e) => setEmbyUrl(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="embyKey" className="block text-sm font-medium text-gray-300">
+                            Clé API Emby
+                        </label>
+                        <input
+                            type="password"
+                            id="embyKey"
+                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            placeholder="Votre clé API Emby"
+                            value={embyKey}
+                            onChange={(e) => setEmbyKey(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                <div className="flex items-center space-x-4 pt-2">
+                    <button
+                        type="button"
+                        onClick={handleTestEmby}
+                        disabled={testingEmby}
+                        className="flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors disabled:opacity-50 text-sm"
+                    >
+                        {testingEmby ? (
+                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                        )}
+                        Tester la connexion
+                    </button>
+                    
+                    {embyTestResult && (
+                        <div className={`flex items-center text-sm ${embyTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                            {embyTestResult.success ? (
+                                <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                            ) : (
+                                <XCircle className="w-4 h-4 mr-1.5" />
+                            )}
+                            {embyTestResult.message}
+                        </div>
+                    )}
                 </div>
             </div>
 

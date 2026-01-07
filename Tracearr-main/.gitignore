@@ -1,0 +1,55 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+.next
+out
+
+# Turbo
+.turbo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+coverage
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Database (keep GeoLite2 database committed)
+data/*.mmdb
+!data/GeoLite2-City.mmdb
+
+# Local server data
+apps/server/data/
+
+# Docker
+docker-compose.override.yml
+
+# Expo
+.expo
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# Drizzle
+drizzle-kit
+*.tsbuildinfo

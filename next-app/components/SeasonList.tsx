@@ -265,7 +265,9 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                                             {episode.overview || "Aucun résumé disponible."}
                                         </p>
                                         <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
-                                            {episode.runtime ? <span>{episode.runtime} min</span> : null}
+                                            {episode.runtime ? (
+                                                <span>{episode.runtime} min</span>
+                                            ) : null}
                                             {episode.vote_average > 0 && (
                                                 <span className="flex items-center gap-1 text-yellow-500">
                                                     ★ {episode.vote_average.toFixed(1)}

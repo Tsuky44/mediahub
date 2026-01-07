@@ -131,7 +131,7 @@ export async function fetchRecentlyWatchedItems() {
             let poster_path = null
             if (item.Type === 'Episode' && item.SeriesId) {
                 const series = await embyService.getItemDetails(item.SeriesId, userId)
-                const seriesTmdbId = series.ProviderIds?.Tmdb
+                const seriesTmdbId = series?.ProviderIds?.Tmdb
                 if (seriesTmdbId) {
                     poster_path = await tmdbService.getPosterPath(parseInt(seriesTmdbId), 'tv')
                     tmdbId = seriesTmdbId
@@ -213,7 +213,7 @@ export async function fetchUserRecommendations(page: number = 1) {
             
             if (item.Type === 'Episode' && item.SeriesId && dbUser.embyUserId) {
                 const series = await embyService.getItemDetails(item.SeriesId, dbUser.embyUserId)
-                tmdbId = series.ProviderIds?.Tmdb
+                tmdbId = series?.ProviderIds?.Tmdb
             }
 
             if (tmdbId && type && !seeds.some(s => s.id === parseInt(tmdbId))) {

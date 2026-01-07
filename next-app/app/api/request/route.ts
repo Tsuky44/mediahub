@@ -6,6 +6,7 @@ import { getSetting } from '@/lib/settings'
 import { prisma } from '@/lib/prisma'
 import { forget } from '@/lib/cache'
 import { revalidatePath } from 'next/cache'
+import { syncJellyseerrRequests } from '@/lib/services/request-sync'
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -41,32 +42,76 @@ export async function POST(request: NextRequest) {
     const result = await jellyseerrService.requestMedia(tmdbId, mediaType, title, jellyseerrUserId || undefined)
     
     if (result.success) {
-        // Invalidate cache
-        forget(`jellyseerr_availability_${mediaType}_${tmdbId}`)
-        revalidatePath(`/dashboard/media/${tmdbId}`)
-
-        // Enregistrer la demande localement pour le système de notifications
+        // Immediate Local DB Update
         try {
-            const dbUser = await prisma.user.findUnique({
-                where: { email: session.user?.email || '' }
-            })
+            const requestData = result.data
+            const externalId = requestData?.id?.toString()
+            const requestStatus = requestData?.status || 2 
             
-            if (dbUser) {
-                await prisma.mediaRequest.create({
+            // Get user info
+            const dbUser = session.user?.email ? await prisma.user.findUnique({ where: { email: session.user.email } }) : null
+            
+            // Determine if we need to update or create
+            let existingRequest = null
+            if (externalId) {
+                existingRequest = await (prisma as any).mediaRequest.findFirst({
+                    where: { externalId: externalId }
+                })
+            }
+            
+            // If not found by externalId, try tmdbId (fallback, though less precise if multiple requests exist)
+            if (!existingRequest) {
+                 existingRequest = await (prisma as any).mediaRequest.findFirst({
+                    where: { tmdbId: tmdbId.toString() }
+                 })
+            }
+
+            if (existingRequest) {
+                await (prisma as any).mediaRequest.update({
+                    where: { id: existingRequest.id },
                     data: {
-                        userId: dbUser.id,
-                        mediaType,
-                        tmdbId: String(tmdbId),
-                        title,
-                        status: 1 as any, // 1 = PENDING in Prisma schema
-                        metadata: JSON.stringify({ posterPath })
+                        status: requestStatus,
+                        updatedAt: new Date(),
+                        externalId: externalId || existingRequest.externalId // Update externalId if we have it now
+                    }
+                })
+            } else {
+                await (prisma as any).mediaRequest.create({
+                    data: {
+                        externalId: externalId || `pending_${tmdbId}_${Date.now()}`,
+                        tmdbId: tmdbId.toString(),
+                        mediaType: mediaType,
+                        title: title || 'Sans titre',
+                        status: requestStatus,
+                        userId: dbUser?.id,
+                        requesterName: session.user?.name || dbUser?.name,
+                        requesterEmail: session.user?.email,
+                        metadata: JSON.stringify({
+                            posterPath: posterPath
+                        }),
+                        requestedAt: new Date()
                     }
                 })
             }
+            console.log(`[Request API] Immediate local DB update success for ${title}`)
         } catch (dbError) {
-            console.error('[Database] Failed to save local request:', dbError)
-            // On ne bloque pas la réponse car la demande Jellyseerr a réussi
+            console.error('[Request API] Failed to update local DB immediately:', dbError)
+            // Non-blocking error, we continue
         }
+
+        // Invalidate cache
+        forget(`jellyseerr_availability_${mediaType}_${tmdbId}`)
+        revalidatePath(`/dashboard/media/${tmdbId}`)
+        revalidatePath('/dashboard/requests/list') // Refresh list immediately
+
+        // Lancer la synchronisation en arrière-plan pour récupérer toutes les infos complètes
+        setTimeout(() => {
+            // Forcer le recheck de la disponibilité après 2 secondes
+            forget(`jellyseerr_availability_${mediaType}_${tmdbId}`)
+            syncJellyseerrRequests().then(() => {
+                revalidatePath('/dashboard/requests/list')
+            }).catch(err => console.error('[Sync] Background sync failed after request:', err))
+        }, 2000)
 
         return NextResponse.json(result)
     } else {

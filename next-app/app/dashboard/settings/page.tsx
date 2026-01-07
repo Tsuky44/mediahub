@@ -41,36 +41,37 @@ export default async function SettingsPage() {
   const currentSonarrUrl = await getSetting('sonarr_url')
   const currentSonarrKey = await getSetting('sonarr_api_key')
   
+  // Get current Jellystat settings
+  const currentJellystatUrl = await getSetting('jellystat_url')
+  const currentJellystatKey = await getSetting('jellystat_api_key')
+
+  // Get current Emby settings
+  const currentEmbyUrl = await getSetting('emby_url')
+  const currentEmbyKey = await getSetting('emby_api_key')
+  
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <h2 className="text-2xl font-bold text-white">Paramètres</h2>
-      
-      <div className="bg-gray-800 shadow sm:rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <h3 className="text-lg leading-6 font-medium text-white">Configuration Globale</h3>
-          <div className="mt-2 max-w-xl text-sm text-gray-400">
-            <p>Gérez les connexions aux services externes pour tous les utilisateurs.</p>
-          </div>
-          <div className="mt-5">
-             <SettingsForm 
-                users={jellyseerrUsers} 
-                currentJellyseerrId={currentJellyseerrId} 
-                currentQbitUrl={currentQbitUrl}
-                currentQbitUser={currentQbitUser}
-                currentQbitPass={currentQbitPass}
-                currentSmbHost={currentSmbHost}
-                currentSmbUser={currentSmbUser}
-                currentSmbPass={currentSmbPass}
-                currentSmbShare={currentSmbShare}
-                currentSmbPath={currentSmbPath}
-                currentRadarrUrl={currentRadarrUrl}
-                currentRadarrKey={currentRadarrKey}
-                currentSonarrUrl={currentSonarrUrl}
-                currentSonarrKey={currentSonarrKey}
-             />
-          </div>
-        </div>
-      </div>
+      <SettingsForm 
+        users={jellyseerrUsers} 
+        currentJellyseerrId={currentJellyseerrId || ''}
+        currentQbitUrl={currentQbitUrl}
+        currentQbitUser={currentQbitUser}
+        currentQbitPass={currentQbitPass}
+        currentSmbHost={currentSmbHost}
+        currentSmbUser={currentSmbUser}
+        currentSmbPass={currentSmbPass}
+        currentSmbShare={currentSmbShare}
+        currentSmbPath={currentSmbPath}
+        currentRadarrUrl={currentRadarrUrl}
+        currentRadarrKey={currentRadarrKey}
+        currentSonarrUrl={currentSonarrUrl}
+        currentSonarrKey={currentSonarrKey}
+        currentJellystatUrl={currentJellystatUrl}
+        currentJellystatKey={currentJellystatKey}
+        currentEmbyUrl={currentEmbyUrl}
+        currentEmbyKey={currentEmbyKey}
+      />
     </div>
   )
 }
