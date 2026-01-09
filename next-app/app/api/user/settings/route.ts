@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { setSetting } from '@/lib/settings'
+import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -39,6 +40,10 @@ export async function POST(request: NextRequest) {
 
     // Update Instance core settings if provided
     if (emby_url || emby_api_key || body.jellyseerr_url || body.jellyseerr_api_key) {
+      if (!prisma || !(prisma as any).instance) {
+        throw new Error("Modèle Instance non disponible dans Prisma");
+      }
+      
       const updateData: any = {}
       if (emby_url) updateData.embyUrl = emby_url
       if (emby_api_key) updateData.embyApiKey = emby_api_key
