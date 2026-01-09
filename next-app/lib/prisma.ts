@@ -17,9 +17,9 @@ if (process.env.NODE_ENV === 'production') {
     globalThis.prisma = prismaClientSingleton()
   }
   
-  // Check if model is missing and force recreation if so
-  if (globalThis.prisma && !(globalThis.prisma as any).watchLater && (globalThis.prisma as any).user) {
-    console.log('[Prisma] WatchLater model missing from singleton, recreating client...')
+  // Check if models are missing and force recreation if so
+  if (globalThis.prisma && !(globalThis.prisma as any).instance && (globalThis.prisma as any).user) {
+    console.log('[Prisma] Instance model missing from singleton, recreating client...')
     globalThis.prisma = prismaClientSingleton()
   }
   

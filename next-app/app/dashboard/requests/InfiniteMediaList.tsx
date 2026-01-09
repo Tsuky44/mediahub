@@ -147,78 +147,40 @@ export function InfiniteMediaList({ initialItems, initialType, initialSearch, sh
        <div className={clsx("flex-1 space-y-6 w-full transition-opacity duration-300", isPending && "opacity-50 pointer-events-none")}>
             {/* Type Filters */}
             {showTabs && (
-                <div className="flex items-center justify-center border-b border-gray-800 pb-4">
-                    <div className="flex space-x-2 bg-gray-900/50 p-1 rounded-xl border border-gray-800 relative">
+                <div className="w-full border-b border-gray-800/50 pb-4">
+                    <div className="flex items-center justify-start sm:justify-center overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+                        <div className="flex p-1 gap-1.5 bg-gray-900/40 backdrop-blur-md rounded-2xl border border-gray-800/50 relative whitespace-nowrap">
                             {isPending && (
-                                <div className="absolute -top-1 left-1/2 -translate-x-1/2">
+                                <div className="absolute -top-6 left-1/2 -translate-x-1/2">
                                     <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
                                 </div>
                             )}
-                            <button
-                                onClick={() => handleFilterChange('all')}
-                                disabled={isPending}
-                                className={clsx(
-                                    'px-6 py-2 text-sm font-medium rounded-lg transition-all',
-                                    initialType === 'all' 
-                                        ? 'bg-gray-800 text-white shadow-sm' 
-                                        : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
-                                    isPending && initialType === 'all' && 'animate-pulse'
-                                )}
-                            >
-                                Tout
-                            </button>
-                            <button
-                                onClick={() => handleFilterChange('movie')}
-                                disabled={isPending}
-                                className={clsx(
-                                    'px-6 py-2 text-sm font-medium rounded-lg transition-all',
-                                    initialType === 'movie' 
-                                        ? 'bg-gray-800 text-white shadow-sm' 
-                                        : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
-                                    isPending && initialType === 'movie' && 'animate-pulse'
-                                )}
-                            >
-                                Films
-                            </button>
-                            <button
-                                onClick={() => handleFilterChange('tv')}
-                                disabled={isPending}
-                                className={clsx(
-                                    'px-6 py-2 text-sm font-medium rounded-lg transition-all',
-                                    initialType === 'tv' 
-                                        ? 'bg-gray-800 text-white shadow-sm' 
-                                        : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
-                                    isPending && initialType === 'tv' && 'animate-pulse'
-                                )}
-                            >
-                                Séries
-                            </button>
-                            <button
-                                onClick={() => handleFilterChange('recommendations')}
-                                disabled={isPending}
-                                className={clsx(
-                                    'px-6 py-2 text-sm font-medium rounded-lg transition-all',
-                                    initialType === 'recommendations' 
-                                        ? 'bg-gray-800 text-white shadow-sm' 
-                                        : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
-                                    isPending && initialType === 'recommendations' && 'animate-pulse'
-                                )}
-                            >
-                                Recommandés
-                            </button>
-                            <button
-                                onClick={() => handleFilterChange('watch-later')}
-                                disabled={isPending}
-                                className={clsx(
-                                    'px-6 py-2 text-sm font-medium rounded-lg transition-all',
-                                    initialType === 'watch-later' 
-                                        ? 'bg-gray-800 text-white shadow-sm' 
-                                        : 'text-gray-400 hover:text-white hover:bg-gray-800/50',
-                                    isPending && initialType === 'watch-later' && 'animate-pulse'
-                                )}
-                            >
-                                À regarder plus tard
-                            </button>
+                            {[
+                                { id: 'all', label: 'Tout' },
+                                { id: 'movie', label: 'Films' },
+                                { id: 'tv', label: 'Séries' },
+                                { id: 'recommendations', label: 'Recommandés' },
+                                { id: 'watch-later', label: 'À regarder plus tard' }
+                            ].map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => handleFilterChange(tab.id as any)}
+                                    disabled={isPending}
+                                    className={clsx(
+                                        'px-5 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 relative',
+                                        initialType === tab.id 
+                                            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' 
+                                            : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/40',
+                                        isPending && initialType === tab.id && 'animate-pulse'
+                                    )}
+                                >
+                                    {tab.label}
+                                    {initialType === tab.id && (
+                                        <div className="absolute inset-0 bg-white/10 rounded-xl animate-pulse" />
+                                    )}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}

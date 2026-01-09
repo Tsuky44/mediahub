@@ -1,13 +1,22 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { embyService } from '@/lib/services/emby'
+import { authOptions, getEmbyServiceForUser } from '@/lib/auth'
 
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session || !session.user || (session.user as any).role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const instanceId = parseInt((session.user as any).instanceId)
+  if (isNaN(instanceId)) {
+    return NextResponse.json({ error: 'Invalid instance' }, { status: 400 })
+  }
+  const embyService = await getEmbyServiceForUser()
+
+  if (!embyService) {
+    return NextResponse.json({ error: 'Emby service not configured' }, { status: 400 })
   }
 
   try {
@@ -21,12 +30,15 @@ export async function GET() {
         // Create or update user in local DB
         const email = embyUser.Email || `${embyUser.Name.toLowerCase()}@emby.local`
         
-        const existingUser = await prisma.user.findFirst({
-          where: { embyUserId: embyUser.Id }
+        const existingUser = await (prisma as any).user.findFirst({
+          where: { 
+            embyUserId: embyUser.Id,
+            instanceId
+          }
         })
 
         if (existingUser) {
-          await prisma.user.update({
+          await (prisma as any).user.update({
             where: { id: existingUser.id },
             data: {
               name: embyUser.Name,
@@ -34,13 +46,14 @@ export async function GET() {
             }
           })
         } else {
-          await prisma.user.create({
+          await (prisma as any).user.create({
             data: {
               embyUserId: embyUser.Id,
               name: embyUser.Name,
               email: email,
               role: 'user', // Default role
               image: embyUser.PrimaryImageTag ? `${baseUrl}/Items/${embyUser.Id}/Images/Primary` : null,
+              instanceId
             }
           })
         }
@@ -51,7 +64,8 @@ export async function GET() {
     // Continue even if sync fails to show existing users
   }
 
-  const users = await prisma.user.findMany({
+  const users = await (prisma as any).user.findMany({
+    where: { instanceId },
     orderBy: { name: 'asc' }
   })
   return NextResponse.json(users)
@@ -63,14 +77,30 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const instanceId = parseInt((session.user as any).instanceId)
+  if (isNaN(instanceId)) {
+    return NextResponse.json({ error: 'Invalid instance' }, { status: 400 })
+  }
   const { id, role } = await request.json()
 
   if (!id || !role) {
     return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
   }
 
-  const updatedUser = await prisma.user.update({
-    where: { id: parseInt(id) },
+  // Ensure user belongs to the same instance
+  const userToUpdate = await (prisma as any).user.findFirst({
+    where: { 
+      id: parseInt(id),
+      instanceId
+    }
+  })
+
+  if (!userToUpdate) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  }
+
+  const updatedUser = await (prisma as any).user.update({
+    where: { id: userToUpdate.id },
     data: { 
       role,
       // @ts-ignore

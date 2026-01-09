@@ -1,28 +1,15 @@
 import axios from 'axios'
-import { getSetting } from '@/lib/settings'
 
 export class RadarrService {
-  private baseUrl: string | null = null
-  private apiKey: string | null = null
+  private baseUrl: string
+  private apiKey: string
 
-  private async init() {
-    if (!this.baseUrl) {
-      this.baseUrl = await getSetting('radarr_url')
-      if (this.baseUrl) {
-        this.baseUrl = this.baseUrl.replace(/\/$/, '')
-      }
-    }
-    if (!this.apiKey) {
-      this.apiKey = await getSetting('radarr_api_key')
-    }
-    
-    return !!(this.baseUrl && this.apiKey)
+  constructor(baseUrl: string, apiKey: string) {
+    this.baseUrl = baseUrl.replace(/\/$/, '')
+    this.apiKey = apiKey
   }
 
-  private async getClient() {
-    const configured = await this.init()
-    if (!configured) return null
-
+  private getClient() {
     return axios.create({
       baseURL: `${this.baseUrl}/api/v3`,
       headers: {
@@ -33,8 +20,7 @@ export class RadarrService {
   }
 
   async deleteMovie(radarrId: number, deleteFiles: boolean = false) {
-    const client = await this.getClient()
-    if (!client) return { success: false, message: 'Radarr non configuré' }
+    const client = this.getClient()
 
     try {
         console.log(`[Radarr] Deleting movie ${radarrId} (deleteFiles: ${deleteFiles})`);
@@ -52,5 +38,3 @@ export class RadarrService {
     }
   }
 }
-
-export const radarrService = new RadarrService()

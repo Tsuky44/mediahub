@@ -1,9 +1,37 @@
-import { tmdbService } from '@/lib/services/tmdb'
+import { getTmdbServiceForUser } from '@/lib/auth'
 import { InfiniteDiscoverList } from './InfiniteDiscoverList'
+import { AlertCircle, Settings } from 'lucide-react'
+import Link from 'next/link'
 
 export default async function DiscoverPage({ searchParams }: { searchParams: Promise<{ keyword?: string, name?: string }> }) {
   const { keyword, name } = await searchParams
   
+  const tmdbService = await getTmdbServiceForUser()
+  
+  if (!tmdbService) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 animate-in fade-in duration-500">
+        <div className="w-20 h-20 rounded-3xl bg-amber-500/10 flex items-center justify-center text-amber-500 mb-2">
+          <AlertCircle className="w-10 h-10" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-3xl font-bold text-white">TMDB non configuré</h2>
+          <p className="text-gray-400 max-w-md mx-auto">
+            La découverte par mot-clé nécessite une clé API TMDB valide. 
+            Veuillez configurer votre clé API dans les paramètres.
+          </p>
+        </div>
+        <Link 
+          href="/dashboard/settings" 
+          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl transition-all active:scale-95 shadow-xl shadow-indigo-500/20"
+        >
+          <Settings className="w-5 h-5" />
+          Aller aux paramètres
+        </Link>
+      </div>
+    )
+  }
+
   if (!keyword) {
     return (
       <div className="p-8 text-center text-gray-400">

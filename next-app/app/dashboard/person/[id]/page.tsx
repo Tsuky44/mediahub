@@ -1,14 +1,17 @@
-import { tmdbService } from '@/lib/services/tmdb'
+import { getTmdbServiceForUser } from '@/lib/auth'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Metadata } from 'next'
 
 interface PersonPageProps {
-    params: { id: string }
+    params: Promise<{ id: string }>
 }
 
 export async function generateMetadata({ params }: PersonPageProps): Promise<Metadata> {
     const { id } = await params
+    const tmdbService = await getTmdbServiceForUser()
+    if (!tmdbService) return { title: 'Service non disponible' }
+    
     const person = await tmdbService.getPersonDetails(parseInt(id))
     if (!person) return { title: 'Artiste non trouvé' }
     return { title: `${person.name} - MediaHub` }
@@ -16,6 +19,11 @@ export async function generateMetadata({ params }: PersonPageProps): Promise<Met
 
 export default async function PersonPage({ params }: PersonPageProps) {
     const { id } = await params
+    const tmdbService = await getTmdbServiceForUser()
+    if (!tmdbService) {
+        notFound()
+    }
+
     const person = await tmdbService.getPersonDetails(parseInt(id))
 
     if (!person) {

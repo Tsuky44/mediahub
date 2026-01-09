@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { embyService } from '@/lib/services/emby'
+import { getCurrentUser } from '@/lib/auth'
 import axios from 'axios'
 import { getSetting } from '@/lib/settings'
 
@@ -20,11 +20,16 @@ export async function GET(
     const tmdbId = searchParams.get('tmdbId')
     const mediaType = searchParams.get('mediaType') || 'movie'
 
+    const user = await getCurrentUser()
+    const instanceIdStr = user ? (user as any).instanceId : null
+    let instanceId = instanceIdStr ? parseInt(instanceIdStr) : 1
+    if (isNaN(instanceId)) instanceId = 1
+
     // If TMDB ID is provided, try to get image from TMDB first (as requested by user)
     if (tmdbId) {
       try {
         let posterPath = tmdbPosterCache.get(`${mediaType}-${tmdbId}`)
-        const tmdbApiKey = await getSetting('tmdb_api_key')
+        const tmdbApiKey = await getSetting('tmdb_api_key', instanceId)
 
         if (!posterPath && tmdbApiKey) {
           const tmdbRes = await axios.get(`https://api.themoviedb.org/3/${mediaType === 'movie' ? 'movie' : 'tv'}/${tmdbId}`, {
@@ -55,8 +60,8 @@ export async function GET(
     }
 
     // Fallback to Emby
-    let embyBaseUrl = await getSetting('emby_url')
-    let embyApiKey = await getSetting('emby_api_key')
+    let embyBaseUrl = await getSetting('emby_url', instanceId)
+    let embyApiKey = await getSetting('emby_api_key', instanceId)
 
     if (!embyBaseUrl || !embyApiKey) {
       console.error('[Image Proxy]: Emby not configured', { embyBaseUrl, hasApiKey: !!embyApiKey })

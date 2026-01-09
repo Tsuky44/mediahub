@@ -17,23 +17,19 @@ export interface Torrent {
 
 export class QBittorrentService {
   private client: AxiosInstance | null = null
-  private baseUrl: string | null = null
+  private baseUrl: string
+  private username?: string
+  private password?: string
+
+  constructor(baseUrl: string, username?: string, password?: string) {
+    this.baseUrl = baseUrl.replace(/\/$/, '')
+    this.username = username
+    this.password = password
+  }
 
   private async init(force: boolean = false) {
     if (this.client && !force) return
 
-    this.baseUrl = await getSetting('qbittorrent_url')
-    const username = await getSetting('qbittorrent_username')
-    const password = await getSetting('qbittorrent_password')
-
-    if (!this.baseUrl) {
-      throw new Error('QBittorrent URL not configured')
-    }
-
-    console.log(`[qBittorrent] Initializing (force=${force}) with URL: ${this.baseUrl}, User: ${username}`)
-
-    // Remove trailing slash for base URL but keep a version with slash for Referer
-    this.baseUrl = this.baseUrl.replace(/\/$/, '')
     const refererUrl = `${this.baseUrl}/`
 
     const client = axios.create({
@@ -46,12 +42,12 @@ export class QBittorrentService {
     })
 
     // Authenticate
-    if (username && password) {
+    if (this.username && this.password) {
       try {
         console.log('[qBittorrent] Attempting login...')
         const params = new URLSearchParams()
-        params.append('username', username)
-        params.append('password', password)
+        params.append('username', this.username)
+        params.append('password', this.password)
 
         const response = await client.post('/api/v2/auth/login', params.toString(), {
             headers: {
@@ -59,16 +55,11 @@ export class QBittorrentService {
             }
         })
         
-        console.log('[qBittorrent] Login response status:', response.status)
-        
         // Setup cookie for subsequent requests
         const setCookie = response.headers['set-cookie']
         if (setCookie) {
             const cookie = Array.isArray(setCookie) ? setCookie[0] : setCookie
             client.defaults.headers.common['Cookie'] = cookie.split(';')[0]
-            console.log('[qBittorrent] Cookie established')
-        } else {
-            console.warn('[qBittorrent] No set-cookie header received')
         }
       } catch (e) {
         if (axios.isAxiosError(e)) {
@@ -171,5 +162,3 @@ export class QBittorrentService {
     })
   }
 }
-
-export const qbittorrentService = new QBittorrentService()

@@ -11,39 +11,36 @@ export interface FileInfo {
     fullPath: string;
 }
 
-class SmbService {
+export class SmbService {
     private client: any = null;
-    private config: any = null;
+    private host: string;
+    private username?: string;
+    private password?: string;
+    private share: string;
+    private rootSubPath: string;
+
+    constructor(host: string, share: string, username?: string, password?: string, rootSubPath: string = '') {
+        this.host = host;
+        this.share = share;
+        this.username = username;
+        this.password = password;
+        this.rootSubPath = rootSubPath;
+    }
 
     private async connect() {
-        const host = await getSetting('smb_host');
-        const username = await getSetting('smb_username');
-        const password = await getSetting('smb_password');
-        const share = await getSetting('smb_share');
-
-        const newConfig = { host, username, password, share };
-        const configStr = JSON.stringify(newConfig);
-
-        if (this.client && this.config === configStr) {
+        if (this.client) {
             return this.client;
         }
 
-        if (this.client) {
-            try {
-                this.client.disconnect();
-            } catch (e) {}
-        }
-
-        if (!host || !share) {
+        if (!this.host || !this.share) {
             throw new Error('SMB settings are not configured');
         }
 
-        this.config = configStr;
         this.client = new SMB2({
-            share: `\\\\${host}\\${share}`,
+            share: `\\\\${this.host}\\${this.share}`,
             domain: '',
-            username: username || '',
-            password: password || '',
+            username: this.username || '',
+            password: this.password || '',
             autoCloseTimeout: 0,
             packetConcurrency: 8
         });
@@ -122,15 +119,14 @@ class SmbService {
                 console.error('Error disconnecting SMB:', e);
             }
             this.client = null;
-            this.config = null;
         }
     }
 
     async testConnection(config?: { host: string, user: string, pass: string, share: string }) {
-        const host = config?.host || await getSetting('smb_host');
-        const username = config?.user || await getSetting('smb_username');
-        const password = config?.pass || await getSetting('smb_password');
-        const share = config?.share || await getSetting('smb_share');
+        const host = config?.host || this.host;
+        const username = config?.user || this.username;
+        const password = config?.pass || this.password;
+        const share = config?.share || this.share;
 
         if (!host || !share) {
             throw new Error('Paramètres SMB manquants');
@@ -163,9 +159,7 @@ class SmbService {
     async listFiles(remotePath: string = ''): Promise<FileInfo[]> {
         console.log(`[SMB] Listing files for path: "${remotePath}"`);
         return this.withRetry(async (client) => {
-            const rootSubPath = await getSetting('smb_path', '');
-            
-            let targetPath = path.join(rootSubPath, remotePath).replace(/\//g, '\\');
+            let targetPath = path.join(this.rootSubPath, remotePath).replace(/\//g, '\\');
             if (targetPath === '.' || targetPath === '/' || targetPath === '\\') {
                 targetPath = '';
             }
@@ -218,8 +212,7 @@ class SmbService {
 
     async getStat(remotePath: string) {
         return this.withRetry(async (client) => {
-            const rootSubPath = await getSetting('smb_path', '');
-            const targetPath = path.join(rootSubPath, remotePath).replace(/\//g, '\\');
+            const targetPath = path.join(this.rootSubPath, remotePath).replace(/\//g, '\\');
 
             const stats = await new Promise<any>((resolve, reject) => {
                 client.stat(targetPath, (err: any, data: any) => {
@@ -236,8 +229,7 @@ class SmbService {
 
     async getFileStream(remotePath: string) {
         return this.withRetry(async (client) => {
-            const rootSubPath = await getSetting('smb_path', '');
-            const targetPath = path.join(rootSubPath, remotePath).replace(/\//g, '\\');
+            const targetPath = path.join(this.rootSubPath, remotePath).replace(/\//g, '\\');
 
             // @marsaud/smb2 createReadStream returns a Promise of a Readable stream
             const stream = await new Promise<any>((resolve, reject) => {
@@ -250,9 +242,8 @@ class SmbService {
         });
     }
 
-    async getFolderZipStream(remoteFolderPath: string) {
-        const rootSubPath = await getSetting('smb_path', '');
-        const targetPath = path.join(rootSubPath, remoteFolderPath).replace(/\//g, '\\');
+    async getFolderZipStream(remotePath: string) {
+        const targetPath = path.join(this.rootSubPath, remotePath).replace(/\//g, '\\');
         
         const archive = archiver('zip', { zlib: { level: 9 } });
 
@@ -365,8 +356,7 @@ class SmbService {
 
     async delete(remotePath: string) {
         return this.withRetry(async (client) => {
-            const rootSubPath = await getSetting('smb_path', '');
-            const targetPath = path.join(rootSubPath, remotePath).replace(/\//g, '\\');
+            const targetPath = path.join(this.rootSubPath, remotePath).replace(/\//g, '\\');
 
             // 1. Get stats to check if it's a directory
             const stats = await new Promise<any>((resolve, reject) => {
@@ -444,5 +434,3 @@ class SmbService {
         });
     }
 }
-
-export const smbService = new SmbService();

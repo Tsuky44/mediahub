@@ -22,6 +22,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No payload' }, { status: 400 })
     }
 
+    const { searchParams } = new URL(req.url)
+    const instanceIdStr = searchParams.get('instanceId')
+    
+    if (!instanceIdStr) {
+      console.warn('[Webhook] Missing instanceId in query params, defaulting to 1')
+    }
+    
+    const instanceId = instanceIdStr ? parseInt(instanceIdStr) : 1
+
     const eventType = payload.Event
     const embyUserId = payload.User?.Id
     const embyUserName = payload.User?.Name
@@ -29,7 +38,7 @@ export async function POST(req: NextRequest) {
     const playbackInfo = payload.PlaybackInfo
     const session = payload.Session
 
-    console.log(`[Webhook] Received event: ${eventType} for ${item?.Name} (User: ${embyUserName})`)
+    console.log(`[Webhook] [Instance ${instanceId}] Received event: ${eventType} for ${item?.Name} (User: ${embyUserName})`)
 
     // On enregistre à l'arrêt OU lors d'une progression significative
     // PlaybackProgress permet d'avoir les stats même si la personne ne "finit" pas l'épisode proprement
@@ -56,14 +65,18 @@ export async function POST(req: NextRequest) {
       // On n'enregistre que si la durée est significative (ex: > 1 min)
       if (durationMinutes >= 1) {
         // Trouver l'utilisateur local
-        const user = await prisma.user.findFirst({
-          where: { embyUserId: embyUserId }
+        const user = await (prisma as any).user.findFirst({
+          where: { 
+            embyUserId: embyUserId,
+            instanceId
+          }
         })
 
         // On cherche s'il existe déjà un événement récent pour cet item/user pour le mettre à jour
         // au lieu d'en créer un nouveau à chaque "Progress"
-        const existingEvent = await prisma.watchEvent.findFirst({
+        const existingEvent = await (prisma as any).watchEvent.findFirst({
           where: {
+            instanceId,
             embyUserId,
             itemId,
             playedAt: {
@@ -75,18 +88,19 @@ export async function POST(req: NextRequest) {
 
         if (existingEvent) {
           // Mise à jour de l'événement existant avec la nouvelle durée et infos
-          await prisma.watchEvent.update({
+          await (prisma as any).watchEvent.update({
             where: { id: existingEvent.id },
             data: {
               durationMinutes: Math.max(existingEvent.durationMinutes, durationMinutes),
               playedAt: new Date(), // On actualise la date pour le "vu récemment"
             }
           })
-          console.log(`[Webhook] Updated playback for ${item.Name} (${durationMinutes} min)`)
+          console.log(`[Webhook] [Instance ${instanceId}] Updated playback for ${item.Name} (${durationMinutes} min)`)
         } else {
           // Création d'un nouvel événement
-          await prisma.watchEvent.create({
+          await (prisma as any).watchEvent.create({
             data: {
+              instanceId,
               embyUserId,
               userId: user?.id,
               itemId,
@@ -98,7 +112,7 @@ export async function POST(req: NextRequest) {
               plays: 1,
             }
           })
-          console.log(`[Webhook] Recorded new playback for ${item.Name} (${durationMinutes} min)`)
+          console.log(`[Webhook] [Instance ${instanceId}] Recorded new playback for ${item.Name} (${durationMinutes} min)`)
         }
       }
     }

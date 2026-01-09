@@ -1,7 +1,7 @@
 import { Metadata } from 'next'
 import LoginForm from './LoginForm'
 import { Suspense } from 'react'
-import { tmdbService } from '@/lib/services/tmdb'
+import { getTmdbServiceForUser } from '@/lib/auth'
 import BackgroundSlideshow from './BackgroundSlideshow'
 import Image from 'next/image'
 
@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 
 export default async function LoginPage() {
   // Fetch trending movies and TV shows from TMDB for high quality backdrops
-  const trending = await tmdbService.getTrending('all', 1)
-  const items = trending.results || []
+  const tmdbService = await getTmdbServiceForUser()
+  const items = tmdbService ? (await tmdbService.getTrending('all', 1)).results || [] : []
   
   const backdrops = items
     .filter((item: any) => item.backdrop_path)

@@ -30,6 +30,8 @@ interface SettingsFormProps {
     currentJellystatKey?: string
     currentEmbyUrl?: string
     currentEmbyKey?: string
+    currentJellyseerrUrl?: string
+    currentJellyseerrKey?: string
 }
 
 export default function SettingsForm({ 
@@ -50,16 +52,20 @@ export default function SettingsForm({
     currentJellystatUrl,
     currentJellystatKey,
     currentEmbyUrl,
-    currentEmbyKey
+    currentEmbyKey,
+    currentJellyseerrUrl,
+    currentJellyseerrKey
 }: SettingsFormProps) {
     const [selectedId, setSelectedId] = useState(currentJellyseerrId)
+    const [jellyseerrUrl, setJellyseerrUrl] = useState(currentJellyseerrUrl || '')
+    const [jellyseerrKey, setJellyseerrKey] = useState(currentJellyseerrKey || '')
     const [qbitUrl, setQbitUrl] = useState(currentQbitUrl || '')
     const [qbitUser, setQbitUser] = useState(currentQbitUser || '')
     const [qbitPass, setQbitPass] = useState(currentQbitPass || '')
-    const [smbHost, setSmbHost] = useState(currentSmbHost || '192.168.1.123')
-    const [smbUser, setSmbUser] = useState(currentSmbUser || 'mathis')
+    const [smbHost, setSmbHost] = useState(currentSmbHost || '')
+    const [smbUser, setSmbUser] = useState(currentSmbUser || '')
     const [smbPass, setSmbPass] = useState(currentSmbPass || '')
-    const [smbShare, setSmbShare] = useState(currentSmbShare || 'dl')
+    const [smbShare, setSmbShare] = useState(currentSmbShare || '')
     const [smbPath, setSmbPath] = useState(currentSmbPath || '')
     
     const [radarrUrl, setRadarrUrl] = useState(currentRadarrUrl || '')
@@ -151,6 +157,8 @@ export default function SettingsForm({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     jellyseerrUserId: selectedId,
+                    jellyseerr_url: jellyseerrUrl,
+                    jellyseerr_api_key: jellyseerrKey,
                     qbittorrent_url: qbitUrl,
                     qbittorrent_username: qbitUser,
                     qbittorrent_password: qbitPass,
@@ -192,6 +200,34 @@ export default function SettingsForm({
                     <p className="text-sm text-indigo-200">
                         <strong>Détection automatique :</strong> Le système mappe désormais automatiquement votre compte Jellyseerr en utilisant votre email ou nom d'utilisateur Emby.
                     </p>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label htmlFor="jellyseerrUrl" className="block text-sm font-medium text-gray-300">
+                            URL Jellyseerr
+                        </label>
+                        <input
+                            type="text"
+                            id="jellyseerrUrl"
+                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            placeholder="https://jellyseerr.example.com"
+                            value={jellyseerrUrl}
+                            onChange={(e) => setJellyseerrUrl(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="jellyseerrKey" className="block text-sm font-medium text-gray-300">
+                            Clé API Jellyseerr
+                        </label>
+                        <input
+                            type="password"
+                            id="jellyseerrKey"
+                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            placeholder="Votre clé API"
+                            value={jellyseerrKey}
+                            onChange={(e) => setJellyseerrKey(e.target.value)}
+                        />
+                    </div>
                 </div>
                 <div className="opacity-50 pointer-events-none">
                     <label htmlFor="jellyseerrUser" className="block text-sm font-medium text-gray-300">
@@ -269,7 +305,7 @@ export default function SettingsForm({
                             type="text"
                             id="smbHost"
                             className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                            placeholder="192.168.1.123"
+                            placeholder="ex: 192.168.1.50"
                             value={smbHost}
                             onChange={(e) => setSmbHost(e.target.value)}
                         />
@@ -282,7 +318,7 @@ export default function SettingsForm({
                             type="text"
                             id="smbShare"
                             className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                            placeholder="dl"
+                            placeholder="ex: partages"
                             value={smbShare}
                             onChange={(e) => setSmbShare(e.target.value)}
                         />
@@ -297,7 +333,7 @@ export default function SettingsForm({
                             type="text"
                             id="smbUser"
                             className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                            placeholder="mathis"
+                            placeholder="Identifiant"
                             value={smbUser}
                             onChange={(e) => setSmbUser(e.target.value)}
                         />

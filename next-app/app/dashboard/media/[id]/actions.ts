@@ -1,21 +1,33 @@
 'use server'
 
-import { tmdbService } from '@/lib/services/tmdb'
-import { jellyseerrService } from '@/lib/services/jellyseerr'
-import { embyService } from '@/lib/services/emby'
+import { getEmbyServiceForUser, getJellyseerrServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { revalidatePath } from 'next/cache'
+import { forget } from '@/lib/cache'
+import { getSetting } from '@/lib/settings'
 
 export async function getSeasonDetails(tvId: number, seasonNumber: number) {
   try {
+    const tmdbService = await getTmdbServiceForUser()
+    if (!tmdbService) return null
+
     const tmdbData = await tmdbService.getSeasonDetails(tvId, seasonNumber)
     if (!tmdbData) return null
 
     // Fetch user info for filtering
     const user = await getCurrentUser()
+    const instanceId = parseInt((user as any)?.instanceId || '0')
+    const embyService = await getEmbyServiceForUser()
+
     let embyUserId: string | undefined = undefined
     if (user && user.email) {
-        const dbUser = await prisma.user.findUnique({ where: { email: user.email } })
+        const dbUser = await (prisma as any).user.findFirst({ 
+          where: { 
+            email: user.email,
+            instanceId
+          } 
+        })
         if (dbUser && dbUser.embyUserId) {
             embyUserId = dbUser.embyUserId
         }
@@ -23,7 +35,7 @@ export async function getSeasonDetails(tvId: number, seasonNumber: number) {
 
     // Fetch Emby data to check played status
     let embyEpisodes: any[] = []
-    if (embyUserId) {
+    if (embyUserId && embyService) {
          const embySeries = await embyService.getItemByTmdbId(embyUserId, tvId, 'Series')
          if (embySeries) {
              embyEpisodes = await embyService.getEpisodes(embyUserId, embySeries.Id, seasonNumber)
@@ -52,14 +64,16 @@ export async function getSeasonDetails(tvId: number, seasonNumber: number) {
   }
 }
 
-import { revalidatePath } from 'next/cache'
-import { forget } from '@/lib/cache'
-import { getSetting } from '@/lib/settings'
-
 export async function requestSeason(tvId: number, seasonNumber: number, title: string) {
     try {
         const user = await getCurrentUser()
+        const instanceId = parseInt((user as any)?.instanceId || '0')
+        const jellyseerrService = await getJellyseerrServiceForUser()
         
+        if (!jellyseerrService) {
+            return { success: false, message: 'Jellyseerr non configuré pour cette instance' }
+        }
+
         // Auto-detect Jellyseerr User
         let jellyseerrUserId: string | undefined = undefined
         try {
@@ -72,7 +86,7 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
         }
 
         if (!jellyseerrUserId) {
-            jellyseerrUserId = await getSetting('jellyseerr_user_id')
+            jellyseerrUserId = await getSetting('jellyseerr_user_id', instanceId)
         }
         
         const result = await jellyseerrService.requestMedia(tvId, 'tv', title, jellyseerrUserId || undefined, [seasonNumber])

@@ -3,7 +3,6 @@
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
-import { PrismaClient } from "@prisma/client"
 
 export interface WatchLaterItem {
     id: number
@@ -33,39 +32,22 @@ export async function toggleWatchLater(params: {
         }
 
         const userId = parseInt((user as any).id)
+        const instanceId = parseInt((user as any).instanceId)
         
-        let watchLaterModel = (prisma as any).watchLater;
-        
-        // Fallback: If global prisma instance is stale, try creating a fresh client
-        if (!watchLaterModel) {
-            console.warn('[WatchLater] prisma.watchLater is undefined on global instance. Attempting to create a fresh client...');
-            try {
-                const freshClient = new PrismaClient();
-                watchLaterModel = (freshClient as any).watchLater;
-                if (watchLaterModel) {
-                    console.log('[WatchLater] Successfully created fresh client with watchLater model.');
-                }
-            } catch (e) {
-                console.error('[WatchLater] Failed to create fresh client:', e);
-            }
-        }
-
-        if (!watchLaterModel) {
-            console.error('[WatchLater] prisma.watchLater is undefined! Available models:', Object.keys(prisma).filter(k => !k.startsWith('_')));
-            return { success: false, error: 'La base de données n\'est pas encore prête. Veuillez rafraîchir la page.' }
-        }
-
         // Verify if user exists in DB before creating relation (in case of DB reset)
-        const userExists = await prisma.user.findUnique({ where: { id: userId } });
+        const userExists = await (prisma as any).user.findFirst({ 
+            where: { id: userId, instanceId } 
+        });
         if (!userExists) {
              console.error('[WatchLater] User not found in DB:', userId);
              return { success: false, error: 'Session invalide. Veuillez vous déconnecter et vous reconnecter.' }
         }
 
         // Find if it exists either by mediaId OR tmdbId (if provided)
-        const existing = await watchLaterModel.findFirst({
+        const existing = await (prisma as any).watchLater.findFirst({
             where: {
                 userId,
+                instanceId,
                 mediaType: params.mediaType,
                 OR: [
                     { mediaId: params.mediaId },
@@ -80,7 +62,7 @@ export async function toggleWatchLater(params: {
 
         if (existing) {
             console.log('[WatchLater] Removing item:', existing.id);
-            await watchLaterModel.delete({
+            await (prisma as any).watchLater.delete({
                 where: { id: existing.id }
             })
             revalidatePath('/dashboard/requests')
@@ -88,9 +70,10 @@ export async function toggleWatchLater(params: {
             return { success: true, action: 'removed' }
         } else {
             console.log('[WatchLater] Adding item:', params.title);
-            await watchLaterModel.create({
+            await (prisma as any).watchLater.create({
                 data: {
                     userId,
+                    instanceId,
                     mediaId: params.mediaId,
                     tmdbId: params.tmdbId,
                     mediaType: params.mediaType,
@@ -109,8 +92,6 @@ export async function toggleWatchLater(params: {
     }
 }
 
-// Remove toggleWithModel as it's no longer needed after simplification
-
 
 export async function getWatchLaterList() {
     try {
@@ -118,26 +99,10 @@ export async function getWatchLaterList() {
         if (!user || !(user as any).id) return []
 
         const userId = parseInt((user as any).id)
+        const instanceId = parseInt((user as any).instanceId)
 
-        let watchLater = (prisma as any).watchLater;
-        
-        // Fallback
-        if (!watchLater) {
-             try {
-                 const freshClient = new PrismaClient();
-                 watchLater = (freshClient as any).watchLater;
-             } catch (e) {
-                 console.error('[WatchLater] Failed to create fresh client for list:', e);
-             }
-        }
-
-        if (!watchLater) {
-            console.error('[WatchLater] getWatchLaterList: prisma.watchLater is undefined');
-            return [];
-        }
-
-        const items = await watchLater.findMany({
-            where: { userId },
+        const items = await (prisma as any).watchLater.findMany({
+            where: { userId, instanceId },
             orderBy: { createdAt: 'desc' }
         })
 
@@ -154,21 +119,14 @@ export async function areInWatchLater(items: { id: string, mediaType: string }[]
         if (!user || !(user as any).id) return []
 
         const userId = parseInt((user as any).id)
-
-        let watchLater = (prisma as any).watchLater;
-        if (!watchLater) {
-             try {
-                 const freshClient = new PrismaClient();
-                 watchLater = (freshClient as any).watchLater;
-             } catch (e) {}
-        }
-        if (!watchLater) return [];
+        const instanceId = parseInt((user as any).instanceId)
 
         const ids = items.map(i => i.id)
         
-        const existing = await watchLater.findMany({
+        const existing = await (prisma as any).watchLater.findMany({
             where: {
                 userId,
+                instanceId,
                 OR: [
                     { mediaId: { in: ids } },
                     { tmdbId: { in: ids } }
@@ -191,22 +149,12 @@ export async function isInWatchLater(id: string, mediaType: string) {
         if (!user || !(user as any).id) return false
 
         const userId = parseInt((user as any).id)
+        const instanceId = parseInt((user as any).instanceId)
 
-        let watchLater = (prisma as any).watchLater;
-        
-        // Fallback
-        if (!watchLater) {
-             try {
-                 const freshClient = new PrismaClient();
-                 watchLater = (freshClient as any).watchLater;
-             } catch (e) {}
-        }
-
-        if (!watchLater) return false;
-
-        const existing = await watchLater.findFirst({
+        const existing = await (prisma as any).watchLater.findFirst({
             where: {
                 userId,
+                instanceId,
                 mediaType,
                 OR: [
                     { mediaId: id },

@@ -7,32 +7,61 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Instance {
+  id                Int                      @id @default(autoincrement())
+  name              String                   @unique
+  slug              String                   @unique
+  embyUrl           String                   @map("emby_url")
+  embyApiKey        String                   @map("emby_api_key")
+  jellyseerrUrl     String?                  @map("jellyseerr_url")
+  jellyseerrApiKey  String?                  @map("jellyseerr_api_key")
+  isDefault         Boolean                  @default(false) @map("is_default")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+  fileShares        FileShare[]
+  mediaAvailability MediaAvailabilityIndex[]
+  mediaRequests     MediaRequest[]
+  notifications     Notification[]
+  settings          Setting[]
+  users             User[]
+  watchEvents       WatchEvent[]
+  watchLater        WatchLater[]
+
+  @@map("instances")
+}
+
 model User {
   id               Int            @id @default(autoincrement())
+  instanceId       Int            @map("instance_id")
   name             String
-  email            String         @unique
+  email            String
   emailVerified    DateTime?
   password         String?
   image            String?
-  embyUserId       String?        @unique @map("emby_user_id")
+  embyUserId       String?        @map("emby_user_id")
   jellyseerrUserId String?        @map("jellyseerr_user_id")
   role             String         @default("user")
   roleVersion      Int            @default(0) @map("role_version")
+  hasSeenWelcome   Boolean        @default(false) @map("has_seen_welcome")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
   accounts         Account[]
   requests         MediaRequest[]
   notifications    Notification[]
   sessions         Session[]
+  instance         Instance       @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   watchEvents      WatchEvent[]
   watchLater       WatchLater[]
 
+  @@unique([email, instanceId])
+  @@unique([embyUserId, instanceId])
   @@map("users")
 }
 
 model Notification {
   id         Int      @id @default(autoincrement())
   userId     Int      @map("user_id")
+  instanceId Int      @map("instance_id")
   title      String
   message    String
   type       String
@@ -42,6 +71,7 @@ model Notification {
   isRead     Boolean  @default(false) @map("is_read")
   link       String?
   createdAt  DateTime @default(now()) @map("created_at")
+  instance   Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
@@ -51,6 +81,7 @@ model Notification {
 model WatchLater {
   id         Int      @id @default(autoincrement())
   userId     Int      @map("user_id")
+  instanceId Int      @map("instance_id")
   mediaId    String   @map("media_id")
   tmdbId     String?  @map("tmdb_id")
   mediaType  String   @map("media_type")
@@ -58,6 +89,7 @@ model WatchLater {
   posterPath String?  @map("poster_path")
   isEmbyItem Boolean  @default(false) @map("is_emby_item")
   createdAt  DateTime @default(now()) @map("created_at")
+  instance   Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, mediaId, mediaType])
@@ -105,6 +137,7 @@ model VerificationToken {
 model MediaRequest {
   id              Int       @id @default(autoincrement())
   userId          Int?      @map("user_id")
+  instanceId      Int       @map("instance_id")
   mediaType       String    @map("media_type")
   tmdbId          String    @map("tmdb_id")
   title           String
@@ -122,6 +155,7 @@ model MediaRequest {
   requesterName   String?   @map("requester_name")
   requesterEmail  String?   @map("requester_email")
   requesterAvatar String?   @map("requester_avatar")
+  instance        Instance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   user            User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
@@ -133,6 +167,7 @@ model MediaRequest {
 model WatchEvent {
   id              Int      @id @default(autoincrement())
   userId          Int?     @map("user_id")
+  instanceId      Int      @map("instance_id")
   embyUserId      String   @map("emby_user_id")
   itemId          String   @map("item_id")
   itemType        String?  @map("item_type")
@@ -151,6 +186,7 @@ model WatchEvent {
   seasonName      String?  @map("season_name")
   sessionId       String?  @map("session_id")
   userName        String?  @map("user_name")
+  instance        Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   user            User?    @relation(fields: [userId], references: [id])
 
   @@unique([embyUserId, itemId, playedAt])
@@ -158,20 +194,24 @@ model WatchEvent {
 }
 
 model Setting {
-  id        Int      @id @default(autoincrement())
-  key       String   @unique
-  value     String?
-  type      String   @default("string")
-  group     String   @default("general")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         Int      @id @default(autoincrement())
+  instanceId Int      @map("instance_id")
+  key        String
+  value      String?
+  type       String   @default("string")
+  group      String   @default("general")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  instance   Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
+  @@unique([key, instanceId])
   @@map("settings")
 }
 
 model MediaAvailabilityIndex {
   id               Int      @id @default(autoincrement())
-  tmdbId           String   @unique @map("tmdb_id")
+  instanceId       Int      @map("instance_id")
+  tmdbId           String   @map("tmdb_id")
   mediaType        String   @map("media_type")
   isAvailable      Boolean  @default(false) @map("is_available")
   availabilityData String?  @map("availability_data")
@@ -179,17 +219,21 @@ model MediaAvailabilityIndex {
   lastCheckedAt    DateTime @default(now()) @map("last_checked_at")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
+  instance         Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
+  @@unique([tmdbId, instanceId])
   @@index([mediaType, isAvailable])
   @@map("media_availability_index")
 }
 
 model FileShare {
-  id        String    @id @default(uuid())
-  filePath  String    @map("file_path")
-  token     String    @unique
-  expiresAt DateTime? @map("expires_at")
-  createdAt DateTime  @default(now()) @map("created_at")
+  id         String    @id @default(uuid())
+  instanceId Int       @map("instance_id")
+  filePath   String    @map("file_path")
+  token      String    @unique
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  instance   Instance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
   @@map("file_shares")
 }

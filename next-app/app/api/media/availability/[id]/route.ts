@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { jellyseerrService } from '@/lib/services/jellyseerr'
+import { getJellyseerrServiceForUser } from '@/lib/auth'
 
 export async function GET(
   request: Request,
@@ -14,6 +14,11 @@ export async function GET(
 
     if (isNaN(tmdbId)) {
         return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
+    }
+
+    const jellyseerrService = await getJellyseerrServiceForUser()
+    if (!jellyseerrService) {
+        return NextResponse.json({ status: 'unknown', available: false })
     }
 
     const availability = await jellyseerrService.getMediaAvailability(tmdbId, type, refresh)

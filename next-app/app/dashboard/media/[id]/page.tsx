@@ -1,6 +1,4 @@
-import { tmdbService } from '@/lib/services/tmdb'
-import { jellyseerrService } from '@/lib/services/jellyseerr'
-import { embyService } from '@/lib/services/emby'
+import { getEmbyServiceForUser, getJellyseerrServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Image from 'next/image'
@@ -16,6 +14,7 @@ import FavoriteButton from './FavoriteButton'
 import WatchLaterButton from './WatchLaterButton'
 import { ManageMediaButton } from './ManageMediaButton'
 import { isInWatchLater } from '../watch-later-actions'
+import { getSetting } from '@/lib/settings'
 
 async function getImdbRating(imdbId: string) {
     try {
@@ -39,11 +38,21 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
       notFound()
   }
 
+  const tmdbService = await getTmdbServiceForUser()
+  if (!tmdbService) {
+      notFound()
+  }
+
   const details = await tmdbService.getDetails(tmdbId, mediaType)
   
   if (!details) {
       notFound()
   }
+
+  const user = await getCurrentUser()
+  const instanceId = parseInt((user as any)?.instanceId || '0')
+  const embyService = await getEmbyServiceForUser()
+  const jellyseerrService = await getJellyseerrServiceForUser()
 
   const videos = details.videos?.results || []
   const trailer = videos.find((v: any) => v.type === 'Trailer' && v.site === 'YouTube')
@@ -51,7 +60,7 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   const credits = details.credits || { cast: [] }
   const cast = credits.cast ? credits.cast.slice(0, 25) : [] // Limit to top 25 cast members for scroll view
 
-  const availability = await jellyseerrService.getMediaAvailability(tmdbId, mediaType)
+  const availability = jellyseerrService ? await jellyseerrService.getMediaAvailability(tmdbId, mediaType) : { status: null }
   const isWatchLaterItem = await isInWatchLater(id, mediaType)
 
   // TMDB Ratings and External IDs
@@ -64,7 +73,6 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   const editors = credits.crew?.filter((c: any) => c.job === 'Editor').slice(0, 2).map((c: any) => c.name)
 
   // Fetch User Progress from Emby
-  const user = await getCurrentUser()
   let userProgress = null
   let embyUserId = null
   let seasonProgress: any[] = []
@@ -72,11 +80,14 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   let embyServerId: string | null = null
   
   if (user && user.email) {
-      const dbUser = await prisma.user.findUnique({
-          where: { email: user.email }
+      const dbUser = await (prisma as any).user.findFirst({
+          where: { 
+            email: user.email,
+            instanceId
+          }
       })
       
-      if (dbUser && dbUser.embyUserId) {
+      if (dbUser && dbUser.embyUserId && embyService) {
           embyUserId = dbUser.embyUserId
           try {
               embyItem = await embyService.getItemByTmdbId(dbUser.embyUserId, tmdbId, mediaType === 'movie' ? 'Movie' : 'Series')
@@ -153,6 +164,11 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
               console.error('Failed to fetch Emby progress', e)
           }
       }
+  }
+
+  const embyUrl = await getSetting('emby_url', instanceId)
+  if (!embyUrl) {
+      // This is not fatal but we should handle it if we want to show Play button
   }
 
   const title = details.title || details.name
@@ -265,14 +281,14 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                             tmdbId={tmdbId} 
                             mediaType={mediaType} 
                             title={title}
-                            initialStatus={availability.status}
+                            initialStatus={availability.status || 'unknown'}
                             seasons={details.seasons}
                             seasonStatuses={(availability as any).seasons || []}
                          />
                          
-                         {embyItem && embyServerId && (
+                         {embyItem && embyServerId && embyUrl && (
                              <PlayButton 
-                                embyUrl={process.env.EMBY_URL?.split('/web/')[0].replace(/\/$/, '') || ''}
+                                embyUrl={embyUrl.split('/web/')[0].replace(/\/$/, '')}
                                 embyItemId={embyItem.Id}
                                 serverId={embyServerId}
                              />

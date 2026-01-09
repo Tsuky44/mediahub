@@ -7,6 +7,9 @@ declare module "next-auth" {
       id: string
       role: string
       embyUserId: string | null
+      instanceId: string
+      instanceSlug: string
+      isDefaultInstance: boolean
     } & DefaultSession["user"]
   }
 
@@ -14,6 +17,9 @@ declare module "next-auth" {
     role: string
     roleVersion: number
     embyUserId: string | null
+    instanceId: string
+    instanceSlug: string
+    isDefaultInstance: boolean
   }
 }
 
@@ -22,5 +28,8 @@ declare module "next-auth/jwt" {
     role: string
     roleVersion: number
     embyUserId: string | null
+    instanceId: string
+    instanceSlug: string
+    isDefaultInstance: boolean
   }
 }

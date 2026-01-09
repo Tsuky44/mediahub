@@ -9,14 +9,22 @@ export async function getNotifications() {
     const user = await getCurrentUser()
     if (!user || !user.email) return []
 
-    const dbUser = await prisma.user.findUnique({
-      where: { email: user.email },
+    const instanceId = parseInt((user as any).instanceId)
+    if (isNaN(instanceId)) return []
+
+    const dbUser = await (prisma as any).user.findUnique({
+      where: { 
+        email_instanceId: {
+          email: user.email,
+          instanceId
+        }
+      },
       select: { id: true }
     })
 
     if (!dbUser) return []
 
-    const notifications = await prisma.notification.findMany({
+    const notifications = await (prisma as any).notification.findMany({
       where: { userId: dbUser.id },
       orderBy: { createdAt: 'desc' },
       take: 50
@@ -34,14 +42,22 @@ export async function getUnreadCount() {
     const user = await getCurrentUser()
     if (!user || !user.email) return 0
 
-    const dbUser = await prisma.user.findUnique({
-      where: { email: user.email },
+    const instanceId = parseInt((user as any).instanceId)
+    if (isNaN(instanceId)) return 0
+
+    const dbUser = await (prisma as any).user.findUnique({
+      where: { 
+        email_instanceId: {
+          email: user.email,
+          instanceId
+        }
+      },
       select: { id: true }
     })
 
     if (!dbUser) return 0
 
-    const count = await prisma.notification.count({
+    const count = await (prisma as any).notification.count({
       where: {
         userId: dbUser.id,
         isRead: false
@@ -60,7 +76,7 @@ export async function markAsRead(id: number) {
     const user = await getCurrentUser()
     if (!user) return { success: false }
 
-    await prisma.notification.update({
+    await (prisma as any).notification.update({
       where: { id },
       data: { isRead: true }
     })
@@ -78,15 +94,23 @@ export async function markAllAsRead() {
     const user = await getCurrentUser()
     if (!user || !user.email) return { success: false }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { email: user.email },
+    const instanceId = parseInt((user as any).instanceId)
+    if (isNaN(instanceId)) return { success: false }
+
+    const dbUser = await (prisma as any).user.findUnique({
+      where: { 
+        email_instanceId: {
+          email: user.email,
+          instanceId
+        }
+      },
       select: { id: true }
     })
 
     if (!dbUser) return { success: false }
 
-    await prisma.notification.updateMany({
-      where: {
+    await (prisma as any).notification.updateMany({
+      where: { 
         userId: dbUser.id,
         isRead: false
       },
@@ -106,7 +130,7 @@ export async function deleteNotification(id: number) {
     const user = await getCurrentUser()
     if (!user) return { success: false }
 
-    await prisma.notification.delete({
+    await (prisma as any).notification.delete({
       where: { id }
     })
 

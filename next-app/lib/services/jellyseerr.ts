@@ -7,31 +7,16 @@ export class JellyseerrService {
   private baseUrl: string | null = null
   private apiKey: string | null = null
 
-  private async init() {
-    if (!this.baseUrl) {
-      this.baseUrl = await getSetting('jellyseerr_url')
-      if (this.baseUrl) {
-        this.baseUrl = this.baseUrl.replace(/\/$/, '')
-      }
-    }
-    if (!this.apiKey) {
-      this.apiKey = await getSetting('jellyseerr_api_key')
-    }
-    
-    if (!this.baseUrl || !this.apiKey) {
-        // Warn but don't throw immediately to allow graceful fallback
-        console.warn('Jellyseerr not configured')
-        return false
-    }
-    return true
+  constructor(baseUrl?: string | null, apiKey?: string | null) {
+    this.baseUrl = baseUrl ? baseUrl.replace(/\/$/, '') : null
+    this.apiKey = apiKey || null
   }
 
   private async getClient() {
-    const configured = await this.init()
-    if (!configured) return null
+    if (!this.baseUrl || !this.apiKey) return null
 
     return axios.create({
-      baseURL: this.baseUrl!,
+      baseURL: this.baseUrl,
       headers: {
         'X-Api-Key': this.apiKey
       },
@@ -376,5 +361,3 @@ export class JellyseerrService {
     }
   }
 }
-
-export const jellyseerrService = new JellyseerrService()

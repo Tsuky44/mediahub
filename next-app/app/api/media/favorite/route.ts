@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { embyService } from '@/lib/services/emby'
-import { getCurrentUser } from '@/lib/auth'
+import { getEmbyServiceForUser, getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(req: NextRequest) {
@@ -10,8 +9,15 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const dbUser = await prisma.user.findUnique({
-            where: { email: user.email }
+        const instanceId = parseInt((user as any).instanceId)
+        const embyService = await getEmbyServiceForUser()
+        
+        if (!embyService) {
+            return NextResponse.json({ error: 'Emby service unavailable' }, { status: 503 })
+        }
+
+        const dbUser = await (prisma as any).user.findFirst({
+            where: { email: user.email, instanceId }
         })
 
         if (!dbUser || !dbUser.embyUserId) {
@@ -24,7 +30,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing embyItemId' }, { status: 400 })
         }
 
-        await embyService.toggleFavorite(dbUser.embyUserId, embyItemId, isFavorite)
+        await embyService.updateFavoriteStatus(dbUser.embyUserId, embyItemId, isFavorite)
 
         return NextResponse.json({ success: true })
     } catch (error: any) {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { tmdbService } from '@/lib/services/tmdb'
+import { getTmdbServiceForUser } from '@/lib/auth'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -11,6 +11,11 @@ export async function GET(request: Request) {
   }
 
   try {
+    const tmdbService = await getTmdbServiceForUser()
+    if (!tmdbService) {
+        return NextResponse.json({ error: 'TMDB service unavailable' }, { status: 503 })
+    }
+
     const keywordId = parseInt(keyword)
     const results = await tmdbService.discoverMixed({ 
       keywords: keywordId,

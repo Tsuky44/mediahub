@@ -4,10 +4,18 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import Image from 'next/image'
-import { Home, Film, ListPlus, Settings, LogOut, Search, Download, BarChart3, User, Play } from 'lucide-react'
-import { signOut, useSession } from 'next-auth/react'
+import { Home, Film, ListPlus, Settings, LogOut, Search, Download, BarChart3, User, Play, Server, ChevronRight, Loader2 } from 'lucide-react'
+import { signOut, useSession, signIn } from 'next-auth/react'
 import { NotificationBell } from './NotificationBell'
 import clsx from 'clsx'
+
+interface UserInstance {
+  id: string;
+  name: string;
+  slug: string;
+  embyUrl: string;
+  current: boolean;
+}
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
@@ -22,6 +30,9 @@ export function Navbar() {
   const pathname = usePathname()
   const { data: session } = useSession()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [instances, setInstances] = useState<UserInstance[]>([])
+  const [isLoadingInstances, setIsLoadingInstances] = useState(false)
+  const [isSwitching, setIsSwitching] = useState<string | null>(null)
   const userRole = (session?.user as any)?.role || 'user'
 
   const filteredNavigation = navigation.filter(item => {
@@ -30,6 +41,46 @@ export function Navbar() {
     }
     return true
   })
+
+  // Récupérer les instances quand le dropdown s'ouvre
+  useEffect(() => {
+    if (isDropdownOpen && session?.user) {
+      fetchInstances()
+    }
+  }, [isDropdownOpen, session])
+
+  const fetchInstances = async () => {
+    try {
+      setIsLoadingInstances(true)
+      const response = await fetch('/api/user/instances')
+      const data = await response.json()
+      if (data.instances) {
+        setInstances(data.instances)
+      }
+    } catch (error) {
+      console.error('[Navbar] Error fetching instances:', error)
+    } finally {
+      setIsLoadingInstances(false)
+    }
+  }
+
+  const handleSwitchInstance = async (instanceSlug: string) => {
+    if (isSwitching || !session?.user?.name) return
+    
+    try {
+      setIsSwitching(instanceSlug)
+      await signIn('credentials', {
+        username: session.user.name,
+        instance: instanceSlug,
+        isSwitch: 'true',
+        redirect: true,
+        callbackUrl: '/dashboard'
+      })
+    } catch (error) {
+      console.error('[Navbar] Error switching instance:', error)
+      setIsSwitching(null)
+    }
+  }
 
   // Fermer le dropdown quand on clique ailleurs
   useEffect(() => {
@@ -146,15 +197,74 @@ export function Navbar() {
                         </Link>
                         
                         {(session?.user as any)?.role === 'admin' && (
-                          <Link 
-                            href="/dashboard/settings" 
-                            className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors group"
-                          >
-                            <Settings className="h-4 w-4 text-gray-400 group-hover:rotate-45 transition-transform" />
-                            Paramètres
-                          </Link>
+                          <>
+                            <Link 
+                              href="/dashboard/settings" 
+                              className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors group"
+                            >
+                              <Settings className="h-4 w-4 text-gray-400 group-hover:rotate-45 transition-transform" />
+                              Paramètres
+                            </Link>
+                            
+                            {(session?.user as any)?.isDefaultInstance && (
+                              <Link 
+                                href="/dashboard/admin/instances" 
+                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors group"
+                              >
+                                <Server className="h-4 w-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+                                Gérer les Instances
+                              </Link>
+                            )}
+                          </>
                         )}
                       </div>
+
+                      {/* Sélecteur d'instance */}
+                      {(isLoadingInstances || instances.length > 1) && (
+                        <div className="border-t border-gray-800 py-2">
+                          <div className="px-4 py-1.5 mb-1">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                              Changer d'instance
+                            </span>
+                          </div>
+                          <div className="space-y-0.5 px-2">
+                            {isLoadingInstances ? (
+                              <div className="flex items-center justify-center py-4">
+                                <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
+                              </div>
+                            ) : (
+                              instances.map((instance) => (
+                                <button
+                                  key={instance.id}
+                                  onClick={() => !instance.current && handleSwitchInstance(instance.slug)}
+                                  disabled={instance.current || !!isSwitching}
+                                  className={clsx(
+                                    "w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all duration-200 group",
+                                    instance.current 
+                                      ? "bg-indigo-500/10 text-indigo-400 cursor-default" 
+                                      : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    <div className={clsx(
+                                      "w-1.5 h-1.5 rounded-full",
+                                      instance.current ? "bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]" : "bg-gray-700"
+                                    )} />
+                                    <span className="font-medium truncate max-w-[120px]">{instance.name}</span>
+                                  </div>
+                                  {isSwitching === instance.slug ? (
+                                    <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
+                                  ) : instance.current ? (
+                                    <div className="text-[10px] font-bold text-indigo-500/80 bg-indigo-500/10 px-1.5 py-0.5 rounded uppercase">Actif</div>
+                                  ) : (
+                                    <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500" />
+                                  )}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="border-t border-gray-800 py-1">
                         <button

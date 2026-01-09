@@ -8,18 +8,26 @@ import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startO
 import { fr } from 'date-fns/locale'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
-async function getEmbyImageUrl(itemId: string, jellystat?: JellystatService | null) {
+async function getEmbyImageUrl(itemId: string, instanceId: number, jellystat?: JellystatService | null) {
   try {
     if (jellystat) {
       const url = await jellystat.getItemImageUrl(itemId)
       if (url) return url
     }
-    const emby = new EmbyService()
-    return await emby.getItemImageUrl(itemId)
+    
+    // Fallback to direct Emby if configured
+    const instance = await (prisma as any).instance.findUnique({
+      where: { id: instanceId }
+    })
+    if (!instance) return null
+
+    const emby = new EmbyService(instance.embyUrl, instance.embyApiKey)
+    return emby.getItemImageUrl(itemId)
   } catch (e) {
     return null
   }
@@ -63,8 +71,8 @@ function sanitizePlaybackDuration(durationInSeconds: number, type: string, actua
   return durationInSeconds;
 }
 
-async function EmbyImage({ itemId, alt, jellystat }: { itemId: string, alt: string, jellystat: JellystatService | null }) {
-  const url = await getEmbyImageUrl(itemId, jellystat)
+async function EmbyImage({ itemId, alt, jellystat, instanceId }: { itemId: string, alt: string, jellystat: JellystatService | null, instanceId: number }) {
+  const url = await getEmbyImageUrl(itemId, instanceId, jellystat)
   if (!url) return <div className="w-full h-full bg-gray-800 flex items-center justify-center"><Film className="h-4 w-4 text-gray-600" /></div>
   
   return (
@@ -81,9 +89,10 @@ interface TopItemCardProps {
   item: any
   rank: number
   jellystat: JellystatService | null
+  instanceId: number
 }
 
-async function TopItemCard({ item, rank, jellystat }: TopItemCardProps) {
+async function TopItemCard({ item, rank, jellystat, instanceId }: TopItemCardProps) {
   const isEpisode = item.Type === 'Episode' || item.SeriesName || (item.ItemType === 'Episode')
   const name = (isEpisode ? (item.SeriesName || item.Name || item.ItemName) : (item.Name || item.ItemName || item.NowPlayingItemName)) || 'Inconnu'
   const itemId = item.NowPlayingItemId || item.ItemId || item.Id || item.id
@@ -95,7 +104,7 @@ async function TopItemCard({ item, rank, jellystat }: TopItemCardProps) {
       <div className="text-lg font-bold text-gray-600 w-4">{rank}</div>
       <div className="relative h-16 w-11 flex-shrink-0 overflow-hidden rounded bg-gray-800">
         {itemId ? (
-          <EmbyImage itemId={itemId} alt={name} jellystat={jellystat} />
+          <EmbyImage itemId={itemId} alt={name} jellystat={jellystat} instanceId={instanceId} />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gray-800">
             <Film className="h-4 w-4 text-gray-600" />
@@ -158,6 +167,25 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
   const currentUserName = session.user.name
   // @ts-ignore
   const currentEmbyUserId = session.user.embyUserId
+  const user = session.user as any
+  const instanceId = parseInt(user.instanceId)
+
+  // Fetch instance config
+  const instance = await (prisma as any).instance.findUnique({
+    where: { id: instanceId }
+  })
+
+  if (!instance) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
+          <Activity size={48} />
+        </div>
+        <h2 className="text-2xl font-bold text-white">Instance non trouvée</h2>
+        <p className="text-gray-400">Impossible de charger vos statistiques pour cette instance.</p>
+      </div>
+    )
+  }
 
   const params = await searchParams
   const period = params.period || 'month'
@@ -207,8 +235,8 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
   const daysSinceStart = differenceInDays(now, startDate) + 2
   const effectiveDays = Math.max(30, daysSinceStart)
 
-  const jellystatUrl = await getSetting('jellystat_url')
-  const jellystatApiKey = await getSetting('jellystat_api_key')
+  const jellystatUrl = await getSetting('jellystat_url', instanceId)
+  const jellystatApiKey = await getSetting('jellystat_api_key', instanceId)
   const jellystat = new JellystatService({ url: jellystatUrl!, apiKey: jellystatApiKey! })
 
   const historyLimit = period === 'year' ? 3000 : 1000
@@ -224,7 +252,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
   })
 
   // 3.5. Fetch actual media durations from Emby for precise sanitization
-  const emby = new EmbyService()
+  const emby = new EmbyService(instance.embyUrl, instance.embyApiKey)
   const uniqueItemIds = Array.from(new Set(historyArray.map((item: any) => item.NowPlayingItemId || item.ItemId).filter(Boolean))) as string[]
   const itemDurations = await emby.getItemsDurations(uniqueItemIds)
 
@@ -391,7 +419,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
         <div className="lg:col-span-1 space-y-4">
           <h2 className="text-xl font-semibold text-white flex items-center gap-2"><TrendingUp className="h-5 w-5 text-yellow-500" /> Mes favoris</h2>
           <div className="space-y-3">
-            {mostViewed.map((item: any, idx: number) => <TopItemCard key={item.Id || idx} item={item} rank={idx + 1} jellystat={jellystat} />)}
+            {mostViewed.map((item: any, idx: number) => <TopItemCard key={item.Id || idx} item={item} rank={idx + 1} jellystat={jellystat} instanceId={instanceId} />)}
             {mostViewed.length === 0 && <p className="text-gray-500 italic py-10 text-center">Aucune donnée disponible</p>}
           </div>
         </div>
@@ -441,7 +469,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="relative h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-gray-900 border border-gray-700/50">
-                             <EmbyImage itemId={item.NowPlayingItemId || item.ItemId || item.Id} alt={displayName} jellystat={jellystat} />
+                             <EmbyImage itemId={item.NowPlayingItemId || item.ItemId || item.Id} alt={displayName} jellystat={jellystat} instanceId={instanceId} />
                           </div>
                           <div>
                             <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">

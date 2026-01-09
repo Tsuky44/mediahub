@@ -1,4 +1,4 @@
-import { jellyseerrService } from '@/lib/services/jellyseerr'
+import { getJellyseerrServiceForUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -15,45 +15,64 @@ export default async function SettingsPage() {
       return (
         <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
           <h2 className="text-2xl font-bold text-white">Accès restreint</h2>
-          <p className="text-gray-400">Seul l'administrateur peut modifier les paramètres globaux.</p>
+          <p className="text-gray-400">Seul l'administrateur peut modifier les paramètres.</p>
         </div>
       )
   }
 
-  // Fetch users from DB for role management
-  const dbUsers = await prisma.user.findMany({
+  const instanceIdStr = (session.user as any).instanceId
+  const instanceId = instanceIdStr ? parseInt(instanceIdStr) : NaN
+
+  if (isNaN(instanceId)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <h2 className="text-2xl font-bold text-white">Erreur d'instance</h2>
+        <p className="text-gray-400">Impossible d'identifier votre instance. Veuillez vous reconnecter.</p>
+      </div>
+    )
+  }
+
+  // Fetch users from DB for role management (instance filtered)
+  const dbUsers = await (prisma as any).user.findMany({
+    where: { instanceId },
     orderBy: { name: 'asc' }
   })
 
   // Fetch users from Jellyseerr for sync setting
-  const jellyseerrUsers = await jellyseerrService.getUsers()
+  const jellyseerrService = await getJellyseerrServiceForUser()
+  const jellyseerrUsers = jellyseerrService ? await jellyseerrService.getUsers() : []
 
-  // Get current global settings
-  const currentJellyseerrId = await getSetting('jellyseerr_user_id')
-  const currentQbitUrl = await getSetting('qbittorrent_url')
-  const currentQbitUser = await getSetting('qbittorrent_username')
-  const currentQbitPass = await getSetting('qbittorrent_password')
+  // Fetch current instance for core Emby config
+  const currentInstance = await (prisma as any).instance.findUnique({
+    where: { id: instanceId }
+  })
+
+  // Get current instance settings
+  const currentJellyseerrId = await getSetting('jellyseerr_user_id', instanceId)
+  const currentQbitUrl = await getSetting('qbittorrent_url', instanceId)
+  const currentQbitUser = await getSetting('qbittorrent_username', instanceId)
+  const currentQbitPass = await getSetting('qbittorrent_password', instanceId)
   
   // Get current SMB settings
-  const currentSmbHost = await getSetting('smb_host')
-  const currentSmbUser = await getSetting('smb_username')
-  const currentSmbPass = await getSetting('smb_password')
-  const currentSmbShare = await getSetting('smb_share')
-  const currentSmbPath = await getSetting('smb_path')
+  const currentSmbHost = await getSetting('smb_host', instanceId)
+  const currentSmbUser = await getSetting('smb_username', instanceId)
+  const currentSmbPass = await getSetting('smb_password', instanceId)
+  const currentSmbShare = await getSetting('smb_share', instanceId)
+  const currentSmbPath = await getSetting('smb_path', instanceId)
   
   // Get current Radarr/Sonarr settings
-  const currentRadarrUrl = await getSetting('radarr_url')
-  const currentRadarrKey = await getSetting('radarr_api_key')
-  const currentSonarrUrl = await getSetting('sonarr_url')
-  const currentSonarrKey = await getSetting('sonarr_api_key')
+  const currentRadarrUrl = await getSetting('radarr_url', instanceId)
+  const currentRadarrKey = await getSetting('radarr_api_key', instanceId)
+  const currentSonarrUrl = await getSetting('sonarr_url', instanceId)
+  const currentSonarrKey = await getSetting('sonarr_api_key', instanceId)
   
   // Get current Jellystat settings
-  const currentJellystatUrl = await getSetting('jellystat_url')
-  const currentJellystatKey = await getSetting('jellystat_api_key')
+  const currentJellystatUrl = await getSetting('jellystat_url', instanceId)
+  const currentJellystatKey = await getSetting('jellystat_api_key', instanceId)
 
-  // Get current Emby settings
-  const currentEmbyUrl = await getSetting('emby_url')
-  const currentEmbyKey = await getSetting('emby_api_key')
+  // Core Emby settings from Instance table
+  const currentEmbyUrl = currentInstance?.embyUrl
+  const currentEmbyKey = currentInstance?.embyApiKey
   
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -84,6 +103,8 @@ export default async function SettingsPage() {
           currentJellystatKey={currentJellystatKey}
           currentEmbyUrl={currentEmbyUrl}
           currentEmbyKey={currentEmbyKey}
+          currentJellyseerrUrl={currentInstance?.jellyseerrUrl || ''}
+          currentJellyseerrKey={currentInstance?.jellyseerrApiKey || ''}
         />
       </div>
     </div>

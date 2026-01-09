@@ -1,8 +1,5 @@
 import { NextResponse } from 'next/server'
-import { jellyseerrService } from '@/lib/services/jellyseerr'
-import { radarrService } from '@/lib/services/radarr'
-import { sonarrService } from '@/lib/services/sonarr'
-import { getCurrentUser } from '@/lib/auth'
+import { getJellyseerrServiceForUser, getRadarrServiceForUser, getSonarrServiceForUser, getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { forget } from '@/lib/cache'
 import { revalidatePath } from 'next/cache'
@@ -14,6 +11,9 @@ export async function POST(
 ) {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const jellyseerrService = await getJellyseerrServiceForUser()
+  if (!jellyseerrService) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
 
   const { id: tmdbIdStr } = await params
   const { searchParams } = new URL(request.url)
@@ -45,6 +45,9 @@ export async function GET(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const jellyseerrService = await getJellyseerrServiceForUser()
+  if (!jellyseerrService) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
+
   const { id: tmdbIdStr } = await params
   const { searchParams } = new URL(request.url)
   const mediaType = searchParams.get('type') as 'movie' | 'tv'
@@ -75,6 +78,13 @@ export async function DELETE(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const jellyseerrService = await getJellyseerrServiceForUser()
+  const radarrService = await getRadarrServiceForUser()
+  const sonarrService = await getSonarrServiceForUser()
+
+  if (!jellyseerrService) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
+
+  const instanceId = parseInt((user as any).instanceId)
   const { id: tmdbIdStr } = await params
   const { searchParams } = new URL(request.url)
   const action = searchParams.get('action') // 'media' or 'request'
@@ -101,12 +111,12 @@ export async function DELETE(
         
         if (externalServiceId) {
           console.log(`[API Manage] Attempting direct deletion from ${mediaType === 'movie' ? 'Radarr' : 'Sonarr'} (ID: ${externalServiceId})`)
-          if (mediaType === 'movie') {
+          if (mediaType === 'movie' && radarrService) {
             const directResult = await radarrService.deleteMovie(externalServiceId, true)
             if (!directResult.success) {
               console.warn(`[API Manage] Direct Radarr deletion failed: ${directResult.message}. Falling back to Jellyseerr.`)
             }
-          } else {
+          } else if (mediaType === 'tv' && sonarrService) {
             const directResult = await sonarrService.deleteSeries(externalServiceId, true)
             if (!directResult.success) {
               console.warn(`[API Manage] Direct Sonarr deletion failed: ${directResult.message}. Falling back to Jellyseerr.`)
@@ -122,16 +132,16 @@ export async function DELETE(
       
       if (result?.success) {
         // Delete any local requests for this media since the media itself is gone
-        await (prisma as any).mediaRequest.deleteMany({
-          where: { tmdbId: tmdbIdStr }
+        await prisma.mediaRequest.deleteMany({
+          where: { tmdbId: tmdbIdStr, instanceId }
         })
       }
     } else if (action === 'request') {
       result = await jellyseerrService.deleteRequest(id)
       if (result?.success) {
         // Delete the local request
-        await (prisma as any).mediaRequest.deleteMany({
-          where: { externalId: targetId }
+        await prisma.mediaRequest.deleteMany({
+          where: { externalId: targetId, instanceId }
         })
       }
     } else if (action === 'status') {
@@ -139,6 +149,7 @@ export async function DELETE(
     } else {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
+
 
     if (result?.success) {
       // Invalidate the availability cache for this media

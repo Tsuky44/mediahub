@@ -1,14 +1,18 @@
 'use server'
 
-import { smbService, FileInfo } from '@/lib/services/smb';
+import { FileInfo, SmbService } from '@/lib/services/smb';
 import { prisma } from '@/lib/prisma';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import https from 'https';
 import { JellystatService } from '@/lib/services/jellystat';
+import { getSmbServiceForUser, authOptions } from '@/lib/auth';
+import { getServerSession } from 'next-auth';
 
 export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[]> {
     try {
+        const smbService = await getSmbServiceForUser();
+        if (!smbService) return [];
         return await smbService.listFiles(remotePath);
     } catch (e) {
         console.error('Failed to list SMB files', e);
@@ -18,11 +22,18 @@ export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[
 
 export async function createPublicShare(filePath: string, expiresDays?: number) {
     try {
+        const session = await getServerSession(authOptions);
+        if (!session?.user || !(session.user as any).instanceId) {
+            return { success: false, error: 'Non autorisé' };
+        }
+        
+        const instanceId = parseInt((session.user as any).instanceId);
         const token = uuidv4();
         const expiresAt = expiresDays ? new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000) : null;
         
         const share = await prisma.fileShare.create({
             data: {
+                instanceId,
                 filePath,
                 token,
                 expiresAt
@@ -38,6 +49,7 @@ export async function createPublicShare(filePath: string, expiresDays?: number) 
 
 export async function testSmbConnection(config: { host: string, user: string, pass: string, share: string }) {
     try {
+        const smbService = new SmbService(config.host, config.share, config.user, config.pass);
         await smbService.testConnection(config);
         return { success: true };
     } catch (e) {

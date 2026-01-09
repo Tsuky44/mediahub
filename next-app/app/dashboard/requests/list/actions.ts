@@ -1,12 +1,10 @@
 'use server'
 
-import { jellyseerrService } from '@/lib/services/jellyseerr'
-import { tmdbService } from '@/lib/services/tmdb'
-import { embyService } from '@/lib/services/emby'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { syncJellyseerrRequests } from '@/lib/services/request-sync'
 import { revalidatePath } from 'next/cache'
+import { getSetting, setSetting } from '@/lib/settings'
 
 export async function forceSyncRequests() {
     try {
@@ -23,41 +21,38 @@ export async function forceSyncRequests() {
     }
 }
 
-import { getSetting, setSetting } from '@/lib/settings'
-
 export async function fetchUserRequests(page: number, pageSize: number = 20) {
   try {
     const user = await getCurrentUser()
     if (!user || !user.email) return { results: [], total: 0, totalPages: 0 }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { email: user.email }
+    const instanceId = parseInt((user as any).instanceId)
+    const dbUser = await (prisma as any).user.findFirst({
+      where: { email: user.email, instanceId }
     })
     
     if (!dbUser) return { results: [], total: 0, totalPages: 0 }
 
-    // Check last sync time
-    const lastSyncStr = await getSetting('last_requests_sync')
+    // Check last sync time (instance specific)
+    const lastSyncStr = await getSetting('last_requests_sync', instanceId)
     const lastSync = lastSyncStr ? parseInt(lastSyncStr) : 0
     const now = Date.now()
     const tenMinutes = 10 * 60 * 1000
 
     if (now - lastSync > tenMinutes) {
         // Trigger sync in background (fire and forget pattern)
-        // Note: In some serverless environments this might not finish, but for persistent server it works.
-        // We catch errors to avoid blocking the read.
         syncJellyseerrRequests().then(async () => {
-             await setSetting('last_requests_sync', Date.now().toString())
+             await setSetting('last_requests_sync', instanceId, Date.now().toString())
              revalidatePath('/dashboard/requests/list')
         }).catch((err: any) => console.error('Background sync failed:', err))
     }
 
     const skip = (page - 1) * pageSize
     
-    // Tout le monde voit toutes les demandes
-    const whereClause = {}
+    // Tout le monde voit toutes les demandes de son instance
+    const whereClause = { instanceId }
     
-    console.log(`[FetchRequests] User role: ${dbUser.role}, fetching all requests`)
+    console.log(`[FetchRequests] User role: ${dbUser.role}, fetching all requests for instance ${instanceId}`)
     
     // Read from local DB instead of Jellyseerr API
     const [requests, total] = await Promise.all([

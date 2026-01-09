@@ -2,18 +2,17 @@ import axios from 'axios'
 import { getSetting } from '@/lib/settings'
 
 export class TmdbService {
-  private apiKey: string | null = null
+  private apiKey: string
+  private static posterPathCache = new Map<string, string>()
+
+  constructor(apiKey: string) {
+    this.apiKey = apiKey
+    if (!this.apiKey) {
+      throw new Error('TMDB API Key missing')
+    }
+  }
 
   private async getClient() {
-    if (!this.apiKey) {
-      this.apiKey = await getSetting('tmdb_api_key')
-    }
-    
-    if (!this.apiKey) {
-        console.warn('TMDB API Key not configured')
-        return null
-    }
-
     return axios.create({
       baseURL: 'https://api.themoviedb.org/3',
       params: {
@@ -289,5 +288,3 @@ export class TmdbService {
     }
   }
 }
-
-export const tmdbService = new TmdbService()

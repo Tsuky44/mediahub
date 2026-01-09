@@ -1,18 +1,26 @@
 'use server'
 
-import { embyService } from '@/lib/services/emby'
-import { tmdbService } from '@/lib/services/tmdb'
 import { getWatchLaterList, isInWatchLater } from './watch-later-actions'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, getEmbyServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { revalidatePath } from 'next/cache'
 
 export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false) {
     try {
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const dbUser = await prisma.user.findUnique({
-            where: { email: user.email }
+        const instanceId = parseInt((user as any).instanceId)
+        const embyService = await getEmbyServiceForUser()
+        const tmdbService = await getTmdbServiceForUser()
+        
+        if (!embyService) return { results: [], total_pages: 0 }
+
+        const dbUser = await (prisma as any).user.findFirst({
+            where: { 
+                email: user.email,
+                instanceId
+            }
         })
         
         if (!dbUser || !dbUser.embyUserId) return { results: [], total_pages: 0 }
@@ -55,8 +63,13 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
             const itemType = item.Type === 'Movie' ? 'movie' : 'tv'
             let poster_path = null
             
-            if (tmdbId) {
+            if (tmdbId && tmdbService) {
                 poster_path = await tmdbService.getPosterPath(parseInt(tmdbId), itemType)
+            }
+
+            // Fallback to Emby image if TMDB image is not available
+            if (!poster_path) {
+                poster_path = embyService.getItemImageUrl(item.Id)
             }
 
             const isWatchLaterItem = await isInWatchLater(item.Id, itemType)
@@ -91,8 +104,17 @@ export async function fetchRecentlyWatchedItems() {
         const user = await getCurrentUser()
         if (!user || !user.email) return []
 
-        const dbUser = await prisma.user.findUnique({
-            where: { email: user.email }
+        const instanceId = parseInt((user as any).instanceId)
+        const embyService = await getEmbyServiceForUser()
+        const tmdbService = await getTmdbServiceForUser()
+        
+        if (!embyService) return []
+
+        const dbUser = await (prisma as any).user.findFirst({
+            where: { 
+                email: user.email,
+                instanceId
+            }
         })
 
         if (!dbUser || !dbUser.embyUserId) {
@@ -132,12 +154,17 @@ export async function fetchRecentlyWatchedItems() {
             if (item.Type === 'Episode' && item.SeriesId) {
                 const series = await embyService.getItemDetails(item.SeriesId, userId)
                 const seriesTmdbId = series?.ProviderIds?.Tmdb
-                if (seriesTmdbId) {
+                if (seriesTmdbId && tmdbService) {
                     poster_path = await tmdbService.getPosterPath(parseInt(seriesTmdbId), 'tv')
                     tmdbId = seriesTmdbId
                 }
-            } else if (tmdbId) {
+            } else if (tmdbId && tmdbService) {
                 poster_path = await tmdbService.getPosterPath(parseInt(tmdbId), itemType)
+            }
+
+            // Fallback to Emby image
+            if (!poster_path) {
+                poster_path = embyService.getItemImageUrl(item.Type === 'Episode' ? item.SeriesId : item.Id)
             }
 
             const lastPlayedDate = item.UserData?.LastPlayedDate 
@@ -178,15 +205,24 @@ export async function fetchUserRecommendations(page: number = 1) {
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const dbUser = await prisma.user.findUnique({
-            where: { email: user.email }
+        const instanceId = parseInt((user as any).instanceId)
+        const embyService = await getEmbyServiceForUser()
+        const tmdbService = await getTmdbServiceForUser()
+        
+        if (!tmdbService) return { results: [], total_pages: 0 }
+
+        const dbUser = await (prisma as any).user.findFirst({
+            where: { 
+                email: user.email,
+                instanceId
+            }
         })
 
         if (!dbUser) return { results: [], total_pages: 0 }
 
         // 1. Get user's recent watch history from Emby
         let history: any[] = []
-        if (dbUser.embyUserId) {
+        if (dbUser.embyUserId && embyService) {
             const data = await embyService.getRecentlyPlayedItems(dbUser.embyUserId, 15)
             history = data.Items || []
         }
@@ -194,6 +230,7 @@ export async function fetchUserRecommendations(page: number = 1) {
         // 2. Get user's recent requests from local DB
         const requests = await (prisma as any).mediaRequest.findMany({
             where: {
+                instanceId,
                 OR: [
                     { requesterEmail: user.email },
                     { userId: dbUser.id }
@@ -211,7 +248,7 @@ export async function fetchUserRecommendations(page: number = 1) {
             let tmdbId = item.ProviderIds?.Tmdb
             const type = item.Type === 'Movie' ? 'movie' : (item.Type === 'Series' || item.Type === 'Episode' ? 'tv' : null)
             
-            if (item.Type === 'Episode' && item.SeriesId && dbUser.embyUserId) {
+            if (item.Type === 'Episode' && item.SeriesId && dbUser.embyUserId && embyService) {
                 const series = await embyService.getItemDetails(item.SeriesId, dbUser.embyUserId)
                 tmdbId = series?.ProviderIds?.Tmdb
             }
@@ -225,8 +262,9 @@ export async function fetchUserRecommendations(page: number = 1) {
         // Process requests if not enough seeds
         if (seeds.length < 10) {
             for (const req of requests) {
-                if (req.tmdbId && !seeds.some(s => s.id === req.tmdbId)) {
-                    seeds.push({ id: req.tmdbId, type: req.mediaType as 'movie' | 'tv' })
+                const reqTmdbId = parseInt(req.tmdbId)
+                if (req.tmdbId && !seeds.some(s => s.id === reqTmdbId)) {
+                    seeds.push({ id: reqTmdbId, type: req.mediaType as 'movie' | 'tv' })
                 }
                 if (seeds.length >= 10) break
             }
@@ -281,16 +319,26 @@ export async function fetchUserRecommendations(page: number = 1) {
 
 export async function fetchServerTrends(page: number = 1) {
     try {
+        const user = await getCurrentUser()
+        if (!user) return { results: [], total_pages: 0 }
+
+        const instanceId = parseInt((user as any).instanceId)
+        const embyService = await getEmbyServiceForUser()
+        const tmdbService = await getTmdbServiceForUser()
+        
+        if (!tmdbService) return { results: [], total_pages: 0 }
+
         const thirtyDaysAgo = new Date()
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
         // 1. Get most watched items from WatchEvent
-        const topWatched = await prisma.watchEvent.groupBy({
+        const topWatched = await (prisma as any).watchEvent.groupBy({
             by: ['itemId', 'itemType', 'itemName', 'seriesName'],
             _count: {
                 itemId: true
             },
             where: {
+                instanceId,
                 playedAt: {
                     gte: thirtyDaysAgo
                 }
@@ -300,16 +348,17 @@ export async function fetchServerTrends(page: number = 1) {
                     itemId: 'desc'
                 }
             },
-            take: 20
+            take: 50
         })
 
         // 2. Get most requested items from MediaRequest
-        const topRequested = await prisma.mediaRequest.groupBy({
+        const topRequested = await (prisma as any).mediaRequest.groupBy({
             by: ['tmdbId', 'mediaType', 'title'],
             _count: {
                 tmdbId: true
             },
             where: {
+                instanceId,
                 requestedAt: {
                     gte: thirtyDaysAgo
                 }
@@ -319,7 +368,7 @@ export async function fetchServerTrends(page: number = 1) {
                     tmdbId: 'desc'
                 }
             },
-            take: 20
+            take: 50
         })
 
         // 3. Unify and enrich
@@ -327,27 +376,29 @@ export async function fetchServerTrends(page: number = 1) {
         const seenTmdbIds = new Set<string>()
 
         // Process watched items first
-        for (const watch of topWatched) {
-            try {
-                const itemDetails = await embyService.getItemDetails(watch.itemId)
-                const tmdbId = itemDetails.ProviderIds?.Tmdb
-                const mediaType = watch.itemType?.toLowerCase() === 'series' || watch.itemType?.toLowerCase() === 'episode' ? 'tv' : 'movie'
-                
-                if (tmdbId) {
-                    seenTmdbIds.add(tmdbId)
-                    const poster_path = await tmdbService.getPosterPath(parseInt(tmdbId), mediaType)
-                    trendItems.push({
-                        id: watch.itemId,
-                        title: watch.itemName || watch.seriesName,
-                        name: watch.itemName || watch.seriesName,
-                        poster_path,
-                        media_type: mediaType,
-                        tmdbId: parseInt(tmdbId),
-                        trendingReason: 'Populaire sur le serveur'
-                    })
+        if (embyService) {
+            for (const watch of topWatched) {
+                try {
+                    const itemDetails = await embyService.getItemDetails(watch.itemId)
+                    const tmdbId = itemDetails.ProviderIds?.Tmdb
+                    const mediaType = watch.itemType?.toLowerCase() === 'series' || watch.itemType?.toLowerCase() === 'episode' ? 'tv' : 'movie'
+                    
+                    if (tmdbId) {
+                        seenTmdbIds.add(tmdbId)
+                        const poster_path = await tmdbService.getPosterPath(parseInt(tmdbId), mediaType)
+                        trendItems.push({
+                            id: watch.itemId,
+                            title: watch.itemName || watch.seriesName,
+                            name: watch.itemName || watch.seriesName,
+                            poster_path,
+                            media_type: mediaType,
+                            tmdbId: parseInt(tmdbId),
+                            trendingReason: 'Populaire sur le serveur'
+                        })
+                    }
+                } catch (e) {
+                    continue
                 }
-            } catch (e) {
-                continue
             }
         }
 
@@ -387,14 +438,22 @@ export async function toggleFavorite(itemId: string, isFavorite: boolean) {
         const user = await getCurrentUser()
         if (!user || !user.email) return false
 
-        const dbUser = await prisma.user.findUnique({
-            where: { email: user.email }
+        const instanceId = parseInt((user as any).instanceId)
+        const embyService = await getEmbyServiceForUser()
+        if (!embyService) return false
+
+        const dbUser = await (prisma as any).user.findFirst({
+            where: { 
+                email: user.email,
+                instanceId
+            }
         })
 
         if (!dbUser || !dbUser.embyUserId) return false
         
         const userId = dbUser.embyUserId
         await embyService.updateFavoriteStatus(userId, itemId, isFavorite)
+        revalidatePath('/')
         return true
     } catch (e) {
         console.error('Failed to toggle favorite', e)

@@ -2,17 +2,18 @@ import React from 'react'
 import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import { JellystatService, WatchHistoryItem } from '@/lib/services/jellystat'
 import { EmbyService } from '@/lib/services/emby'
 import { getSetting } from '@/lib/settings'
 import { StatsCharts } from './StatsCharts'
-import { ChevronLeft, ChevronRight, Clock, Film, Play, User, Activity, TrendingUp, AlertCircle, Settings, Calendar } from 'lucide-react'
-import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addYears, subYears } from 'date-fns'
+import { ChevronLeft, ChevronRight, Clock, Film, Play, User, Activity, TrendingUp, AlertCircle, Calendar } from 'lucide-react'
+import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
 export const dynamic = 'force-dynamic'
 
-async function getEmbyImageUrl(itemId: string, jellystat?: JellystatService | null) {
+async function getEmbyImageUrl(itemId: string, instanceId: number, jellystat?: JellystatService | null) {
   try {
     // Try Jellystat proxy first as it's already configured for the user
     if (jellystat) {
@@ -21,8 +22,13 @@ async function getEmbyImageUrl(itemId: string, jellystat?: JellystatService | nu
     }
 
     // Fallback to direct Emby if configured
-    const emby = new EmbyService()
-    return await emby.getItemImageUrl(itemId)
+    const instance = await (prisma as any).instance.findUnique({
+      where: { id: instanceId }
+    })
+    if (!instance) return null
+
+    const emby = new EmbyService(instance.embyUrl, instance.embyApiKey)
+    return emby.getItemImageUrl(itemId)
   } catch (e) {
     return null
   }
@@ -79,7 +85,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   // Check authorization
   const session = await getServerSession(authOptions)
   
-  if (!session) {
+  if (!session || !session.user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <div className="p-4 rounded-full bg-red-500/10 text-red-500">
@@ -94,12 +100,32 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     )
   }
 
+  const user = session.user as any
+  const instanceId = parseInt(user.instanceId)
+
+  // Fetch instance config
+  const instance = await (prisma as any).instance.findUnique({
+    where: { id: instanceId }
+  })
+
+  if (!instance) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
+          <AlertCircle size={48} />
+        </div>
+        <h2 className="text-2xl font-bold text-white">Instance non trouvée</h2>
+        <p className="text-gray-400">Impossible de charger les statistiques pour cette instance.</p>
+      </div>
+    )
+  }
+
   // 0. Unwrap searchParams (Next.js 15 requirement)
   const params = await searchParams
   
   // 1. Explicit Config Retrieval
-  const jellystatUrl = await getSetting('jellystat_url')
-  const jellystatApiKey = await getSetting('jellystat_api_key')
+  const jellystatUrl = await getSetting('jellystat_url', instanceId)
+  const jellystatApiKey = await getSetting('jellystat_api_key', instanceId)
 
   // Calculate days based on period
   const period = params.period || 'month'
@@ -179,9 +205,9 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   }
 
   // 3. Fetch Data (Parallel)
-  const emby = new EmbyService()
+  const emby = new EmbyService(instance.embyUrl, instance.embyApiKey)
   const historyLimit = period === 'year' ? 3000 : 1000
-  const [historyRaw, watchStats, libraryStats, _userStats, libraryViews, _mostViewedData, embySessions] = await Promise.all([
+  const [historyRaw, watchStats, libraryStats, _userStats, _libraryViews, _mostViewedData, embySessions] = await Promise.all([
     jellystat.getHistory(historyLimit, 0, effectiveDays).catch(e => { console.error('History fetch failed:', e); return []; }),
     jellystat.getWatchStats(effectiveDays).catch(e => { console.error('WatchStats fetch failed:', e); return null; }),
     jellystat.getLibraryStats().catch(e => { console.error('LibraryStats fetch failed:', e); return []; }),
@@ -528,7 +554,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
           </div>
           <div className="space-y-3">
             {mostViewed.map((item: any, idx: number) => (
-              <TopItemCard key={item.Id || idx} item={item} rank={idx + 1} jellystat={jellystat} />
+              <TopItemCard key={item.Id || idx} item={item} rank={idx + 1} jellystat={jellystat} instanceId={instanceId} />
             ))}
             {mostViewed.length === 0 && (
               <p className="text-gray-500 italic py-10 text-center">Aucune donnée disponible</p>
@@ -582,7 +608,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="relative h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-gray-900 border border-gray-700/50">
-                             <EmbyImage itemId={item.NowPlayingItemId || item.ItemId || item.Id} alt={displayName} jellystat={jellystat} />
+                             <EmbyImage itemId={item.NowPlayingItemId || item.ItemId || item.Id} alt={displayName} jellystat={jellystat} instanceId={instanceId} />
                           </div>
                           <div>
                             <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
@@ -658,7 +684,7 @@ function PeriodButton({ active, href, label }: { active: boolean, href: string, 
   )
 }
 
-function TopItemCard({ item, rank, jellystat }: { item: any, rank: number, jellystat: JellystatService | null }) {
+function TopItemCard({ item, rank, jellystat, instanceId }: { item: any, rank: number, jellystat: JellystatService | null, instanceId: number }) {
   // For episodes, we prefer the Series Name if available
   const isEpisode = item.Type === 'Episode' || item.SeriesName || (item.ItemType === 'Episode')
   const name = (isEpisode ? (item.SeriesName || item.Name || item.ItemName) : (item.Name || item.ItemName || item.NowPlayingItemName)) || 'Inconnu'
@@ -675,7 +701,7 @@ function TopItemCard({ item, rank, jellystat }: { item: any, rank: number, jelly
       <div className="text-lg font-bold text-gray-600 w-4">{rank}</div>
       <div className="relative h-16 w-11 flex-shrink-0 overflow-hidden rounded bg-gray-800">
         {itemId ? (
-           <EmbyImage itemId={itemId} alt={name} jellystat={jellystat} />
+           <EmbyImage itemId={itemId} alt={name} jellystat={jellystat} instanceId={instanceId} />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gray-800"><Film className="h-4 w-4 text-gray-600" /></div>
         )}
@@ -690,8 +716,8 @@ function TopItemCard({ item, rank, jellystat }: { item: any, rank: number, jelly
   )
 }
 
-async function EmbyImage({ itemId, alt, jellystat }: { itemId: string, alt: string, jellystat: JellystatService | null }) {
-  const url = await getEmbyImageUrl(itemId, jellystat)
+async function EmbyImage({ itemId, alt, jellystat, instanceId }: { itemId: string, alt: string, jellystat: JellystatService | null, instanceId: number }) {
+  const url = await getEmbyImageUrl(itemId, instanceId, jellystat)
   if (!url) return <div className="w-full h-full bg-gray-800 flex items-center justify-center"><Film className="h-4 w-4 text-gray-600" /></div>
   
   return (

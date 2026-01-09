@@ -1,37 +1,26 @@
 import axios from 'axios'
 import https from 'https'
-import { getSetting } from '@/lib/settings'
-import { prisma } from '@/lib/prisma'
 
 export class EmbyService {
-  private baseUrl: string | null = null
-  private apiKey: string | null = null
+  private baseUrl: string
+  private apiKey: string
   private httpsAgent = new https.Agent({
     rejectUnauthorized: false
   })
 
-  private async init() {
-    if (!this.baseUrl) {
-      this.baseUrl = await getSetting('emby_url')
-      // Remove trailing slash and /web/... if present
-      if (this.baseUrl) {
-        this.baseUrl = this.baseUrl.split('/web/')[0].replace(/\/$/, '')
-      }
-    }
-    if (!this.apiKey) {
-      this.apiKey = await getSetting('emby_api_key')
-    }
+  constructor(baseUrl: string, apiKey: string) {
+    // Remove trailing slash and /web/... if present
+    this.baseUrl = baseUrl.split('/web/')[0].replace(/\/$/, '')
+    this.apiKey = apiKey
     
     if (!this.baseUrl || !this.apiKey) {
-      console.error('[EmbyService] Missing configuration. URL:', this.baseUrl, 'API Key present:', !!this.apiKey)
-      throw new Error('Emby not configured')
+      throw new Error('Emby configuration missing: URL or API Key is null')
     }
   }
 
   private async getClient(timeout: number = 10000) {
-    await this.init()
     return axios.create({
-      baseURL: this.baseUrl!,
+      baseURL: this.baseUrl,
       params: {
         api_key: this.apiKey
       },
@@ -46,7 +35,7 @@ export class EmbyService {
 
   async getSystemInfo() {
     try {
-      const client = await this.getClient(5000) // 5s for system info
+      const client = await this.getClient(5000)
       const response = await client.get('/System/Info/Public')
       return response.data
     } catch (e) {
@@ -56,7 +45,6 @@ export class EmbyService {
   }
 
   async authenticate(username: string, pw: string) {
-    await this.init()
     console.log(`[EmbyService] Authenticating user '${username}' against ${this.baseUrl}`)
     try {
         const response = await axios.post(`${this.baseUrl}/Users/AuthenticateByName`, {
@@ -80,7 +68,7 @@ export class EmbyService {
 
   async getUsers() {
     try {
-      const client = await this.getClient(10000) // 10s for users
+      const client = await this.getClient(10000)
       const response = await client.get('/Users')
       return response.data
     } catch (e) {
@@ -91,7 +79,7 @@ export class EmbyService {
 
   async getSessions() {
     try {
-      const client = await this.getClient(3000) // 3s timeout
+      const client = await this.getClient(3000)
       const response = await client.get('/Sessions')
       return response.data
     } catch (e) {
@@ -115,7 +103,6 @@ export class EmbyService {
       if (response.data && response.data.Items) {
         response.data.Items.forEach((item: any) => {
           if (item.RunTimeTicks) {
-            // Convert ticks to seconds (1 tick = 100ns = 10^-7s)
             durations[item.Id] = item.RunTimeTicks / 10000000
           }
         })
@@ -127,8 +114,7 @@ export class EmbyService {
     }
   }
 
-  async getItemImageUrl(itemId: string, type: string = 'Primary') {
-    await this.init()
+  getItemImageUrl(itemId: string, type: string = 'Primary') {
     return `${this.baseUrl}/Items/${itemId}/Images/${type}?api_key=${this.apiKey}`
   }
 
@@ -158,8 +144,6 @@ export class EmbyService {
   async getUserPlayedItems(userId: string) {
     const client = await this.getClient()
     try {
-        // L'endpoint /Users/{Id}/PlayedItems n'existe pas ou est différent sur certaines versions
-        // On utilise /Users/{Id}/Items avec des filtres pour obtenir l'historique
         const response = await client.get(`/Users/${userId}/Items`, {
             params: {
                 Recursive: true,
@@ -208,7 +192,7 @@ export class EmbyService {
 
   async getUserItems(userId: string, filters: any = {}) {
     try {
-      const client = await this.getClient(4000) // 4s timeout for general items
+      const client = await this.getClient(4000)
       const params = {
         IncludeExternalContent: false,
         Recursive: true,
@@ -225,7 +209,7 @@ export class EmbyService {
 
   async getItemDetails(itemId: string, userId?: string) {
     try {
-      const client = await this.getClient(3000) // 3s timeout
+      const client = await this.getClient(3000)
       const url = userId ? `/Users/${userId}/Items/${itemId}` : `/Items/${itemId}`
       const response = await client.get(url, {
           params: {
@@ -254,18 +238,11 @@ export class EmbyService {
   }
 
   async getItemByTmdbId(userId: string, tmdbId: number, type: 'Movie' | 'Series' | 'Episode') {
-      // It seems Emby API filtering by ProviderId is tricky or not working as expected with the current version/setup.
-      // And search term didn't work for ID.
-      
-      // Let's try to fetch all items of that type (if not too many) and filter manually.
-      // This is a last resort but ensures correctness if the API doesn't support direct lookup well.
-      // Assuming library size is manageable (e.g. < 5000 items).
-      
       const allItems = await this.getUserItems(userId, {
           IncludeItemTypes: type,
           Recursive: true,
           Fields: 'UserData,ProviderIds',
-          Limit: 1000 // Limit to avoid massive payloads, but might miss items in large libs
+          Limit: 1000
       })
       
       const match = allItems.Items?.find((i: any) => 
@@ -307,15 +284,9 @@ export class EmbyService {
       return items.Items || []
   }
 
-  /**
-   * Récupère les données du plugin "Playback Reporting" d'Emby
-   * Ce plugin expose généralement ses données via /PlaybackReporting/...
-   */
   async getPlaybackReportingStats(days: number = 30) {
     const client = await this.getClient()
     try {
-        // Le plugin Playback Reporting utilise souvent ces paramètres pour ses rapports
-        // Note: On essaye l'URL du log d'activité qui est la plus commune
         const response = await client.get('/PlaybackReporting/ActivityLog', {
             params: {
                 MinDate: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
@@ -326,7 +297,6 @@ export class EmbyService {
             }
         })
         
-        // Si /ActivityLog ne marche pas, on essaye /Report
         if (!response.data || !response.data.Items) {
             const reportResponse = await client.get('/PlaybackReporting/Report', {
                 params: {
@@ -339,7 +309,6 @@ export class EmbyService {
         return response.data.Items
     } catch (e) {
         console.warn('[EmbyService] Playback Reporting plugin error:', e)
-        // Tentative désespérée sur un autre endpoint connu
         try {
             const queryResponse = await client.get('/PlaybackReporting/Query')
             return queryResponse.data.Items || queryResponse.data
@@ -349,7 +318,6 @@ export class EmbyService {
     }
   }
 
-  // Simplified version of getServerStats
   async getServerStats(from?: string, to?: string) {
     const users = await this.getUsers()
     
@@ -372,7 +340,6 @@ export class EmbyService {
             const userData = item.UserData || {}
             const playCount = userData.PlayCount || 0
             
-            // Basic filtering logic (simplified from PHP)
             const effectivePlays = Math.max(1, playCount)
             const minutesTotal = minutes * effectivePlays
 
@@ -415,5 +382,3 @@ export class EmbyService {
     }
   }
 }
-
-export const embyService = new EmbyService()

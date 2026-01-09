@@ -1,12 +1,18 @@
 'use server'
 
-import { tmdbService } from '@/lib/services/tmdb'
-import { jellyseerrService } from '@/lib/services/jellyseerr'
+import { getJellyseerrServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
 import { getWatchLaterList, isInWatchLater, areInWatchLater } from '../media/watch-later-actions'
   import { fetchUserRecommendations, fetchServerTrends } from '../media/actions'
   
   export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations' | 'trends', search?: string, filters?: any) {
     try {
+      const tmdbService = await getTmdbServiceForUser()
+      if (!tmdbService) {
+          return { results: [], total_pages: 0 }
+      }
+      
+      const jellyseerrService = await getJellyseerrServiceForUser()
+      
       if (type === 'recommendations') {
           return await fetchUserRecommendations(page)
       }
@@ -18,7 +24,9 @@ import { getWatchLaterList, isInWatchLater, areInWatchLater } from '../media/wat
         const watchLaterItems = await getWatchLaterList()
         // Format for MediaCard
         const results = await Promise.all(watchLaterItems.map(async (item) => {
-            const availability = await jellyseerrService.getMediaAvailability(parseInt(item.tmdbId || item.mediaId), item.mediaType as 'movie' | 'tv')
+            const availability = jellyseerrService 
+              ? await jellyseerrService.getMediaAvailability(parseInt(item.tmdbId || item.mediaId), item.mediaType as 'movie' | 'tv')
+              : { available: false, status: 'unknown' }
             return {
                 id: item.mediaId,
                 tmdbId: item.tmdbId,
@@ -31,6 +39,7 @@ import { getWatchLaterList, isInWatchLater, areInWatchLater } from '../media/wat
         }))
         return { results, total_pages: 1, total_results: results.length }
     }
+
 
     if (search) {
       data = await tmdbService.searchMulti(search, page)
@@ -65,7 +74,9 @@ import { getWatchLaterList, isInWatchLater, areInWatchLater } from '../media/wat
             
             try {
                 // Jellyseerr availability check (cached)
-                const availability = await jellyseerrService.getMediaAvailability(item.id, mediaType)
+                const availability = jellyseerrService 
+                    ? await jellyseerrService.getMediaAvailability(item.id, mediaType)
+                    : { available: false, status: 'unknown' }
                 const isWatchLater = watchLaterSet.has(`${mediaType}:${item.id}`)
                 return { ...item, media_status: availability, isWatchLater }
             } catch (e) {
@@ -84,6 +95,9 @@ import { getWatchLaterList, isInWatchLater, areInWatchLater } from '../media/wat
 
 export async function getFilterOptions(type: 'all' | 'movie' | 'tv') {
     try {
+        const tmdbService = await getTmdbServiceForUser()
+        if (!tmdbService) return { genres: [] }
+
         if (type === 'all') {
             // Fetch both and merge
             const [movieGenres, tvGenres] = await Promise.all([
@@ -115,6 +129,9 @@ export async function getFilterOptions(type: 'all' | 'movie' | 'tv') {
 
 export async function getWatchProviders(type: 'all' | 'movie' | 'tv', region: string) {
     try {
+        const tmdbService = await getTmdbServiceForUser()
+        if (!tmdbService) return []
+
         if (type === 'all') {
             const [movieProviders, tvProviders] = await Promise.all([
                 tmdbService.getWatchProviders('movie', region),

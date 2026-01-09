@@ -10,6 +10,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized. Only admins can manage settings.' }, { status: 401 })
   }
 
+  const instanceId = parseInt((session.user as any).instanceId)
+  if (isNaN(instanceId)) {
+    return NextResponse.json({ error: 'Invalid instance' }, { status: 400 })
+  }
+
   try {
     const body = await request.json()
     const { 
@@ -32,6 +37,20 @@ export async function POST(request: NextRequest) {
         emby_api_key
     } = body
 
+    // Update Instance core settings if provided
+    if (emby_url || emby_api_key || body.jellyseerr_url || body.jellyseerr_api_key) {
+      const updateData: any = {}
+      if (emby_url) updateData.embyUrl = emby_url
+      if (emby_api_key) updateData.embyApiKey = emby_api_key
+      if (body.jellyseerr_url) updateData.jellyseerrUrl = body.jellyseerr_url
+      if (body.jellyseerr_api_key) updateData.jellyseerrApiKey = body.jellyseerr_api_key
+      
+      await (prisma as any).instance.update({
+        where: { id: instanceId },
+        data: updateData
+      })
+    }
+
     // Update Global Settings
     const settingsToUpdate = [
         { key: 'jellyseerr_user_id', value: jellyseerrUserId },
@@ -49,13 +68,11 @@ export async function POST(request: NextRequest) {
         { key: 'sonarr_api_key', value: sonarr_api_key },
         { key: 'jellystat_url', value: jellystat_url },
         { key: 'jellystat_api_key', value: jellystat_api_key },
-        { key: 'emby_url', value: emby_url },
-        { key: 'emby_api_key', value: emby_api_key },
     ]
 
     for (const setting of settingsToUpdate) {
         if (setting.value !== undefined) {
-            await setSetting(setting.key, setting.value)
+            await setSetting(setting.key, instanceId, setting.value)
         }
     }
 

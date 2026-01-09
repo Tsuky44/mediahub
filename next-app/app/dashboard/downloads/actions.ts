@@ -1,10 +1,9 @@
 'use server'
 
-import { qbittorrentService, Torrent } from '@/lib/services/qbittorrent'
-import { smbService } from '@/lib/services/smb'
+import { Torrent } from '@/lib/services/qbittorrent'
 import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { authOptions, getQBittorrentServiceForUser, getSmbServiceForUser } from '@/lib/auth'
 
 async function checkAccess() {
   const session = await getServerSession(authOptions)
@@ -17,7 +16,9 @@ async function checkAccess() {
 export async function getTorrents(filter: string = 'all'): Promise<Torrent[]> {
   try {
     await checkAccess()
-    return await qbittorrentService.getTorrents(filter)
+    const qbtService = await getQBittorrentServiceForUser()
+    if (!qbtService) return []
+    return await qbtService.getTorrents(filter)
   } catch (e) {
     console.error('Failed to get torrents', e)
     return []
@@ -27,6 +28,9 @@ export async function getTorrents(filter: string = 'all'): Promise<Torrent[]> {
 export async function addTorrent(formData: FormData) {
   try {
     await checkAccess()
+    const qbtService = await getQBittorrentServiceForUser()
+    if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
+    
     const urls = formData.get('urls') as string | null
     const files = formData.getAll('torrents') as File[]
     
@@ -38,7 +42,7 @@ export async function addTorrent(formData: FormData) {
     // Filter out empty files if any (sometimes empty input sends empty file)
     const validFiles = files.filter(f => f.size > 0)
 
-    await qbittorrentService.addTorrent(urls, validFiles)
+    await qbtService.addTorrent(urls, validFiles)
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
@@ -50,7 +54,10 @@ export async function addTorrent(formData: FormData) {
 export async function deleteTorrents(hashes: string[], deleteFiles: boolean) {
   try {
     await checkAccess()
-    await qbittorrentService.deleteTorrents(hashes, deleteFiles)
+    const qbtService = await getQBittorrentServiceForUser()
+    if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
+
+    await qbtService.deleteTorrents(hashes, deleteFiles)
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
@@ -62,7 +69,10 @@ export async function deleteTorrents(hashes: string[], deleteFiles: boolean) {
 export async function pauseTorrents(hashes: string[]) {
   try {
     await checkAccess()
-    await qbittorrentService.pauseTorrents(hashes)
+    const qbtService = await getQBittorrentServiceForUser()
+    if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
+
+    await qbtService.pauseTorrents(hashes)
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
@@ -74,7 +84,10 @@ export async function pauseTorrents(hashes: string[]) {
 export async function resumeTorrents(hashes: string[]) {
   try {
     await checkAccess()
-    await qbittorrentService.resumeTorrents(hashes)
+    const qbtService = await getQBittorrentServiceForUser()
+    if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
+
+    await qbtService.resumeTorrents(hashes)
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
@@ -86,6 +99,9 @@ export async function resumeTorrents(hashes: string[]) {
 export async function deleteSmbPath(path: string) {
   try {
     await checkAccess()
+    const smbService = await getSmbServiceForUser()
+    if (!smbService) return { success: false, error: 'Service SMB non configuré' }
+    
     await smbService.delete(path)
     revalidatePath('/dashboard/downloads')
     return { success: true }

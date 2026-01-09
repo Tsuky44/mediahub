@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { smbService } from '@/lib/services/smb';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions, getSmbServiceForUser } from '@/lib/auth';
 import { Readable } from 'stream';
 
 export async function GET(request: NextRequest) {
@@ -19,6 +18,11 @@ export async function GET(request: NextRequest) {
     }
 
     try {
+        const smbService = await getSmbServiceForUser();
+        if (!smbService) {
+            return new NextResponse('SMB service not configured', { status: 500 });
+        }
+        
         const stats = await smbService.getStat(path);
         const fileName = path.split('/').pop() || 'download';
         

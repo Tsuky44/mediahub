@@ -1,4 +1,4 @@
-import { tmdbService } from '@/lib/services/tmdb'
+import { getTmdbServiceForUser } from '@/lib/auth'
 import { MediaCard } from '@/components/MediaCard'
 import { notFound } from 'next/navigation'
 
@@ -8,6 +8,11 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
 
   if (isNaN(collectionId)) {
     notFound()
+  }
+
+  const tmdbService = await getTmdbServiceForUser()
+  if (!tmdbService) {
+      notFound()
   }
 
   const collection = await tmdbService.getCollectionDetails(collectionId)
