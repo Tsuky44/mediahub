@@ -24,8 +24,7 @@ export function WelcomePopup({ show, userRole }: WelcomePopupProps) {
 
     const handleClose = async () => {
         setClosing(true)
-        // Temporairement désactivé pour que le popup apparaisse à chaque connexion
-        // await markWelcomeAsSeen()
+        await markWelcomeAsSeen()
         setTimeout(() => {
             setIsOpen(false)
         }, 300)
