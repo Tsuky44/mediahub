@@ -13,10 +13,11 @@ export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[
     try {
         const smbService = await getSmbServiceForUser();
         if (!smbService) return [];
-        return await smbService.listFiles(remotePath);
+        const files = await smbService.listFiles(remotePath);
+        return Array.isArray(files) ? files : [];
     } catch (e) {
         console.error('Failed to list SMB files', e);
-        throw new Error('Impossible de lister les fichiers SMB');
+        return [];
     }
 }
 

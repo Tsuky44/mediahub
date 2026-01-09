@@ -116,9 +116,9 @@ export default function FileManager() {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
     }
 
-    const filteredFiles = files.filter(file => 
+    const filteredFiles = Array.isArray(files) ? files.filter(file => 
         file.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    ) : []
 
     return (
         <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden">

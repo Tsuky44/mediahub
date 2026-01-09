@@ -121,9 +121,9 @@ export function TorrentManager() {
         fetchTorrents()
     }
 
-    const filteredTorrents = torrents.filter(t => 
+    const filteredTorrents = Array.isArray(torrents) ? torrents.filter(t => 
         t.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    ) : []
 
     return (
         <div className="space-y-6">

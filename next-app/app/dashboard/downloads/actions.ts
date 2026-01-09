@@ -18,7 +18,8 @@ export async function getTorrents(filter: string = 'all'): Promise<Torrent[]> {
     await checkAccess()
     const qbtService = await getQBittorrentServiceForUser()
     if (!qbtService) return []
-    return await qbtService.getTorrents(filter)
+    const torrents = await qbtService.getTorrents(filter)
+    return Array.isArray(torrents) ? torrents : []
   } catch (e) {
     console.error('Failed to get torrents', e)
     return []
