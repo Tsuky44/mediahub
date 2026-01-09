@@ -31,7 +31,7 @@ export async function createPublicShare(filePath: string, expiresDays?: number) 
         const token = uuidv4();
         const expiresAt = expiresDays ? new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000) : null;
         
-        const share = await prisma.fileShare.create({
+        const share = await (prisma as any).fileShare.create({
             data: {
                 instanceId,
                 filePath,
