@@ -132,7 +132,7 @@ export async function DELETE(
       
       if (result?.success) {
         // Delete any local requests for this media since the media itself is gone
-        await prisma.mediaRequest.deleteMany({
+        await (prisma as any).mediaRequest.deleteMany({
           where: { tmdbId: tmdbIdStr, instanceId }
         })
       }
@@ -140,7 +140,7 @@ export async function DELETE(
       result = await jellyseerrService.deleteRequest(id)
       if (result?.success) {
         // Delete the local request
-        await prisma.mediaRequest.deleteMany({
+        await (prisma as any).mediaRequest.deleteMany({
           where: { externalId: targetId, instanceId }
         })
       }
