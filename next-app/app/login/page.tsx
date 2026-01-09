@@ -11,17 +11,23 @@ export const metadata: Metadata = {
 }
 
 export default async function LoginPage() {
-  // Fetch trending movies and TV shows from TMDB for high quality backdrops
-  const tmdbService = await getTmdbServiceForUser()
-  const items = tmdbService ? (await tmdbService.getTrending('all', 1)).results || [] : []
+  let backdrops: string[] = []
   
-  const backdrops = items
-    .filter((item: any) => item.backdrop_path)
-    .map((item: any) => `https://image.tmdb.org/t/p/original${item.backdrop_path}`)
-    .slice(0, 15)
+  try {
+    // Fetch trending movies and TV shows from TMDB for high quality backdrops
+    const tmdbService = await getTmdbServiceForUser()
+    const items = tmdbService ? (await tmdbService.getTrending('all', 1)).results || [] : []
+    
+    backdrops = items
+      .filter((item: any) => item.backdrop_path)
+      .map((item: any) => `https://image.tmdb.org/t/p/original${item.backdrop_path}`)
+      .slice(0, 15)
 
-  if (backdrops.length === 0) {
-    console.warn('[LoginPage] No backdrops found from TMDB trending')
+    if (backdrops.length === 0) {
+      console.warn('[LoginPage] No backdrops found from TMDB trending')
+    }
+  } catch (error) {
+    console.error('[LoginPage] Error fetching backdrops:', error)
   }
 
   return (

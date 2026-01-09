@@ -395,6 +395,10 @@ export async function getTmdbServiceForUser(instanceId?: number) {
     if (!user || !(user as any).instanceId) {
       // Fallback: use default instance if no user and no instanceId provided
       try {
+        if (!prisma) {
+          console.error(`[getTmdbServiceForUser] Prisma client is not initialized`)
+          return null
+        }
         const defaultInstance = await (prisma as any).instance.findFirst({ where: { isDefault: true } })
         if (!defaultInstance) return null
         targetInstanceId = defaultInstance.id
@@ -410,6 +414,7 @@ export async function getTmdbServiceForUser(instanceId?: number) {
   if (!targetInstanceId || isNaN(targetInstanceId)) return null
   
   try {
+    if (!prisma) return null
     let tmdbApiKey = await getSetting('tmdb_api_key', targetInstanceId)
     
     // Si la clé n'est pas trouvée sur l'instance actuelle, on cherche sur l'instance par défaut
