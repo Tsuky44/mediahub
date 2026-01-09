@@ -15,6 +15,10 @@ export async function POST(request: NextRequest) {
         const searchNameLower = searchName.toLowerCase();
 
         // 1. Fetch all instances
+        if (!prisma || !(prisma as any).instance) {
+            console.error('[Auth Discover] Prisma or Instance model not available');
+            return NextResponse.json({ instances: [] });
+        }
         const allInstances = await (prisma as any).instance.findMany();
         
         // 2. Check each instance for the user

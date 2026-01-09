@@ -23,6 +23,10 @@ export const authOptions: NextAuthOptions = {
         isSwitch: { label: "Is Switch", type: "text" }
       },
       async authorize(credentials, req) {
+        if (!prisma || !(prisma as any).instance) {
+          console.error("[Auth] Prisma client or Instance model is not available")
+          throw new Error("Erreur technique: Base de données non prête")
+        }
         const instanceSlug = credentials?.instance || 'main'
         
         // 1. Gérer le switch rapide (si déjà connecté)
@@ -216,6 +220,7 @@ export async function getEmbyServiceForUser() {
   if (isNaN(instanceId)) return null
   
   try {
+    if (!prisma || !(prisma as any).instance) return null
     const instance = await (prisma as any).instance.findUnique({
       where: { id: instanceId }
     })
@@ -248,6 +253,7 @@ export async function getJellyseerrServiceForUser() {
   if (isNaN(instanceId)) return null
   
   try {
+    if (!prisma || !(prisma as any).instance) return null
     const instance = await (prisma as any).instance.findUnique({
       where: { id: instanceId }
     })
@@ -395,8 +401,8 @@ export async function getTmdbServiceForUser(instanceId?: number) {
     if (!user || !(user as any).instanceId) {
       // Fallback: use default instance if no user and no instanceId provided
       try {
-        if (!prisma) {
-          console.error(`[getTmdbServiceForUser] Prisma client is not initialized`)
+        if (!prisma || !(prisma as any).instance) {
+          console.error(`[getTmdbServiceForUser] Prisma client or Instance model is not available`)
           return null
         }
         const defaultInstance = await (prisma as any).instance.findFirst({ where: { isDefault: true } })
@@ -414,7 +420,7 @@ export async function getTmdbServiceForUser(instanceId?: number) {
   if (!targetInstanceId || isNaN(targetInstanceId)) return null
   
   try {
-    if (!prisma) return null
+    if (!prisma || !(prisma as any).setting) return null
     let tmdbApiKey = await getSetting('tmdb_api_key', targetInstanceId)
     
     // Si la clé n'est pas trouvée sur l'instance actuelle, on cherche sur l'instance par défaut

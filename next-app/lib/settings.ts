@@ -3,6 +3,10 @@ import { prisma } from '@/lib/prisma'
 export async function getSetting(key: string, instanceId: number, defaultValue: string = ''): Promise<string> {
   // Try to get from DB first
   try {
+    if (!prisma || !(prisma as any).setting) {
+      console.warn(`[getSetting] Prisma or Setting model not available`);
+      return defaultValue;
+    }
     const setting = await (prisma as any).setting.findFirst({
       where: { key, instanceId }
     })
@@ -35,6 +39,10 @@ export async function getSetting(key: string, instanceId: number, defaultValue: 
 }
 
 export async function setSetting(key: string, instanceId: number, value: string): Promise<void> {
+  if (!prisma || !(prisma as any).setting) {
+    console.error(`[setSetting] Prisma or Setting model not available`);
+    return;
+  }
   const existing = await (prisma as any).setting.findFirst({
     where: { key, instanceId }
   })
