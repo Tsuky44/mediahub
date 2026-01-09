@@ -3,16 +3,19 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 async function main() {
-  const embyUrl = await (prisma as any).setting.findUnique({ where: { key: 'emby_url' } })
-  if (embyUrl && embyUrl.value.includes('/web/index.html')) {
-    const newValue = embyUrl.value.split('/web/')[0]
-    await (prisma as any).setting.update({
-      where: { key: 'emby_url' },
-      data: { value: newValue }
-    })
-    console.log(`Updated Emby URL from ${embyUrl.value} to ${newValue}`)
-  } else {
-    console.log('Emby URL looks OK or not found')
+  const instances = await (prisma as any).instance.findMany()
+  
+  for (const instance of instances) {
+    if (instance.embyUrl.includes('/web/index.html')) {
+      const newValue = instance.embyUrl.split('/web/')[0]
+      await (prisma as any).instance.update({
+        where: { id: instance.id },
+        data: { embyUrl: newValue }
+      })
+      console.log(`Updated Emby URL for instance ${instance.name} from ${instance.embyUrl} to ${newValue}`)
+    } else {
+      console.log(`Emby URL for instance ${instance.name} looks OK`)
+    }
   }
 }
 
