@@ -57,11 +57,13 @@ export class JellystatService {
     }
   }
 
-  private async init() {
+  private async init(instanceId?: number) {
     if (this.baseUrl && this.apiKey) return true
 
-    const url = await getSetting('jellystat_url')
-    const key = await getSetting('jellystat_api_key')
+    if (!instanceId) return false
+
+    const url = await getSetting('jellystat_url', instanceId)
+    const key = await getSetting('jellystat_api_key', instanceId)
 
     if (url) this.baseUrl = url.replace(/\/$/, '')
     if (key) this.apiKey = key
@@ -73,8 +75,8 @@ export class JellystatService {
     return true
   }
 
-  private async getClient() {
-    await this.init()
+  private async getClient(instanceId?: number) {
+    await this.init(instanceId)
     if (!this.baseUrl || !this.apiKey) return null
 
     return axios.create({
@@ -90,8 +92,8 @@ export class JellystatService {
     })
   }
 
-  private async get(endpoint: string, params: any = {}) {
-    const client = await this.getClient()
+  private async get(endpoint: string, params: any = {}, instanceId?: number) {
+    const client = await this.getClient(instanceId)
     if (!client || !this.baseUrl) return null
 
     const fullUrl = `${this.baseUrl}${endpoint}`
@@ -127,8 +129,8 @@ export class JellystatService {
     }
   }
 
-  private async post(endpoint: string, body: any = {}) {
-    const client = await this.getClient()
+  private async post(endpoint: string, body: any = {}, instanceId?: number) {
+    const client = await this.getClient(instanceId)
     if (!client || !this.baseUrl) return null
 
     const fullUrl = `${this.baseUrl}${endpoint}`
@@ -152,16 +154,16 @@ export class JellystatService {
     }
   }
 
-  async getHistory(limit = 200, offset = 0, days = 30) {
+  async getHistory(limit = 200, offset = 0, days = 30, instanceId?: number) {
     const page = Math.floor(offset / limit) + 1
-    const data = await this.get('/stats/getPlaybackActivity', { size: limit, page: page, days: days })
+    const data = await this.get('/stats/getPlaybackActivity', { size: limit, page: page, days: days }, instanceId)
     return data?.results || []
   }
 
-  async getMostViewed(limit = 10, days = 30): Promise<MostViewedItem[]> {
+  async getMostViewed(limit = 10, days = 30, instanceId?: number): Promise<MostViewedItem[]> {
     const [movies, series] = await Promise.all([
-        this.post('/stats/getMostViewedByType', { days: days, type: 'Movie' }),
-        this.post('/stats/getMostViewedByType', { days: days, type: 'Series' })
+        this.post('/stats/getMostViewedByType', { days: days, type: 'Movie' }, instanceId),
+        this.post('/stats/getMostViewedByType', { days: days, type: 'Series' }, instanceId)
     ])
     
     const mapItem = (item: any, type: string): MostViewedItem => ({
@@ -181,8 +183,8 @@ export class JellystatService {
     return all.sort((a, b) => b.ViewCount - a.ViewCount).slice(0, limit)
   }
 
-  async getUserStats(days = 30): Promise<UserStat[]> {
-    const data = await this.post('/stats/getMostActiveUsers', { days: days })
+  async getUserStats(days = 30, instanceId?: number): Promise<UserStat[]> {
+    const data = await this.post('/stats/getMostActiveUsers', { days: days }, instanceId)
     if (!Array.isArray(data)) return []
     
     return data.map((u: any) => ({
@@ -192,8 +194,8 @@ export class JellystatService {
     }))
   }
 
-  async getLibraryStats() {
-    return this.get('/stats/getLibraryOverview')
+  async getLibraryStats(instanceId?: number) {
+    return this.get('/stats/getLibraryOverview', {}, instanceId)
   }
 
   async getItemImageUrl(itemId: string) {
