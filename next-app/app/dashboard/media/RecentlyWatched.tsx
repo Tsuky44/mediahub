@@ -18,7 +18,7 @@ interface RecentlyWatchedItem {
 }
 
 export function RecentlyWatched({ items }: { items: RecentlyWatchedItem[] }) {
-    if (!items || items.length === 0) return null
+    if (!Array.isArray(items) || items.length === 0) return null
 
     return (
         <div className="space-y-4">

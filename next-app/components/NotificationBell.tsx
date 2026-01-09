@@ -108,7 +108,7 @@ export function NotificationBell() {
           </div>
 
           <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
-            {notifications.length === 0 ? (
+            {!Array.isArray(notifications) || notifications.length === 0 ? (
               <div className="p-8 text-center">
                 <div className="bg-gray-800 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
                   <Bell className="h-6 w-6 text-gray-500" />

@@ -43,7 +43,8 @@ export async function liveSearch(query: string) {
     if (!tmdbService) return []
 
     const results = await tmdbService.searchMulti(query)
-    return (results.results || [])
+    const resultsArray = Array.isArray(results.results) ? results.results : []
+    return resultsArray
       .filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv')
       .slice(0, 8)
       .map((item: any) => ({

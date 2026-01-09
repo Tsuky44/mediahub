@@ -21,7 +21,7 @@ interface Session {
 }
 
 export function LiveSessions({ sessions }: { sessions: Session[] }) {
-  const activeSessions = sessions.filter(s => s.NowPlayingItem)
+  const activeSessions = Array.isArray(sessions) ? sessions.filter(s => s.NowPlayingItem) : []
 
   return (
     <div className="rounded-2xl bg-gray-900/50 border border-gray-800 p-6 backdrop-blur-sm">

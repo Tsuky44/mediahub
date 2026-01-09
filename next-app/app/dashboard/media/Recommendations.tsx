@@ -20,7 +20,7 @@ export function Recommendations({ items, showTitle = true }: { items: Recommenda
     const [showLeftArrow, setShowLeftArrow] = useState(false)
     const [showRightArrow, setShowRightArrow] = useState(true)
 
-    if (!items || items.length === 0) return null
+    if (!Array.isArray(items) || items.length === 0) return null
 
     const handleScroll = () => {
         if (scrollRef.current) {

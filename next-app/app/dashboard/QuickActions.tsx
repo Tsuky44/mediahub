@@ -83,21 +83,22 @@ export function QuickActions({ initialTorrents = [], userName, isAdmin }: QuickA
     }
   }, [])
 
-  const activeTorrents = torrents
-    .filter((t: any) => 
-      ['downloading', 'stalledDL', 'uploading', 'stalledUP', 'checkingUP', 'checkingDL', 'forcedDL', 'forcedUP'].includes(t.state)
-    )
-    .sort((a: any, b: any) => {
-      // Priorité à ceux qui ont de la vitesse (DL ou UL)
-      const aSpeed = (a.dlspeed || 0) + (a.upspeed || 0)
-      const bSpeed = (b.dlspeed || 0) + (b.upspeed || 0)
-      if (aSpeed > 0 && bSpeed === 0) return -1
-      if (aSpeed === 0 && bSpeed > 0) return 1
-      return bSpeed - aSpeed // Trier par vitesse décroissante si les deux sont actifs
-    })
+  const activeTorrents = Array.isArray(torrents) 
+    ? torrents.filter((t: any) => 
+        ['downloading', 'stalledDL', 'uploading', 'stalledUP', 'checkingUP', 'checkingDL', 'forcedDL', 'forcedUP'].includes(t.state)
+      )
+      .sort((a: any, b: any) => {
+        // Priorité à ceux qui ont de la vitesse (DL ou UL)
+        const aSpeed = (a.dlspeed || 0) + (a.upspeed || 0)
+        const bSpeed = (b.dlspeed || 0) + (b.upspeed || 0)
+        if (aSpeed > 0 && bSpeed === 0) return -1
+        if (aSpeed === 0 && bSpeed > 0) return 1
+        return bSpeed - aSpeed // Trier par vitesse décroissante si les deux sont actifs
+      })
+    : []
 
-  const totalDlSpeed = torrents.reduce((acc, t) => acc + (t.dlspeed || 0), 0)
-  const totalUlSpeed = torrents.reduce((acc, t) => acc + (t.upspeed || 0), 0)
+  const totalDlSpeed = Array.isArray(torrents) ? torrents.reduce((acc, t) => acc + (t.dlspeed || 0), 0) : 0
+  const totalUlSpeed = Array.isArray(torrents) ? torrents.reduce((acc, t) => acc + (t.upspeed || 0), 0) : 0
 
   return (
     <div className="space-y-6">

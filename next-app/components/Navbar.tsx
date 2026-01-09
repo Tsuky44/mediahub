@@ -220,7 +220,7 @@ export function Navbar() {
                       </div>
 
                       {/* Sélecteur d'instance */}
-                      {(isLoadingInstances || instances.length > 1) && (
+                      {(isLoadingInstances || (Array.isArray(instances) && instances.length > 1)) && (
                         <div className="border-t border-gray-800 py-2">
                           <div className="px-4 py-1.5 mb-1">
                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
@@ -233,7 +233,7 @@ export function Navbar() {
                                 <Loader2 className="w-4 h-4 text-gray-500 animate-spin" />
                               </div>
                             ) : (
-                              instances.map((instance) => (
+                              Array.isArray(instances) && instances.map((instance) => (
                                 <button
                                   key={instance.id}
                                   onClick={() => !instance.current && handleSwitchInstance(instance.slug)}
