@@ -32,6 +32,16 @@ export class TmdbService {
     return response.data
   }
 
+  async search(type: 'movie' | 'tv', query: string, page = 1) {
+    const client = await this.getClient()
+    if (!client) return { results: [] }
+    
+    const response = await client.get(`/search/${type}`, {
+        params: { query, page }
+    })
+    return response.data
+  }
+
   async getTrending(type: 'all' | 'movie' | 'tv' = 'movie', page = 1) {
       const client = await this.getClient()
       if (!client) return { results: [] }

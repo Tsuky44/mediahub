@@ -88,6 +88,17 @@ export class EmbyService {
     }
   }
 
+  async getInstalledPlugins() {
+    try {
+      const client = await this.getClient(5000)
+      const response = await client.get('/Plugins')
+      return response.data
+    } catch (e) {
+      console.error('[EmbyService] getInstalledPlugins failed:', e)
+      return []
+    }
+  }
+
   async getItemsDurations(itemIds: string[]) {
     if (!itemIds || itemIds.length === 0) return {}
     try {
@@ -287,34 +298,120 @@ export class EmbyService {
   async getPlaybackReportingStats(days: number = 30) {
     const client = await this.getClient()
     try {
+        // 0. Try custom query on PlaybackActivity table first (if Statistics plugin is present but we want Playback Reporting data)
+        // Some users have both, but we want the data from Playback Reporting's DB structure
+        try {
+            const query = `SELECT rowid, * FROM PlaybackActivity`
+            const pbQueryResponse = await client.post('/user_usage_stats/submit_custom_query', {
+                CustomQueryString: query
+            })
+            if (pbQueryResponse.data && pbQueryResponse.data.results) {
+                return pbQueryResponse.data.results.map((item: any[]) => ({
+                    Id: item[0],
+                    DateCreated: item[1],
+                    UserId: item[2],
+                    ItemId: item[3],
+                    ItemType: item[4],
+                    ItemName: item[5],
+                    PlaybackMethod: item[6],
+                    ClientName: item[7],
+                    DeviceName: item[8],
+                    PlayDuration: item[9],
+                    UserName: 'Unknown'
+                }))
+            }
+        } catch (e) {
+            // Ignore custom query error and continue to official endpoints
+        }
+
+        // 1. Try the Report endpoint
+        const reportResponse = await client.get('/PlaybackReporting/Report', {
+            params: {
+                MinDate: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+                // Grouping by Id (rowid) ensures we get individual sessions
+                GroupBy: 'Id'
+            }
+        })
+        
+        if (reportResponse.data && reportResponse.data.Items) {
+            return reportResponse.data.Items
+        }
+
+        // Fallback to ActivityLog
         const response = await client.get('/PlaybackReporting/ActivityLog', {
             params: {
                 MinDate: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
                 IsIntermediate: false,
-                UserId: '',
                 StartIndex: 0,
                 Limit: 10000
             }
         })
         
-        if (!response.data || !response.data.Items) {
-            const reportResponse = await client.get('/PlaybackReporting/Report', {
-                params: {
-                    MinDate: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
-                }
-            })
-            return reportResponse.data.Items || reportResponse.data
+        return response.data?.Items || []
+    } catch (e: any) {
+        if (e.response?.status === 404) {
+            // Plugin not installed, just return empty list
+            return []
+        }
+        console.warn('[EmbyService] Playback Reporting plugin error:', e.message)
+        return []
+    }
+  }
+
+  async getStatisticsStats(days: number = 2) {
+        // NOTE: This method now falls back to Playback Reporting as the primary source
+        // since we are moving away from the Statistics plugin.
+        const pbStats = await this.getPlaybackReportingStats(days);
+        if (pbStats && pbStats.length > 0) {
+            return pbStats;
         }
 
-        return response.data.Items
-    } catch (e) {
-        console.warn('[EmbyService] Playback Reporting plugin error:', e)
+        const client = await this.getClient()
         try {
-            const queryResponse = await client.get('/PlaybackReporting/Query')
-            return queryResponse.data.Items || queryResponse.data
-        } catch (e2) {
-            return null
+            // Fallback to the old Statistics plugin custom query if Playback Reporting fails
+            let query = `SELECT rowid, * FROM PlaybackActivity`
+            
+            if (days > 0) {
+                const minDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+                const formattedDate = minDate.toISOString().replace('T', ' ').split('.')[0] // YYYY-MM-DD HH:mm:ss
+                query += ` WHERE DateCreated > '${formattedDate}'`
+            }
+            
+            query += ` ORDER BY DateCreated DESC`
+            
+            const response = await client.post('/user_usage_stats/submit_custom_query', {
+                CustomQueryString: query
+            })
+        
+        if (response.data && response.data.results) {
+            // Map the array of arrays to objects
+            // Based on Jellystat mapping: 
+            // 0:rowid, 1:DateCreated, 2:UserId, 3:ItemId, 4:ItemType, 5:ItemName, 6:PlaybackMethod, 7:ClientName, 8:DeviceName, 9:PlayDuration
+            return response.data.results.map((item: any[]) => ({
+                Id: item[0],
+                DateCreated: item[1],
+                UserId: item[2],
+                ItemId: item[3],
+                ItemType: item[4],
+                ItemName: item[5],
+                PlaybackMethod: item[6],
+                ClientName: item[7],
+                DeviceName: item[8],
+                PlayDuration: item[9],
+                // Compatibility fields for the tracker
+                UserName: 'Unknown', // Statistics plugin doesn't seem to return username in this table
+                App: item[7],
+                Device: item[8]
+            }))
         }
+        
+        return []
+    } catch (e: any) {
+        if (e.response?.status === 404) {
+            return []
+        }
+        console.warn('[EmbyService] Statistics plugin error:', e.message)
+        return []
     }
   }
 

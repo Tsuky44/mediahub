@@ -237,3 +237,54 @@ model FileShare {
 
   @@map("file_shares")
 }
+
+model EmbyLiveSession {
+  id                String   @id @default(uuid())
+  instanceId        Int      @default(1) @map("instance_id")
+  sessionId         String   @unique @map("session_id")
+  userId            String   @map("user_id")
+  userName          String   @map("user_name")
+  client            String?
+  device            String?
+  deviceId          String?  @map("device_id")
+  applicationVersion String? @map("app_version")
+  
+  itemId            String?  @map("item_id")
+  itemName          String?  @map("item_name")
+  itemType          String?  @map("item_type")
+  runTimeTicks      BigInt?  @map("runtime_ticks")
+  
+  isPaused          Boolean  @default(false) @map("is_paused")
+  lastActivity      DateTime @default(now()) @map("last_activity")
+  startedAt         DateTime @default(now()) @map("started_at")
+  playbackPosition  BigInt?  @map("playback_position")
+  
+  @@map("emby_live_sessions")
+}
+
+model EmbyActivityLog {
+  id                String   @id @default(uuid())
+  instanceId        Int      @default(1) @map("instance_id")
+  embyUserId        String   @map("emby_user_id")
+  userName          String   @map("user_name")
+  itemId            String   @map("item_id")
+  itemName          String   @map("item_name")
+  itemType          String   @map("item_type")
+  
+  startTime         DateTime @default(now()) @map("start_time")
+  endTime           DateTime? @map("end_time")
+  
+  playDuration      Int      @default(0) @map("play_duration") // Seconds
+  totalDuration     BigInt?  @map("total_duration") // Ticks
+  
+  client            String?
+  device            String?
+  deviceId          String?  @map("device_id")
+  ipAddress         String?  @map("ip_address")
+  
+  mediaInfo         String?  @map("media_info") // JSON dump of extra info (season, episode, etc)
+
+  @@index([embyUserId])
+  @@index([startTime])
+  @@map("emby_activity_logs")
+}

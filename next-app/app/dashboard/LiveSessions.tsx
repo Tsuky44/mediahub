@@ -3,28 +3,25 @@
 import React from 'react'
 import { Activity, Clock, Film, Play } from 'lucide-react'
 
-interface Session {
-  Id: string
-  UserName: string
-  DeviceName: string
-  Client: string
-  NowPlayingItem?: {
-    Name: string
-    Type: string
-    SeriesName?: string
-    RunTimeTicks?: number
-  }
-  PlayState?: {
-    PositionTicks?: number
-    IsPaused: boolean
-  }
+interface LiveSession {
+  id: string
+  sessionId: string
+  userName: string
+  device?: string | null
+  client?: string | null
+  itemName?: string | null
+  itemType?: string | null
+  runTimeTicks?: bigint | null
+  playbackPosition?: bigint | null
+  isPaused: boolean
 }
 
-export function LiveSessions({ sessions }: { sessions: Session[] }) {
-  const activeSessions = Array.isArray(sessions) ? sessions.filter(s => s.NowPlayingItem) : []
+export function LiveSessions({ sessions }: { sessions: LiveSession[] }) {
+  // Filter sessions that have an item playing
+  const activeSessions = Array.isArray(sessions) ? sessions.filter(s => s.itemName) : []
 
   return (
-    <div className="rounded-2xl bg-gray-900/50 border border-gray-800 p-6 backdrop-blur-sm">
+    <div className="rounded-2xl bg-gray-900/50 border border-gray-800 p-6 backdrop-blur-sm mb-8">
       <div className="flex items-center gap-3 mb-6">
         <div className="p-2 bg-green-500/10 rounded-lg">
           <Play className="w-5 h-5 text-green-500 fill-green-500" />
@@ -45,32 +42,37 @@ export function LiveSessions({ sessions }: { sessions: Session[] }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {activeSessions.map((session) => {
-            const item = session.NowPlayingItem!
-            const isEpisode = item.Type === 'Episode'
-            const name = isEpisode ? `${item.SeriesName} - ${item.Name}` : item.Name
+            const isEpisode = session.itemType === 'Episode'
+            // We might want to store series name in DB if we want to display it here, 
+            // for now we just use itemName which usually contains the episode name
+            const name = session.itemName
             
             // Calcul du pourcentage de progression
             let progress = 0
-            if (item.RunTimeTicks && session.PlayState?.PositionTicks) {
-              progress = Math.round((session.PlayState.PositionTicks / item.RunTimeTicks) * 100)
+            if (session.runTimeTicks && session.playbackPosition) {
+              const total = Number(session.runTimeTicks)
+              const current = Number(session.playbackPosition)
+              if (total > 0) {
+                  progress = Math.round((current / total) * 100)
+              }
             }
 
             return (
-              <div key={session.Id} className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 hover:border-green-500/30 transition-all group">
+              <div key={session.sessionId} className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 hover:border-green-500/30 transition-all group">
                 <div className="flex items-start justify-between mb-3">
                   <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-white truncate group-hover:text-green-400 transition-colors">
                       {name}
                     </h3>
                     <p className="text-xs text-gray-400 mt-1 truncate">
-                      {session.UserName} • {session.DeviceName}
+                      {session.userName} • {session.device}
                     </p>
                   </div>
                 </div>
                 
                 <div className="mt-4">
                   <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
-                    <span>{session.PlayState?.IsPaused ? 'En pause' : 'Lecture en cours'}</span>
+                    <span>{session.isPaused ? 'En pause' : 'Lecture en cours'}</span>
                     <span>{progress}%</span>
                   </div>
                   <div className="w-full bg-gray-700 h-1 rounded-full overflow-hidden">

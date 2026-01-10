@@ -42,7 +42,11 @@ import { getWatchLaterList, isInWatchLater, areInWatchLater } from '../media/wat
 
 
     if (search) {
-      data = await tmdbService.searchMulti(search, page)
+      if (type === 'movie' || type === 'tv') {
+        data = await tmdbService.search(type, search, page)
+      } else {
+        data = await tmdbService.searchMulti(search, page)
+      }
     } else if (filters && Object.keys(filters).length > 0) {
         if (type === 'all') {
             data = await tmdbService.discoverMixed({ ...filters, page })

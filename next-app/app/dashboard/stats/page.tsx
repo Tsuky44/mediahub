@@ -7,20 +7,16 @@ import { JellystatService, WatchHistoryItem } from '@/lib/services/jellystat'
 import { EmbyService } from '@/lib/services/emby'
 import { getSetting } from '@/lib/settings'
 import { StatsCharts } from './StatsCharts'
-import { ChevronLeft, ChevronRight, Clock, Film, Play, User, Activity, TrendingUp, AlertCircle, Calendar } from 'lucide-react'
+import { LiveSessions } from '../LiveSessions'
+import { SyncPluginButton } from './SyncPluginButton'
+import { ChevronLeft, ChevronRight, Clock, Film, Play, User, Activity, TrendingUp, AlertCircle, Calendar, RefreshCw } from 'lucide-react'
 import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
 export const dynamic = 'force-dynamic'
 
-async function getEmbyImageUrl(itemId: string, instanceId: number, jellystat?: JellystatService | null) {
+async function getEmbyImageUrl(itemId: string, instanceId: number) {
   try {
-    // Try Jellystat proxy first as it's already configured for the user
-    if (jellystat) {
-      const url = await jellystat.getItemImageUrl(itemId)
-      if (url) return url
-    }
-
     // Fallback to direct Emby if configured
     const instance = await (prisma as any).instance.findUnique({
       where: { id: instanceId }
@@ -101,7 +97,20 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   }
 
   const user = session.user as any
-  const instanceId = parseInt(user.instanceId)
+  const instanceId = user.instanceId ? parseInt(user.instanceId) : NaN
+
+  // Handle missing or invalid instance ID
+  if (isNaN(instanceId)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
+          <AlertCircle size={48} />
+        </div>
+        <h2 className="text-2xl font-bold text-white">Erreur d'instance</h2>
+        <p className="text-gray-400">Impossible d'identifier votre instance. Veuillez vous reconnecter.</p>
+      </div>
+    )
+  }
 
   // Fetch instance config
   const instance = await (prisma as any).instance.findUnique({
@@ -124,8 +133,8 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const params = await searchParams
   
   // 1. Explicit Config Retrieval
-  const jellystatUrl = await getSetting('jellystat_url', instanceId)
-  const jellystatApiKey = await getSetting('jellystat_api_key', instanceId)
+  // const jellystatUrl = await getSetting('jellystat_url', instanceId) // No longer needed
+  // const jellystatApiKey = await getSetting('jellystat_api_key', instanceId) // No longer needed
 
   // Calculate days based on period
   const period = params.period || 'month'
@@ -192,40 +201,76 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const effectiveDays = Math.max(30, daysSinceStart)
 
   // 2. Initialize Service Explicitly
-  let jellystat: JellystatService | null = null
+  // Jellystat service removed
+  // let jellystat: JellystatService | null = null
   
-  if (jellystatUrl && jellystatApiKey) {
-    jellystat = new JellystatService({ 
-      url: jellystatUrl, 
-      apiKey: jellystatApiKey 
-    })
-  } else {
-    // Fallback to internal init if explicit fails (shouldn't happen if getSetting works)
-    jellystat = new JellystatService()
-  }
+  // if (jellystatUrl && jellystatApiKey) {
+  //   jellystat = new JellystatService({ 
+  //     url: jellystatUrl, 
+  //     apiKey: jellystatApiKey 
+  //   })
+  // } else {
+  //   // Fallback to internal init if explicit fails (shouldn't happen if getSetting works)
+  //   jellystat = new JellystatService()
+  // }
 
-  // 3. Fetch Data (Parallel)
-  const emby = new EmbyService(instance.embyUrl, instance.embyApiKey)
-  const historyLimit = period === 'year' ? 3000 : 1000
-  const [historyRaw, watchStats, libraryStats, _userStats, _libraryViews, _mostViewedData, embySessions] = await Promise.all([
-    jellystat.getHistory(historyLimit, 0, effectiveDays).catch(e => { console.error('History fetch failed:', e); return []; }),
-    jellystat.getWatchStats(effectiveDays).catch(e => { console.error('WatchStats fetch failed:', e); return null; }),
-    jellystat.getLibraryStats().catch(e => { console.error('LibraryStats fetch failed:', e); return []; }),
-    jellystat.getUserStats(effectiveDays).catch(e => { console.error('UserStats fetch failed:', e); return []; }),
-    jellystat.getViewsByLibraryType(effectiveDays).catch(e => { console.error('LibraryViews fetch failed:', e); return []; }),
-    jellystat.getMostViewed(10, effectiveDays).catch(e => { console.error('MostViewed fetch failed:', e); return []; }),
-    emby.getSessions().catch(e => { console.error('Emby sessions fetch failed:', e); return []; })
+  // 3. Fetch Data (Prisma)
+  const [historyRaw, embySessions] = await Promise.all([
+    (prisma as any).embyActivityLog.findMany({
+      where: {
+        instanceId: instanceId,
+        startTime: {
+          gte: startDate,
+          lte: endDate
+        }
+      },
+      orderBy: {
+        startTime: 'desc'
+      }
+    }),
+    (prisma as any).embyLiveSession.findMany({
+      where: {
+        instanceId: instanceId
+      }
+    })
   ])
 
-  // Process history and apply precise filtering for the selected period
-  const historyArray = (Array.isArray(historyRaw) ? historyRaw : []).filter((item: any) => {
-    const itemDate = new Date(item.ActivityDateInserted || item.DateCreated)
-    return itemDate >= startDate && itemDate <= endDate
+  // Process history
+  const historyArray = historyRaw.map((log: any) => {
+    let mediaInfo: any = {}
+    try {
+      mediaInfo = log.mediaInfo ? JSON.parse(log.mediaInfo) : {}
+    } catch (e) {}
+
+    return {
+      Id: log.id,
+      ItemId: log.itemId,
+      NowPlayingItemId: log.itemId,
+      UserId: log.embyUserId,
+      UserName: log.userName,
+      Name: log.itemName,
+      SeriesName: mediaInfo.seriesName,
+      SeasonName: mediaInfo.seasonName,
+      IndexNumber: mediaInfo.episodeIndex,
+      ParentIndexNumber: mediaInfo.seasonIndex,
+      Type: log.itemType,
+      Client: log.client,
+      DeviceName: log.device,
+      ActivityDateInserted: log.startTime.toISOString(),
+      DateCreated: log.startTime.toISOString(),
+      PlaybackDuration: log.playDuration, // Already accurate from tracker
+      RunTimeTicks: Number(log.totalDuration || 0)
+    }
   })
 
-  // 3.5. Fetch actual media durations from Emby for precise sanitization
-  const uniqueItemIds = Array.from(new Set(historyArray.map((item: any) => item.NowPlayingItemId || item.ItemId).filter(Boolean))) as string[]
-  const itemDurations = await emby.getItemsDurations(uniqueItemIds)
+  // 3.5. Duration sanitization is less needed with the new tracker but we keep the logic structure
+  // We use the stored totalDuration from the log instead of fetching from Emby
+  const itemDurations: Record<string, number> = {}
+  historyArray.forEach((item: any) => {
+    if (item.RunTimeTicks) {
+      itemDurations[item.ItemId] = Math.round(item.RunTimeTicks / 10000000) // Ticks to seconds
+    }
+  })
 
   // Process Most Viewed from filtered history
   const mostViewedMap = new Map()
@@ -264,11 +309,9 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
      .slice(0, 10)
 
   // Calculate unique active users for the period
-  const uniqueUsers = new Set(historyArray.map(item => item.UserId || item.UserName))
+  const uniqueUsers = new Set(historyArray.map((item: any) => item.UserId || item.UserName))
   const totalActiveUsers = uniqueUsers.size
-  const activeNowCount = Array.isArray(embySessions) 
-    ? embySessions.filter((s: any) => s.NowPlayingItem).length 
-    : 0
+  const activeNowCount = embySessions.length
 
   // Process Hourly Activity
   const hourlyActivity = Array.from({ length: 24 }, (_, i) => ({
@@ -276,8 +319,8 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     value: 0
   }))
 
-  const hasRealData = historyArray.length > 0 || (Array.isArray(libraryStats) && libraryStats.length > 0)
-  const serverUrl = jellystatUrl || await jellystat.getServiceUrl()
+  const hasRealData = historyArray.length > 0
+  const serverUrl = "Local Tracker"
 
   if (historyArray.length > 0) {
     historyArray.forEach((item: WatchHistoryItem) => {
@@ -391,37 +434,31 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   if (!hasRealData) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
-        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-10 max-w-2xl w-full space-y-6">
-          <div className="bg-red-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
-            <Activity className="h-8 w-8 text-red-500" />
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-10 max-w-2xl w-full space-y-6">
+          <div className="bg-blue-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
+            <Activity className="h-8 w-8 text-blue-500" />
           </div>
           <div className="space-y-2">
-            <h2 className="text-xl font-bold text-white">Serveur Injoignable ou Erreur d'Authentification</h2>
+            <h2 className="text-xl font-bold text-white">Aucune donnée de visionnage</h2>
             <p className="text-gray-400 text-sm">
-              Impossible de récupérer les données depuis l'instance Jellystat.
+              Aucune activité n'a encore été enregistrée pour cette période.
             </p>
-             <div className="mt-4 p-4 bg-black/40 rounded text-left space-y-2 border border-red-500/20">
+             <div className="mt-4 p-4 bg-black/40 rounded text-left space-y-2 border border-blue-500/20">
                 <div className="flex justify-between text-xs text-gray-500 uppercase tracking-wider font-semibold border-b border-gray-700 pb-2 mb-2">
-                  <span>Configuration Détectée</span>
+                  <span>État du système</span>
                 </div>
                 <div className="grid grid-cols-[100px_1fr] gap-2 text-sm">
-                  <span className="text-gray-500">URL:</span>
-                  <code className="text-blue-400 font-mono break-all">{serverUrl || 'Non définie'}</code>
-                  
-                  <span className="text-gray-500">Clé API:</span>
-                  <code className="text-yellow-400 font-mono">
-                    {jellystatApiKey ? `${jellystatApiKey.substring(0, 4)}...${jellystatApiKey.substring(jellystatApiKey.length - 4)}` : 'Non définie'}
-                  </code>
+                  <span className="text-gray-500">Source:</span>
+                  <code className="text-blue-400 font-mono">Tracker Local (WebSocket)</code>
                 </div>
             </div>
           </div>
           <div className="pt-4 text-xs text-gray-500 text-left space-y-2">
             <p className="font-semibold text-gray-400 uppercase tracking-wider">Solutions possibles :</p>
             <ul className="list-disc list-inside space-y-1">
-              <li>Vérifiez que le container Docker est démarré</li>
-              <li>Vérifiez que l'URL est accessible depuis ce serveur (Next.js)</li>
-              <li>Vérifiez que la clé API est correcte (essayez de la régénérer)</li>
-              <li>Si vous utilisez HTTPS avec un certificat auto-signé, les erreurs SSL sont ignorées mais peuvent persister</li>
+              <li>Vérifiez que le script de tracking est en cours d'exécution</li>
+              <li>Lancez une lecture sur Emby pour générer des données</li>
+              <li>Vérifiez les logs du tracker pour d'éventuelles erreurs</li>
             </ul>
           </div>
         </div>
@@ -441,30 +478,13 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   
   // Use watchStats for total plays if available, otherwise use historyArray length
   let totalPlays = historyArray.length
-  const statsArray = watchStats?.stats && Array.isArray(watchStats.stats) 
-    ? watchStats.stats 
-    : (Array.isArray(watchStats) ? watchStats : []);
-
-  if (statsArray.length > 0) {
-    let playsFromStats = 0
-    statsArray.forEach((dayStat: any) => {
-      const date = new Date(dayStat.Key);
-      if (date >= startDate && date <= endDate) {
-        Object.values(dayStat).forEach((val: any) => {
-          if (val && typeof val === 'object' && val.count) {
-            playsFromStats += val.count
-          }
-        });
-      }
-    });
-    if (playsFromStats > totalPlays) totalPlays = playsFromStats
-  }
-
+  // Removed Jellystat watchStats logic as we trust our historyArray
+  
   const subValueLabel = period === 'week' ? '7 jours' : period === 'year' ? 'Année' : 'Mois'
 
   return (
     <div className="space-y-8 p-6 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
         <div className="flex flex-col gap-1">
           <h1 className="text-3xl font-bold text-white tracking-tight">Vos Statistiques</h1>
           <div className="flex items-center gap-2 text-gray-400">
@@ -476,34 +496,38 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
           </div>
         </div>
         
-        <div className="flex flex-col sm:flex-row items-center gap-4">
-          {/* Aujourd'hui & Navigation */}
-          <div className="flex items-center gap-2">
-            <a 
-              href="/dashboard/stats" 
-              className="px-3 py-1.5 bg-gray-800/50 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs font-medium text-gray-300 hover:text-white transition-all flex items-center gap-1.5"
-            >
-              <Calendar className="h-3.5 w-3.5" />
-              Aujourd'hui
-            </a>
+        <div className="flex flex-col items-end gap-4">
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            {/* Aujourd'hui & Navigation */}
+            <div className="flex items-center gap-2">
+              <a 
+                href="/dashboard/stats" 
+                className="px-3 py-1.5 bg-gray-800/50 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs font-medium text-gray-300 hover:text-white transition-all flex items-center gap-1.5"
+              >
+                <Calendar className="h-3.5 w-3.5" />
+                Aujourd'hui
+              </a>
 
+              <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700">
+                <a href={prevHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
+                  <ChevronLeft className="h-5 w-5" />
+                </a>
+                <div className="h-4 w-px bg-gray-700 mx-1" />
+                <a href={nextHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
+                  <ChevronRight className="h-5 w-5" />
+                </a>
+              </div>
+            </div>
+
+            {/* Period Selectors */}
             <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700">
-              <a href={prevHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
-                <ChevronLeft className="h-5 w-5" />
-              </a>
-              <div className="h-4 w-px bg-gray-700 mx-1" />
-              <a href={nextHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
-                <ChevronRight className="h-5 w-5" />
-              </a>
+              <PeriodButton active={period === 'week'} href="?period=week" label="Semaine" />
+              <PeriodButton active={period === 'month'} href="?period=month" label="Mois" />
+              <PeriodButton active={period === 'year'} href="?period=year" label="Année" />
             </div>
           </div>
-
-          {/* Period Selectors */}
-          <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700">
-            <PeriodButton active={period === 'week'} href="?period=week" label="Semaine" />
-            <PeriodButton active={period === 'month'} href="?period=month" label="Mois" />
-            <PeriodButton active={period === 'year'} href="?period=year" label="Année" />
-          </div>
+          
+          <SyncPluginButton />
         </div>
       </div>
 
@@ -535,6 +559,9 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
         />
       </div>
 
+      {/* Live Sessions */}
+      <LiveSessions sessions={embySessions} />
+
       {/* Charts */}
       <StatsCharts 
         hourlyActivity={hourlyActivity} 
@@ -554,13 +581,14 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
           </div>
           <div className="space-y-3">
             {mostViewed.map((item: any, idx: number) => (
-              <TopItemCard key={item.Id || idx} item={item} rank={idx + 1} jellystat={jellystat} instanceId={instanceId} />
+              <TopItemCard key={item.Id || idx} item={item} rank={idx + 1} instanceId={instanceId} />
             ))}
             {mostViewed.length === 0 && (
               <p className="text-gray-500 italic py-10 text-center">Aucune donnée disponible</p>
             )}
           </div>
         </div>
+
 
         {/* Recent History */}
         <div className="lg:col-span-2 space-y-4">
@@ -608,7 +636,11 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="relative h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-gray-900 border border-gray-700/50">
-                             <EmbyImage itemId={item.NowPlayingItemId || item.ItemId || item.Id} alt={displayName} jellystat={jellystat} instanceId={instanceId} />
+                            {item.NowPlayingItemId || item.ItemId || item.Id ? (
+                              <EmbyImage itemId={item.NowPlayingItemId || item.ItemId || item.Id} alt={displayName} instanceId={instanceId} />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-gray-800"><Film className="h-4 w-4 text-gray-600" /></div>
+                            )}
                           </div>
                           <div>
                             <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
@@ -684,7 +716,7 @@ function PeriodButton({ active, href, label }: { active: boolean, href: string, 
   )
 }
 
-function TopItemCard({ item, rank, jellystat, instanceId }: { item: any, rank: number, jellystat: JellystatService | null, instanceId: number }) {
+function TopItemCard({ item, rank, instanceId }: { item: any, rank: number, instanceId: number }) {
   // For episodes, we prefer the Series Name if available
   const isEpisode = item.Type === 'Episode' || item.SeriesName || (item.ItemType === 'Episode')
   const name = (isEpisode ? (item.SeriesName || item.Name || item.ItemName) : (item.Name || item.ItemName || item.NowPlayingItemName)) || 'Inconnu'
@@ -701,7 +733,7 @@ function TopItemCard({ item, rank, jellystat, instanceId }: { item: any, rank: n
       <div className="text-lg font-bold text-gray-600 w-4">{rank}</div>
       <div className="relative h-16 w-11 flex-shrink-0 overflow-hidden rounded bg-gray-800">
         {itemId ? (
-           <EmbyImage itemId={itemId} alt={name} jellystat={jellystat} instanceId={instanceId} />
+           <EmbyImage itemId={itemId} alt={name} instanceId={instanceId} />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gray-800"><Film className="h-4 w-4 text-gray-600" /></div>
         )}
@@ -716,8 +748,8 @@ function TopItemCard({ item, rank, jellystat, instanceId }: { item: any, rank: n
   )
 }
 
-async function EmbyImage({ itemId, alt, jellystat, instanceId }: { itemId: string, alt: string, jellystat: JellystatService | null, instanceId: number }) {
-  const url = await getEmbyImageUrl(itemId, instanceId, jellystat)
+async function EmbyImage({ itemId, alt, instanceId }: { itemId: string, alt: string, instanceId: number }) {
+  const url = await getEmbyImageUrl(itemId, instanceId)
   if (!url) return <div className="w-full h-full bg-gray-800 flex items-center justify-center"><Film className="h-4 w-4 text-gray-600" /></div>
   
   return (

@@ -51,5 +51,5 @@ export default async function DownloadsPage() {
     )
   }
 
-  return <DownloadsClient />
+  return <DownloadsClient hasQbit={!!qbtService} hasSmb={!!smbService} />
 }
