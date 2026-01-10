@@ -2,11 +2,12 @@ import WebSocket from 'ws';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import { EmbyService } from '../lib/services/emby';
+import { getPrisma } from '../lib/prisma';
 
 // Load environment variables
 dotenv.config();
 
-const prisma = new PrismaClient();
+const prisma = getPrisma();
 
 interface SessionState {
   instanceId: number;
@@ -88,7 +89,7 @@ async function syncFromPlugins(days: number = 2) {
           const embyUserId = s.UserId;
           const itemId = s.ItemId || s.NowPlayingItemId;
 
-          const exists = await (prisma as any).embyActivityLog.findFirst({
+          const exists = await prisma.embyActivityLog.findFirst({
             where: {
               instanceId: inst.id,
               embyUserId,
@@ -101,7 +102,7 @@ async function syncFromPlugins(days: number = 2) {
           });
 
           if (!exists) {
-            await (prisma as any).embyActivityLog.create({
+            await prisma.embyActivityLog.create({
               data: {
                 instanceId: inst.id,
                 embyUserId,
@@ -303,12 +304,17 @@ async function processSessions(instanceId: number, instanceName: string, session
       activeSessions.set(sessionId, sessionState);
 
       try {
-        await (prisma as any).embyLiveSession.upsert({
-            where: { sessionId },
-            create: mapToLiveSession(sessionState, s),
-            update: mapToLiveSession(sessionState, s)
-        });
-      } catch (e: any) { console.error(`[${instanceName}] DB Error (Live Session): ${e.message}`); }
+        const p = prisma as any;
+        if (p.embyLiveSession) {
+            await p.embyLiveSession.upsert({
+                where: { sessionId },
+                create: mapToLiveSession(sessionState, s),
+                update: mapToLiveSession(sessionState, s)
+            });
+        } else {
+            console.error(`[${instanceName}] Prisma model embyLiveSession not found!`);
+        }
+      } catch (e: any) { console.error(`[${instanceName}] DB Error (Live Session Upsert): ${e.message}`); }
 
     } else {
       // Update accumulated time
@@ -364,17 +370,20 @@ async function processSessions(instanceId: number, instanceName: string, session
       activeSessions.set(sessionId, sessionState);
 
       try {
-        await (prisma as any).embyLiveSession.update({
-            where: { sessionId },
-            data: {
-                isPaused,
-                lastActivity: new Date(),
-                playbackPosition: BigInt(s.PlayState.PositionTicks || 0),
-                itemId: sessionState.itemId,
-                itemName: sessionState.itemName,
-                itemType: sessionState.itemType
-            }
-        });
+        const p = prisma as any;
+        if (p.embyLiveSession) {
+            await p.embyLiveSession.update({
+                where: { sessionId },
+                data: {
+                    isPaused,
+                    lastActivity: new Date(),
+                    playbackPosition: BigInt(s.PlayState.PositionTicks || 0),
+                    itemId: sessionState.itemId,
+                    itemName: sessionState.itemName,
+                    itemType: sessionState.itemType
+                }
+            });
+        }
       } catch (e) { /* ignore update errors */ }
     }
   }
@@ -383,18 +392,28 @@ async function processSessions(instanceId: number, instanceName: string, session
   for (const [sid, state] of activeSessions) {
     // Only check sessions for THIS instance
     if (state.instanceId === instanceId && !currentSessionIds.has(sid)) {
-      console.log(`[${instanceName}] Session Ended: ${state.userName} - ${state.itemName} (${Math.round(state.accumulatedDuration)}s)`);
-      
       if (!state.isPaused) {
          const delta = (now - state.lastUpdate) / 1000;
-         if (delta > 0 && delta < 60) state.accumulatedDuration += delta;
+         if (delta > 0 && delta < 60) {
+             state.accumulatedDuration += delta;
+         }
       }
 
-      await flushSession(state);
+      if (state.accumulatedDuration > 1) {
+          console.log(`[${instanceName}] Session Ended: ${state.userName} - ${state.itemName} (${state.accumulatedDuration.toFixed(1)}s)`);
+          await flushSession(state);
+      } else {
+          // If session was extremely short, just silent delete from live sessions
+          // console.debug(`[${instanceName}] Session Discarded (too short): ${state.userName} - ${state.itemName} (${state.accumulatedDuration.toFixed(1)}s)`);
+      }
+      
       activeSessions.delete(sid);
       
       try {
-        await (prisma as any).embyLiveSession.delete({ where: { sessionId: sid } });
+        const p = prisma as any;
+        if (p.embyLiveSession) {
+            await p.embyLiveSession.delete({ where: { sessionId: sid } });
+        }
       } catch (e) { }
     }
   }
@@ -451,14 +470,17 @@ function mapToLiveSession(state: SessionState, raw: any) {
 async function cleanupOrphanedSessions() {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     try {
+        const p = prisma as any;
+        if (!p.embyLiveSession) return;
+
         // If a session hasn't been updated in 5 minutes, it's probably dead
-        const orphaned = await (prisma as any).embyLiveSession.findMany({
+        const orphaned = await p.embyLiveSession.findMany({
             where: { lastActivity: { lt: fiveMinutesAgo } }
         });
 
         for (const s of orphaned) {
             console.log(`Cleaning up orphaned session: ${s.sessionId}`);
-            await (prisma as any).embyLiveSession.delete({ where: { sessionId: s.sessionId } });
+            await p.embyLiveSession.delete({ where: { sessionId: s.sessionId } });
             activeSessions.delete(s.sessionId);
         }
     } catch (e) { }
