@@ -89,7 +89,7 @@ async function syncFromPlugins(days: number = 2) {
           const embyUserId = s.UserId;
           const itemId = s.ItemId || s.NowPlayingItemId;
 
-          const exists = await prisma.embyActivityLog.findFirst({
+            const exists = await (prisma as any).embyActivityLog.findFirst({
             where: {
               instanceId: inst.id,
               embyUserId,
@@ -102,7 +102,7 @@ async function syncFromPlugins(days: number = 2) {
           });
 
           if (!exists) {
-            await prisma.embyActivityLog.create({
+            await (prisma as any).embyActivityLog.create({
               data: {
                 instanceId: inst.id,
                 embyUserId,
