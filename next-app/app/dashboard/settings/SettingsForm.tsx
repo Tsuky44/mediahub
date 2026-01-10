@@ -295,7 +295,10 @@ export default function SettingsForm({
             </div>
 
             <div className="space-y-4">
-                <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">SMB (Partage Windows)</h4>
+                <div className="flex items-center justify-between border-b border-gray-700 pb-2">
+                    <h4 className="text-lg font-medium text-white">SMB (Partage Windows)</h4>
+                    <span className="text-xs text-gray-400 italic">Optionnel</span>
+                </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                         <label htmlFor="smbHost" className="block text-sm font-medium text-gray-300">

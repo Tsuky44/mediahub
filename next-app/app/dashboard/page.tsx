@@ -20,14 +20,14 @@ export default async function DashboardPage() {
   const user = session?.user as any
   const userRole = user?.role || 'user'
   const isAdminOrUserPlus = userRole === 'admin' || userRole === 'user_plus'
-  const instanceIdStr = user?.instanceId
-  const instanceId = instanceIdStr ? parseInt(instanceIdStr) : NaN
+  const instanceId = user?.instanceId ? parseInt(user.instanceId) : NaN
+  const userId = user?.id ? parseInt(user.id) : NaN
 
-  if (isNaN(instanceId)) {
+  if (isNaN(instanceId) || isNaN(userId)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-gray-900/50 rounded-2xl border border-gray-800">
-        <h2 className="text-2xl font-bold text-white mb-2">Erreur d'instance</h2>
-        <p className="text-gray-400">Impossible d'identifier votre instance. Veuillez vous reconnecter.</p>
+        <h2 className="text-2xl font-bold text-white mb-2">Erreur d'authentification</h2>
+        <p className="text-gray-400">Impossible d'identifier votre session. Veuillez vous reconnecter.</p>
       </div>
     )
   }
@@ -37,7 +37,7 @@ export default async function DashboardPage() {
   // Check if user has seen welcome popup
   const dbUser = await (prisma as any).user.findFirst({
     where: { 
-      id: parseInt(user.id),
+      id: userId,
       instanceId
     }
   })

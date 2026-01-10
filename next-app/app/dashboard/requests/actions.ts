@@ -1,7 +1,7 @@
 'use server'
 
 import { getJellyseerrServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
-import { getWatchLaterList, isInWatchLater, areInWatchLater } from '../media/watch-later-actions'
+import { getWatchLaterList, areInWatchLater } from '../media/watch-later-actions'
   import { fetchUserRecommendations, fetchServerTrends } from '../media/actions'
   
   export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations' | 'trends', search?: string, filters?: any) {
@@ -12,42 +12,37 @@ import { getWatchLaterList, isInWatchLater, areInWatchLater } from '../media/wat
       }
       
       const jellyseerrService = await getJellyseerrServiceForUser()
-      
-      if (type === 'recommendations') {
-          return await fetchUserRecommendations(page)
-      }
-      if (type === 'trends') {
-          return await fetchServerTrends(page)
-      }
       let data;
-    if (type === 'watch-later') {
-        const watchLaterItems = await getWatchLaterList()
-        // Format for MediaCard
-        const results = await Promise.all(watchLaterItems.map(async (item) => {
-            const availability = jellyseerrService 
-              ? await jellyseerrService.getMediaAvailability(parseInt(item.tmdbId || item.mediaId), item.mediaType as 'movie' | 'tv')
-              : { available: false, status: 'unknown' }
-            return {
-                id: item.mediaId,
-                tmdbId: item.tmdbId,
-                title: item.title,
-                poster_path: item.posterPath,
-                media_type: item.mediaType,
-                media_status: availability,
-                isWatchLater: true
-            }
-        }))
-        return { results, total_pages: 1, total_results: results.length }
-    }
-
-
-    if (search) {
-      if (type === 'movie' || type === 'tv') {
-        data = await tmdbService.search(type, search, page)
-      } else {
-        data = await tmdbService.searchMulti(search, page)
-      }
-    } else if (filters && Object.keys(filters).length > 0) {
+      
+      if (search) {
+        if (type === 'movie' || type === 'tv') {
+          data = await tmdbService.search(type, search, page)
+        } else {
+          data = await tmdbService.searchMulti(search, page)
+        }
+      } else if (type === 'recommendations') {
+          return await fetchUserRecommendations(page)
+      } else if (type === 'trends') {
+          return await fetchServerTrends(page)
+      } else if (type === 'watch-later') {
+          const watchLaterItems = await getWatchLaterList()
+          // Format for MediaCard
+          const results = await Promise.all(watchLaterItems.map(async (item) => {
+              const availability = jellyseerrService 
+                ? await jellyseerrService.getMediaAvailability(parseInt(item.tmdbId || item.mediaId), item.mediaType as 'movie' | 'tv')
+                : { available: false, status: 'unknown' }
+              return {
+                  id: item.mediaId,
+                  tmdbId: item.tmdbId,
+                  title: item.title,
+                  poster_path: item.posterPath,
+                  media_type: item.mediaType,
+                  media_status: availability,
+                  isWatchLater: true
+              }
+          }))
+          return { results, total_pages: 1, total_results: results.length }
+      } else if (filters && Object.keys(filters).length > 0) {
         if (type === 'all') {
             data = await tmdbService.discoverMixed({ ...filters, page })
         } else {

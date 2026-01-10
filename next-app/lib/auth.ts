@@ -225,6 +225,8 @@ export async function getEmbyServiceForUser() {
       where: { id: instanceId }
     })
 
+    console.debug(`[getEmbyServiceForUser] InstanceId: ${instanceId}, Instance found: ${instance ? instance.name : 'null'}`)
+
     if (!instance) {
       console.error(`[getEmbyServiceForUser] Instance ${instanceId} non trouvée`)
       return null
@@ -254,13 +256,25 @@ export async function getJellyseerrServiceForUser() {
   
   try {
     if (!prisma || !(prisma as any).instance) return null
-    const instance = await (prisma as any).instance.findUnique({
+    let instance = await (prisma as any).instance.findUnique({
       where: { id: instanceId }
     })
 
     if (!instance) {
       console.error(`[getJellyseerrServiceForUser] Instance ${instanceId} non trouvée`)
       return null
+    }
+
+    console.debug(`[getJellyseerrServiceForUser] Instance found: ${instance.name}, URL: ${instance.jellyseerrUrl ? 'OK' : 'MISSING'}, API Key: ${instance.jellyseerrApiKey ? 'OK' : 'MISSING'}`)
+
+    if (!instance.jellyseerrUrl || !instance.jellyseerrApiKey) {
+      console.warn(`[getJellyseerrServiceForUser] Jellyseerr config missing for instance ${instance.name}, trying default instance`)
+      const defaultInstance = await (prisma as any).instance.findFirst({ where: { isDefault: true } })
+      if (defaultInstance && defaultInstance.id !== instanceId) {
+        if (defaultInstance.jellyseerrUrl && defaultInstance.jellyseerrApiKey) {
+          instance = defaultInstance
+        }
+      }
     }
 
     if (!instance.jellyseerrUrl || !instance.jellyseerrApiKey) {
@@ -425,14 +439,19 @@ export async function getTmdbServiceForUser(instanceId?: number) {
     
     // Si la clé n'est pas trouvée sur l'instance actuelle, on cherche sur l'instance par défaut
     if (!tmdbApiKey) {
+      console.warn(`[getTmdbServiceForUser] TMDB API Key not found for instance ${targetInstanceId}, trying default instance`)
       const defaultInstance = await (prisma as any).instance.findFirst({ where: { isDefault: true } })
       if (defaultInstance && defaultInstance.id !== targetInstanceId) {
         tmdbApiKey = await getSetting('tmdb_api_key', defaultInstance.id)
       }
     }
 
-    if (!tmdbApiKey) return null
+    if (!tmdbApiKey) {
+      console.error(`[getTmdbServiceForUser] No TMDB API Key found for instance ${targetInstanceId} or default instance`)
+      return null
+    }
 
+    console.debug(`[getTmdbServiceForUser] Service initialized with API Key (prefix: ${tmdbApiKey.substring(0, 4)}...)`)
     return new TmdbService(tmdbApiKey)
   } catch (error) {
     console.error(`[getTmdbServiceForUser] Error:`, error)

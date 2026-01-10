@@ -19,12 +19,18 @@ export function SearchInput({ placeholder }: { placeholder?: string }) {
     const currentQ = searchParams.get('q') || ''
     if (query === currentQ) return 
     
-    const params = new URLSearchParams(searchParams)
+    const params = new URLSearchParams(searchParams.toString())
     
     if (query) {
       params.set('q', query)
     } else {
       params.delete('q')
+    }
+    
+    // On s'assure de garder le filtre s'il existe
+    const currentFilter = searchParams.get('filter')
+    if (currentFilter) {
+      params.set('filter', currentFilter)
     }
     
     startTransition(() => {
