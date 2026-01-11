@@ -1,13 +1,10 @@
 import WebSocket from 'ws';
-import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import { EmbyService } from '../lib/services/emby';
 import { getPrisma } from '../lib/prisma';
 
 // Load environment variables
 dotenv.config();
-
-const prisma = getPrisma();
 
 interface SessionState {
   instanceId: number;
@@ -35,6 +32,10 @@ const instanceConnections = new Map<number, { ws: WebSocket | null, keepAlive?: 
 
 async function startTracker() {
   console.log('--- Emby Multi-Instance Tracker Starting ---');
+  
+  const p = getPrisma() as any;
+  const availableModels = Object.keys(p).filter(key => !key.startsWith('_') && !key.startsWith('$'));
+  console.log(`[Tracker] Available Prisma models: ${availableModels.join(', ')}`);
   
   // 1. Initial connection to all instances in DB
   await refreshInstances();
@@ -142,6 +143,7 @@ async function syncFromPlugins(days: number = 2) {
 
 async function refreshInstances() {
   try {
+    const prisma = getPrisma();
     const instances = await (prisma as any).instance.findMany();
     const activeIds = new Set(instances.map((i: any) => i.id));
 
@@ -206,7 +208,7 @@ function connectToInstance(inst: any) {
     }
   });
 
-  ws.on('close', (code, reason) => {
+  ws.on('close', (code) => {
     if (keepAlive) clearInterval(keepAlive);
     
     // If we haven't already marked this as a permanent WS error, try to reconnect
@@ -214,7 +216,7 @@ function connectToInstance(inst: any) {
         console.log(`[${inst.name}] WebSocket Disconnected (Code: ${code}). Reconnecting in 30s...`);
         instanceConnections.delete(inst.id);
         setTimeout(() => {
-            (prisma as any).instance.findUnique({ where: { id: inst.id } }).then((exists: any) => {
+            (getPrisma() as any).instance.findUnique({ where: { id: inst.id } }).then((exists: any) => {
                 if (exists) connectToInstance(inst);
             }).catch((e: any) => console.error(`[${inst.name}] Reconnect failed: ${e.message}`));
         }, 30000);
@@ -262,6 +264,7 @@ function startPollingFallback(inst: any) {
 async function processSessions(instanceId: number, instanceName: string, sessions: any[]) {
   const now = Date.now();
   const currentSessionIds = new Set<string>();
+  const prisma = getPrisma();
 
   for (const s of sessions) {
     if (!s.NowPlayingItem) continue;
@@ -312,7 +315,8 @@ async function processSessions(instanceId: number, instanceName: string, session
                 update: mapToLiveSession(sessionState, s)
             });
         } else {
-            console.error(`[${instanceName}] Prisma model embyLiveSession not found!`);
+            const models = Object.keys(p).filter(k => !k.startsWith('$') && !k.startsWith('_'));
+            console.error(`[${instanceName}] Prisma model embyLiveSession not found! Available models: ${models.join(', ')}`);
         }
       } catch (e: any) { console.error(`[${instanceName}] DB Error (Live Session Upsert): ${e.message}`); }
 
@@ -423,7 +427,15 @@ async function flushSession(state: SessionState) {
     if (state.accumulatedDuration < 10) return; // Minimum 10s to log
 
     try {
-        await (prisma as any).embyActivityLog.create({
+        const prisma = getPrisma();
+        const p = prisma as any;
+        if (!p.embyActivityLog) {
+            const models = Object.keys(p).filter(k => !k.startsWith('$') && !k.startsWith('_'));
+            console.error(`[Tracker] Cannot save activity log: embyActivityLog model not found! Available models: ${models.join(', ')}`);
+            return;
+        }
+
+        await p.embyActivityLog.create({
             data: {
                 instanceId: state.instanceId,
                 embyUserId: state.userId,
@@ -470,6 +482,7 @@ function mapToLiveSession(state: SessionState, raw: any) {
 async function cleanupOrphanedSessions() {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     try {
+        const prisma = getPrisma();
         const p = prisma as any;
         if (!p.embyLiveSession) return;
 
@@ -489,6 +502,7 @@ async function cleanupOrphanedSessions() {
 async function pollAllInstances() {
     // This is a fallback sync mechanism using HTTP API
     try {
+        const prisma = getPrisma();
         const instances = await (prisma as any).instance.findMany();
         for (const inst of instances) {
             // We can call /Sessions on Emby API to get current state
@@ -515,6 +529,6 @@ process.on('SIGINT', async () => {
       if (conn.keepAlive) clearInterval(conn.keepAlive);
       if (conn.pollingInterval) clearInterval(conn.pollingInterval);
   }
-  await prisma.$disconnect();
+  await getPrisma().$disconnect();
   process.exit(0);
 });

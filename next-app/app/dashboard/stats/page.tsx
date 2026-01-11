@@ -215,7 +215,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   // }
 
   // 3. Fetch Data (Prisma)
-  const [historyRaw, embySessions] = await Promise.all([
+  const [historyRaw, embySessionsRaw] = await Promise.all([
     (prisma as any).embyActivityLog.findMany({
       where: {
         instanceId: instanceId,
@@ -234,6 +234,13 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       }
     })
   ])
+
+  // Sanitize sessions for client component (convert BigInt to Number)
+  const embySessions = embySessionsRaw.map((s: any) => ({
+    ...s,
+    runTimeTicks: s.runTimeTicks ? Number(s.runTimeTicks) : null,
+    playbackPosition: s.playbackPosition ? Number(s.playbackPosition) : null
+  }))
 
   // Process history
   const historyArray = historyRaw.map((log: any) => {
