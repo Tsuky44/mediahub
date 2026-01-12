@@ -18,21 +18,34 @@ export async function getSetting(key: string, instanceId: number, defaultValue: 
     console.warn(`Failed to fetch setting ${key} from DB`, e)
   }
   
-  // Fallback to Env vars ONLY for the default instance
+  // Fallback to Instance table for core fields
   try {
     const instance = await (prisma as any).instance.findUnique({
       where: { id: instanceId },
-      select: { isDefault: true }
+      select: { 
+        isDefault: true,
+        embyUrl: true,
+        embyApiKey: true,
+        jellyseerrUrl: true,
+        jellyseerrApiKey: true
+      }
     })
     
-    if (instance?.isDefault) {
-      const envKey = key.toUpperCase()
-      if (process.env[envKey]) {
-        return process.env[envKey] as string
+    if (instance) {
+      if (key === 'emby_url' && instance.embyUrl) return instance.embyUrl
+      if (key === 'emby_api_key' && instance.embyApiKey) return instance.embyApiKey
+      if (key === 'jellyseerr_url' && instance.jellyseerrUrl) return instance.jellyseerrUrl
+      if (key === 'jellyseerr_api_key' && instance.jellyseerrApiKey) return instance.jellyseerrApiKey
+
+      if (instance.isDefault) {
+        const envKey = key.toUpperCase()
+        if (process.env[envKey]) {
+          return process.env[envKey] as string
+        }
       }
     }
   } catch (e) {
-    console.warn(`Failed to check if instance ${instanceId} is default`, e)
+    console.warn(`Failed to check instance ${instanceId} for core settings`, e)
   }
   
   return defaultValue

@@ -11,13 +11,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized. Only admins can manage settings.' }, { status: 401 })
   }
 
-  const instanceId = parseInt((session.user as any).instanceId)
+  const body = await request.json()
+  const sessionInstanceId = parseInt((session.user as any).instanceId)
+  // Allow specifying an instanceId in the body, but fallback to session instanceId
+  const instanceId = body.instanceId ? parseInt(body.instanceId) : sessionInstanceId
+  
   if (isNaN(instanceId)) {
     return NextResponse.json({ error: 'Invalid instance' }, { status: 400 })
   }
 
+  // Security check: only allow editing other instances if user is from the default instance
+  if (instanceId !== sessionInstanceId) {
+    const sessionInstance = await (prisma as any).instance.findUnique({ where: { id: sessionInstanceId } })
+    if (!sessionInstance?.isDefault) {
+      return NextResponse.json({ error: 'Unauthorized. Only main instance admins can manage other instances.' }, { status: 401 })
+    }
+  }
+
   try {
-    const body = await request.json()
     const { 
         jellyseerrUserId, 
         qbittorrent_url, 

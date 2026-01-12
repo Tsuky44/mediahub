@@ -26,9 +26,12 @@ export class EmbyService {
       },
       timeout,
       httpsAgent: this.httpsAgent,
+      maxRedirects: 5, // Allow some redirects
+      validateStatus: (status) => status >= 200 && status < 400, // Allow 3xx
       headers: {
         'Accept': 'application/json',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Emby-Token': this.apiKey // Some proxies/Emby versions prefer this
       }
     })
   }
@@ -37,9 +40,12 @@ export class EmbyService {
     try {
       const client = await this.getClient(5000)
       const response = await client.get('/System/Info/Public')
+      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+        throw new Error('Received HTML instead of JSON (likely a redirect to login)')
+      }
       return response.data
-    } catch (e) {
-      console.error('[EmbyService] getSystemInfo failed:', e)
+    } catch (e: any) {
+      console.error(`[EmbyService] getSystemInfo failed at ${this.baseUrl}:`, e.message)
       return null
     }
   }
@@ -56,7 +62,8 @@ export class EmbyService {
                 'Content-Type': 'application/json'
             },
             httpsAgent: this.httpsAgent,
-            timeout: 10000
+            timeout: 10000,
+            maxRedirects: 0
         })
         return response.data
     } catch (e: any) {
@@ -70,9 +77,12 @@ export class EmbyService {
     try {
       const client = await this.getClient(10000)
       const response = await client.get('/Users')
+      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+        throw new Error('Received HTML instead of JSON')
+      }
       return response.data
-    } catch (e) {
-      console.error('[EmbyService] getUsers failed:', e)
+    } catch (e: any) {
+      console.error(`[EmbyService] getUsers failed at ${this.baseUrl}:`, e.message)
       return []
     }
   }
@@ -81,9 +91,12 @@ export class EmbyService {
     try {
       const client = await this.getClient(3000)
       const response = await client.get('/Sessions')
+      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+        throw new Error('Received HTML instead of JSON')
+      }
       return response.data
-    } catch (e) {
-      console.error('[EmbyService] getSessions failed:', e)
+    } catch (e: any) {
+      console.error(`[EmbyService] getSessions failed at ${this.baseUrl}:`, e.message)
       return []
     }
   }
@@ -95,6 +108,23 @@ export class EmbyService {
       return response.data
     } catch (e) {
       console.error('[EmbyService] getInstalledPlugins failed:', e)
+      return []
+    }
+  }
+
+  async getItemsDetails(itemIds: string[]) {
+    if (!itemIds || itemIds.length === 0) return []
+    try {
+      const client = await this.getClient(10000)
+      const response = await client.get('/Items', {
+        params: {
+          Ids: itemIds.join(','),
+          Fields: 'ProviderIds,RunTimeTicks,SeriesId,SeriesName,SeasonName,IndexNumber,ParentIndexNumber,Type'
+        }
+      })
+      return response.data.Items || []
+    } catch (e) {
+      console.error('[EmbyService] getItemsDetails failed:', e)
       return []
     }
   }

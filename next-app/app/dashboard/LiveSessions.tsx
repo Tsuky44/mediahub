@@ -1,24 +1,55 @@
 'use client'
 
 import React from 'react'
-import { Activity, Clock, Film, Play } from 'lucide-react'
+import { Activity, Clock, Film, Play, Wifi, WifiOff } from 'lucide-react'
+import { useLiveSessions, LiveSession } from '@/hooks/useLiveSessions'
 
-interface LiveSession {
-  id: string
-  sessionId: string
-  userName: string
-  device?: string | null
-  client?: string | null
-  itemName?: string | null
-  itemType?: string | null
-  runTimeTicks?: bigint | null
-  playbackPosition?: bigint | null
-  isPaused: boolean
-}
+export function LiveSessions({ sessions: initialSessions, instanceId }: { sessions: any[], instanceId?: number }) {
+  // Use WebSocket for real-time updates
+  const { sessions: wsSessions, isConnected } = useLiveSessions(initialSessions)
+  const [sessions, setSessions] = React.useState<any[]>(initialSessions)
+  const [interpolatedSessions, setInterpolatedSessions] = React.useState<any[]>([])
 
-export function LiveSessions({ sessions }: { sessions: LiveSession[] }) {
+  // Update sessions when WebSocket updates
+  React.useEffect(() => {
+    if (wsSessions && wsSessions.length > 0) {
+      setSessions(wsSessions)
+    } else if (wsSessions && wsSessions.length === 0 && isConnected) {
+      setSessions([])
+    }
+  }, [wsSessions, isConnected])
+
+  // Interpolation logic
+  React.useEffect(() => {
+    if (!sessions) return
+    
+    // Filter sessions by instanceId if provided
+    const filteredSessions = instanceId 
+      ? sessions.filter(s => s.instanceId === instanceId)
+      : sessions
+
+    setInterpolatedSessions(filteredSessions.map(s => ({ ...s })))
+
+    const interval = setInterval(() => {
+      setInterpolatedSessions(prev => 
+        prev.map(s => {
+          if (s.isPaused || !s.runTimeTicks || s.playbackPosition === undefined) return s
+          
+          // Increment position by 1 second (10,000,000 ticks)
+          const newPosition = Number(s.playbackPosition) + 10000000
+          if (newPosition <= Number(s.runTimeTicks)) {
+            return { ...s, playbackPosition: newPosition }
+          }
+          return s
+        })
+      )
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [sessions, instanceId])
+  
   // Filter sessions that have an item playing
-  const activeSessions = Array.isArray(sessions) ? sessions.filter(s => s.itemName) : []
+  const activeSessions = Array.isArray(interpolatedSessions) ? interpolatedSessions.filter(s => s.itemName) : []
 
   return (
     <div className="rounded-2xl bg-gray-900/50 border border-gray-800 p-6 backdrop-blur-sm mb-8">
@@ -27,9 +58,22 @@ export function LiveSessions({ sessions }: { sessions: LiveSession[] }) {
           <Play className="w-5 h-5 text-green-500 fill-green-500" />
         </div>
         <h2 className="text-xl font-bold text-white">En direct sur Emby</h2>
-        {activeSessions.length > 0 && (
-          <span className="ml-auto flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-        )}
+        <div className="flex items-center gap-2 ml-auto">
+          {isConnected ? (
+            <div className="flex items-center gap-1.5 text-[10px] font-medium text-green-500 bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/20">
+              <Wifi size={10} />
+              <span>LIVE</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-[10px] font-medium text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">
+              <WifiOff size={10} />
+              <span>DÉCONNECTÉ</span>
+            </div>
+          )}
+          {activeSessions.length > 0 && (
+            <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+          )}
+        </div>
       </div>
 
       {activeSessions.length === 0 ? (

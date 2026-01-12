@@ -3,32 +3,18 @@ import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { JellystatService, WatchHistoryItem } from '@/lib/services/jellystat'
-import { EmbyService } from '@/lib/services/emby'
-import { getSetting } from '@/lib/settings'
+import { WatchHistoryItem } from '@/lib/services/jellystat'
 import { StatsCharts } from './StatsCharts'
 import { LiveSessions } from '../LiveSessions'
 import { SyncPluginButton } from './SyncPluginButton'
-import { ChevronLeft, ChevronRight, Clock, Film, Play, User, Activity, TrendingUp, AlertCircle, Calendar, RefreshCw } from 'lucide-react'
+import { RecentHistory } from './RecentHistory'
+import { TopItemsTabs } from '@/components/stats/TopItemsTabs'
+import { EmbyImage } from '@/components/EmbyImage'
+import { ChevronLeft, ChevronRight, Clock, Film, Play, User, Activity, AlertCircle, Calendar } from 'lucide-react'
 import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
 export const dynamic = 'force-dynamic'
-
-async function getEmbyImageUrl(itemId: string, instanceId: number) {
-  try {
-    // Fallback to direct Emby if configured
-    const instance = await (prisma as any).instance.findUnique({
-      where: { id: instanceId }
-    })
-    if (!instance) return null
-
-    const emby = new EmbyService(instance.embyUrl, instance.embyApiKey)
-    return emby.getItemImageUrl(itemId)
-  } catch (e) {
-    return null
-  }
-}
 
 /**
  * Sanitizes playback duration to avoid absurd values (e.g., 346m for a 43m episode)
@@ -194,26 +180,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     prevHref = `?period=year&year=${year - 1}`
     nextHref = `?period=year&year=${year + 1}`
   }
-
-  // Calculate effective days to fetch from API
-  // We need to fetch from the start of the selected period until now
-  const daysSinceStart = differenceInDays(now, startDate) + 2 // +2 to be safe with timezones
-  const effectiveDays = Math.max(30, daysSinceStart)
-
-  // 2. Initialize Service Explicitly
-  // Jellystat service removed
-  // let jellystat: JellystatService | null = null
   
-  // if (jellystatUrl && jellystatApiKey) {
-  //   jellystat = new JellystatService({ 
-  //     url: jellystatUrl, 
-  //     apiKey: jellystatApiKey 
-  //   })
-  // } else {
-  //   // Fallback to internal init if explicit fails (shouldn't happen if getSetting works)
-  //   jellystat = new JellystatService()
-  // }
-
   // 3. Fetch Data (Prisma)
   const [historyRaw, embySessionsRaw] = await Promise.all([
     (prisma as any).embyActivityLog.findMany({
@@ -239,7 +206,8 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const embySessions = embySessionsRaw.map((s: any) => ({
     ...s,
     runTimeTicks: s.runTimeTicks ? Number(s.runTimeTicks) : null,
-    playbackPosition: s.playbackPosition ? Number(s.playbackPosition) : null
+    playbackPosition: s.playbackPosition ? Number(s.playbackPosition) : null,
+    accumulatedDuration: s.accumulatedDuration || 0
   }))
 
   // Process history
@@ -257,6 +225,8 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       UserName: log.userName,
       Name: log.itemName,
       SeriesName: mediaInfo.seriesName,
+      SeriesId: mediaInfo.seriesId,
+      TmdbId: mediaInfo.tmdbId,
       SeasonName: mediaInfo.seasonName,
       IndexNumber: mediaInfo.episodeIndex,
       ParentIndexNumber: mediaInfo.seasonIndex,
@@ -280,30 +250,71 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   })
 
   // Process Most Viewed from filtered history
-  const mostViewedMap = new Map()
+  const mostViewedMoviesMap = new Map()
+  const mostViewedSeriesMap = new Map()
+
   historyArray.forEach((item: any) => {
-    const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie');
+    // Aggressive series detection: Episode type is always a series
+    const isSeries = item.Type === 'Episode' || !!item.SeriesName || !!item.SeriesId;
+    const targetMap = isSeries ? mostViewedSeriesMap : mostViewedMoviesMap
+    
+    const type = isSeries ? 'Episode' : (item.Type || 'Movie');
     const itemId = item.NowPlayingItemId || item.ItemId;
     const actualDuration = itemDurations[itemId];
     const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration);
 
-    const isSeries = item.Type === 'Episode' || !!item.SeriesName
-    const key = isSeries ? (item.SeriesId || item.SeriesName) : (item.NowPlayingItemId || item.Id)
+    // Important: for Series, we use the SeriesId for aggregation and images
+    let seriesKey = item.SeriesId || item.SeriesName
+    if (isSeries && !seriesKey) {
+      // Try to extract series name from item name if it follows "Series - S01E01 - Episode"
+      if (item.Name?.includes(' - ')) {
+        seriesKey = item.Name.split(' - ')[0]
+      } else {
+        // Last resort: use itemId, but this will prevent aggregation across episodes
+        seriesKey = item.NowPlayingItemId || item.ItemId
+      }
+    }
+    
+    const key = isSeries ? seriesKey : (item.NowPlayingItemId || item.Id)
+    const imageItemId = isSeries ? (item.SeriesId || itemId) : itemId
     
     if (!key) return
 
-    if (!mostViewedMap.has(key)) {
-       mostViewedMap.set(key, {
+    if (!targetMap.has(key)) {
+       // For series name fallback: try to extract from "Series - S01E01 - Episode"
+       let displayName = item.Name
+       if (isSeries) {
+         if (item.SeriesName) {
+           displayName = item.SeriesName
+         } else if (item.Name?.includes(' - ')) {
+           displayName = item.Name.split(' - ')[0]
+         }
+       } else {
+         displayName = item.Name || item.NowPlayingItemName
+       }
+
+       targetMap.set(key, {
          ...item,
-         Name: isSeries ? item.SeriesName : (item.NowPlayingItemName || item.Name),
+         Name: displayName,
          count: 1,
          totalDuration: sanitizedDuration,
-         lastView: new Date(item.ActivityDateInserted || item.DateCreated)
+         lastView: new Date(item.ActivityDateInserted || item.DateCreated),
+         imageItemId: imageItemId,
+         tmdbId: item.TmdbId,
+         mediaType: isSeries ? 'tv' : 'movie'
        })
      } else {
-       const existing = mostViewedMap.get(key)
+       const existing = targetMap.get(key)
        existing.count += 1
        existing.totalDuration += sanitizedDuration
+       // Update tmdbId if missing
+       if (!existing.tmdbId && item.TmdbId) {
+         existing.tmdbId = item.TmdbId
+       }
+       // Update imageItemId if it was a fallback and we found a better one
+       if (isSeries && existing.imageItemId === existing.ItemId && item.SeriesId) {
+         existing.imageItemId = item.SeriesId;
+       }
        const currentDate = new Date(item.ActivityDateInserted || item.DateCreated)
        if (currentDate > existing.lastView) {
          existing.lastView = currentDate
@@ -311,7 +322,11 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
      }
    })
  
-   const mostViewed = Array.from(mostViewedMap.values())
+   const mostViewedMovies = Array.from(mostViewedMoviesMap.values())
+     .sort((a, b) => b.count - a.count)
+     .slice(0, 10)
+
+   const mostViewedSeries = Array.from(mostViewedSeriesMap.values())
      .sort((a, b) => b.count - a.count)
      .slice(0, 10)
 
@@ -327,7 +342,6 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   }))
 
   const hasRealData = historyArray.length > 0
-  const serverUrl = "Local Tracker"
 
   if (historyArray.length > 0) {
     historyArray.forEach((item: WatchHistoryItem) => {
@@ -383,8 +397,28 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     monthlyActivity = activity
   }
 
-  // Aggregate Recent History to merge duplicate views of the same content within the same week
-  const aggregatedHistory: any[] = []
+  // Add imageItemId to aggregatedHistory items too
+  // Prepend current active sessions as "Live" items
+  const liveItems = embySessions.map((s: any) => ({
+    id: `live-${s.sessionId}`,
+    itemId: s.itemId,
+    itemName: s.itemName,
+    itemType: s.itemType,
+    userName: s.userName,
+    client: s.client,
+    device: s.device,
+    startTime: new Date(),
+    endTime: new Date(),
+    PlaybackDuration: s.accumulatedDuration || 0,
+    totalDuration: s.runTimeTicks,
+    isLive: true,
+    imageItemId: s.itemType === 'Episode' ? (s.mediaInfo?.seriesId || s.itemId) : s.itemId,
+    mediaType: s.itemType === 'Episode' ? 'tv' : 'movie',
+    ActivityDateInserted: new Date().toISOString(),
+    accumulatedDuration: s.accumulatedDuration || 0
+  }))
+
+  const aggregatedHistory: any[] = [...liveItems]
   const historyMap = new Map<string, any>()
 
   historyArray.forEach((item: any) => {
@@ -398,6 +432,9 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie')
     const actualDuration = itemDurations[itemId]
     const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration)
+
+    const isSeries = item.Type === 'Episode' || !!item.SeriesName
+    const imageItemId = isSeries ? (item.SeriesId || itemId) : itemId
 
     if (historyMap.has(key)) {
       const existing = historyMap.get(key)
@@ -425,7 +462,10 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     // We clone the item to avoid modifying the original array if needed
     const newItem = { 
       ...item, 
-      PlaybackDuration: sanitizedDuration
+      PlaybackDuration: sanitizedDuration,
+      imageItemId: imageItemId,
+      tmdbId: item.TmdbId,
+      mediaType: item.Type === 'Episode' ? 'tv' : 'movie'
     }
     historyMap.set(key, newItem)
     aggregatedHistory.push(newItem)
@@ -440,7 +480,10 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
 
   if (!hasRealData) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center space-y-6">
+        <div className="w-full max-w-2xl flex justify-end">
+          <SyncPluginButton />
+        </div>
         <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-10 max-w-2xl w-full space-y-6">
           <div className="bg-blue-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
             <Activity className="h-8 w-8 text-blue-500" />
@@ -463,9 +506,9 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
           <div className="pt-4 text-xs text-gray-500 text-left space-y-2">
             <p className="font-semibold text-gray-400 uppercase tracking-wider">Solutions possibles :</p>
             <ul className="list-disc list-inside space-y-1">
+              <li>Cliquez sur le bouton "Importer" en haut à droite pour récupérer l'historique</li>
               <li>Vérifiez que le script de tracking est en cours d'exécution</li>
               <li>Lancez une lecture sur Emby pour générer des données</li>
-              <li>Vérifiez les logs du tracker pour d'éventuelles erreurs</li>
             </ul>
           </div>
         </div>
@@ -567,7 +610,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       </div>
 
       {/* Live Sessions */}
-      <LiveSessions sessions={embySessions} />
+      <LiveSessions sessions={embySessions} instanceId={instanceId} />
 
       {/* Charts */}
       <StatsCharts 
@@ -578,117 +621,19 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
 
       {/* Top Content & History */}
       <div className="grid gap-8 lg:grid-cols-3">
-        {/* Most Viewed (Simulated from history if endpoint not available) */}
-        <div className="lg:col-span-1 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-yellow-500" />
-              Contenus les plus vus
-            </h2>
-          </div>
-          <div className="space-y-3">
-            {mostViewed.map((item: any, idx: number) => (
-              <TopItemCard key={item.Id || idx} item={item} rank={idx + 1} instanceId={instanceId} />
-            ))}
-            {mostViewed.length === 0 && (
-              <p className="text-gray-500 italic py-10 text-center">Aucune donnée disponible</p>
-            )}
-          </div>
+        {/* Most Viewed */}
+        <div className="lg:col-span-1">
+          <TopItemsTabs 
+            movies={mostViewedMovies} 
+            series={mostViewedSeries} 
+            instanceId={instanceId} 
+          />
         </div>
 
 
         {/* Recent History */}
-        <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <Clock className="h-5 w-5 text-blue-500" />
-            Historique récent
-          </h2>
-          <div className="rounded-xl bg-gray-900/40 border border-gray-700/50 overflow-hidden backdrop-blur-md shadow-2xl ring-1 ring-white/5">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-900/50 text-gray-400 text-xs uppercase tracking-wider">
-                  <th className="px-6 py-4 font-medium">Contenu</th>
-                  <th className="px-6 py-4 font-medium">Client / Appareil</th>
-                  <th className="px-6 py-4 font-medium">Date</th>
-                  <th className="px-6 py-4 font-medium text-right">Durée</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700">
-                {aggregatedHistory.slice(0, 50).map((item: any) => {
-                  const isSeries = item.ItemType === 'Episode' || item.Type === 'Episode' || !!item.SeriesName;
-                  
-                  // For episodes, we want the episode name as title
-                  const isEpisode = item.Type === 'Episode' || item.ItemType === 'Episode';
-                  const displayName = isEpisode 
-                    ? (item.Name || item.ItemName || item.NowPlayingItemName)
-                    : (isSeries ? (item.SeriesName || item.Name) : (item.NowPlayingItemName || item.Name || item.ItemName));
-
-                  // Construct subtitle: Series Name • S1 E3
-                  let subName = null;
-                  if (isSeries) {
-                    const parts = [];
-                    if (item.SeriesName && item.SeriesName !== displayName) {
-                      parts.push(item.SeriesName);
-                    }
-                    if (item.ParentIndexNumber !== undefined && item.IndexNumber !== undefined) {
-                      parts.push(`S${item.ParentIndexNumber} • Épisode ${item.IndexNumber}`);
-                    } else if (item.NowPlayingItemName && item.NowPlayingItemName !== displayName && item.NowPlayingItemName !== item.SeriesName) {
-                      parts.push(item.NowPlayingItemName);
-                    }
-                    subName = parts.length > 0 ? parts.join(' • ') : null;
-                  }
-
-                  return (
-                    <tr key={item.Id || `${item.NowPlayingItemId}-${item.ActivityDateInserted}`} className="hover:bg-blue-500/5 transition-colors group">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="relative h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-gray-900 border border-gray-700/50">
-                            {item.NowPlayingItemId || item.ItemId || item.Id ? (
-                              <EmbyImage itemId={item.NowPlayingItemId || item.ItemId || item.Id} alt={displayName} instanceId={instanceId} />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-gray-800"><Film className="h-4 w-4 text-gray-600" /></div>
-                            )}
-                          </div>
-                          <div>
-                            <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
-                              {displayName}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-900 text-gray-500 font-medium border border-gray-700">
-                                {isSeries ? 'Série' : 'Film'}
-                              </span>
-                              {subName && (
-                                <span className="text-[10px] text-gray-500 truncate max-w-[250px]">
-                                  {subName}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-300">{item.Client || item.ClientName || 'Client web'}</div>
-                        <div className="text-xs text-gray-500">{item.DeviceName || 'Inconnu'}</div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-400">
-                        {formatDistanceToNow(new Date(item.ActivityDateInserted || item.DateCreated), { addSuffix: true, locale: fr })}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-mono text-blue-400">
-                        {Math.floor((item.PlaybackDuration || 0) / 60)}m
-                      </td>
-                    </tr>
-                  );
-                })}
-                {aggregatedHistory.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-10 text-center text-gray-500 italic">
-                      Aucun historique de visionnage trouvé
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div className="lg:col-span-2">
+          <RecentHistory initialHistory={aggregatedHistory} instanceId={instanceId} />
         </div>
       </div>
     </div>
@@ -723,48 +668,4 @@ function PeriodButton({ active, href, label }: { active: boolean, href: string, 
   )
 }
 
-function TopItemCard({ item, rank, instanceId }: { item: any, rank: number, instanceId: number }) {
-  // For episodes, we prefer the Series Name if available
-  const isEpisode = item.Type === 'Episode' || item.SeriesName || (item.ItemType === 'Episode')
-  const name = (isEpisode ? (item.SeriesName || item.Name || item.ItemName) : (item.Name || item.ItemName || item.NowPlayingItemName)) || 'Inconnu'
-  
-  // Priority to media item ID over activity ID
-  const itemId = item.NowPlayingItemId || item.ItemId || item.Id || item.id
-  
-  const type = item.Type || (item.SeriesName ? 'Série' : 'Film')
-  const count = item.ViewCount || item.count || 0
-  const subText = count ? `${count} vues` : type
 
-  return (
-    <div className="flex items-center gap-4 p-3 rounded-lg bg-gray-900/50 border border-gray-800 hover:border-gray-700 transition-all group">
-      <div className="text-lg font-bold text-gray-600 w-4">{rank}</div>
-      <div className="relative h-16 w-11 flex-shrink-0 overflow-hidden rounded bg-gray-800">
-        {itemId ? (
-           <EmbyImage itemId={itemId} alt={name} instanceId={instanceId} />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-800"><Film className="h-4 w-4 text-gray-600" /></div>
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-white truncate group-hover:text-blue-400 transition-colors">
-          {name}
-        </div>
-        <div className="text-xs text-gray-500 truncate group-hover:text-blue-400/60 transition-colors">{subText}</div>
-      </div>
-    </div>
-  )
-}
-
-async function EmbyImage({ itemId, alt, instanceId }: { itemId: string, alt: string, instanceId: number }) {
-  const url = await getEmbyImageUrl(itemId, instanceId)
-  if (!url) return <div className="w-full h-full bg-gray-800 flex items-center justify-center"><Film className="h-4 w-4 text-gray-600" /></div>
-  
-  return (
-    <img 
-      src={url} 
-      alt={alt}
-      className="h-full w-full object-cover"
-      loading="lazy"
-    />
-  )
-}

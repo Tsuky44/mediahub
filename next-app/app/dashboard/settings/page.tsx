@@ -47,33 +47,45 @@ export default async function SettingsPage() {
     where: { id: instanceId }
   })
 
-  // Get current instance settings
-  const currentJellyseerrId = await getSetting('jellyseerr_user_id', instanceId)
-  const currentQbitUrl = await getSetting('qbittorrent_url', instanceId)
-  const currentQbitUser = await getSetting('qbittorrent_username', instanceId)
-  const currentQbitPass = await getSetting('qbittorrent_password', instanceId)
-  
-  // Get current SMB settings
-  const currentSmbHost = await getSetting('smb_host', instanceId)
-  const currentSmbUser = await getSetting('smb_username', instanceId)
-  const currentSmbPass = await getSetting('smb_password', instanceId)
-  const currentSmbShare = await getSetting('smb_share', instanceId)
-  const currentSmbPath = await getSetting('smb_path', instanceId)
-  
-  // Get current Radarr/Sonarr settings
-  const currentRadarrUrl = await getSetting('radarr_url', instanceId)
-  const currentRadarrKey = await getSetting('radarr_api_key', instanceId)
-  const currentSonarrUrl = await getSetting('sonarr_url', instanceId)
-  const currentSonarrKey = await getSetting('sonarr_api_key', instanceId)
-  
-  // Get current Jellystat settings
-  const currentJellystatUrl = await getSetting('jellystat_url', instanceId)
-  const currentJellystatKey = await getSetting('jellystat_api_key', instanceId)
+  // Fetch all instances if user is in default instance
+  let allInstances = []
+  if (currentInstance?.isDefault) {
+    allInstances = await (prisma as any).instance.findMany({
+      orderBy: { name: 'asc' }
+    })
+  } else {
+    allInstances = [currentInstance]
+  }
 
-  // Core Emby settings from Instance table
-  const currentEmbyUrl = currentInstance?.embyUrl
-  const currentEmbyKey = currentInstance?.embyApiKey
-  
+  // Fetch settings for all instances if default
+  const instancesWithSettings = await Promise.all(allInstances.map(async (inst: any) => {
+    const instId = inst.id
+    return {
+      ...inst,
+      settings: {
+        jellyseerr_user_id: await getSetting('jellyseerr_user_id', instId),
+        qbittorrent_url: await getSetting('qbittorrent_url', instId),
+        qbittorrent_username: await getSetting('qbittorrent_username', instId),
+        qbittorrent_password: await getSetting('qbittorrent_password', instId),
+        smb_host: await getSetting('smb_host', instId),
+        smb_username: await getSetting('smb_username', instId),
+        smb_password: await getSetting('smb_password', instId),
+        smb_share: await getSetting('smb_share', instId),
+        smb_path: await getSetting('smb_path', instId),
+        radarr_url: await getSetting('radarr_url', instId),
+        radarr_api_key: await getSetting('radarr_api_key', instId),
+        sonarr_url: await getSetting('sonarr_url', instId),
+        sonarr_api_key: await getSetting('sonarr_api_key', instId),
+        jellystat_url: await getSetting('jellystat_url', instId),
+        jellystat_api_key: await getSetting('jellystat_api_key', instId),
+        emby_url: inst.embyUrl,
+        emby_api_key: inst.embyApiKey,
+        jellyseerr_url: inst.jellyseerrUrl,
+        jellyseerr_api_key: inst.jellyseerrApiKey,
+      }
+    }
+  }))
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
@@ -85,26 +97,9 @@ export default async function SettingsPage() {
       <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
         <h3 className="text-xl font-bold text-white mb-6">Configuration des services</h3>
         <SettingsForm 
+          instances={instancesWithSettings}
+          currentInstanceId={instanceId}
           users={jellyseerrUsers} 
-          currentJellyseerrId={currentJellyseerrId || ''}
-          currentQbitUrl={currentQbitUrl}
-          currentQbitUser={currentQbitUser}
-          currentQbitPass={currentQbitPass}
-          currentSmbHost={currentSmbHost}
-          currentSmbUser={currentSmbUser}
-          currentSmbPass={currentSmbPass}
-          currentSmbShare={currentSmbShare}
-          currentSmbPath={currentSmbPath}
-          currentRadarrUrl={currentRadarrUrl}
-          currentRadarrKey={currentRadarrKey}
-          currentSonarrUrl={currentSonarrUrl}
-          currentSonarrKey={currentSonarrKey}
-          currentJellystatUrl={currentJellystatUrl}
-          currentJellystatKey={currentJellystatKey}
-          currentEmbyUrl={currentEmbyUrl}
-          currentEmbyKey={currentEmbyKey}
-          currentJellyseerrUrl={currentInstance?.jellyseerrUrl || ''}
-          currentJellyseerrKey={currentInstance?.jellyseerrApiKey || ''}
         />
       </div>
     </div>

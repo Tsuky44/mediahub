@@ -45,9 +45,8 @@ export default async function DashboardPage() {
   const showWelcome = dbUser ? !dbUser.hasSeenWelcome : true
 
   const embyUrl = await getSetting('emby_url', instanceId)
-  const jellystatUrl = await getSetting('jellystat_url', instanceId)
 
-  if (!embyUrl || !jellystatUrl) {
+  if (!embyUrl) {
     // Only show the configuration warning for the default instance or if user is admin
     const isBaseAdmin = userRole === 'admin' && user?.isDefaultInstance
     
@@ -59,7 +58,7 @@ export default async function DashboardPage() {
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Configuration incomplète</h2>
           <p className="text-gray-400 max-w-md mb-6">
-            L'instance doit être configurée avec les URLs d'Emby et Jellystat pour afficher les données du tableau de bord.
+            L'instance doit être configurée avec l'URL d'Emby pour afficher les données du tableau de bord.
           </p>
           {isBaseAdmin && (
             <Link 

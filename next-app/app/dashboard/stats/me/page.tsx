@@ -1,9 +1,9 @@
 import React from 'react'
-import { JellystatService, WatchHistoryItem } from '@/lib/services/jellystat'
-import { EmbyService } from '@/lib/services/emby'
-import { getSetting } from '@/lib/settings'
+import { WatchHistoryItem } from '@/lib/services/jellystat'
 import { StatsCharts } from '../StatsCharts'
-import { ChevronLeft, ChevronRight, Clock, Film, Play, Activity, TrendingUp, Calendar } from 'lucide-react'
+import { TopItemsTabs } from '@/components/stats/TopItemsTabs'
+import { EmbyImage } from '@/components/EmbyImage'
+import { ChevronLeft, ChevronRight, Clock, Play, Activity, TrendingUp, Calendar, User } from 'lucide-react'
 import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { getServerSession } from 'next-auth'
@@ -12,26 +12,6 @@ import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
-
-async function getEmbyImageUrl(itemId: string, instanceId: number, jellystat?: JellystatService | null) {
-  try {
-    if (jellystat) {
-      const url = await jellystat.getItemImageUrl(itemId)
-      if (url) return url
-    }
-    
-    // Fallback to direct Emby if configured
-    const instance = await (prisma as any).instance.findUnique({
-      where: { id: instanceId }
-    })
-    if (!instance) return null
-
-    const emby = new EmbyService(instance.embyUrl, instance.embyApiKey)
-    return emby.getItemImageUrl(itemId)
-  } catch (e) {
-    return null
-  }
-}
 
 /**
  * Sanitizes playback duration to avoid absurd values (e.g., 346m for a 43m episode)
@@ -71,55 +51,7 @@ function sanitizePlaybackDuration(durationInSeconds: number, type: string, actua
   return durationInSeconds;
 }
 
-async function EmbyImage({ itemId, alt, jellystat, instanceId }: { itemId: string, alt: string, jellystat: JellystatService | null, instanceId: number }) {
-  const url = await getEmbyImageUrl(itemId, instanceId, jellystat)
-  if (!url) return <div className="w-full h-full bg-gray-800 flex items-center justify-center"><Film className="h-4 w-4 text-gray-600" /></div>
-  
-  return (
-    <img 
-      src={url} 
-      alt={alt}
-      className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-300"
-      loading="lazy"
-    />
-  )
-}
 
-interface TopItemCardProps {
-  item: any
-  rank: number
-  jellystat: JellystatService | null
-  instanceId: number
-}
-
-async function TopItemCard({ item, rank, jellystat, instanceId }: TopItemCardProps) {
-  const isEpisode = item.Type === 'Episode' || item.SeriesName || (item.ItemType === 'Episode')
-  const name = (isEpisode ? (item.SeriesName || item.Name || item.ItemName) : (item.Name || item.ItemName || item.NowPlayingItemName)) || 'Inconnu'
-  const itemId = item.NowPlayingItemId || item.ItemId || item.Id || item.id
-  
-  const count = item.ViewCount || item.count || 0
-  
-  return (
-    <div className="flex items-center gap-4 p-3 rounded-lg bg-gray-900/50 border border-gray-800 hover:border-gray-700 transition-all group">
-      <div className="text-lg font-bold text-gray-600 w-4">{rank}</div>
-      <div className="relative h-16 w-11 flex-shrink-0 overflow-hidden rounded bg-gray-800">
-        {itemId ? (
-          <EmbyImage itemId={itemId} alt={name} jellystat={jellystat} instanceId={instanceId} />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-800">
-            <Film className="h-4 w-4 text-gray-600" />
-          </div>
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-white truncate group-hover:text-blue-400 transition-colors">
-          {name}
-        </div>
-        <div className="text-xs text-gray-500 truncate">{count} vues</div>
-      </div>
-    </div>
-  )
-}
 
 function StatCard({ title, value, subValue, icon }: { title: string, value: string, subValue: string, icon: React.ReactNode }) {
   return (
@@ -190,7 +122,6 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
   const params = await searchParams
   const period = params.period || 'month'
   const now = new Date()
-  let days = 30
   let periodTitle = ""
   
   let startDate = new Date()
@@ -203,8 +134,6 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
     const targetDate = addWeeks(now, weekOffset)
     startDate = startOfWeek(targetDate, { weekStartsOn: 1 })
     endDate = endOfWeek(targetDate, { weekStartsOn: 1 })
-    days = differenceInDays(now, startDate) + 1
-    if (days < 7) days = 7
     periodTitle = `Semaine du ${new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' }).format(startDate)}`
     prevHref = `?period=week&weekOffset=${weekOffset - 1}`
     nextHref = `?period=week&weekOffset=${weekOffset + 1}`
@@ -214,8 +143,6 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
     const targetDate = new Date(year, month, 1)
     startDate = startOfMonth(targetDate)
     endDate = endOfMonth(targetDate)
-    days = differenceInDays(now, startDate) + 1
-    if (days < 0) days = 30
     periodTitle = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(targetDate)
     const prevMonth = subMonths(targetDate, 1)
     const nextMonth = addMonths(targetDate, 1)
@@ -226,67 +153,149 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
     const targetDate = new Date(year, 0, 1)
     startDate = startOfYear(targetDate)
     endDate = endOfYear(targetDate)
-    days = differenceInDays(now, startDate) + 1
     periodTitle = `Année ${year}`
     prevHref = `?period=year&year=${year - 1}`
     nextHref = `?period=year&year=${year + 1}`
   }
 
-  const daysSinceStart = differenceInDays(now, startDate) + 2
-  const effectiveDays = Math.max(30, daysSinceStart)
-
-  const jellystatUrl = await getSetting('jellystat_url', instanceId)
-  const jellystatApiKey = await getSetting('jellystat_api_key', instanceId)
-  const jellystat = new JellystatService({ url: jellystatUrl!, apiKey: jellystatApiKey! })
-
-  const historyLimit = period === 'year' ? 3000 : 1000
-  const historyRaw = await jellystat.getHistory(historyLimit, 0, effectiveDays)
-
-  // Filter history for the current user AND the selected period
-  const historyArray = (Array.isArray(historyRaw) ? historyRaw : []).filter((item: any) => {
-    const itemDate = new Date(item.ActivityDateInserted || item.DateCreated)
-    const isPeriodMatch = itemDate >= startDate && itemDate <= endDate
-    const isUserMatch = (item.UserId === currentEmbyUserId) || 
-                       (item.UserName?.toLowerCase() === currentUserName?.toLowerCase())
-    return isPeriodMatch && isUserMatch
+  // 3. Fetch Data (Prisma)
+  const historyRaw = await (prisma as any).embyActivityLog.findMany({
+    where: {
+      instanceId: instanceId,
+      OR: [
+        { embyUserId: currentEmbyUserId },
+        { userName: { equals: currentUserName, mode: 'insensitive' } }
+      ],
+      startTime: {
+        gte: startDate,
+        lte: endDate
+      }
+    },
+    orderBy: {
+      startTime: 'desc'
+    }
   })
 
-  // 3.5. Fetch actual media durations from Emby for precise sanitization
-  const emby = new EmbyService(instance.embyUrl, instance.embyApiKey)
-  const uniqueItemIds = Array.from(new Set(historyArray.map((item: any) => item.NowPlayingItemId || item.ItemId).filter(Boolean))) as string[]
-  const itemDurations = await emby.getItemsDurations(uniqueItemIds)
+  // Process history to match WatchHistoryItem interface
+  const historyArray = historyRaw.map((log: any) => {
+    let mediaInfo: any = {}
+    try {
+      mediaInfo = log.mediaInfo ? JSON.parse(log.mediaInfo) : {}
+    } catch (e) {}
+
+    return {
+      Id: log.id,
+      ItemId: log.itemId,
+      NowPlayingItemId: log.itemId,
+      UserId: log.embyUserId,
+      UserName: log.userName,
+      Name: log.itemName,
+      SeriesName: mediaInfo.seriesName,
+      SeriesId: mediaInfo.seriesId,
+      TmdbId: mediaInfo.tmdbId,
+      SeasonName: mediaInfo.seasonName,
+      IndexNumber: mediaInfo.episodeIndex,
+      ParentIndexNumber: mediaInfo.seasonIndex,
+      Type: log.itemType,
+      Client: log.client,
+      DeviceName: log.device,
+      ActivityDateInserted: log.startTime.toISOString(),
+      DateCreated: log.startTime.toISOString(),
+      PlaybackDuration: log.playDuration,
+      RunTimeTicks: Number(log.totalDuration || 0)
+    }
+  })
+
+  // Calculate days for stats
+  const days = differenceInDays(now, startDate) + 1
+
+  // 3.5. Duration sanitization
+  const itemDurations: Record<string, number> = {}
+  historyArray.forEach((item: any) => {
+    if (item.RunTimeTicks) {
+      itemDurations[item.ItemId] = Math.round(item.RunTimeTicks / 10000000) // Ticks to seconds
+    }
+  })
 
   // Process Most Viewed for the user
-  const mostViewedMap = new Map()
+  const mostViewedMoviesMap = new Map()
+  const mostViewedSeriesMap = new Map()
+
   historyArray.forEach((item: any) => {
-    const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie');
+    // Aggressive series detection: Episode type is always a series
+    const isSeries = item.Type === 'Episode' || !!item.SeriesName || !!item.SeriesId;
+    const targetMap = isSeries ? mostViewedSeriesMap : mostViewedMoviesMap
+    
+    const type = isSeries ? 'Episode' : (item.Type || 'Movie');
     const itemId = item.NowPlayingItemId || item.ItemId;
     const actualDuration = itemDurations[itemId];
     const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration);
 
-    const isSeries = item.Type === 'Episode' || !!item.SeriesName
-    const key = isSeries ? (item.SeriesId || item.SeriesName) : (item.NowPlayingItemId || item.Id)
+    // Important: for Series, we use the SeriesId for aggregation and images
+    let seriesKey = item.SeriesId || item.SeriesName
+    if (isSeries && !seriesKey) {
+      // Try to extract series name from item name if it follows "Series - S01E01 - Episode"
+      if (item.Name?.includes(' - ')) {
+        seriesKey = item.Name.split(' - ')[0]
+      } else {
+        // Last resort: use itemId, but this will prevent aggregation across episodes
+        seriesKey = item.NowPlayingItemId || item.ItemId
+      }
+    }
+    
+    const key = isSeries ? seriesKey : (item.NowPlayingItemId || item.Id)
+    const imageItemId = isSeries ? (item.SeriesId || itemId) : itemId
+    
     if (!key) return
 
-    if (!mostViewedMap.has(key)) {
-       mostViewedMap.set(key, {
+    if (!targetMap.has(key)) {
+       // For series name fallback: try to extract from "Series - S01E01 - Episode"
+       let displayName = item.Name
+       if (isSeries) {
+         if (item.SeriesName) {
+           displayName = item.SeriesName
+         } else if (item.Name?.includes(' - ')) {
+           displayName = item.Name.split(' - ')[0]
+         }
+       } else {
+         displayName = item.Name || item.NowPlayingItemName
+       }
+
+       targetMap.set(key, {
          ...item,
-         Name: isSeries ? item.SeriesName : (item.NowPlayingItemName || item.Name),
+         Name: displayName,
          count: 1,
          totalDuration: sanitizedDuration,
-         lastView: new Date(item.ActivityDateInserted || item.DateCreated)
+         lastView: new Date(item.ActivityDateInserted || item.DateCreated),
+         imageItemId: imageItemId,
+         tmdbId: item.TmdbId,
+         mediaType: isSeries ? 'tv' : 'movie'
        })
      } else {
-       const existing = mostViewedMap.get(key)
+       const existing = targetMap.get(key)
        existing.count += 1
        existing.totalDuration += sanitizedDuration
+       // Update tmdbId if missing
+       const currentTmdbId = item.TmdbId
+       if (!existing.tmdbId && currentTmdbId) {
+         existing.tmdbId = currentTmdbId
+       }
+       // Update imageItemId if it was a fallback and we found a better one
+       if (isSeries && existing.imageItemId === existing.ItemId && item.SeriesId) {
+         existing.imageItemId = item.SeriesId;
+       }
        const currentDate = new Date(item.ActivityDateInserted || item.DateCreated)
        if (currentDate > existing.lastView) {
          existing.lastView = currentDate
        }
      }
-  })
-  const mostViewed = Array.from(mostViewedMap.values())
+   })
+
+  const mostViewedMovies = Array.from(mostViewedMoviesMap.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10)
+
+  const mostViewedSeries = Array.from(mostViewedSeriesMap.values())
     .sort((a, b) => b.count - a.count)
     .slice(0, 10)
 
@@ -360,9 +369,13 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
         return
       }
     }
+    const isSeriesItem = itemType === 'Episode' || !!item.SeriesName
     const newItem = { 
       ...item,
-      PlaybackDuration: sanitizedDuration
+      PlaybackDuration: sanitizedDuration,
+      imageItemId: isSeriesItem ? (item.SeriesId || itemId) : itemId,
+      tmdbId: item.TmdbId,
+      mediaType: itemType === 'Episode' ? 'tv' : 'movie'
     }
     historyMap.set(key, newItem)
     aggregatedHistory.push(newItem)
@@ -416,12 +429,13 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
       />
 
       <div className="grid gap-8 lg:grid-cols-3">
-        <div className="lg:col-span-1 space-y-4">
-          <h2 className="text-xl font-semibold text-white flex items-center gap-2"><TrendingUp className="h-5 w-5 text-yellow-500" /> Mes favoris</h2>
-          <div className="space-y-3">
-            {mostViewed.map((item: any, idx: number) => <TopItemCard key={item.Id || idx} item={item} rank={idx + 1} jellystat={jellystat} instanceId={instanceId} />)}
-            {mostViewed.length === 0 && <p className="text-gray-500 italic py-10 text-center">Aucune donnée disponible</p>}
-          </div>
+        <div className="lg:col-span-1">
+          <TopItemsTabs 
+            movies={mostViewedMovies} 
+            series={mostViewedSeries} 
+            instanceId={instanceId} 
+            title="Mes favoris"
+          />
         </div>
 
         <div className="lg:col-span-2 space-y-4">
@@ -469,7 +483,14 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="relative h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-gray-900 border border-gray-700/50">
-                             <EmbyImage itemId={item.NowPlayingItemId || item.ItemId || item.Id} alt={displayName} jellystat={jellystat} instanceId={instanceId} />
+                             <EmbyImage 
+                               itemId={item.imageItemId || item.NowPlayingItemId || item.ItemId || item.Id} 
+                               alt={displayName} 
+                               itemName={displayName}
+                               instanceId={instanceId} 
+                               tmdbId={item.tmdbId}
+                               mediaType={item.mediaType}
+                             />
                           </div>
                           <div>
                             <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
@@ -491,6 +512,10 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-300">{item.Client || item.ClientName || 'Client web'}</div>
                         <div className="text-xs text-gray-500">{item.DeviceName || 'Inconnu'}</div>
+                        <div className="text-[10px] text-blue-400/80 mt-1 flex items-center gap-1 font-medium uppercase tracking-wider">
+                          <User size={10} className="text-blue-500" />
+                          {item.UserName || item.userName || 'Utilisateur'}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-400">
                         {formatDistanceToNow(new Date(item.ActivityDateInserted || item.DateCreated), { addSuffix: true, locale: fr })}
