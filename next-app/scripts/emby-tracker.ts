@@ -25,7 +25,7 @@ const io = new Server(server, {
   }
 });
 
-const WS_PORT = process.env.TRACKER_WS_PORT || 3001;
+const WS_PORT = process.env.TRACKER_WS_PORT || 3005;
 
 if (!isFullSync) {
     server.listen(WS_PORT, () => {

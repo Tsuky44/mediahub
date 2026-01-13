@@ -24,7 +24,7 @@ export function useLiveSessions(initialSessions: LiveSession[] = []) {
   useEffect(() => {
     // Determine the protocol and hostname
     const protocol = window.location.protocol === 'https:' ? 'https' : 'http'
-    const wsUrl = process.env.NEXT_PUBLIC_TRACKER_WS_URL || `${protocol}://${window.location.hostname}:3001`
+    const wsUrl = process.env.NEXT_PUBLIC_TRACKER_WS_URL || `${protocol}://${window.location.hostname}:3005`
     
     console.log(`[WebSocket] Connecting to ${wsUrl}...`)
     const socket: Socket = io(wsUrl, {
