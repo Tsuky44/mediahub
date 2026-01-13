@@ -46,7 +46,7 @@ async function fixDurations() {
   let errorCount = 0;
 
   for (let i = 0; i < uniqueItemIds.length; i++) {
-    const itemId = uniqueItemIds[i];
+    const itemId = String(uniqueItemIds[i]);
     
     if (i % 50 === 0) {
       console.log(`Progress: ${i}/${uniqueItemIds.length} items checked. Fixed so far: ${fixedCount}`);
