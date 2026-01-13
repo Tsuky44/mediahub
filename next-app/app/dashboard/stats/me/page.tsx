@@ -102,6 +102,39 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
   const user = session.user as any
   const instanceId = parseInt(user.instanceId)
 
+  // Check if user is part of a group
+  const userGroupMember = await (prisma as any).userGroupMember.findFirst({
+    where: {
+      instanceId: instanceId,
+      userId: currentEmbyUserId
+    },
+    include: {
+      userGroup: {
+        include: {
+          members: true
+        }
+      }
+    }
+  })
+
+  let whereCondition: any = {
+    instanceId: instanceId,
+    OR: [
+      { embyUserId: currentEmbyUserId },
+      { userName: { equals: currentUserName, mode: 'insensitive' } }
+    ]
+  }
+
+  if (userGroupMember) {
+    const groupMembers = userGroupMember.userGroup.members
+    whereCondition = {
+      OR: groupMembers.map((member: any) => ({
+        instanceId: member.instanceId,
+        embyUserId: member.userId
+      }))
+    }
+  }
+
   // Fetch instance config
   const instance = await (prisma as any).instance.findUnique({
     where: { id: instanceId }
@@ -161,11 +194,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
   // 3. Fetch Data (Prisma)
   const historyRaw = await (prisma as any).embyActivityLog.findMany({
     where: {
-      instanceId: instanceId,
-      OR: [
-        { embyUserId: currentEmbyUserId },
-        { userName: { equals: currentUserName, mode: 'insensitive' } }
-      ],
+      ...whereCondition,
       startTime: {
         gte: startDate,
         lte: endDate

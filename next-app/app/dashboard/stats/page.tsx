@@ -172,8 +172,19 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
    }
  
    // 3. Fetch Data (Prisma)
-   const [historyRaw, embySessionsRaw] = await Promise.all([
-     (prisma as any).embyActivityLog.findMany({
+  // Fetch User Groups for aggregation
+  const userGroups = await (prisma as any).userGroup.findMany({
+    include: { members: true }
+  });
+  const userGroupMap = new Map<string, any>(); // key: "instanceId:userId", value: group
+  userGroups.forEach((group: any) => {
+    group.members.forEach((member: any) => {
+        userGroupMap.set(`${member.instanceId}:${member.userId}`, group);
+    });
+  });
+
+  const [historyRaw, embySessionsRaw] = await Promise.all([
+    (prisma as any).embyActivityLog.findMany({
        where: {
          instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
          source: sourceFilter !== 'all' ? sourceFilter : undefined,
@@ -499,9 +510,21 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     const duration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration);
     
     // User aggregation
-    const userKey = item.UserId || item.UserName;
+    const rawUserKey = item.UserId || item.UserName;
+    
+    // Check if user is part of a group
+    // We need instanceId for the key. item.instanceId should be available
+    const groupKey = `${item.instanceId}:${rawUserKey}`;
+    const group = userGroupMap.get(groupKey);
+    
+    const userKey = group ? `group-${group.id}` : rawUserKey;
+    const userName = group ? group.name : (item.UserName || 'Inconnu');
+
     if (userKey) {
-      const existing = userStatsMap.get(userKey) || { name: item.UserName || 'Inconnu', duration: 0, plays: 0 };
+      const existing = userStatsMap.get(userKey) || { name: userName, duration: 0, plays: 0 };
+      // If we merge into a group, ensure the name is the group name
+      if (group) existing.name = group.name;
+      
       existing.duration += duration;
       existing.plays += 1;
       userStatsMap.set(userKey, existing);

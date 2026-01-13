@@ -2,9 +2,7 @@ import { getJellyseerrServiceForUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import SettingsForm from './SettingsForm'
-import UserManagement from './UserManagement'
-import { getSetting } from '@/lib/settings'
+import SettingsTabs from './SettingsTabs'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,37 +45,21 @@ export default async function SettingsPage() {
     where: { id: instanceId }
   })
 
-  // Fetch all instances if user is in default instance
-  let allInstances = []
-  if (currentInstance?.isDefault) {
-    allInstances = await (prisma as any).instance.findMany({
-      orderBy: { name: 'asc' }
-    })
-  } else {
-    allInstances = [currentInstance]
-  }
+  // Fetch all instances for the dropdown
+  const allInstances = await (prisma as any).instance.findMany({
+    include: {
+        settings: true
+    }
+  })
 
-  // Fetch settings for all instances if default
-  const instancesWithSettings = await Promise.all(allInstances.map(async (inst: any) => {
-    const instId = inst.id
-    return {
-      ...inst,
-      settings: {
-        jellyseerr_user_id: await getSetting('jellyseerr_user_id', instId),
-        qbittorrent_url: await getSetting('qbittorrent_url', instId),
-        qbittorrent_username: await getSetting('qbittorrent_username', instId),
-        qbittorrent_password: await getSetting('qbittorrent_password', instId),
-        smb_host: await getSetting('smb_host', instId),
-        smb_username: await getSetting('smb_username', instId),
-        smb_password: await getSetting('smb_password', instId),
-        smb_share: await getSetting('smb_share', instId),
-        smb_path: await getSetting('smb_path', instId),
-        radarr_url: await getSetting('radarr_url', instId),
-        radarr_api_key: await getSetting('radarr_api_key', instId),
-        sonarr_url: await getSetting('sonarr_url', instId),
-        sonarr_api_key: await getSetting('sonarr_api_key', instId),
-        jellystat_url: await getSetting('jellystat_url', instId),
-        jellystat_api_key: await getSetting('jellystat_api_key', instId),
+  const instancesWithSettings = allInstances.map((inst: any) => ({
+    id: inst.id,
+    name: inst.name,
+    slug: inst.slug,
+    settings: {
+      ...(inst.settings?.reduce((acc: any, curr: any) => ({ ...acc, [curr.key]: curr.value }), {}) || {}),
+      // Add core fields to settings object for form compatibility
+      ...{
         emby_url: inst.embyUrl,
         emby_api_key: inst.embyApiKey,
         plex_url: inst.plexUrl,
@@ -92,21 +74,11 @@ export default async function SettingsPage() {
   }))
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-black text-white tracking-tight">Paramètres</h2>
-      </div>
-
-      <UserManagement initialUsers={dbUsers} />
-
-      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
-        <h3 className="text-xl font-bold text-white mb-6">Configuration des services</h3>
-        <SettingsForm 
-          instances={instancesWithSettings}
-          currentInstanceId={instanceId}
-          users={jellyseerrUsers} 
-        />
-      </div>
-    </div>
+    <SettingsTabs 
+        dbUsers={dbUsers}
+        instancesWithSettings={instancesWithSettings}
+        currentInstanceId={instanceId}
+        jellyseerrUsers={jellyseerrUsers}
+    />
   )
 }

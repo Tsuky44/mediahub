@@ -29,6 +29,7 @@ model Instance {
   notifications     Notification[]
   settings          Setting[]
   users             User[]
+  userGroupMembers  UserGroupMember[]
   watchEvents       WatchEvent[]
   watchLater        WatchLater[]
 
@@ -266,6 +267,30 @@ model EmbyLiveSession {
 
   @@unique([sessionId, instanceId])
   @@map("emby_live_sessions")
+}
+
+model UserGroup {
+  id        String            @id @default(uuid())
+  name      String
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+  members   UserGroupMember[]
+
+  @@map("user_groups")
+}
+
+model UserGroupMember {
+  id          Int       @id @default(autoincrement())
+  userGroupId String    @map("user_group_id")
+  instanceId  Int       @map("instance_id")
+  userId      String    @map("user_id") // ID externe (emby_user_id, plex_id, etc)
+  username    String?   // Nom d'utilisateur pour référence
+  
+  userGroup   UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  instance    Instance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@unique([instanceId, userId])
+  @@map("user_group_members")
 }
 
 model EmbyActivityLog {
