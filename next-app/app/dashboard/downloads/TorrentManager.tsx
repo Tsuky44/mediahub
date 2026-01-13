@@ -234,7 +234,7 @@ export function TorrentManager() {
             </div>
 
             {/* Torrent List - Compact Row Layout */}
-            <div className="grid gap-3">
+            <div className="flex flex-col gap-3 w-full">
                 {loading && torrents.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">Chargement...</div>
                 ) : filteredTorrents.length === 0 ? (
@@ -251,96 +251,103 @@ export function TorrentManager() {
                         const isDownloading = stateDisplay.includes('download') || stateDisplay.includes('meta')
                         
                         return (
-                            <div key={torrent.hash} className="bg-gray-900/50 rounded-xl p-3 border border-gray-800 shadow-sm hover:border-gray-700 transition-all">
-                                <div className="flex flex-col gap-2">
-                                    {/* Top Row: Tags & Date */}
-                                    <div className="flex justify-between items-center text-[10px] sm:text-xs">
-                                        <div className="flex items-center gap-2">
-                                            {torrent.tags ? torrent.tags.split(',').map(tag => (
-                                                <span key={tag} className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded-md font-bold uppercase tracking-wider">
-                                                    [{tag}]
-                                                </span>
-                                            )) : (
-                                                <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded-md font-bold uppercase tracking-wider">
+                            <div key={torrent.hash} className="bg-[#111827]/80 rounded-xl p-3 border border-gray-800/40 shadow-sm hover:border-gray-700/60 transition-all group overflow-hidden w-full">
+                                <div className="flex flex-col gap-3 w-full">
+                                    {/* Top Row: Tracker, Title & Actions/Date */}
+                                    <div className="flex justify-between items-center gap-4 w-full">
+                                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                                            <div className="shrink-0">
+                                                <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-md font-bold uppercase tracking-wider text-[10px] sm:text-[11px]">
                                                     [{getTrackerName(torrent.tracker)}]
                                                 </span>
-                                            )}
-                                            <span className="text-gray-500">Ajouté: {formatDate(torrent.added_on)}</span>
+                                            </div>
+                                            <h3 className="font-semibold text-gray-100 truncate text-sm sm:text-[15px] leading-tight flex-1 min-w-0" title={torrent.name}>
+                                                {torrent.name}
+                                            </h3>
                                         </div>
-                                    </div>
 
-                                    {/* Middle Row: Name, Status & Actions */}
-                                    <div className="flex justify-between items-center gap-4">
-                                        <h3 className="font-medium text-white truncate text-sm sm:text-base flex-1" title={torrent.name}>
-                                            {torrent.name}
-                                        </h3>
-                                        
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-4 shrink-0">
+                                            <span className="text-gray-500 text-[10px] sm:text-[11px] whitespace-nowrap hidden sm:inline-block border-r border-gray-800 pr-3 mr-1">
+                                                Ajouté: <span className="text-gray-400 font-medium">{formatDate(torrent.added_on)}</span>
+                                            </span>
+
                                             <span className={clsx(
-                                                'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter sm:tracking-normal sm:text-xs whitespace-nowrap',
-                                                isPaused ? 'bg-gray-800 text-gray-400' :
-                                                isError ? 'bg-red-900/40 text-red-400 border border-red-900/50' :
-                                                isUploading ? 'bg-green-900/40 text-green-400 border border-green-900/50' :
-                                                'bg-blue-900/40 text-blue-400 border border-blue-900/50'
+                                                'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border transition-colors hidden xs:inline-block',
+                                                isPaused ? 'bg-gray-800/50 text-gray-500 border-gray-700/50' :
+                                                isError ? 'bg-red-900/20 text-red-500 border-red-900/30' :
+                                                isUploading ? 'bg-green-900/20 text-green-500 border-green-900/30' :
+                                                'bg-blue-900/20 text-blue-500 border-blue-900/30'
                                             )}>
                                                 {isPaused ? 'PAUSED' : isError ? 'ERROR' : isUploading ? 'SEEDING' : 'DOWNLOADING'}
                                             </span>
 
-                                            <div className="flex items-center gap-1 border-l border-gray-800 pl-2">
+                                            <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
                                                 {isPaused ? (
-                                                    <button onClick={() => handleResume(torrent.hash)} className="p-1.5 text-gray-400 hover:text-green-400 hover:bg-gray-800 rounded transition-colors" title="Resume">
+                                                    <button onClick={() => handleResume(torrent.hash)} className="p-1 text-gray-400 hover:text-green-400 transition-colors" title="Resume">
                                                         <Play className="h-4 w-4" />
                                                     </button>
                                                 ) : (
-                                                    <button onClick={() => handlePause(torrent.hash)} className="p-1.5 text-gray-400 hover:text-yellow-400 hover:bg-gray-800 rounded transition-colors" title="Pause">
+                                                    <button onClick={() => handlePause(torrent.hash)} className="p-1 text-gray-400 hover:text-yellow-400 transition-colors" title="Pause">
                                                         <Pause className="h-4 w-4" />
                                                     </button>
                                                 )}
-                                                <button onClick={() => handleDeleteClick(torrent)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-800 rounded transition-colors" title="Delete">
+                                                <button onClick={() => handleDeleteClick(torrent)} className="p-1 text-gray-400 hover:text-red-400 transition-colors" title="Delete">
                                                     <Trash2 className="h-4 w-4" />
                                                 </button>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Progress Bar */}
-                                    <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
-                                        <div 
-                                            className={clsx("h-full transition-all duration-500 shadow-[0_0_8px_rgba(0,0,0,0.5)]", getProgressBarColor(torrent.state))}
-                                            style={{ width: `${(torrent.progress * 100).toFixed(1)}%` }}
-                                        />
-                                    </div>
-
-                                    {/* Bottom Row: Stats */}
-                                    <div className="flex flex-wrap items-center justify-between gap-y-2 text-[10px] sm:text-xs text-gray-400 pt-1">
-                                        <div className="flex items-center gap-3 sm:gap-4">
-                                            <div className="flex items-center gap-1.5 border-r border-gray-800 pr-3 sm:pr-4">
-                                                <Download className="h-3.5 w-3.5 text-green-500" />
-                                                <span className="font-medium text-gray-300">DL: {formatSize(torrent.downloaded)}</span>
-                                                <span className="text-gray-500">({formatSpeed(torrent.dlspeed)})</span>
+                                    {/* Bottom Row: Stats & Progress Bar */}
+                                    <div className="flex items-center gap-4 text-[11px] sm:text-xs text-gray-400 w-full">
+                                        <div className="flex items-center gap-4 shrink-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <Download className="h-3.5 w-3.5 text-green-500/80" />
+                                                <span className="text-gray-200 font-medium whitespace-nowrap">
+                                                    <span className="hidden sm:inline">DL: </span>
+                                                    <span className="text-gray-100">{formatSize(torrent.downloaded)}</span> 
+                                                    <span className="text-gray-500 text-[10px] font-normal ml-0.5 hidden lg:inline">({formatSpeed(torrent.dlspeed)})</span>
+                                                </span>
                                             </div>
-                                            <div className="flex items-center gap-1.5 border-r border-gray-800 pr-3 sm:pr-4">
-                                                <Upload className="h-3.5 w-3.5 text-blue-500" />
-                                                <span className="font-medium text-gray-300">UL: {formatSize(torrent.uploaded)}</span>
-                                                <span className="text-gray-500">({formatSpeed(torrent.upspeed)})</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <Upload className="h-3.5 w-3.5 text-blue-500/80" />
+                                                <span className="text-gray-200 font-medium whitespace-nowrap">
+                                                    <span className="hidden sm:inline">UL: </span>
+                                                    <span className="text-gray-100">{formatSize(torrent.uploaded)}</span> 
+                                                    <span className="text-gray-500 text-[10px] font-normal ml-0.5 hidden lg:inline">({formatSpeed(torrent.upspeed)})</span>
+                                                </span>
                                             </div>
-                                            <div className="flex items-center gap-1.5 border-r border-gray-800 pr-3 sm:pr-4">
+                                            <div className="flex items-center gap-1.5 hidden sm:flex">
                                                 <span className="text-gray-500">Ratio:</span>
                                                 <span className={clsx(
                                                     "font-bold",
-                                                    torrent.ratio >= 2 ? "text-green-500" : torrent.ratio >= 1 ? "text-blue-400" : "text-red-400"
+                                                    torrent.ratio >= 2 ? "text-green-500" : torrent.ratio >= 1 ? "text-blue-400" : "text-red-500"
                                                 )}>{torrent.ratio.toFixed(2)}</span>
                                             </div>
-                                            <div className="flex items-center gap-1.5 sm:border-r sm:border-gray-800 sm:pr-4">
+                                            <div className="flex items-center gap-1.5 hidden md:flex">
                                                 <Users className="h-3.5 w-3.5 text-gray-500" />
-                                                <span className="text-gray-500">Connectés:</span>
-                                                <span className="text-gray-300 font-medium">
-                                                    {torrent.num_seeds + torrent.num_leechs} ({torrent.num_complete + torrent.num_incomplete})
+                                                <span className="text-gray-200 font-medium">
+                                                    {torrent.num_seeds} ({torrent.num_leechs})
                                                 </span>
                                             </div>
                                         </div>
-                                        <div className="font-bold text-gray-300 ml-auto">
-                                            {(torrent.progress * 100).toFixed(0)}%
+
+                                        {/* Progress Bar & Percentage */}
+                                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            <div className="flex-1 bg-gray-800/50 rounded-full h-[5px] overflow-hidden">
+                                                <div 
+                                                    className={clsx(
+                                                        "h-full transition-all duration-500 rounded-full",
+                                                        isPaused ? 'bg-gray-600' : 
+                                                        isUploading ? 'bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.3)]' : 
+                                                        'bg-[#3b82f6] shadow-[0_0_8px_rgba(59,130,246,0.3)]'
+                                                    )}
+                                                    style={{ width: `${(torrent.progress * 100).toFixed(1)}%` }}
+                                                />
+                                            </div>
+                                            <span className="font-bold text-gray-200 text-xs shrink-0 text-right">
+                                                {(torrent.progress * 100).toFixed(0)}%
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
