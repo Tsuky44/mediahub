@@ -14,6 +14,7 @@ export interface LiveSession {
   runTimeTicks?: number | null
   playbackPosition?: number | null
   isPaused: boolean
+  source?: string | null
 }
 
 export function useLiveSessions(initialSessions: LiveSession[] = []) {
@@ -27,7 +28,7 @@ export function useLiveSessions(initialSessions: LiveSession[] = []) {
     
     console.log(`[WebSocket] Connecting to ${wsUrl}...`)
     const socket: Socket = io(wsUrl, {
-      transports: ['websocket', 'polling'], // Allow fallback to polling if WebSocket is blocked
+      transports: ['websocket'], // Force WebSocket to avoid polling-related flickering
       reconnectionAttempts: 10,
       reconnectionDelay: 2000
     })

@@ -11,24 +11,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized. Only admins can manage settings.' }, { status: 401 })
   }
 
-  const body = await request.json()
-  const sessionInstanceId = parseInt((session.user as any).instanceId)
-  // Allow specifying an instanceId in the body, but fallback to session instanceId
-  const instanceId = body.instanceId ? parseInt(body.instanceId) : sessionInstanceId
-  
-  if (isNaN(instanceId)) {
-    return NextResponse.json({ error: 'Invalid instance' }, { status: 400 })
-  }
-
-  // Security check: only allow editing other instances if user is from the default instance
-  if (instanceId !== sessionInstanceId) {
-    const sessionInstance = await (prisma as any).instance.findUnique({ where: { id: sessionInstanceId } })
-    if (!sessionInstance?.isDefault) {
-      return NextResponse.json({ error: 'Unauthorized. Only main instance admins can manage other instances.' }, { status: 401 })
-    }
-  }
-
   try {
+    const body = await request.json()
+    console.log('[Settings API] Received body:', JSON.stringify(body, null, 2))
+    
+    const sessionInstanceId = parseInt((session.user as any).instanceId)
+    // Allow specifying an instanceId in the body, but fallback to session instanceId
+    const instanceId = body.instanceId ? parseInt(body.instanceId) : sessionInstanceId
+    
+    if (isNaN(instanceId)) {
+        return NextResponse.json({ error: 'Invalid instance' }, { status: 400 })
+    }
+
+    // Security check: only allow editing other instances if user is from the default instance
+    if (instanceId !== sessionInstanceId) {
+        const sessionInstance = await (prisma as any).instance.findUnique({ where: { id: sessionInstanceId } })
+        if (!sessionInstance?.isDefault) {
+            return NextResponse.json({ error: 'Unauthorized. Only main instance admins can manage other instances.' }, { status: 401 })
+        }
+    }
+
     const { 
         jellyseerrUserId, 
         qbittorrent_url, 
@@ -46,25 +48,60 @@ export async function POST(request: NextRequest) {
         jellystat_url,
         jellystat_api_key,
         emby_url,
-        emby_api_key
+        emby_api_key,
+        plex_url,
+        plex_token,
+        jellyfin_url,
+        jellyfin_api_key,
+        jellyseerr_url,
+        jellyseerr_api_key,
+        type
     } = body
 
+    console.log(`[Settings API] Updating instance ${instanceId} with type ${type}`)
+
     // Update Instance core settings if provided
-    if (emby_url || emby_api_key || body.jellyseerr_url || body.jellyseerr_api_key) {
-      if (!prisma || !(prisma as any).instance) {
-        throw new Error("Modèle Instance non disponible dans Prisma");
+    if (emby_url !== undefined || emby_api_key !== undefined || 
+        plex_url !== undefined || plex_token !== undefined ||
+        jellyfin_url !== undefined || jellyfin_api_key !== undefined ||
+        jellyseerr_url !== undefined || jellyseerr_api_key !== undefined ||
+        type !== undefined) {
+      
+      console.log('[Settings API] Core settings update detected')
+      if (!prisma) {
+        throw new Error("Prisma client non disponible");
       }
       
       const updateData: any = {}
-      if (emby_url) updateData.embyUrl = emby_url
-      if (emby_api_key) updateData.embyApiKey = emby_api_key
-      if (body.jellyseerr_url) updateData.jellyseerrUrl = body.jellyseerr_url
-      if (body.jellyseerr_api_key) updateData.jellyseerrApiKey = body.jellyseerr_api_key
       
-      await (prisma as any).instance.update({
-        where: { id: instanceId },
-        data: updateData
-      })
+      const setField = (key: string, value: any) => {
+        if (value === undefined) return;
+        // Convert empty string to null for optional fields
+        updateData[key] = value === '' ? null : value;
+      }
+
+      setField('embyUrl', emby_url)
+      setField('embyApiKey', emby_api_key)
+      setField('plexUrl', plex_url)
+      setField('plexToken', plex_token)
+      setField('jellyfinUrl', jellyfin_url)
+      setField('jellyfinApiKey', jellyfin_api_key)
+      setField('jellyseerrUrl', jellyseerr_url)
+      setField('jellyseerrApiKey', jellyseerr_api_key)
+      setField('type', type)
+      
+      console.log('[Settings API] updateData:', JSON.stringify(updateData, null, 2))
+      
+      try {
+        await (prisma as any).instance.update({
+          where: { id: instanceId },
+          data: updateData
+        })
+        console.log('[Settings API] Instance core settings updated successfully')
+      } catch (prismaError: any) {
+        console.error('[Settings API] Prisma update error:', prismaError)
+        throw new Error(`Erreur Prisma: ${prismaError.message}`);
+      }
     }
 
     // Update Global Settings
@@ -94,8 +131,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
 
-  } catch (e) {
-    console.error('Failed to update settings', e)
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  } catch (e: any) {
+    console.error('Failed to update settings:', e.message, e.stack)
+    return NextResponse.json({ error: e.message || 'Internal Server Error' }, { status: 500 })
   }
 }

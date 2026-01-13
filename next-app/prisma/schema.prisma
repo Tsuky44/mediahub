@@ -11,8 +11,13 @@ model Instance {
   id                Int                      @id @default(autoincrement())
   name              String                   @unique
   slug              String                   @unique
-  embyUrl           String                   @map("emby_url")
-  embyApiKey        String                   @map("emby_api_key")
+  type              String                   @default("emby") // emby, jellyfin, plex
+  embyUrl           String?                  @map("emby_url")
+  embyApiKey        String?                  @map("emby_api_key")
+  plexUrl           String?                  @map("plex_url")
+  plexToken         String?                  @map("plex_token")
+  jellyfinUrl       String?                  @map("jellyfin_url")
+  jellyfinApiKey    String?                  @map("jellyfin_api_key")
   jellyseerrUrl     String?                  @map("jellyseerr_url")
   jellyseerrApiKey  String?                  @map("jellyseerr_api_key")
   isDefault         Boolean                  @default(false) @map("is_default")
@@ -242,6 +247,7 @@ model EmbyLiveSession {
   id                 String   @id @default(uuid())
   instanceId         Int      @default(1) @map("instance_id")
   sessionId          String   @map("session_id")
+  source             String   @default("emby")
   userId             String   @map("user_id")
   userName           String   @map("user_name")
   client             String?
@@ -265,6 +271,7 @@ model EmbyLiveSession {
 model EmbyActivityLog {
   id            String    @id @default(uuid())
   instanceId    Int       @default(1) @map("instance_id")
+  source        String    @default("emby")
   embyUserId    String    @map("emby_user_id")
   userName      String    @map("user_name")
   itemId        String    @map("item_id")

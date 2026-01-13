@@ -6,7 +6,7 @@ async function main() {
   console.log('--- Seeding Test Data ---');
 
   // 1. Create or get Instance 1
-  const instance1 = await prisma.instance.upsert({
+  const instance1 = await (prisma as any).instance.upsert({
     where: { name: 'Instance 1' },
     update: {},
     create: {
@@ -14,12 +14,13 @@ async function main() {
       slug: 'instance-1',
       embyUrl: 'http://instance1:8096',
       embyApiKey: 'key1',
+      type: 'emby'
     },
   });
   console.log(`Created Instance 1: ID ${instance1.id}`);
 
   // 2. Create or get Instance 2
-  const instance2 = await prisma.instance.upsert({
+  const instance2 = await (prisma as any).instance.upsert({
     where: { name: 'Instance 2' },
     update: {},
     create: {
@@ -27,9 +28,24 @@ async function main() {
       slug: 'instance-2',
       embyUrl: 'http://instance2:8096',
       embyApiKey: 'key2',
+      type: 'emby'
     },
   });
   console.log(`Created Instance 2: ID ${instance2.id}`);
+
+  // 3. Create a Plex Instance
+  const plexInstance = await (prisma as any).instance.upsert({
+    where: { name: 'Plex Test' },
+    update: {},
+    create: {
+      name: 'Plex Test',
+      slug: 'plex-test',
+      plexUrl: 'http://plex:32400',
+      plexToken: 'plex-token',
+      type: 'plex'
+    },
+  });
+  console.log(`Created Plex Instance: ID ${plexInstance.id}`);
 
   // 3. Create a session for Instance 1
   const sessionId = 'shared-session-id';

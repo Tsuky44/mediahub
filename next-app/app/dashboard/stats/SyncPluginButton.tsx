@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { RefreshCw, Check, AlertCircle } from 'lucide-react'
 
-export function SyncPluginButton() {
+export function SyncPluginButton({ source }: { source?: string }) {
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
@@ -14,6 +14,10 @@ export function SyncPluginButton() {
     try {
       const response = await fetch('/api/stats/sync-plugin', {
         method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ source })
       })
       const data = await response.json()
       

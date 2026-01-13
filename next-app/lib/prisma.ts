@@ -1,6 +1,15 @@
 import { PrismaClient } from '@prisma/client'
 
+// FIX: Global BigInt serialization for JSON
+// This prevents crashes when sending objects containing BigInt (like EmbyActivityLog) in API responses
+if (!(BigInt.prototype as any).toJSON) {
+  (BigInt.prototype as any).toJSON = function () {
+    return Number(this);
+  };
+}
+
 const prismaClientSingleton = () => {
+  console.log('[Prisma] Creating new PrismaClient instance')
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   })

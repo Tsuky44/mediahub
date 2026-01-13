@@ -98,9 +98,9 @@ export function TopItemsTabs({ movies, series, instanceId, title = "Contenus les
         </div>
       </div>
 
-      <div className="space-y-3 min-h-[400px]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {currentItems.length > 0 ? (
-          currentItems.map((item, idx) => (
+          currentItems.slice(0, 4).map((item, idx) => (
             <TopItemCard 
               key={item.Id || idx} 
               item={item} 
@@ -109,7 +109,7 @@ export function TopItemsTabs({ movies, series, instanceId, title = "Contenus les
             />
           ))
         ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-500 italic border border-dashed border-gray-800 rounded-xl bg-gray-900/20">
+          <div className="col-span-full flex flex-col items-center justify-center py-20 text-gray-500 italic border border-dashed border-gray-800 rounded-xl bg-gray-900/20">
             <p>Aucune donnée disponible pour cette catégorie</p>
           </div>
         )}

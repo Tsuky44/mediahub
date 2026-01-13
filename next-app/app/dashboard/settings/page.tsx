@@ -80,8 +80,13 @@ export default async function SettingsPage() {
         jellystat_api_key: await getSetting('jellystat_api_key', instId),
         emby_url: inst.embyUrl,
         emby_api_key: inst.embyApiKey,
+        plex_url: inst.plexUrl,
+        plex_token: inst.plexToken,
+        jellyfin_url: inst.jellyfinUrl,
+        jellyfin_api_key: inst.jellyfinApiKey,
         jellyseerr_url: inst.jellyseerrUrl,
         jellyseerr_api_key: inst.jellyseerrApiKey,
+        type: inst.type,
       }
     }
   }))

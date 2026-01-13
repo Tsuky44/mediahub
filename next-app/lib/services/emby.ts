@@ -331,11 +331,24 @@ export class EmbyService {
         // 0. Try custom query on PlaybackActivity table first (if Statistics plugin is present but we want Playback Reporting data)
         // Some users have both, but we want the data from Playback Reporting's DB structure
         try {
-            const query = `SELECT rowid, * FROM PlaybackActivity`
+            let query = `SELECT rowid, * FROM PlaybackActivity`
+            
+            if (days > 0) {
+                const minDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+                // Format for SQLite comparison (YYYY-MM-DD HH:mm:ss)
+                const formattedDate = minDate.toISOString().replace('T', ' ').split('.')[0]
+                query += ` WHERE DateCreated > '${formattedDate}'`
+            }
+            
+            query += ` ORDER BY DateCreated DESC`
+
+            console.log(`[EmbyService] Executing custom query: ${query}`)
+
             const pbQueryResponse = await client.post('/user_usage_stats/submit_custom_query', {
                 CustomQueryString: query
             })
-            if (pbQueryResponse.data && pbQueryResponse.data.results) {
+            if (pbQueryResponse.data && pbQueryResponse.data.results && pbQueryResponse.data.results.length > 0) {
+                console.log(`[EmbyService] Custom query returned ${pbQueryResponse.data.results.length} rows`)
                 return pbQueryResponse.data.results.map((item: any[]) => ({
                     Id: item[0],
                     DateCreated: item[1],
@@ -347,11 +360,14 @@ export class EmbyService {
                     ClientName: item[7],
                     DeviceName: item[8],
                     PlayDuration: item[9],
-                    UserName: 'Unknown'
+                    UserName: 'Unknown',
+                    App: item[7],
+                    Device: item[8]
                 }))
             }
         } catch (e) {
             // Ignore custom query error and continue to official endpoints
+            console.warn('[EmbyService] Custom query failed, falling back to endpoints:', (e as any).message)
         }
 
         // 1. Try the Report endpoint

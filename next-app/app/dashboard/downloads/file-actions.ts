@@ -85,15 +85,54 @@ export async function testEmbyConnection(url: string, apiKey: string) {
         const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
         // Simple ping HTTP
-        const response = await axios.get(cleanUrl, {
+        const response = await axios.get(`${cleanUrl}/System/Info/Public`, {
             timeout: 5000,
             httpsAgent: cleanUrl.startsWith('https') ? httpsAgent : undefined,
-            validateStatus: () => true
+            validateStatus: (status) => status === 200
         });
 
         return { success: true };
     } catch (e: any) {
         console.error('Emby ping failed:', e.message);
-        return { success: false, error: 'Service injoignable' };
+        return { success: false, error: 'Serveur Emby injoignable ou invalide' };
+    }
+}
+
+export async function testPlexConnection(url: string, token: string) {
+    try {
+        const cleanUrl = url.replace(/\/$/, '');
+        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+        // Plex /identity endpoint doesn't require token but confirms it's a Plex server
+        const response = await axios.get(`${cleanUrl}/identity`, {
+            timeout: 5000,
+            httpsAgent: cleanUrl.startsWith('https') ? httpsAgent : undefined,
+            headers: { 'Accept': 'application/json' },
+            validateStatus: (status) => status === 200
+        });
+
+        return { success: true };
+    } catch (e: any) {
+        console.error('Plex ping failed:', e.message);
+        return { success: false, error: 'Serveur Plex injoignable ou invalide' };
+    }
+}
+
+export async function testJellyfinConnection(url: string, apiKey: string) {
+    try {
+        const cleanUrl = url.replace(/\/$/, '');
+        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+        // Jellyfin also has /system/info/public
+        const response = await axios.get(`${cleanUrl}/System/Info/Public`, {
+            timeout: 5000,
+            httpsAgent: cleanUrl.startsWith('https') ? httpsAgent : undefined,
+            validateStatus: (status) => status === 200
+        });
+
+        return { success: true };
+    } catch (e: any) {
+        console.error('Jellyfin ping failed:', e.message);
+        return { success: false, error: 'Serveur Jellyfin injoignable ou invalide' };
     }
 }

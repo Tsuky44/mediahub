@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import dotenv from 'dotenv';
 import { EmbyService } from '../lib/services/emby';
+import { PlexService } from '../lib/services/plex';
 import { getPrisma } from '../lib/prisma';
 import { Server } from 'socket.io';
 import http from 'http';
@@ -15,6 +16,7 @@ dotenv.config();
 };
 
 // Socket.io Server Setup
+const isFullSync = process.argv.includes('--full-sync');
 const server = http.createServer();
 const io = new Server(server, {
   cors: {
@@ -25,9 +27,11 @@ const io = new Server(server, {
 
 const WS_PORT = process.env.TRACKER_WS_PORT || 3001;
 
-server.listen(WS_PORT, () => {
-  console.log(`[Tracker] WebSocket broadcast server listening on port ${WS_PORT}`);
-});
+if (!isFullSync) {
+    server.listen(WS_PORT, () => {
+      console.log(`[Tracker] WebSocket broadcast server listening on port ${WS_PORT}`);
+    });
+}
 
 io.on('connection', (socket) => {
   console.log(`[Tracker] Frontend client connected: ${socket.id}`);
@@ -64,6 +68,7 @@ io.on('connection', (socket) => {
               device: sessionState.device,
               deviceId: sessionState.deviceId,
               mediaInfo: sessionState.mediaInfo,
+              source: sessionState.source,
               isLive: true
           }
       });
@@ -88,6 +93,7 @@ function broadcastSessions() {
 
 interface SessionState {
   instanceId: number;
+  source: string; // emby, jellyfin, plex
   sessionId: string;
   userId: string;
   userName: string;
@@ -114,18 +120,151 @@ interface SessionState {
 
 // Global state tracking
 const activeSessions = new Map<string, SessionState>();
-interface InstanceConnection {
+interface ServiceConnection {
   ws: WebSocket | null;
   keepAlive?: NodeJS.Timeout;
   pollingInterval?: NodeJS.Timeout;
-  embyUrl: string;
-  embyApiKey: string;
+  url: string;
+  key: string;
+  type: string;
 }
 
-const instanceConnections = new Map<number, InstanceConnection>();
-const instanceUsers = new Map<number, Map<string, string>>(); // instanceId -> (userId -> userName)
+const instanceConnections = new Map<string, ServiceConnection>();
+const instanceUsers = new Map<string, Map<string, string>>(); // "instanceId-source" -> (userId -> userName)
 
 async function startTracker() {
+  if (isFullSync) {
+      console.log('[Tracker] Running EXHAUSTIVE Plex history sync as requested...');
+      const p = getPrisma() as any;
+      const instances = await p.instance.findMany();
+      for (const inst of instances) {
+          if (inst.plexUrl && inst.plexToken) {
+              console.log(`[Tracker] Full sync for instance: ${inst.name}`);
+              
+              const plex = new PlexService(inst.plexUrl, inst.plexToken);
+              
+              // Fetch users first
+               const plexUsers = await plex.getUsers();
+               const userMap = new Map<string, string>(plexUsers.map((u: any) => [String(u.Id), String(u.Name)]));
+               instanceUsers.set(`${inst.id}-plex`, userMap);
+
+              // 1. Fetch recent (up to 20k)
+              let offset = 0;
+              const limit = 500;
+              let hasMore = true;
+              let totalFetched = 0;
+
+              while (hasMore && totalFetched < 20000) {
+                  const batch = await plex.getHistory(limit, offset, 'viewedAt:desc');
+                  if (!batch || batch.length === 0) {
+                      hasMore = false;
+                  } else {
+                      // Process batch immediately to save memory
+                      for (const item of batch) {
+                          const date = new Date(item.viewedAt * 1000);
+                          const existing = await p.embyActivityLog.findFirst({
+                              where: {
+                                  instanceId: inst.id,
+                                  source: 'plex',
+                                  embyUserId: String(item.accountID),
+                                  itemId: String(item.ratingKey),
+                                  startTime: {
+                                      gte: new Date(date.getTime() - 5000),
+                                      lte: new Date(date.getTime() + 5000)
+                                  }
+                              }
+                          });
+
+                          if (!existing) {
+                              const playDurationMs = item.duration || 1800000;
+                              const embyUserId = String(item.accountID || 'unknown');
+                              const userName = item.user || item.User?.title || userMap.get(embyUserId) || 'Plex User';
+
+                              await p.embyActivityLog.create({
+                                    data: {
+                                        instanceId: inst.id,
+                                        source: 'plex',
+                                        embyUserId,
+                                        userName,
+                                        itemId: String(item.ratingKey),
+                                        itemName: item.title || 'Unknown Item',
+                                        itemType: item.type || 'Unknown',
+                                        startTime: date,
+                                        endTime: new Date(date.getTime() + playDurationMs),
+                                        playDuration: Math.floor(playDurationMs / 1000),
+                                        mediaInfo: JSON.stringify({
+                                            seriesName: item.grandparentTitle,
+                                            seasonName: item.parentTitle,
+                                            client: item.Player?.product || 'Plex',
+                                            pluginSynced: true,
+                                            exhaustive: true
+                                        })
+                                    }
+                                });
+                          }
+                      }
+                      totalFetched += batch.length;
+                      offset += limit;
+                      console.log(`[Tracker] ${inst.name}: Synced ${totalFetched} recent items...`);
+                      if (batch.length < limit) hasMore = false;
+                  }
+              }
+
+              // 2. Fetch oldest (ensure "first thing seen")
+              console.log(`[Tracker] ${inst.name}: Fetching oldest items (beginning of time)...`);
+              const oldestBatch = await plex.getHistory(500, 0, 'viewedAt:asc');
+              if (oldestBatch) {
+                  for (const item of oldestBatch) {
+                      const date = new Date(item.viewedAt * 1000);
+                      const existing = await p.embyActivityLog.findFirst({
+                          where: {
+                              instanceId: inst.id,
+                              source: 'plex',
+                              embyUserId: String(item.accountID),
+                              itemId: String(item.ratingKey),
+                              startTime: {
+                                  gte: new Date(date.getTime() - 5000),
+                                  lte: new Date(date.getTime() + 5000)
+                              }
+                          }
+                      });
+
+                      if (!existing) {
+                          const playDurationMs = item.duration || 1800000;
+                          const embyUserId = String(item.accountID || 'unknown');
+                          const userName = item.user || item.User?.title || userMap.get(embyUserId) || 'Plex User';
+
+                          await p.embyActivityLog.create({
+                                data: {
+                                    instanceId: inst.id,
+                                    source: 'plex',
+                                    embyUserId,
+                                    userName,
+                                    itemId: String(item.ratingKey),
+                                    itemName: item.title || 'Unknown Item',
+                                    itemType: item.type || 'Unknown',
+                                    startTime: date,
+                                    endTime: new Date(date.getTime() + playDurationMs),
+                                    playDuration: Math.floor(playDurationMs / 1000),
+                                    mediaInfo: JSON.stringify({
+                                        seriesName: item.grandparentTitle,
+                                        seasonName: item.parentTitle,
+                                        client: item.Player?.product || 'Plex',
+                                        pluginSynced: true,
+                                        exhaustiveOldest: true
+                                    })
+                                }
+                            });
+                      }
+                  }
+                  console.log(`[Tracker] ${inst.name}: Synced ${oldestBatch.length} oldest items.`);
+              }
+          }
+      }
+      console.log('[Tracker] EXHAUSTIVE sync completed.');
+      process.exit(0);
+  }
+
   console.log('--- Emby Multi-Instance Tracker Starting ---');
   
   const p = getPrisma() as any;
@@ -149,25 +288,16 @@ async function startTracker() {
   setInterval(() => syncFromPlugins(2), 15 * 60 * 1000);
   // Initial deep sync on start (1000 days = ~3 years)
   syncFromPlugins(1000);
-
-  /*
-  // Clear existing live sessions from DB to start fresh and avoid "stuck" long durations from previous bugs
-  const clearExistingSessions = async () => {
-    try {
-        const p = getPrisma() as any;
-        if (p.embyLiveSession) {
-            await p.embyLiveSession.deleteMany({});
-            console.log(`[Tracker] Cleared existing live sessions from DB for fresh start.`);
-        }
-    } catch (e) { console.error(`[Tracker] Error clearing existing sessions: ${e}`); }
-  };
-  clearExistingSessions();
-  */
   
   // Load existing live sessions from DB to memory to persist accumulatedDuration across tracker restarts
   const loadExistingSessions = async () => {
     try {
         const p = getPrisma() as any;
+        // Fetch instance types map
+        const instances = await p.instance.findMany({ select: { id: true, type: true } });
+        const instanceTypes = new Map<number, string>();
+        instances.forEach((i: any) => instanceTypes.set(i.id, i.type || 'emby'));
+
         if (p.embyLiveSession) {
             const existing = await p.embyLiveSession.findMany();
             console.log(`[Tracker] Loading ${existing.length} existing live sessions from DB...`);
@@ -175,6 +305,7 @@ async function startTracker() {
                 const sessionKey = `${s.instanceId}-${s.sessionId}`;
                 activeSessions.set(sessionKey, {
                     instanceId: s.instanceId,
+                    source: s.source || 'emby',
                     sessionId: s.sessionId,
                     userId: s.userId,
                     userName: s.userName,
@@ -214,13 +345,15 @@ async function startTracker() {
     // though Map iteration handles deletion gracefully usually, explicit key is better.
     for (const [key, state] of activeSessions.entries()) {
       // Only project forward if not paused AND recently seen
-      const isRecentlySeen = (now - state.lastSeen) < 15000; // 15s grace
-      
-      // Background cleanup for sessions marked for deletion
-      if (state.markedForCleanup && (now - state.markedForCleanup > 1000)) { 
-          console.log(`[Tracker] Background cleanup for session: ${state.userName} - ${state.itemName}`);
-          await flushSession(state);
-          activeSessions.delete(key);
+    const isRecentlySeen = (now - state.lastSeen) < 30000; // 30s grace (increased from 15s)
+    
+    // Background cleanup for sessions marked for deletion
+    // Plex sessions are especially prone to flickering in the sessions list, so we use a longer grace period
+    const cleanupDelay = state.source === 'plex' ? 30000 : 15000;
+    if (state.markedForCleanup && (now - state.markedForCleanup > cleanupDelay)) { 
+        console.log(`[Tracker] Background cleanup for session: ${state.userName} - ${state.itemName} (Source: ${state.source})`);
+        await flushSession(state);
+        activeSessions.delete(key);
           
           try {
             const p = getPrisma() as any;
@@ -294,199 +427,183 @@ async function startTracker() {
 }
 
 async function syncFromPlugins(days: number = 2) {
-  console.log(`--- Syncing from Emby Plugins (Last ${days} days) ---`);
+  console.log(`--- Syncing from Media Plugins (Last ${days} days) ---`);
   try {
     const prisma = getPrisma();
     const instances = await (prisma as any).instance.findMany();
     for (const inst of instances) {
-      try {
-        const emby = new EmbyService(inst.embyUrl, inst.embyApiKey);
-        
-        // 1. Try Statistics Plugin first (user preference)
-        let stats = await emby.getStatisticsStats(days);
-        let pluginName = 'Statistics';
+      // 1. Sync Emby if configured
+      if (inst.embyUrl && inst.embyApiKey) {
+        await syncEmbyOrJellyfinHistory(inst, 'emby', days);
+      }
+      
+      // 2. Sync Jellyfin if configured
+      if (inst.jellyfinUrl && inst.jellyfinApiKey) {
+        await syncEmbyOrJellyfinHistory(inst, 'jellyfin', days);
+      }
 
-        // 2. If no data from Statistics, try Playback Reporting as fallback
-        if (!stats || stats.length === 0) {
-            const pbStats = await emby.getPlaybackReportingStats(days);
-            if (pbStats && pbStats.length > 0) {
-                stats = pbStats;
-                pluginName = 'Playback Reporting';
-            }
-        }
-
-        if (!stats || stats.length === 0) continue;
-
-        // Pre-fetch item details for all unique item IDs to get TMDB IDs
-        const uniqueItemIds = Array.from(new Set(stats.map((s: any) => s.ItemId || s.NowPlayingItemId).filter(Boolean))) as string[];
-        const itemDetailsMap = new Map<string, any>();
-        
-        if (uniqueItemIds.length > 0) {
-          console.log(`[${inst.name}] Fetching details for ${uniqueItemIds.length} items in batches...`);
-          // Fetch in batches of 50 to avoid URL length limits
-          for (let i = 0; i < uniqueItemIds.length; i += 50) {
-            const batch = uniqueItemIds.slice(i, i + 50);
-            const details = await emby.getItemsDetails(batch);
-            console.log(`[${inst.name}] Batch ${i/50 + 1}: Received ${details.length} item details`);
-            details.forEach((item: any) => {
-              itemDetailsMap.set(String(item.Id), item);
-            });
-          }
-
-          // Second pass: Fetch series details for episodes missing TMDB IDs
-          const missingTmdbSeriesIds = new Set<string>();
-          itemDetailsMap.forEach((item: any) => {
-            const tmdbId = item?.ProviderIds?.Tmdb || item?.ProviderIds?.TMDB;
-            if (!tmdbId && item.SeriesId) {
-              missingTmdbSeriesIds.add(String(item.SeriesId));
-            }
-          });
-
-          if (missingTmdbSeriesIds.size > 0) {
-            const seriesIds = Array.from(missingTmdbSeriesIds);
-            console.log(`[${inst.name}] Fetching details for ${seriesIds.length} parent series...`);
-            for (let i = 0; i < seriesIds.length; i += 50) {
-              const batch = seriesIds.slice(i, i + 50);
-              const details = await emby.getItemsDetails(batch);
-              details.forEach((item: any) => {
-                itemDetailsMap.set(`series_${item.Id}`, item);
-              });
-            }
-          }
-        }
-
-        let syncedCount = 0;
-        let tmdbFoundCount = 0;
-        const missingTmdbItems = new Set<string>();
-        for (const s of stats) {
-          const itemId = String(s.ItemId || s.NowPlayingItemId);
-          const itemDetail = itemDetailsMap.get(itemId);
-          let tmdbId = itemDetail?.ProviderIds?.Tmdb || itemDetail?.ProviderIds?.TMDB;
-
-          // Fallback to series TMDB ID if it's an episode
-          if (!tmdbId && itemDetail?.SeriesId) {
-            const seriesDetail = itemDetailsMap.get(`series_${itemDetail.SeriesId}`);
-            tmdbId = seriesDetail?.ProviderIds?.Tmdb || seriesDetail?.ProviderIds?.TMDB;
-          }
-
-          if (tmdbId) {
-            tmdbFoundCount++;
-          } else if (itemDetail) {
-            // Log once per unique item that is missing TMDB
-            if (!missingTmdbItems.has(itemId)) {
-                missingTmdbItems.add(itemId);
-                console.log(`[${inst.name}] Item missing TMDB: ${itemDetail.Name} (Type: ${itemDetail.Type}, SeriesId: ${itemDetail.SeriesId})`);
-            }
-          }
-          
-          // Map plugin fields to our model
-          const startTime = new Date(s.DateCreated || s.ActivityDateInserted || s.Timestamp);
-          const playDuration = Math.round(s.PlayDuration || 0);
-          
-          if (playDuration < 10) continue; 
-
-          const embyUserId = s.UserId;
-          const itemName = s.ItemName || s.Name || 'Unknown';
-
-          // Get real user name from cache if possible
-          const cachedUserName = instanceUsers.get(inst.id)?.get(embyUserId);
-          const userName = s.UserName || s.User || cachedUserName || 'Unknown';
-
-          // Filter out junk data like theme songs or unknown items
-          if (itemName.includes('Not Known') || itemName.toLowerCase().includes('theme')) {
-              continue;
-          }
-
-            const exists = await (prisma as any).embyActivityLog.findFirst({
-            where: {
-              instanceId: inst.id,
-              embyUserId,
-              itemId,
-              startTime: {
-                gte: new Date(startTime.getTime() - 5000), 
-                lte: new Date(startTime.getTime() + 5000)
-              }
-            }
-          });
-
-          if (!exists) {
-            await (prisma as any).embyActivityLog.create({
-              data: {
-                instanceId: inst.id,
-                embyUserId,
-                userName,
-                itemId,
-                itemName: s.ItemName || s.Name || 'Unknown',
-                itemType: s.ItemType || s.Type || 'Unknown',
-                startTime,
-                endTime: new Date(startTime.getTime() + playDuration * 1000),
-                playDuration,
-                totalDuration: itemDetail?.RunTimeTicks ? BigInt(itemDetail.RunTimeTicks) : null,
-                client: s.ClientName || s.Client || 'Unknown',
-                device: s.DeviceName || s.Device || 'Unknown',
-                mediaInfo: JSON.stringify({
-                  playbackMethod: s.PlaybackMethod || s.PlayMethod,
-                  pluginSynced: true,
-                  pluginSource: pluginName,
-                  tmdbId,
-                  seriesId: itemDetail?.SeriesId,
-                  seriesName: itemDetail?.SeriesName,
-                  seasonName: itemDetail?.SeasonName,
-                  episodeIndex: itemDetail?.IndexNumber,
-                  seasonIndex: itemDetail?.ParentIndexNumber
-                })
-              }
-            });
-            syncedCount++;
-          } else {
-            // If exists but missing TMDB ID or totalDuration, update it
-            const existingMediaInfo = typeof exists.mediaInfo === 'string' ? JSON.parse(exists.mediaInfo) : (exists.mediaInfo || {});
-            const needsTmdbUpdate = !existingMediaInfo.tmdbId && tmdbId;
-            const needsDurationUpdate = !exists.totalDuration && itemDetail?.RunTimeTicks;
-
-            if (needsTmdbUpdate || needsDurationUpdate) {
-              await (prisma as any).embyActivityLog.update({
-                where: { id: exists.id },
-                data: {
-                  totalDuration: needsDurationUpdate ? BigInt(itemDetail.RunTimeTicks) : exists.totalDuration,
-                  mediaInfo: JSON.stringify({
-                    ...existingMediaInfo,
-                    tmdbId: needsTmdbUpdate ? tmdbId : existingMediaInfo.tmdbId,
-                    seriesId: itemDetail?.SeriesId || existingMediaInfo.seriesId,
-                    seriesName: itemDetail?.SeriesName || existingMediaInfo.seriesName,
-                    seasonName: itemDetail?.SeasonName || existingMediaInfo.seasonName,
-                    episodeIndex: itemDetail?.IndexNumber || existingMediaInfo.episodeIndex,
-                    seasonIndex: itemDetail?.ParentIndexNumber || existingMediaInfo.seasonIndex
-                  })
-                }
-              });
-            }
-          }
-        }
-        if (syncedCount > 0 || tmdbFoundCount > 0) {
-          console.log(`[${inst.name}] Synced ${syncedCount} new logs, found TMDB IDs for ${tmdbFoundCount}/${stats.length} logs from ${pluginName} plugin`);
-        }
-      } catch (err: any) {
-        // Only log if it's not a 404 (plugin missing)
-        if (err.response?.status !== 404) {
-           console.error(`[${inst.name}] Failed to sync from plugins:`, err.message);
-        }
+      // 3. Sync Plex if configured
+      if (inst.plexUrl && inst.plexToken) {
+        await syncPlexHistory(inst);
       }
     }
   } catch (err: any) {
-    console.error('Error in syncFromPlugins:', err.message);
+    console.error(`[Tracker] syncFromPlugins global error:`, err.message);
   }
 }
 
-async function fixUnknownUsersInDB(instanceId: number, userMap: Map<string, string>) {
+async function syncEmbyOrJellyfinHistory(inst: any, type: 'emby' | 'jellyfin', days: number) {
+  try {
+    const url = type === 'jellyfin' ? inst.jellyfinUrl : inst.embyUrl;
+    const key = type === 'jellyfin' ? inst.jellyfinApiKey : inst.embyApiKey;
+    
+    if (!url || !key) return;
+
+    const service = new EmbyService(url, key);
+    
+    // 1. Try Statistics Plugin first (user preference)
+    let stats = await service.getStatisticsStats(days);
+    let pluginName = 'Statistics';
+
+    // 2. If no data from Statistics, try Playback Reporting as fallback
+    if (!stats || stats.length === 0) {
+        const pbStats = await service.getPlaybackReportingStats(days);
+        if (pbStats && pbStats.length > 0) {
+            stats = pbStats;
+            pluginName = 'Playback Reporting';
+        }
+    }
+
+    if (!stats || stats.length === 0) return;
+
+    // Pre-fetch item details for all unique item IDs to get TMDB IDs
+    const uniqueItemIds = Array.from(new Set(stats.map((s: any) => s.ItemId || s.NowPlayingItemId).filter(Boolean))) as string[];
+    const itemDetailsMap = new Map<string, any>();
+    
+    if (uniqueItemIds.length > 0) {
+      console.log(`[${inst.name}] (${type}) Fetching details for ${uniqueItemIds.length} items...`);
+      for (let i = 0; i < uniqueItemIds.length; i += 50) {
+        const batch = uniqueItemIds.slice(i, i + 50);
+        const details = await service.getItemsDetails(batch);
+        details.forEach((item: any) => {
+          itemDetailsMap.set(String(item.Id), item);
+        });
+      }
+
+      // Second pass for series details
+      const missingTmdbSeriesIds = new Set<string>();
+      itemDetailsMap.forEach((item: any) => {
+        const tmdbId = item?.ProviderIds?.Tmdb || item?.ProviderIds?.TMDB;
+        if (!tmdbId && item.SeriesId) {
+          missingTmdbSeriesIds.add(String(item.SeriesId));
+        }
+      });
+
+      if (missingTmdbSeriesIds.size > 0) {
+        const seriesIds = Array.from(missingTmdbSeriesIds);
+        for (let i = 0; i < seriesIds.length; i += 50) {
+          const batch = seriesIds.slice(i, i + 50);
+          const details = await service.getItemsDetails(batch);
+          details.forEach((item: any) => {
+            itemDetailsMap.set(`series_${item.Id}`, item);
+          });
+        }
+      }
+    }
+
+    let syncedCount = 0;
+    const prisma = getPrisma();
+    for (const s of stats) {
+      const itemId = String(s.ItemId || s.NowPlayingItemId);
+      const itemDetail = itemDetailsMap.get(itemId);
+      let tmdbId = itemDetail?.ProviderIds?.Tmdb || itemDetail?.ProviderIds?.TMDB;
+
+      if (!tmdbId && itemDetail?.SeriesId) {
+        const seriesDetail = itemDetailsMap.get(`series_${itemDetail.SeriesId}`);
+        tmdbId = seriesDetail?.ProviderIds?.Tmdb || seriesDetail?.ProviderIds?.TMDB;
+      }
+      
+      const startTime = new Date(s.DateCreated || s.ActivityDateInserted || s.Timestamp);
+      const playDuration = Math.round(s.PlayDuration || 0);
+      
+      if (playDuration < 10) continue; 
+
+      const embyUserId = s.UserId;
+      const itemName = s.ItemName || s.Name || 'Unknown';
+
+      // Filter out junk
+      if (itemName.includes('Not Known') || itemName.toLowerCase().includes('theme')) {
+          continue;
+      }
+
+      const exists = await (prisma as any).embyActivityLog.findFirst({
+        where: {
+          instanceId: inst.id,
+          source: type,
+          embyUserId,
+          itemId,
+          startTime: {
+            gte: new Date(startTime.getTime() - 5000), 
+            lte: new Date(startTime.getTime() + 5000)
+          }
+        }
+      });
+
+      if (!exists) {
+        const cachedUserName = instanceUsers.get(`${inst.id}-${type}`)?.get(embyUserId);
+        const userName = s.UserName || s.User || cachedUserName || 'Unknown';
+
+        await (prisma as any).embyActivityLog.create({
+          data: {
+            instanceId: inst.id,
+            source: type,
+            embyUserId,
+            userName,
+            itemId,
+            itemName: s.ItemName || s.Name || 'Unknown',
+            itemType: s.ItemType || s.Type || 'Unknown',
+            startTime,
+            endTime: new Date(startTime.getTime() + playDuration * 1000),
+            playDuration,
+            totalDuration: itemDetail?.RunTimeTicks ? BigInt(itemDetail.RunTimeTicks) : null,
+            client: s.ClientName || s.Client || 'Unknown',
+            device: s.DeviceName || s.Device || 'Unknown',
+            mediaInfo: JSON.stringify({
+              playbackMethod: s.PlaybackMethod || s.PlayMethod,
+              pluginSynced: true,
+              pluginSource: pluginName,
+              tmdbId,
+              seriesId: itemDetail?.SeriesId,
+              seriesName: itemDetail?.SeriesName,
+              seasonName: itemDetail?.SeasonName,
+              episodeIndex: itemDetail?.IndexNumber,
+              seasonIndex: itemDetail?.ParentIndexNumber
+            })
+          }
+        });
+        syncedCount++;
+      }
+    }
+    if (syncedCount > 0) {
+      console.log(`[${inst.name}] (${type}) Synced ${syncedCount} logs from ${pluginName}`);
+    }
+  } catch (err: any) {
+    if (err.response?.status !== 404) {
+       console.error(`[${inst.name}] (${type}) Failed to sync from plugins:`, err.message);
+    }
+  }
+}
+
+async function fixUnknownUsersInDB(instanceId: number, source: string, userMap: Map<string, string>) {
     try {
         const prisma = getPrisma() as any;
         if (!prisma.embyActivityLog) return;
 
-        // Find logs for this instance with "Unknown" or "UNKNOWN" or empty userName
+        // Find logs for this instance and source with "Unknown" or "UNKNOWN" or empty userName
         const logsToFix = await prisma.embyActivityLog.findMany({
             where: {
                 instanceId,
+                source,
                 OR: [
                     { userName: 'Unknown' },
                     { userName: 'UNKNOWN' },
@@ -510,7 +627,7 @@ async function fixUnknownUsersInDB(instanceId: number, userMap: Map<string, stri
         }
 
         if (fixedCount > 0) {
-            console.log(`[Tracker] Fixed ${fixedCount} "Unknown" logs for instance ${instanceId} using user map.`);
+            console.log(`[Tracker] Fixed ${fixedCount} "Unknown" logs for instance ${instanceId} (${source}) using user map.`);
         }
     } catch (e: any) {
         console.error(`[Tracker] Error fixing unknown users in DB: ${e.message}`);
@@ -521,67 +638,320 @@ async function refreshInstances() {
   try {
     const prisma = getPrisma();
     const instances = await (prisma as any).instance.findMany();
-    const activeIds = new Set(instances.map((i: any) => i.id));
 
     // Refresh user cache for all active instances
     for (const inst of instances) {
-        try {
-            const emby = new EmbyService(inst.embyUrl, inst.embyApiKey);
-            const users = await emby.getUsers();
-            if (users && Array.isArray(users)) {
-                const userMap = new Map<string, string>();
-                users.forEach((u: any) => {
-                    userMap.set(u.Id, u.Name);
-                });
-                instanceUsers.set(inst.id, userMap);
-                console.log(`[Tracker] Cached ${userMap.size} users for instance [${inst.name}]`);
-                
-                // Attempt to fix existing "Unknown" or "UNKNOWN" logs in DB for this instance
-                await fixUnknownUsersInDB(inst.id, userMap);
+        const sources = [
+            { type: 'jellyfin', url: inst.jellyfinUrl, key: inst.jellyfinApiKey },
+            { type: 'emby', url: inst.embyUrl, key: inst.embyApiKey },
+            { type: 'plex', url: inst.plexUrl, key: inst.plexToken }
+        ];
+
+        for (const source of sources) {
+            if (!source.url || !source.key) continue;
+
+            try {
+                let users = [];
+                if (source.type === 'plex') {
+                    const plex = new PlexService(source.url, source.key);
+                    users = await plex.getUsers();
+                } else {
+                    const service = new EmbyService(source.url, source.key);
+                    users = await service.getUsers();
+                }
+
+                if (users && Array.isArray(users)) {
+                    const userMap = new Map<string, string>();
+                    users.forEach((u: any) => {
+                        userMap.set(u.Id, u.Name);
+                    });
+                    
+                    const cacheKey = `${inst.id}-${source.type}`;
+                    instanceUsers.set(cacheKey, userMap);
+                    console.log(`[Tracker] Cached ${userMap.size} users for instance [${inst.name}] (${source.type})`);
+                    
+                    // If source is Plex, also try to fix "Plex User" names in DB
+                    if (source.type === 'plex') {
+                        try {
+                            const p = getPrisma() as any;
+                            const logsToFix = await p.embyActivityLog.findMany({
+                                where: {
+                                    instanceId: inst.id,
+                                    source: 'plex',
+                                    userName: 'Plex User'
+                                }
+                            });
+                            for (const log of logsToFix) {
+                                const realName = userMap.get(log.embyUserId);
+                                if (realName && realName !== 'Plex User') {
+                                    await p.embyActivityLog.update({
+                                        where: { id: log.id },
+                                        data: { userName: realName }
+                                    });
+                                }
+                            }
+                        } catch (e) {}
+                    }
+
+                    // Attempt to fix existing "Unknown" or "UNKNOWN" logs in DB for this instance and source
+                    await fixUnknownUsersInDB(inst.id, source.type, userMap);
+                }
+            } catch (e: any) {
+                console.error(`[Tracker] Failed to refresh ${source.type} users for instance [${inst.name}]: ${e.message}`);
             }
-        } catch (e: any) {
-            console.error(`[Tracker] Failed to refresh users for instance [${inst.name}]: ${e.message}`);
         }
     }
 
-    // Close connections for removed or updated instances
-    for (const [id, conn] of instanceConnections.entries()) {
-      const inst = instances.find((i: any) => i.id === id);
-      const isRemoved = !activeIds.has(id);
-      const isUpdated = inst && (inst.embyUrl !== conn.embyUrl || inst.embyApiKey !== conn.embyApiKey);
+  // Identify which service connections should exist
+  const desiredConnections = new Set<string>();
+  for (const inst of instances) {
+      if (inst.embyUrl && inst.embyApiKey) desiredConnections.add(`${inst.id}-emby`);
+      if (inst.plexUrl && inst.plexToken) desiredConnections.add(`${inst.id}-plex`);
+      if (inst.jellyfinUrl && inst.jellyfinApiKey) desiredConnections.add(`${inst.id}-jellyfin`);
+  }
 
-      if (isRemoved || isUpdated) {
-        console.log(`Closing connection for instance ${id} (${isRemoved ? 'removed' : 'updated'} in DB)`);
-        if (conn.ws) conn.ws.close();
-        if (conn.keepAlive) clearInterval(conn.keepAlive);
-        if (conn.pollingInterval) clearInterval(conn.pollingInterval);
-        instanceConnections.delete(id);
+  // Close connections for removed or updated services
+  for (const [key, conn] of instanceConnections.entries()) {
+    const [instIdStr, type] = key.split('-');
+    const instId = parseInt(instIdStr);
+    const inst = instances.find((i: any) => i.id === instId);
+    
+    const isRemoved = !desiredConnections.has(key);
+    let isUpdated = false;
+
+    if (inst) {
+      if (type === 'emby') {
+          isUpdated = inst.embyUrl !== conn.url || inst.embyApiKey !== conn.key;
+      } else if (type === 'plex') {
+          isUpdated = inst.plexUrl !== conn.url || inst.plexToken !== conn.key;
+      } else if (type === 'jellyfin') {
+          isUpdated = inst.jellyfinUrl !== conn.url || inst.jellyfinApiKey !== conn.key;
       }
     }
 
-    // Connect to new or updated instances
-    for (const inst of instances) {
-      if (!instanceConnections.has(inst.id)) {
-        connectToInstance(inst);
-      }
+    if (isRemoved || isUpdated) {
+      console.log(`Closing connection for ${key} (${isRemoved ? 'removed' : 'updated'} in DB)`);
+      if (conn.ws) conn.ws.close();
+      if (conn.keepAlive) clearInterval(conn.keepAlive);
+      if (conn.pollingInterval) clearInterval(conn.pollingInterval);
+      instanceConnections.delete(key);
     }
+  }
+
+  // Connect to new or updated services
+  for (const inst of instances) {
+      // Emby
+      if (inst.embyUrl && inst.embyApiKey && !instanceConnections.has(`${inst.id}-emby`)) {
+          connectToInstance(inst, 'emby');
+      }
+      // Plex
+      if (inst.plexUrl && inst.plexToken && !instanceConnections.has(`${inst.id}-plex`)) {
+          connectToPlexInstance(inst);
+      }
+      // Jellyfin
+      if (inst.jellyfinUrl && inst.jellyfinApiKey && !instanceConnections.has(`${inst.id}-jellyfin`)) {
+          connectToInstance(inst, 'jellyfin');
+      }
+  }
   } catch (err: any) {
     console.error(`Error refreshing instances: ${err.message}`);
   }
 }
 
-function connectToInstance(inst: any) {
-  const baseUrl = inst.embyUrl.endsWith('/') ? inst.embyUrl.slice(0, -1) : inst.embyUrl;
-  const wsUrl = baseUrl.replace(/^http/, 'ws') + `/embywebsocket?api_key=${inst.embyApiKey}&deviceId=NextAppTracker&deviceName=NextAppTracker&format=json`;
+async function syncPlexHistory(inst: any) {
+    try {
+        const plex = new PlexService(inst.plexUrl || inst.embyUrl, inst.plexToken || inst.embyApiKey);
+        
+        // Exhaustive sync in background too, but limited to 2000 for regular background checks
+        let allHistory: any[] = [];
+        let offset = 0;
+        const limit = 500;
+        let hasMore = true;
+
+        while (hasMore && allHistory.length < 2000) {
+            const batch = await plex.getHistory(limit, offset, 'viewedAt:desc');
+            if (!batch || batch.length === 0) {
+                hasMore = false;
+            } else {
+                allHistory = [...allHistory, ...batch];
+                offset += limit;
+                if (batch.length < limit) hasMore = false;
+            }
+        }
+
+        if (allHistory.length === 0) return;
+
+        const p = getPrisma() as any;
+        for (const item of allHistory) {
+            // item.viewedAt is unix timestamp (seconds)
+            const date = new Date(item.viewedAt * 1000);
+            
+            // Check if exists
+            const existing = await p.embyActivityLog.findFirst({
+                where: {
+                    instanceId: inst.id,
+                    source: 'plex',
+                    embyUserId: String(item.accountID),
+                    itemId: String(item.ratingKey),
+                    startTime: {
+                        gte: new Date(date.getTime() - 5000),
+                        lte: new Date(date.getTime() + 5000)
+                    }
+                }
+            });
+
+            if (!existing) {
+                // Insert
+                const playDurationMs = item.duration || 1800000; // Default to 30 mins if missing
+                
+                const embyUserId = String(item.accountID || 'unknown');
+                const cachedUserName = instanceUsers.get(`${inst.id}-plex`)?.get(embyUserId);
+                const userName = item.user || item.User?.title || cachedUserName || 'Plex User';
+
+                await p.embyActivityLog.create({
+                    data: {
+                        instanceId: inst.id,
+                        source: 'plex',
+                        embyUserId,
+                        userName,
+                        itemId: String(item.ratingKey),
+                        itemName: item.title,
+                        itemType: item.type,
+                        startTime: date,
+                        endTime: new Date(date.getTime() + playDurationMs),
+                        playDuration: Math.floor(playDurationMs / 1000), // ms to seconds
+                        mediaInfo: JSON.stringify({
+                            seriesName: item.grandparentTitle,
+                            seasonName: item.parentTitle,
+                            client: item.Player?.product || 'Plex',
+                            pluginSynced: true
+                        })
+                    }
+                });
+                console.log(`[${inst.name}] Synced Plex history: ${item.title} at ${date.toISOString()}`);
+            }
+        }
+
+    } catch (e: any) {
+        console.error(`[${inst.name}] Sync Plex History error: ${e.message}`);
+    }
+}
+
+function connectToPlexInstance(inst: any) {
+    const url = inst.plexUrl;
+    const token = inst.plexToken;
+    const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    const wsUrl = baseUrl.replace(/^http/, 'ws') + `/:/websockets/notifications?X-Plex-Token=${token}`;
+    
+    console.log(`[${inst.name}] Connecting to Plex WebSocket for notifications...`);
+    
+    const ws = new WebSocket(wsUrl);
+    let pollingInterval: NodeJS.Timeout;
+
+    let lastPlexRefresh = 0;
+    const refreshPlexSessions = async (force = false) => {
+        const now = Date.now();
+        if (!force && now - lastPlexRefresh < 2000) return; // Throttle to every 2s
+        
+        lastPlexRefresh = now;
+        try {
+            const plex = new PlexService(url, token);
+            const sessions = await plex.getSessions();
+            if (sessions) {
+                const normalizedSessions = sessions.map((s: any) => PlexService.normalizeSession(s));
+                await processSessions(inst.id, inst.name, normalizedSessions, 'plex');
+            }
+        } catch (e: any) {
+            console.error(`[${inst.name}] Plex refresh error:`, e.message);
+        }
+    };
+
+    ws.on('open', () => {
+        console.log(`[${inst.name}] Plex WebSocket Connected`);
+        // Initial refresh
+        refreshPlexSessions(true);
+        
+        // Slower polling as fallback (every 10s instead of 2s)
+        pollingInterval = setInterval(() => refreshPlexSessions(false), 10000);
+
+        instanceConnections.set(`${inst.id}-plex`, { 
+            ws, 
+            pollingInterval, 
+            url: inst.plexUrl, 
+            key: inst.plexToken,
+            type: 'plex'
+        });
+    });
+
+    ws.on('message', (data) => {
+        try {
+            const msg = JSON.parse(data.toString());
+            // Plex sends notifications for various things. 
+            // We care about 'playing' notifications to trigger a refresh.
+            if (msg.NotificationContainer?.type === 'playing' || msg.NotificationContainer?.type === 'progress') {
+                // console.log(`[${inst.name}] Plex activity detected, refreshing sessions...`);
+                refreshPlexSessions(false);
+            }
+        } catch (e) {}
+    });
+
+    ws.on('close', (code, reason) => {
+        console.log(`[${inst.name}] Plex WebSocket Disconnected. Reconnecting in 5s...`);
+        if (pollingInterval) clearInterval(pollingInterval);
+        instanceConnections.delete(`${inst.id}-plex`);
+        setTimeout(() => {
+            (getPrisma() as any).instance.findUnique({ where: { id: inst.id } }).then((exists: any) => {
+                if (exists && exists.plexUrl && exists.plexToken) connectToPlexInstance(exists);
+            });
+        }, 5000);
+    });
+
+    ws.on('error', (err) => {
+        console.error(`[${inst.name}] Plex WebSocket error: ${err.message}`);
+        // Fallback to pure polling if WS fails
+        if (!instanceConnections.get(`${inst.id}-plex`)?.pollingInterval) {
+            console.log(`[${inst.name}] Falling back to pure Plex polling (2s)`);
+            pollingInterval = setInterval(() => refreshPlexSessions(false), 2000);
+            instanceConnections.set(`${inst.id}-plex`, { 
+                ws: null, 
+                pollingInterval, 
+                url: inst.plexUrl, 
+                key: inst.plexToken,
+                type: 'plex'
+            });
+        }
+        ws.close();
+    });
+}
+
+function connectToInstance(inst: any, type: string = 'emby') {
+  const isJellyfin = type === 'jellyfin';
+  const url = isJellyfin ? inst.jellyfinUrl : inst.embyUrl;
+  const key = isJellyfin ? inst.jellyfinApiKey : inst.embyApiKey;
+
+  if (!url || !key) {
+    console.error(`[${inst.name}] Missing URL or API Key for ${type} connection`);
+    return;
+  }
+
+  const baseUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+  let wsUrl = '';
   
-  console.log(`Connecting to instance [${inst.name}] at ${inst.embyUrl}`);
+  if (isJellyfin) {
+    // Jellyfin sometimes prefers /socket or a simpler WS URL
+    wsUrl = baseUrl.replace(/^http/, 'ws') + `/socket?api_key=${key}`;
+  } else {
+    wsUrl = baseUrl.replace(/^http/, 'ws') + `/embywebsocket?api_key=${key}&deviceId=NextAppTracker&deviceName=NextAppTracker&format=json`;
+  }
+  
+  console.log(`Connecting to instance [${inst.name}] at ${url} (type: ${type})`);
   
   const ws = new WebSocket(wsUrl);
   let keepAlive: NodeJS.Timeout;
   let hasWSError = false;
 
   ws.on('open', () => {
-    console.log(`[${inst.name}] WebSocket Connected`);
+    console.log(`[${inst.name}] ${type} WebSocket Connected`);
     ws.send(JSON.stringify({ MessageType: 'SessionsStart', Data: '0,1500' }));
     
     keepAlive = setInterval(() => {
@@ -591,80 +961,99 @@ function connectToInstance(inst: any) {
     }, 30000);
 
     // If it was polling, stop it
-    const existing = instanceConnections.get(inst.id);
+    const existing = instanceConnections.get(`${inst.id}-${type}`);
     if (existing?.pollingInterval) clearInterval(existing.pollingInterval);
 
-    instanceConnections.set(inst.id, { ws, keepAlive, embyUrl: inst.embyUrl, embyApiKey: inst.embyApiKey });
+    instanceConnections.set(`${inst.id}-${type}`, { 
+        ws, 
+        keepAlive, 
+        url, 
+        key,
+        type
+    });
   });
 
   ws.on('message', async (data) => {
     try {
       const msg = JSON.parse(data.toString());
       if (msg.MessageType === 'Sessions') {
-        await processSessions(inst.id, inst.name, msg.Data);
+        await processSessions(inst.id, inst.name, msg.Data, type);
       } else if (msg.MessageType === 'ForceKeepAlive') {
         ws.send(JSON.stringify({ MessageType: 'SessionsStart', Data: '0,1500' }));
       }
     } catch (err: any) {
-      console.error(`[${inst.name}] Error processing message: ${err.message}`);
+      console.error(`[${inst.name}] ${type} Error processing message: ${err.message}`);
     }
   });
 
   ws.on('close', (code, reason) => {
     if (keepAlive) clearInterval(keepAlive);
-    console.log(`[${inst.name}] WebSocket Disconnected (Code: ${code}). Reason: ${reason || 'None'}`);
+    console.log(`[${inst.name}] ${type} WebSocket Disconnected (Code: ${code}). Reason: ${reason || 'None'}`);
     
     // Only try to reconnect if we haven't switched to polling
-    const conn = instanceConnections.get(inst.id);
+    const conn = instanceConnections.get(`${inst.id}-${type}`);
     if (!conn?.pollingInterval) {
-        console.log(`[${inst.name}] Reconnecting in 5s...`);
-        instanceConnections.delete(inst.id);
+        console.log(`[${inst.name}] ${type} Reconnecting in 2s...`);
+        instanceConnections.delete(`${inst.id}-${type}`);
         setTimeout(() => {
             (getPrisma() as any).instance.findUnique({ where: { id: inst.id } }).then((exists: any) => {
-                if (exists) connectToInstance(inst);
-            }).catch((e: any) => console.error(`[${inst.name}] Reconnect failed: ${e.message}`));
-        }, 5000);
+                if (exists) {
+                    if (type === 'emby' && exists.embyUrl && exists.embyApiKey) connectToInstance(exists, 'emby');
+                    else if (type === 'jellyfin' && exists.jellyfinUrl && exists.jellyfinApiKey) connectToInstance(exists, 'jellyfin');
+                    else if (type === 'plex' && exists.plexUrl && exists.plexToken) connectToPlexInstance(exists);
+                }
+            }).catch((e: any) => console.error(`[${inst.name}] ${type} Reconnect failed: ${e.message}`));
+        }, 2000);
     }
   });
 
   ws.on('error', (err: any) => {
     hasWSError = true;
-    console.error(`[${inst.name}] WebSocket error: ${err.message}`);
+    console.error(`[${inst.name}] ${type} WebSocket error: ${err.message}`);
     
     // Fallback to polling on any error if not already polling
-    if (!instanceConnections.get(inst.id)?.pollingInterval) {
-        console.warn(`[${inst.name}] Switching to HTTP Polling fallback due to WebSocket error.`);
-        startPollingFallback(inst);
+    if (!instanceConnections.get(`${inst.id}-${type}`)?.pollingInterval) {
+        console.warn(`[${inst.name}] ${type} Switching to HTTP Polling fallback due to WebSocket error.`);
+        startPollingFallback(inst, type);
     }
     
     ws.close();
   });
 }
 
-function startPollingFallback(inst: any) {
-    // Stop any existing WS/KeepAlive for this instance
-    const existing = instanceConnections.get(inst.id);
+function startPollingFallback(inst: any, type: string) {
+    // Stop any existing WS/KeepAlive for this service
+    const existing = instanceConnections.get(`${inst.id}-${type}`);
     if (existing?.keepAlive) clearInterval(existing.keepAlive);
     if (existing?.pollingInterval) clearInterval(existing.pollingInterval);
 
-    console.log(`[${inst.name}] Starting HTTP Polling (every 2s)`);
+    console.log(`[${inst.name}] Starting HTTP Polling for ${type} (every 2s)`);
     
+    const url = type === 'jellyfin' ? inst.jellyfinUrl : inst.embyUrl;
+    const key = type === 'jellyfin' ? inst.jellyfinApiKey : inst.embyApiKey;
+
     const pollingInterval = setInterval(async () => {
         try {
-            const emby = new EmbyService(inst.embyUrl, inst.embyApiKey);
-            const sessions = await emby.getSessions();
+            const service = new EmbyService(url, key);
+            const sessions = await service.getSessions();
             if (sessions) {
-                await processSessions(inst.id, inst.name, sessions);
+                await processSessions(inst.id, inst.name, sessions, type);
             }
         } catch (e: any) {
-            console.error(`[${inst.name}] Polling error:`, e.message);
+            console.error(`[${inst.name}] ${type} Polling error:`, e.message);
         }
     }, 2000);
 
-    instanceConnections.set(inst.id, { ws: null, pollingInterval, embyUrl: inst.embyUrl, embyApiKey: inst.embyApiKey });
+    instanceConnections.set(`${inst.id}-${type}`, { 
+        ws: null, 
+        pollingInterval, 
+        url, 
+        key,
+        type
+    });
 }
 
-async function processSessions(instanceId: number, instanceName: string, sessions: any[]) {
+async function processSessions(instanceId: number, instanceName: string, sessions: any[], sourceType: string = 'emby') {
   const now = Date.now();
   const currentSessionIds = new Set<string>();
   const prisma = getPrisma();
@@ -677,18 +1066,47 @@ async function processSessions(instanceId: number, instanceName: string, session
     });
   }
 
-      for (const s of sessions) {
-    if (!s.NowPlayingItem) continue;
-    
+  // 1. First pass: identify and group sessions by DeviceId/UserId to avoid duplicates
+  // Emby sometimes reports multiple sessions for the same physical playback
+  const sessionGroups = new Map<string, any[]>();
+  for (const s of sessions) {
+      if (!s.NowPlayingItem) continue;
+      const groupKey = `${instanceId}-${s.UserId}-${s.DeviceId}`;
+      if (!sessionGroups.has(groupKey)) {
+          sessionGroups.set(groupKey, []);
+      }
+      sessionGroups.get(groupKey)!.push(s);
+  }
+
+  // 2. Second pass: process only the "best" session from each group
+  for (const [groupKey, groupSessions] of sessionGroups) {
+      // Pick the best session: prefer one that is NOT paused, then prefer one with more recent activity
+      const s = groupSessions.length === 1 ? groupSessions[0] : groupSessions.sort((a, b) => {
+          const aPaused = a.PlayState?.IsPaused || a.PlayState?.Status === 'Paused' || !a.PlayState;
+          const bPaused = b.PlayState?.IsPaused || b.PlayState?.Status === 'Paused' || !b.PlayState;
+          if (aPaused !== bPaused) return aPaused ? 1 : -1;
+          return (b.LastActivityDate || 0) > (a.LastActivityDate || 0) ? 1 : -1;
+      })[0];
+
     // Filter out junk data like theme songs or unknown items
     const itemName = s.NowPlayingItem.Name || '';
     if (itemName.includes('Not Known') || itemName.toLowerCase().includes('theme')) {
         continue;
     }
     
-    const sessionId = s.Id;
+    const sessionId = `${sourceType}-${s.Id}`;
     const sessionKey = `${instanceId}-${sessionId}`;
     currentSessionIds.add(sessionKey);
+
+    // Also mark other sessions in the same group as "handled" so they don't count as ended immediately
+    // if we switch session IDs
+    if (groupSessions.length > 1) {
+        for (const otherS of groupSessions) {
+            if (otherS.Id !== s.Id) {
+                currentSessionIds.add(`${instanceId}-${sourceType}-${otherS.Id}`);
+            }
+        }
+    }
     
     // Robust pause detection: check IsPaused flag OR if the playback status is explicitly "Paused"
     // Also consider it paused if there is no PlayState (shouldn't happen for active playback)
@@ -701,11 +1119,14 @@ async function processSessions(instanceId: number, instanceName: string, session
     if (!sessionState) {
       console.log(`[${instanceName}] New Session: ${s.UserName} playing ${s.NowPlayingItem.Name}`);
       
-      const cachedUserName = instanceUsers.get(instanceId)?.get(s.UserId);
-      const userName = s.UserName || cachedUserName || 'Unknown';
+      const cachedUserName = instanceUsers.get(`${instanceId}-${sourceType}`)?.get(s.UserId);
+      const userName = (s.UserName && s.UserName !== 'Plex User' && s.UserName !== 'Unknown') 
+        ? s.UserName 
+        : (cachedUserName || s.UserName || 'Unknown');
       
       sessionState = {
         instanceId,
+        source: sourceType,
         sessionId,
         userId: s.UserId,
         userName: userName,
@@ -728,10 +1149,10 @@ async function processSessions(instanceId: number, instanceName: string, session
         deviceId: s.DeviceId,
         markedForCleanup: null,
         mediaInfo: {
-            seasonName: s.NowPlayingItem.SeasonName,
+            seasonName: s.NowPlayingItem.SeasonName || s.NowPlayingItem.ParentTitle,
             episodeTitle: s.NowPlayingItem.Name,
-            seriesName: s.NowPlayingItem.SeriesName,
-            seriesId: s.NowPlayingItem.SeriesId,
+            seriesName: s.NowPlayingItem.SeriesName || s.NowPlayingItem.GrandparentTitle || (s.NowPlayingItem.Type === 'Episode' && s.NowPlayingItem.Name?.includes(' : ') ? s.NowPlayingItem.Name.split(' : ')[0] : undefined),
+            seriesId: s.NowPlayingItem.SeriesId || s.NowPlayingItem.GrandparentItemId,
             episodeIndex: s.NowPlayingItem.IndexNumber,
             seasonIndex: s.NowPlayingItem.ParentIndexNumber,
             tmdbId: s.NowPlayingItem.ProviderIds?.Tmdb || s.NowPlayingItem.ProviderIds?.TMDB,
@@ -761,6 +1182,7 @@ async function processSessions(instanceId: number, instanceName: string, session
               device: sessionState.device,
               deviceId: sessionState.deviceId,
               mediaInfo: sessionState.mediaInfo,
+              source: sessionState.source,
               isLive: true
           }
       });
@@ -778,6 +1200,7 @@ async function processSessions(instanceId: number, instanceName: string, session
                 create: mapToLiveSession(sessionState, s),
                 update: {
                     ...mapToLiveSession(sessionState, s),
+                    source: sourceType,
                     accumulatedDuration: Math.round(sessionState.accumulatedDuration)
                 }
             });
@@ -848,7 +1271,7 @@ async function processSessions(instanceId: number, instanceName: string, session
 
       // Update userName if it was Unknown but we now have it or found it in cache
       if (sessionState.userName === 'Unknown' || !sessionState.userName) {
-          const cachedUserName = instanceUsers.get(instanceId)?.get(s.UserId);
+          const cachedUserName = instanceUsers.get(`${instanceId}-${sourceType}`)?.get(s.UserId);
           const userName = s.UserName || cachedUserName;
           if (userName) sessionState.userName = userName;
       }
@@ -909,6 +1332,7 @@ async function processSessions(instanceId: number, instanceName: string, session
                   device: sessionState.device,
                   deviceId: sessionState.deviceId,
                   mediaInfo: sessionState.mediaInfo,
+                  source: sessionState.source,
                   isLive: true
               }
           });
@@ -941,8 +1365,9 @@ async function processSessions(instanceId: number, instanceName: string, session
   }
 
   // Check for sessions that ended
-    // We use a grace period of 1 second to handle temporary API drops
-    const GRACE_PERIOD = 1000;
+    // We use a grace period to handle temporary API drops or session refreshes
+    // Plex is especially prone to this.
+    const GRACE_PERIOD = 30000; // 30s grace period (increased from 20s)
     for (const [key, state] of activeSessions.entries()) {
         if (state.instanceId === instanceId && !currentSessionIds.has(key)) {
             // Mark for cleanup if not already marked
@@ -1003,6 +1428,7 @@ async function flushSession(state: SessionState) {
         const newLog = await p.embyActivityLog.create({
             data: {
                 instanceId: state.instanceId,
+                source: state.source || 'emby',
                 embyUserId: state.userId,
                 userName: state.userName,
                 itemId: state.itemId,
@@ -1037,6 +1463,7 @@ function mapToLiveSession(state: SessionState, raw: any) {
     return {
         instanceId: state.instanceId,
         sessionId: state.sessionId,
+        source: state.source || 'emby',
         userId: state.userId,
         userName: state.userName,
         client: state.client,
@@ -1090,15 +1517,32 @@ async function pollAllInstances() {
         const prisma = getPrisma();
         const instances = await (prisma as any).instance.findMany();
         for (const inst of instances) {
-            // We can call /Sessions on Emby API to get current state
-            // and feed it to processSessions to ensure consistency
-            try {
-                const response = await fetch(`${inst.embyUrl}/Sessions?api_key=${inst.embyApiKey}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    await processSessions(inst.id, inst.name, data);
-                }
-            } catch (e) { }
+            // Emby
+            if (inst.embyUrl && inst.embyApiKey) {
+                try {
+                    const cleanUrl = inst.embyUrl.endsWith('/') ? inst.embyUrl.slice(0, -1) : inst.embyUrl;
+                    const response = await fetch(`${cleanUrl}/Sessions?api_key=${inst.embyApiKey}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        await processSessions(inst.id, inst.name, data, 'emby');
+                    }
+                } catch (e) { }
+            }
+
+            // Jellyfin
+            if (inst.jellyfinUrl && inst.jellyfinApiKey) {
+                try {
+                    const cleanUrl = inst.jellyfinUrl.endsWith('/') ? inst.jellyfinUrl.slice(0, -1) : inst.jellyfinUrl;
+                    const response = await fetch(`${cleanUrl}/Sessions?api_key=${inst.jellyfinApiKey}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        await processSessions(inst.id, inst.name, data, 'jellyfin');
+                    }
+                } catch (e) { }
+            }
+
+            // Plex has its own polling already in connectToPlexInstance, 
+            // but we could add a sync here if needed.
         }
     } catch (e) { }
 }

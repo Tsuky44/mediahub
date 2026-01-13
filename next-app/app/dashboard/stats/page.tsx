@@ -8,9 +8,10 @@ import { StatsCharts } from './StatsCharts'
 import { LiveSessions } from '../LiveSessions'
 import { SyncPluginButton } from './SyncPluginButton'
 import { RecentHistory } from './RecentHistory'
+import { SourceFilter } from './SourceFilter'
+import { UserStatsCard } from './UserStatsCard'
 import { TopItemsTabs } from '@/components/stats/TopItemsTabs'
-import { EmbyImage } from '@/components/EmbyImage'
-import { ChevronLeft, ChevronRight, Clock, Film, Play, User, Activity, AlertCircle, Calendar } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, Play, Activity, AlertCircle, Calendar } from 'lucide-react'
 import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -60,6 +61,7 @@ interface StatsPageProps {
     month?: string;
     year?: string;
     weekOffset?: string;
+    source?: string;
   }>
 }
 
@@ -83,128 +85,119 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   }
 
   const user = session.user as any
-  const instanceId = user.instanceId ? parseInt(user.instanceId) : NaN
-
-  // Handle missing or invalid instance ID
-  if (isNaN(instanceId)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
-          <AlertCircle size={48} />
-        </div>
-        <h2 className="text-2xl font-bold text-white">Erreur d'instance</h2>
-        <p className="text-gray-400">Impossible d'identifier votre instance. Veuillez vous reconnecter.</p>
-      </div>
-    )
-  }
-
-  // Fetch instance config
-  const instance = await (prisma as any).instance.findUnique({
-    where: { id: instanceId }
-  })
-
-  if (!instance) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
-          <AlertCircle size={48} />
-        </div>
-        <h2 className="text-2xl font-bold text-white">Instance non trouvée</h2>
-        <p className="text-gray-400">Impossible de charger les statistiques pour cette instance.</p>
-      </div>
-    )
-  }
-
-  // 0. Unwrap searchParams (Next.js 15 requirement)
+  const userInstanceId = user.instanceId ? parseInt(user.instanceId) : NaN
+  
   const params = await searchParams
+  const sourceFilter = params.source || 'all'
+
+  // Fetch all instances
+  const allInstances = await (prisma as any).instance.findMany();
+  const instanceTypeMap = new Map<number, string>();
+  allInstances.forEach((i: any) => instanceTypeMap.set(i.id, i.type || 'emby'));
+
+  const instanceTypes = Object.fromEntries(instanceTypeMap);
+
+  // Determine target instances based on filter and user restriction
+  let targetInstanceIds: number[] | undefined = undefined;
   
-  // 1. Explicit Config Retrieval
-  // const jellystatUrl = await getSetting('jellystat_url', instanceId) // No longer needed
-  // const jellystatApiKey = await getSetting('jellystat_api_key', instanceId) // No longer needed
+  const filteredInstances = allInstances.filter((inst: any) => {
+    // If user is restricted to an instance, only include that one
+    if (!isNaN(userInstanceId) && inst.id !== userInstanceId) return false;
+    return true;
+  });
 
-  // Calculate days based on period
-  const period = params.period || 'month'
-  const now = new Date()
-  let days = 30
-  let periodTitle = ""
-  
-  // Date range for filtering
-  let startDate = new Date()
-  let endDate = new Date()
-
-  // Navigation URLs
-  let prevHref = ""
-  let nextHref = ""
-
-  if (period === 'week') {
-    const weekOffset = params.weekOffset ? parseInt(params.weekOffset) : 0
-    const targetDate = addWeeks(now, weekOffset)
-    startDate = startOfWeek(targetDate, { weekStartsOn: 1 })
-    endDate = endOfWeek(targetDate, { weekStartsOn: 1 })
-    
-    days = differenceInDays(now, startDate) + 1
-    if (days < 7) days = 7
-
-    periodTitle = `Semaine du ${new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' }).format(startDate)}`
-    prevHref = `?period=week&weekOffset=${weekOffset - 1}`
-    nextHref = `?period=week&weekOffset=${weekOffset + 1}`
-    
-  } else if (period === 'month') {
-    const month = params.month ? parseInt(params.month) : now.getMonth()
-    const year = params.year ? parseInt(params.year) : now.getFullYear()
-    const targetDate = new Date(year, month, 1)
-    
-    startDate = startOfMonth(targetDate)
-    endDate = endOfMonth(targetDate)
-    
-    days = differenceInDays(now, startDate) + 1
-    if (days < 0) days = 30
-
-    periodTitle = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(targetDate)
-    
-    const prevMonth = subMonths(targetDate, 1)
-    const nextMonth = addMonths(targetDate, 1)
-    
-    prevHref = `?period=month&month=${prevMonth.getMonth()}&year=${prevMonth.getFullYear()}`
-    nextHref = `?period=month&month=${nextMonth.getMonth()}&year=${nextMonth.getFullYear()}`
-    
-  } else if (period === 'year') {
-    const year = params.year ? parseInt(params.year) : now.getFullYear()
-    const targetDate = new Date(year, 0, 1)
-    startDate = startOfYear(targetDate)
-    endDate = endOfYear(targetDate)
-    
-    days = differenceInDays(now, startDate) + 1
-    periodTitle = `Année ${year}`
-    
-    prevHref = `?period=year&year=${year - 1}`
-    nextHref = `?period=year&year=${year + 1}`
+  if (sourceFilter !== 'all' || !isNaN(userInstanceId)) {
+    targetInstanceIds = filteredInstances.map((i: any) => i.id);
   }
-  
-  // 3. Fetch Data (Prisma)
-  const [historyRaw, embySessionsRaw] = await Promise.all([
-    (prisma as any).embyActivityLog.findMany({
-      where: {
-        instanceId: instanceId,
-        startTime: {
-          gte: startDate,
-          lte: endDate
-        }
-      },
-      orderBy: {
-        startTime: 'desc'
-      }
-    }),
-    (prisma as any).embyLiveSession.findMany({
-      where: {
-        instanceId: instanceId
-      }
-    })
-  ])
+
+   const period = params.period || 'week' // Default to week view
+   const now = new Date()
+   let days = 7
+   let periodTitle = ""
+   
+   let startDate = startOfWeek(now, { locale: fr })
+   let endDate = endOfWeek(now, { locale: fr })
+   
+   let prevHref = ""
+   let nextHref = ""
+ 
+   if (period === 'week') {
+     const weekOffset = params.weekOffset ? parseInt(params.weekOffset) : 0
+     const targetDate = addWeeks(now, weekOffset)
+     startDate = startOfWeek(targetDate, { weekStartsOn: 1 })
+     endDate = endOfWeek(targetDate, { weekStartsOn: 1 })
+     
+     days = differenceInDays(now, startDate) + 1
+     if (days < 7) days = 7
+ 
+     periodTitle = `Semaine du ${new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' }).format(startDate)}`
+     prevHref = `?period=week&weekOffset=${weekOffset - 1}&source=${sourceFilter}`
+     nextHref = `?period=week&weekOffset=${weekOffset + 1}&source=${sourceFilter}`
+     
+   } else if (period === 'month') {
+     const month = params.month ? parseInt(params.month) : now.getMonth()
+     const year = params.year ? parseInt(params.year) : now.getFullYear()
+     const targetDate = new Date(year, month, 1)
+     
+     startDate = startOfMonth(targetDate)
+     endDate = endOfMonth(targetDate)
+     
+     days = differenceInDays(now, startDate) + 1
+     if (days < 0) days = 30
+ 
+     periodTitle = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(targetDate)
+     
+     const prevMonth = subMonths(targetDate, 1)
+     const nextMonth = addMonths(targetDate, 1)
+     
+     prevHref = `?period=month&month=${prevMonth.getMonth()}&year=${prevMonth.getFullYear()}&source=${sourceFilter}`
+     nextHref = `?period=month&month=${nextMonth.getMonth()}&year=${nextMonth.getFullYear()}&source=${sourceFilter}`
+     
+   } else if (period === 'year') {
+     const year = params.year ? parseInt(params.year) : now.getFullYear()
+     const targetDate = new Date(year, 0, 1)
+     startDate = startOfYear(targetDate)
+     endDate = endOfYear(targetDate)
+     
+     days = differenceInDays(now, startDate) + 1
+     periodTitle = `Année ${year}`
+     prevHref = `?period=year&year=${year - 1}&source=${sourceFilter}`
+     nextHref = `?period=year&year=${year + 1}&source=${sourceFilter}`
+   } else if (period === 'all') {
+     startDate = new Date(2000, 0, 1) // Way back
+     endDate = new Date(2100, 0, 1) // Way forward
+     periodTitle = "Tout l'historique"
+     prevHref = "#"
+     nextHref = "#"
+   }
+ 
+   // 3. Fetch Data (Prisma)
+   const [historyRaw, embySessionsRaw] = await Promise.all([
+     (prisma as any).embyActivityLog.findMany({
+       where: {
+         instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
+         source: sourceFilter !== 'all' ? sourceFilter : undefined,
+         startTime: {
+           gte: startDate,
+           lte: endDate
+         }
+       },
+       orderBy: {
+         startTime: 'desc'
+       }
+     }),
+     (prisma as any).embyLiveSession.findMany({
+       where: {
+         instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
+         source: sourceFilter !== 'all' ? sourceFilter : undefined,
+       }
+     })
+   ])
 
   // Sanitize sessions for client component (convert BigInt to Number)
   const embySessions = embySessionsRaw.map((s: any) => ({
     ...s,
+    source: s.source || instanceTypeMap.get(s.instanceId) || 'emby',
     runTimeTicks: s.runTimeTicks ? Number(s.runTimeTicks) : null,
     playbackPosition: s.playbackPosition ? Number(s.playbackPosition) : null,
     accumulatedDuration: s.accumulatedDuration || 0
@@ -236,7 +229,9 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       ActivityDateInserted: log.startTime.toISOString(),
       DateCreated: log.startTime.toISOString(),
       PlaybackDuration: log.playDuration, // Already accurate from tracker
-      RunTimeTicks: Number(log.totalDuration || 0)
+      RunTimeTicks: Number(log.totalDuration || 0),
+      source: log.source || instanceTypeMap.get(log.instanceId) || 'emby',
+      instanceId: log.instanceId,
     }
   })
 
@@ -249,13 +244,22 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     }
   })
 
+  // Pre-process history to find series info for episodes that might be missing it
+  const seriesInfoMap = new Map<string, { name: string, id?: string }>();
+  historyArray.forEach((item: any) => {
+    if (item.SeriesName && (item.SeriesId || item.imageItemId)) {
+      if (item.SeriesId) seriesInfoMap.set(String(item.SeriesId), { name: item.SeriesName, id: item.SeriesId });
+      if (item.imageItemId) seriesInfoMap.set(String(item.imageItemId), { name: item.SeriesName, id: item.SeriesId });
+    }
+  });
+
   // Process Most Viewed from filtered history
   const mostViewedMoviesMap = new Map()
   const mostViewedSeriesMap = new Map()
 
   historyArray.forEach((item: any) => {
-    // Aggressive series detection: Episode type is always a series
-    const isSeries = item.Type === 'Episode' || !!item.SeriesName || !!item.SeriesId;
+    // Aggressive series detection
+    const isSeries = item.Type === 'Episode' || item.Type === 'Series' || !!item.SeriesName || !!item.SeriesId;
     const targetMap = isSeries ? mostViewedSeriesMap : mostViewedMoviesMap
     
     const type = isSeries ? 'Episode' : (item.Type || 'Movie');
@@ -263,39 +267,45 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     const actualDuration = itemDurations[itemId];
     const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration);
 
-    // Important: for Series, we use the SeriesId for aggregation and images
-    let seriesKey = item.SeriesId || item.SeriesName
-    if (isSeries && !seriesKey) {
-      // Try to extract series name from item name if it follows "Series - S01E01 - Episode"
-      if (item.Name?.includes(' - ')) {
-        seriesKey = item.Name.split(' - ')[0]
-      } else {
-        // Last resort: use itemId, but this will prevent aggregation across episodes
-        seriesKey = item.NowPlayingItemId || item.ItemId
+    // Robust Series Name & Key extraction
+    let seriesName = item.SeriesName;
+    let seriesId = item.SeriesId;
+    let displayName = item.Name || item.NowPlayingItemName;
+
+    // Fallback for series name if missing
+    if (isSeries && !seriesName) {
+      // 1. Try extraction from "Series : Episode" format
+      if (displayName?.includes(' : ')) {
+        const parts = displayName.split(' : ');
+        seriesName = parts[0];
+      } 
+      // 2. Try lookup from our seriesInfoMap using imageItemId
+      else if (item.imageItemId && seriesInfoMap.has(String(item.imageItemId))) {
+        const info = seriesInfoMap.get(String(item.imageItemId))!;
+        seriesName = info.name;
+        seriesId = seriesId || info.id;
       }
     }
+
+    // Aggregation Key: prefer SeriesId, then SeriesName, then fallback
+    const key = isSeries 
+      ? (seriesId || seriesName || itemId) 
+      : (itemId || item.Id);
     
-    const key = isSeries ? seriesKey : (item.NowPlayingItemId || item.Id)
-    const imageItemId = isSeries ? (item.SeriesId || itemId) : itemId
+    const imageItemId = isSeries ? (seriesId || item.imageItemId || itemId) : itemId
     
     if (!key) return
 
     if (!targetMap.has(key)) {
-       // For series name fallback: try to extract from "Series - S01E01 - Episode"
-       let displayName = item.Name
+       // For series display name: prefer SeriesName, then extracted name, then item name
+       let finalDisplayName = displayName;
        if (isSeries) {
-         if (item.SeriesName) {
-           displayName = item.SeriesName
-         } else if (item.Name?.includes(' - ')) {
-           displayName = item.Name.split(' - ')[0]
-         }
-       } else {
-         displayName = item.Name || item.NowPlayingItemName
+         finalDisplayName = seriesName || displayName;
        }
 
        targetMap.set(key, {
          ...item,
-         Name: displayName,
+         Name: finalDisplayName,
          count: 1,
          totalDuration: sanitizedDuration,
          lastView: new Date(item.ActivityDateInserted || item.DateCreated),
@@ -329,11 +339,6 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
    const mostViewedSeries = Array.from(mostViewedSeriesMap.values())
      .sort((a, b) => b.count - a.count)
      .slice(0, 10)
-
-  // Calculate unique active users for the period
-  const uniqueUsers = new Set(historyArray.map((item: any) => item.UserId || item.UserName))
-  const totalActiveUsers = uniqueUsers.size
-  const activeNowCount = embySessions.length
 
   // Process Hourly Activity
   const hourlyActivity = Array.from({ length: 24 }, (_, i) => ({
@@ -401,6 +406,8 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   // Prepend current active sessions as "Live" items
   const liveItems = embySessions.map((s: any) => ({
     id: `live-${s.sessionId}`,
+    sessionId: s.sessionId,
+    instanceId: s.instanceId,
     itemId: s.itemId,
     itemName: s.itemName,
     itemType: s.itemType,
@@ -412,6 +419,8 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     PlaybackDuration: s.accumulatedDuration || 0,
     totalDuration: s.runTimeTicks,
     isLive: true,
+    source: s.source,
+    mediaInfo: s.mediaInfo,
     imageItemId: s.itemType === 'Episode' ? (s.mediaInfo?.seriesId || s.itemId) : s.itemId,
     mediaType: s.itemType === 'Episode' ? 'tv' : 'movie',
     ActivityDateInserted: new Date().toISOString(),
@@ -478,106 +487,170 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     return dateB - dateA
   })
 
-  if (!hasRealData) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center space-y-6">
-        <div className="w-full max-w-2xl flex justify-end">
-          <SyncPluginButton />
-        </div>
-        <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-10 max-w-2xl w-full space-y-6">
-          <div className="bg-blue-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
-            <Activity className="h-8 w-8 text-blue-500" />
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-xl font-bold text-white">Aucune donnée de visionnage</h2>
-            <p className="text-gray-400 text-sm">
-              Aucune activité n'a encore été enregistrée pour cette période.
-            </p>
-             <div className="mt-4 p-4 bg-black/40 rounded text-left space-y-2 border border-blue-500/20">
-                <div className="flex justify-between text-xs text-gray-500 uppercase tracking-wider font-semibold border-b border-gray-700 pb-2 mb-2">
-                  <span>État du système</span>
-                </div>
-                <div className="grid grid-cols-[100px_1fr] gap-2 text-sm">
-                  <span className="text-gray-500">Source:</span>
-                  <code className="text-blue-400 font-mono">Tracker Local (WebSocket)</code>
-                </div>
-            </div>
-          </div>
-          <div className="pt-4 text-xs text-gray-500 text-left space-y-2">
-            <p className="font-semibold text-gray-400 uppercase tracking-wider">Solutions possibles :</p>
-            <ul className="list-disc list-inside space-y-1">
-              <li>Cliquez sur le bouton "Importer" en haut à droite pour récupérer l'historique</li>
-              <li>Vérifiez que le script de tracking est en cours d'exécution</li>
-              <li>Lancez une lecture sur Emby pour générer des données</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    )
-  }
+
 
   // 4. Calculate Stats from Filtered Data
-  // We prioritize historyArray for watch time as it's the most accurate source we have filtered locally
+  const userStatsMap = new Map<string, { name: string, duration: number, plays: number }>()
+  
   const totalWatchTimeSeconds = historyArray.reduce((acc: number, item: any) => {
     const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie');
     const itemId = item.NowPlayingItemId || item.ItemId;
     const actualDuration = itemDurations[itemId];
-    return acc + sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration);
+    const duration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration);
+    
+    // User aggregation
+    const userKey = item.UserId || item.UserName;
+    if (userKey) {
+      const existing = userStatsMap.get(userKey) || { name: item.UserName || 'Inconnu', duration: 0, plays: 0 };
+      existing.duration += duration;
+      existing.plays += 1;
+      userStatsMap.set(userKey, existing);
+    }
+
+    return acc + duration;
   }, 0)
+
+  const topUsers = Array.from(userStatsMap.values())
+    .sort((a, b) => b.duration - a.duration)
+    .slice(0, 3);
+
+  const allUsersPeriod = Array.from(userStatsMap.values())
+    .sort((a, b) => b.duration - a.duration);
+
   const totalHours = Math.round(totalWatchTimeSeconds / 3600)
   
   // Use watchStats for total plays if available, otherwise use historyArray length
   let totalPlays = historyArray.length
   // Removed Jellystat watchStats logic as we trust our historyArray
   
-  const subValueLabel = period === 'week' ? '7 jours' : period === 'year' ? 'Année' : 'Mois'
+  const subValueLabel = period === 'week' ? '7 jours' : period === 'year' ? 'Année' : period === 'all' ? 'Historique' : 'Mois'
+
+  // Header content to be reused even in empty state
+  const statsHeader = (
+    <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-3xl font-bold text-white tracking-tight">Vos Statistiques</h1>
+        <div className="flex items-center gap-2 text-gray-400">
+          <span className="text-sm font-medium px-2 py-0.5 bg-gray-800 rounded text-blue-400 border border-gray-700">
+            {periodTitle}
+          </span>
+          {hasRealData && (
+            <>
+              <span className="text-gray-600">•</span>
+              <span className="text-sm">{totalHours}h de visionnage</span>
+            </>
+          )}
+        </div>
+      </div>
+      
+      <div className="flex flex-col items-end gap-4">
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <SourceFilter />
+          <div className="flex items-center gap-2">
+            <SyncPluginButton />
+            {period !== 'all' && (
+              <div className="flex items-center gap-2">
+                <a 
+                  href="/dashboard/stats" 
+                  className="px-3 py-1.5 bg-gray-800/50 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs font-medium text-gray-300 hover:text-white transition-all flex items-center gap-1.5"
+                >
+                  <Calendar className="h-3.5 w-3.5" />
+                  Aujourd'hui
+                </a>
+
+                <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700">
+                  <a href={prevHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
+                    <ChevronLeft className="h-5 w-5" />
+                  </a>
+                  <div className="h-4 w-px bg-gray-700 mx-1" />
+                  <a href={nextHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
+                    <ChevronRight className="h-5 w-5" />
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (!hasRealData) {
+    // Check if there's any data at all to help the user navigate
+    const oldestLog = await (prisma as any).embyActivityLog.findFirst({
+      where: {
+        source: sourceFilter !== 'all' ? sourceFilter : undefined,
+        instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
+      },
+      orderBy: { startTime: 'asc' },
+      select: { startTime: true }
+    });
+
+    const oldestYear = oldestLog ? new Date(oldestLog.startTime).getFullYear() : null;
+    const currentYear = period === 'year' ? (params.year ? parseInt(params.year) : now.getFullYear()) : null;
+
+    return (
+      <div className="space-y-8 p-6 pb-20">
+        {statsHeader}
+        <div className="flex flex-col items-center justify-center min-h-[40vh] p-6 text-center space-y-6">
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-10 max-w-2xl w-full space-y-6">
+            <div className="bg-blue-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
+              <Activity className="h-8 w-8 text-blue-500" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-white">Aucune donnée de visionnage</h2>
+              <p className="text-gray-400 text-sm">
+                Aucune activité n'a encore été enregistrée pour {periodTitle.toLowerCase()}.
+              </p>
+              
+              {oldestYear && currentYear && oldestYear < currentYear && (
+                <div className="mt-4 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20 text-blue-300 text-sm">
+                  <p>Des données plus anciennes sont disponibles à partir de <strong>{oldestYear}</strong>.</p>
+                  <a 
+                    href={`?period=year&year=${oldestYear}&source=${sourceFilter}`}
+                    className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-all"
+                  >
+                    Aller en {oldestYear}
+                    <ChevronRight className="h-3 w-3" />
+                  </a>
+                </div>
+              )}
+
+               <div className="mt-4 p-4 bg-black/40 rounded text-left space-y-2 border border-blue-500/20">
+                  <div className="flex justify-between text-xs text-gray-500 uppercase tracking-wider font-semibold border-b border-gray-700 pb-2 mb-2">
+                    <span>État du système</span>
+                  </div>
+                  <div className="grid grid-cols-[100px_1fr] gap-2 text-sm">
+                    <span className="text-gray-500">Source:</span>
+                    <code className="text-blue-400 font-mono">Tracker Local (WebSocket)</code>
+                  </div>
+              </div>
+            </div>
+            <div className="pt-4 text-xs text-gray-500 text-left space-y-2">
+              <p className="font-semibold text-gray-400 uppercase tracking-wider">Solutions possibles :</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Vérifiez que le script de tracking est en cours d'exécution</li>
+                <li>Essayez une autre période ou une autre source</li>
+                <li>Lancez une lecture pour générer des données</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8 p-6 pb-20">
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-bold text-white tracking-tight">Vos Statistiques</h1>
-          <div className="flex items-center gap-2 text-gray-400">
-            <span className="text-sm font-medium px-2 py-0.5 bg-gray-800 rounded text-blue-400 border border-gray-700">
-              {periodTitle}
-            </span>
-            <span className="text-gray-600">•</span>
-            <span className="text-sm">{totalHours}h de visionnage</span>
-          </div>
-        </div>
-        
-        <div className="flex flex-col items-end gap-4">
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            {/* Aujourd'hui & Navigation */}
-            <div className="flex items-center gap-2">
-              <a 
-                href="/dashboard/stats" 
-                className="px-3 py-1.5 bg-gray-800/50 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs font-medium text-gray-300 hover:text-white transition-all flex items-center gap-1.5"
-              >
-                <Calendar className="h-3.5 w-3.5" />
-                Aujourd'hui
-              </a>
-
-              <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700">
-                <a href={prevHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
-                  <ChevronLeft className="h-5 w-5" />
-                </a>
-                <div className="h-4 w-px bg-gray-700 mx-1" />
-                <a href={nextHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
-                  <ChevronRight className="h-5 w-5" />
-                </a>
-              </div>
-            </div>
-
-            {/* Period Selectors */}
-            <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700">
-              <PeriodButton active={period === 'week'} href="?period=week" label="Semaine" />
-              <PeriodButton active={period === 'month'} href="?period=month" label="Mois" />
-              <PeriodButton active={period === 'year'} href="?period=year" label="Année" />
-            </div>
-          </div>
-          
-          <SyncPluginButton />
+      {statsHeader}
+      
+      {/* Period Selectors */}
+      <div className="flex justify-end">
+        <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700 w-fit">
+          <PeriodButton active={period === 'week'} href="?period=week" label="Semaine" />
+          <PeriodButton active={period === 'month'} href="?period=month" label="Mois" />
+          <PeriodButton active={period === 'year'} href="?period=year" label="Année" />
+          <PeriodButton active={period === 'all'} href="?period=all" label="Tout" />
         </div>
       </div>
 
@@ -601,16 +674,19 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
           subValue="Dernière session"
           icon={<Activity className="h-5 w-5 text-purple-500" />}
         />
-        <StatCard 
-          title="Utilisateurs" 
-          value={totalActiveUsers.toString()} 
-          subValue={`${activeNowCount} en lecture actuelle`}
-          icon={<User className="h-5 w-5 text-orange-500" />}
-        />
+        <UserStatsCard 
+            topUsers={topUsers} 
+            allUsers={allUsersPeriod}
+            periodLabel={period === 'week' ? 'cette semaine' : period === 'year' ? 'cette année' : period === 'all' ? 'tout l\'historique' : 'ce mois'}
+          />
       </div>
 
       {/* Live Sessions */}
-      <LiveSessions sessions={embySessions} instanceId={instanceId} />
+      <LiveSessions 
+        sessions={embySessions} 
+        instanceId={userInstanceId} 
+        filteredInstanceIds={targetInstanceIds}
+      />
 
       {/* Charts */}
       <StatsCharts 
@@ -619,22 +695,23 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
         monthlyActivity={monthlyActivity}
       />
 
-      {/* Top Content & History */}
-      <div className="grid gap-8 lg:grid-cols-3">
-        {/* Most Viewed */}
-        <div className="lg:col-span-1">
-          <TopItemsTabs 
-            movies={mostViewedMovies} 
-            series={mostViewedSeries} 
-            instanceId={instanceId} 
-          />
-        </div>
+      {/* Top Content */}
+      <div className="mb-8">
+        <TopItemsTabs 
+          movies={mostViewedMovies} 
+          series={mostViewedSeries} 
+          instanceId={userInstanceId} 
+        />
+      </div>
 
-
-        {/* Recent History */}
-        <div className="lg:col-span-2">
-          <RecentHistory initialHistory={aggregatedHistory} instanceId={instanceId} />
-        </div>
+      {/* Recent History */}
+      <div>
+        <RecentHistory 
+          initialHistory={aggregatedHistory} 
+          instanceId={userInstanceId} 
+          filteredInstanceIds={targetInstanceIds}
+          instanceTypes={instanceTypes}
+        />
       </div>
     </div>
   )

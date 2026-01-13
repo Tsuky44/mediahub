@@ -10,21 +10,29 @@ async function main() {
 
   const embyUrl = process.env.EMBY_URL || 'http://localhost:8096';
   const embyApiKey = process.env.EMBY_API_KEY || '';
+  const plexUrl = process.env.PLEX_URL || '';
+  const plexToken = process.env.PLEX_TOKEN || '';
+  const jellyfinUrl = process.env.JELLYFIN_URL || '';
+  const jellyfinApiKey = process.env.JELLYFIN_API_KEY || '';
   const tmdbApiKey = process.env.TMDB_API_KEY || '';
   const jellyseerrUrl = process.env.JELLYSEERR_URL || '';
   const jellyseerrApiKey = process.env.JELLYSEERR_API_KEY || '';
 
-  if (!embyApiKey) {
-    console.warn('Warning: EMBY_API_KEY is not set in .env');
+  if (!embyApiKey && !plexToken && !jellyfinApiKey) {
+    console.warn('Warning: No server API keys (Emby/Plex/Jellyfin) set in .env');
   }
 
   // Create or update the 'main' instance
-  const mainInstance = await prisma.instance.upsert({
+  const mainInstance = await (prisma as any).instance.upsert({
     where: { slug: 'main' },
     update: {
       name: 'Serveur Principal',
       embyUrl,
       embyApiKey,
+      plexUrl,
+      plexToken,
+      jellyfinUrl,
+      jellyfinApiKey,
       jellyseerrUrl,
       jellyseerrApiKey,
       isDefault: true,
@@ -34,6 +42,10 @@ async function main() {
       slug: 'main',
       embyUrl,
       embyApiKey,
+      plexUrl,
+      plexToken,
+      jellyfinUrl,
+      jellyfinApiKey,
       jellyseerrUrl,
       jellyseerrApiKey,
       isDefault: true,

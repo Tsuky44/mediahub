@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Save, Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
-import { testSmbConnection, testJellystatConnection, testEmbyConnection } from '../downloads/file-actions'
+import { testSmbConnection, testJellystatConnection, testEmbyConnection, testPlexConnection, testJellyfinConnection } from '../downloads/file-actions'
 
 interface User {
     id: number
@@ -33,8 +33,13 @@ interface Instance {
         jellystat_api_key?: string
         emby_url?: string
         emby_api_key?: string
+        plex_url?: string
+        plex_token?: string
+        jellyfin_url?: string
+        jellyfin_api_key?: string
         jellyseerr_url?: string
         jellyseerr_api_key?: string
+        type?: string
     }
 }
 
@@ -76,6 +81,13 @@ export default function SettingsForm({
     const [embyUrl, setEmbyUrl] = useState(settings.emby_url || '')
     const [embyKey, setEmbyKey] = useState(settings.emby_api_key || '')
 
+    const [plexUrl, setPlexUrl] = useState(settings.plex_url || '')
+    const [plexToken, setPlexToken] = useState(settings.plex_token || '')
+
+    const [jellyfinUrl, setJellyfinUrl] = useState(settings.jellyfin_url || '')
+    const [jellyfinKey, setJellyfinKey] = useState(settings.jellyfin_api_key || '')
+    const [instanceType, setInstanceType] = useState(settings.type || 'emby')
+
     const [loading, setLoading] = useState(false)
     const [testingSmb, setTestingSmb] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
@@ -103,7 +115,14 @@ export default function SettingsForm({
         setJellystatKey(s.jellystat_api_key || '')
         setEmbyUrl(s.emby_url || '')
         setEmbyKey(s.emby_api_key || '')
+        setPlexUrl(s.plex_url || '')
+        setPlexToken(s.plex_token || '')
+        setJellyfinUrl(s.jellyfin_url || '')
+        setJellyfinKey(s.jellyfin_api_key || '')
+        setInstanceType(s.type || 'emby')
         setEmbyTestResult(null)
+        setPlexTestResult(null)
+        setJellyfinTestResult(null)
         setJellystatTestResult(null)
         setTestResult(null)
     }, [selectedInstanceId, instances])
@@ -113,6 +132,12 @@ export default function SettingsForm({
     
     const [testingEmby, setTestingEmby] = useState(false)
     const [embyTestResult, setEmbyTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [testingPlex, setTestingPlex] = useState(false)
+    const [plexTestResult, setPlexTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [testingJellyfin, setTestingJellyfin] = useState(false)
+    const [jellyfinTestResult, setJellyfinTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
     const router = useRouter()
 
@@ -172,6 +197,40 @@ export default function SettingsForm({
         }
     }
 
+    const handleTestPlex = async () => {
+        setTestingPlex(true)
+        setPlexTestResult(null)
+        try {
+            const res = await testPlexConnection(plexUrl, plexToken)
+            if (res.success) {
+                setPlexTestResult({ success: true, message: 'Connexion Plex réussie !' })
+            } else {
+                setPlexTestResult({ success: false, message: res.error || 'Échec de la connexion' })
+            }
+        } catch (error) {
+            setPlexTestResult({ success: false, message: 'Erreur lors du test' })
+        } finally {
+            setTestingPlex(false)
+        }
+    }
+
+    const handleTestJellyfin = async () => {
+        setTestingJellyfin(true)
+        setJellyfinTestResult(null)
+        try {
+            const res = await testJellyfinConnection(jellyfinUrl, jellyfinKey)
+            if (res.success) {
+                setJellyfinTestResult({ success: true, message: 'Connexion Jellyfin réussie !' })
+            } else {
+                setJellyfinTestResult({ success: false, message: res.error || 'Échec de la connexion' })
+            }
+        } catch (error) {
+            setJellyfinTestResult({ success: false, message: 'Erreur lors du test' })
+        } finally {
+            setTestingJellyfin(false)
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
@@ -198,17 +257,23 @@ export default function SettingsForm({
                     sonarr_url: sonarrUrl,
                     sonarr_api_key: sonarrKey,
                     jellystat_url: jellystatUrl,
-            jellystat_api_key: jellystatKey,
-            emby_url: embyUrl,
-            emby_api_key: embyKey
-        })
+                    jellystat_api_key: jellystatKey,
+                    emby_url: embyUrl,
+                    emby_api_key: embyKey,
+                    plex_url: plexUrl,
+                    plex_token: plexToken,
+                    jellyfin_url: jellyfinUrl,
+                    jellyfin_api_key: jellyfinKey,
+                    type: instanceType
+                })
             })
 
             if (res.ok) {
                 alert('Paramètres sauvegardés')
                 router.refresh()
             } else {
-                alert('Erreur lors de la sauvegarde')
+                const errorData = await res.json().catch(() => ({}))
+                alert(`Erreur lors de la sauvegarde: ${errorData.error || 'Erreur inconnue'}`)
             }
         } catch (error) {
             console.error(error)
@@ -220,25 +285,42 @@ export default function SettingsForm({
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
-            {instances.length > 1 && (
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 mb-8">
-                    <label htmlFor="instance-selector" className="block text-sm font-medium text-gray-400 mb-2">
-                        Instance à configurer
-                    </label>
-                    <select
-                        id="instance-selector"
-                        className="block w-full rounded-md border-gray-600 bg-gray-700 py-2 pl-3 pr-10 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                        value={selectedInstanceId}
-                        onChange={(e) => setSelectedInstanceId(parseInt(e.target.value))}
-                    >
-                        {instances.map((inst) => (
-                            <option key={inst.id} value={inst.id}>
-                                {inst.name} {inst.id === currentInstanceId ? '(Actuelle)' : ''}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                        <div>
+                            <label htmlFor="instance-selector" className="block text-sm font-medium text-gray-400 mb-2">
+                                Instance à configurer
+                            </label>
+                            <select
+                                id="instance-selector"
+                                className="block w-full rounded-md border-gray-600 bg-gray-700 py-2 pl-3 pr-10 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                value={selectedInstanceId}
+                                onChange={(e) => setSelectedInstanceId(parseInt(e.target.value))}
+                            >
+                                {instances.map((inst) => (
+                                    <option key={inst.id} value={inst.id}>
+                                        {inst.name} {inst.id === currentInstanceId ? '(Actuelle)' : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="instance-type" className="block text-sm font-medium text-gray-400 mb-2">
+                                Type de serveur principal
+                            </label>
+                            <select
+                                id="instance-type"
+                                className="block w-full rounded-md border-gray-600 bg-gray-700 py-2 pl-3 pr-10 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                value={instanceType}
+                                onChange={(e) => setInstanceType(e.target.value)}
+                            >
+                                <option value="emby">Emby</option>
+                                <option value="jellyfin">Jellyfin</option>
+                                <option value="plex">Plex</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
-            )}
 
             <div className="space-y-4">
                 <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Jellyseerr</h4>
@@ -563,62 +645,179 @@ export default function SettingsForm({
                 </div>
             </div>
 
-            <div className="space-y-4">
-                <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Emby</h4>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                        <label htmlFor="embyUrl" className="block text-sm font-medium text-gray-300">
-                            URL Emby
-                        </label>
-                        <input
-                            type="text"
-                            id="embyUrl"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                            placeholder="http://192.168.1.100:8096"
-                            value={embyUrl}
-                            onChange={(e) => setEmbyUrl(e.target.value)}
-                        />
+            <div className="space-y-8">
+                <div className="space-y-4">
+                    <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Emby</h4>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label htmlFor="embyUrl" className="block text-sm font-medium text-gray-300">
+                                URL Emby
+                            </label>
+                            <input
+                                type="text"
+                                id="embyUrl"
+                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="http://192.168.1.100:8096"
+                                value={embyUrl}
+                                onChange={(e) => setEmbyUrl(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="embyKey" className="block text-sm font-medium text-gray-300">
+                                Clé API Emby
+                            </label>
+                            <input
+                                type="password"
+                                id="embyKey"
+                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="Votre clé API Emby"
+                                value={embyKey}
+                                onChange={(e) => setEmbyKey(e.target.value)}
+                            />
+                        </div>
                     </div>
-                    <div>
-                        <label htmlFor="embyKey" className="block text-sm font-medium text-gray-300">
-                            Clé API Emby
-                        </label>
-                        <input
-                            type="password"
-                            id="embyKey"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                            placeholder="Votre clé API Emby"
-                            value={embyKey}
-                            onChange={(e) => setEmbyKey(e.target.value)}
-                        />
+                    <div className="flex items-center space-x-4 pt-2">
+                        <button
+                            type="button"
+                            onClick={handleTestEmby}
+                            disabled={testingEmby}
+                            className="flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {testingEmby ? (
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                            )}
+                            Tester la connexion Emby
+                        </button>
+                        
+                        {embyTestResult && (
+                            <div className={`flex items-center text-sm ${embyTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                                {embyTestResult.success ? (
+                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                ) : (
+                                    <XCircle className="w-4 h-4 mr-1.5" />
+                                )}
+                                {embyTestResult.message}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                <div className="flex items-center space-x-4 pt-2">
-                    <button
-                        type="button"
-                        onClick={handleTestEmby}
-                        disabled={testingEmby}
-                        className="flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors disabled:opacity-50 text-sm"
-                    >
-                        {testingEmby ? (
-                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                        )}
-                        Tester la connexion
-                    </button>
-                    
-                    {embyTestResult && (
-                        <div className={`flex items-center text-sm ${embyTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
-                            {embyTestResult.success ? (
-                                <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                            ) : (
-                                <XCircle className="w-4 h-4 mr-1.5" />
-                            )}
-                            {embyTestResult.message}
+                <div className="space-y-4">
+                    <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Plex</h4>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label htmlFor="plexUrl" className="block text-sm font-medium text-gray-300">
+                                URL Plex
+                            </label>
+                            <input
+                                type="text"
+                                id="plexUrl"
+                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="http://192.168.1.100:32400"
+                                value={plexUrl}
+                                onChange={(e) => setPlexUrl(e.target.value)}
+                            />
                         </div>
-                    )}
+                        <div>
+                            <label htmlFor="plexToken" className="block text-sm font-medium text-gray-300">
+                                Token Plex
+                            </label>
+                            <input
+                                type="password"
+                                id="plexToken"
+                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="Votre Token Plex"
+                                value={plexToken}
+                                onChange={(e) => setPlexToken(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-4 pt-2">
+                        <button
+                            type="button"
+                            onClick={handleTestPlex}
+                            disabled={testingPlex}
+                            className="flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {testingPlex ? (
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                            )}
+                            Tester la connexion Plex
+                        </button>
+                        
+                        {plexTestResult && (
+                            <div className={`flex items-center text-sm ${plexTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                                {plexTestResult.success ? (
+                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                ) : (
+                                    <XCircle className="w-4 h-4 mr-1.5" />
+                                )}
+                                {plexTestResult.message}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Jellyfin</h4>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label htmlFor="jellyfinUrl" className="block text-sm font-medium text-gray-300">
+                                URL Jellyfin
+                            </label>
+                            <input
+                                type="text"
+                                id="jellyfinUrl"
+                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="http://192.168.1.100:8096"
+                                value={jellyfinUrl}
+                                onChange={(e) => setJellyfinUrl(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="jellyfinKey" className="block text-sm font-medium text-gray-300">
+                                Clé API Jellyfin
+                            </label>
+                            <input
+                                type="password"
+                                id="jellyfinKey"
+                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="Votre clé API Jellyfin"
+                                value={jellyfinKey}
+                                onChange={(e) => setJellyfinKey(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-4 pt-2">
+                        <button
+                            type="button"
+                            onClick={handleTestJellyfin}
+                            disabled={testingJellyfin}
+                            className="flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {testingJellyfin ? (
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                            )}
+                            Tester la connexion Jellyfin
+                        </button>
+                        
+                        {jellyfinTestResult && (
+                            <div className={`flex items-center text-sm ${jellyfinTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                                {jellyfinTestResult.success ? (
+                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                ) : (
+                                    <XCircle className="w-4 h-4 mr-1.5" />
+                                )}
+                                {jellyfinTestResult.message}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
