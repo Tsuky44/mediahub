@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Save, Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
+import { Save, Loader2, CheckCircle2, XCircle, RefreshCw, History } from 'lucide-react'
 import { testSmbConnection, testJellystatConnection, testEmbyConnection, testPlexConnection, testJellyfinConnection } from '../downloads/file-actions'
+import { importPlexHistoryAction } from './actions'
 
 interface User {
     id: number
@@ -139,7 +140,28 @@ export default function SettingsForm({
     const [testingJellyfin, setTestingJellyfin] = useState(false)
     const [jellyfinTestResult, setJellyfinTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
+    const [importingPlex, setImportingPlex] = useState(false)
+    const [importPlexResult, setImportPlexResult] = useState<{ success: boolean; message: string } | null>(null)
+
     const router = useRouter()
+
+    const handleImportPlex = async () => {
+        if (!confirm('Voulez-vous vraiment importer tout l\'historique Plex ? Cela peut prendre du temps.')) return
+        
+        setImportingPlex(true)
+        setImportPlexResult(null)
+        try {
+            const res = await importPlexHistoryAction(selectedInstanceId)
+            setImportPlexResult(res)
+            if (res.success) {
+                router.refresh()
+            }
+        } catch (error) {
+            setImportPlexResult({ success: false, message: 'Erreur lors de l\'importation' })
+        } finally {
+            setImportingPlex(false)
+        }
+    }
 
     const handleTestSmb = async () => {
         setTestingSmb(true)
@@ -748,6 +770,20 @@ export default function SettingsForm({
                             )}
                             Tester la connexion Plex
                         </button>
+
+                        <button
+                            type="button"
+                            onClick={handleImportPlex}
+                            disabled={importingPlex || testingPlex}
+                            className="flex items-center px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-md transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {importingPlex ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <History className="w-4 h-4 mr-2" />
+                            )}
+                            Importer l'historique complet
+                        </button>
                         
                         {plexTestResult && (
                             <div className={`flex items-center text-sm ${plexTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
@@ -757,6 +793,17 @@ export default function SettingsForm({
                                     <XCircle className="w-4 h-4 mr-1.5" />
                                 )}
                                 {plexTestResult.message}
+                            </div>
+                        )}
+
+                        {importPlexResult && (
+                            <div className={`flex items-center text-sm ${importPlexResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                                {importPlexResult.success ? (
+                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                ) : (
+                                    <XCircle className="w-4 h-4 mr-1.5" />
+                                )}
+                                {importPlexResult.message}
                             </div>
                         )}
                     </div>

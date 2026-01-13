@@ -13,6 +13,13 @@ export interface Torrent {
   num_seeds: number
   num_leechs: number
   added_on: number
+  ratio: number
+  uploaded: number
+  downloaded: number
+  tags: string
+  num_incomplete: number
+  num_complete: number
+  tracker: string
 }
 
 export class QBittorrentService {

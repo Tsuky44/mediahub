@@ -58,6 +58,17 @@ export class PlexService {
     }
   }
 
+  async getItemDetails(ratingKey: string) {
+    try {
+      const client = await this.getClient();
+      const response = await client.get(`/library/metadata/${ratingKey}`);
+      return response.data.MediaContainer?.Metadata?.[0] || null;
+    } catch (e: any) {
+      console.error(`[PlexService] getItemDetails failed for ${ratingKey}:`, e.message);
+      return null;
+    }
+  }
+
   async getUsers() {
     try {
       const client = await this.getClient();
