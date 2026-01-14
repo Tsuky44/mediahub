@@ -44,8 +44,6 @@ export async function POST(request: NextRequest) {
         radarr_api_key,
         sonarr_url,
         sonarr_api_key,
-        jellystat_url,
-        jellystat_api_key,
         emby_url,
         emby_api_key,
         plex_url,
@@ -112,8 +110,6 @@ export async function POST(request: NextRequest) {
         { key: 'radarr_api_key', value: radarr_api_key },
         { key: 'sonarr_url', value: sonarr_url },
         { key: 'sonarr_api_key', value: sonarr_api_key },
-        { key: 'jellystat_url', value: jellystat_url },
-        { key: 'jellystat_api_key', value: jellystat_api_key },
         { key: 'jellyseerr_url', value: body.jellyseerr_url },
         { key: 'jellyseerr_api_key', value: body.jellyseerr_api_key },
     ]

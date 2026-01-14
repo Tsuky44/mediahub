@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { WatchHistoryItem } from '@/lib/services/jellystat'
 import { StatsCharts } from './StatsCharts'
 import { LiveSessions } from '../LiveSessions'
 import { SyncPluginButton } from './SyncPluginButton'
@@ -360,7 +359,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const hasRealData = historyArray.length > 0
 
   if (historyArray.length > 0) {
-    historyArray.forEach((item: WatchHistoryItem) => {
+    historyArray.forEach((item: any) => {
       const dateString = item.ActivityDateInserted || item.DateCreated || (item as any).DateInserted
       if (!dateString) return
       
@@ -380,7 +379,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   }))
 
   if (historyArray.length > 0) {
-    historyArray.forEach((item: WatchHistoryItem) => {
+    historyArray.forEach((item: any) => {
       const dateString = item.ActivityDateInserted || item.DateCreated || (item as any).DateInserted
       if (!dateString) return
 
@@ -403,7 +402,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   if (period === 'year') {
     const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']
     const activity = monthNames.map(month => ({ name: month, value: 0 }))
-    historyArray.forEach((item: WatchHistoryItem) => {
+    historyArray.forEach((item: any) => {
       const dateString = item.ActivityDateInserted || item.DateCreated || (item as any).DateInserted
       if (!dateString) return
       const date = new Date(dateString)
@@ -542,9 +541,8 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
 
   const totalHours = Math.round(totalWatchTimeSeconds / 3600)
   
-  // Use watchStats for total plays if available, otherwise use historyArray length
-  let totalPlays = historyArray.length
-  // Removed Jellystat watchStats logic as we trust our historyArray
+  // Total plays from history
+  const totalPlays = historyArray.length
   
   const subValueLabel = period === 'week' ? '7 jours' : period === 'year' ? 'Année' : period === 'all' ? 'Historique' : 'Mois'
 

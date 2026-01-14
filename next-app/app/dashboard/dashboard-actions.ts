@@ -1,36 +1,29 @@
 'use server'
 
 import { getSetting } from '@/lib/settings'
-import { testEmbyConnection, testJellystatConnection } from './downloads/file-actions'
+import { testEmbyConnection } from './downloads/file-actions'
 import { getCurrentUser, getTmdbServiceForUser } from '@/lib/auth'
 
 export async function checkServicesHealth() {
   try {
     const user = await getCurrentUser()
-    if (!user) return { emby: 'offline', jellystat: 'offline' }
+    if (!user) return { emby: 'offline' }
     
     const instanceId = parseInt((user as any).instanceId)
-    if (isNaN(instanceId)) return { emby: 'offline', jellystat: 'offline' }
+    if (isNaN(instanceId)) return { emby: 'offline' }
     const embyUrl = await getSetting('emby_url', instanceId)
     const embyKey = await getSetting('emby_api_key', instanceId)
-    const jsUrl = await getSetting('jellystat_url', instanceId)
-    const jsKey = await getSetting('jellystat_api_key', instanceId)
 
     // Test with short timeouts to avoid blocking the UI
-    const [embyRes, jsRes] = await Promise.all([
-      embyUrl && embyKey ? testEmbyConnection(embyUrl, embyKey) : Promise.resolve({ success: false }),
-      jsUrl && jsKey ? testJellystatConnection(jsUrl, jsKey) : Promise.resolve({ success: false })
-    ])
+    const embyRes = embyUrl && embyKey ? await testEmbyConnection(embyUrl, embyKey) : { success: false }
 
     return {
-      emby: embyRes.success ? 'online' : 'offline',
-      jellystat: jsRes.success ? 'online' : 'offline'
+      emby: embyRes.success ? 'online' : 'offline'
     }
   } catch (e) {
     console.error('Failed to check services health:', e)
     return {
-      emby: 'offline',
-      jellystat: 'offline'
+      emby: 'offline'
     }
   }
 }

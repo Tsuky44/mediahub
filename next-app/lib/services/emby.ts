@@ -471,7 +471,7 @@ export class EmbyService {
         
         if (response.data && response.data.results) {
             // Map the array of arrays to objects
-            // Based on Jellystat mapping: 
+            // Mapping for user_usage_stats plugin: 
             // 0:rowid, 1:DateCreated, 2:UserId, 3:ItemId, 4:ItemType, 5:ItemName, 6:PlaybackMethod, 7:ClientName, 8:DeviceName, 9:PlayDuration
             return response.data.results.map((item: any[]) => ({
                 Id: item[0],

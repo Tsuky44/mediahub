@@ -5,7 +5,6 @@ import { prisma } from '@/lib/prisma';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import https from 'https';
-import { JellystatService } from '@/lib/services/jellystat';
 import { getSmbServiceForUser, authOptions } from '@/lib/auth';
 import { getServerSession } from 'next-auth';
 
@@ -56,25 +55,6 @@ export async function testSmbConnection(config: { host: string, user: string, pa
     } catch (e) {
         console.error('SMB connection test failed:', e);
         return { success: false, error: e instanceof Error ? e.message : 'Échec de la connexion' };
-    }
-}
-
-export async function testJellystatConnection(url: string, apiKey: string) {
-    try {
-        const cleanUrl = url.replace(/\/$/, '');
-        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
-        
-        // Simple ping HTTP
-        const response = await axios.get(cleanUrl, {
-            timeout: 5000,
-            httpsAgent: cleanUrl.startsWith('https') ? httpsAgent : undefined,
-            validateStatus: () => true // On accepte n'importe quel code de réponse (200, 401, 404, etc.) tant que le serveur répond
-        });
-
-        return { success: true };
-    } catch (e: any) {
-        console.error('Jellystat ping failed:', e.message);
-        return { success: false, error: 'Service injoignable' };
     }
 }
 

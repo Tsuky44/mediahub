@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Save, Loader2, CheckCircle2, XCircle, RefreshCw, History, Trash2, ListPlus } from 'lucide-react'
-import { testSmbConnection, testJellystatConnection, testEmbyConnection, testPlexConnection, testJellyfinConnection } from '../downloads/file-actions'
+import { testSmbConnection, testEmbyConnection, testPlexConnection, testJellyfinConnection } from '../downloads/file-actions'
 import { importPlexHistoryAction, testJellyseerrConnectionAction, importJellyseerrRequestsAction, fixMissingTitlesAction } from './actions'
 
 interface Instance {
@@ -23,8 +23,6 @@ interface Instance {
         radarr_api_key?: string
         sonarr_url?: string
         sonarr_api_key?: string
-        jellystat_url?: string
-        jellystat_api_key?: string
         jellyseerr_url?: string
         jellyseerr_api_key?: string
         emby_url?: string
@@ -64,9 +62,6 @@ export default function SettingsForm({
     const [sonarrUrl, setSonarrUrl] = useState(settings.sonarr_url || '')
     const [sonarrKey, setSonarrKey] = useState(settings.sonarr_api_key || '')
 
-    const [jellystatUrl, setJellystatUrl] = useState(settings.jellystat_url || '')
-    const [jellystatKey, setJellystatKey] = useState(settings.jellystat_api_key || '')
-
     const [jellyseerrUrl, setJellyseerrUrl] = useState(settings.jellyseerr_url || '')
     const [jellyseerrKey, setJellyseerrKey] = useState(settings.jellyseerr_api_key || '')
 
@@ -98,13 +93,8 @@ export default function SettingsForm({
         setSmbShare(s.smb_share || '')
         setSmbPath(s.smb_path || '')
         setRadarrUrl(s.radarr_url || '')
-        setRadarrKey(s.radarr_api_key || '')
-        setSonarrUrl(s.sonarr_url || '')
-        setSonarrKey(s.sonarr_api_key || '')
-        setJellystatUrl(s.jellystat_url || '')
-        setJellystatKey(s.jellystat_api_key || '')
-        setJellyseerrUrl(s.jellyseerr_url || '')
-        setJellyseerrKey(s.jellyseerr_api_key || '')
+    const [jellyseerrUrl, setJellyseerrUrl] = useState(settings.jellyseerr_url || '')
+    const [jellyseerrKey, setJellyseerrKey] = useState(settings.jellyseerr_api_key || '')
         setEmbyUrl(s.emby_url || '')
         setEmbyKey(s.emby_api_key || '')
         setPlexUrl(s.plex_url || '')
@@ -115,12 +105,8 @@ export default function SettingsForm({
         setEmbyTestResult(null)
         setPlexTestResult(null)
         setJellyfinTestResult(null)
-        setJellystatTestResult(null)
         setTestResult(null)
     }, [selectedInstanceId, instances])
-    
-    const [testingJellystat, setTestingJellystat] = useState(false)
-    const [jellystatTestResult, setJellystatTestResult] = useState<{ success: boolean; message: string } | null>(null)
     
     const [testingEmby, setTestingEmby] = useState(false)
     const [embyTestResult, setEmbyTestResult] = useState<{ success: boolean; message: string } | null>(null)
@@ -232,23 +218,6 @@ export default function SettingsForm({
         }
     }
 
-    const handleTestJellystat = async () => {
-        setTestingJellystat(true)
-        setJellystatTestResult(null)
-        try {
-            const res = await testJellystatConnection(jellystatUrl, jellystatKey)
-            if (res.success) {
-                setJellystatTestResult({ success: true, message: 'Connexion réussie !' })
-            } else {
-                setJellystatTestResult({ success: false, message: res.error || 'Échec de la connexion' })
-            }
-        } catch (error) {
-            setJellystatTestResult({ success: false, message: 'Erreur lors du test' })
-        } finally {
-            setTestingJellystat(false)
-        }
-    }
-
     const handleTestEmby = async () => {
         setTestingEmby(true)
         setEmbyTestResult(null)
@@ -348,8 +317,6 @@ export default function SettingsForm({
                     radarr_api_key: radarrKey,
                     sonarr_url: sonarrUrl,
                     sonarr_api_key: sonarrKey,
-                    jellystat_url: jellystatUrl,
-                    jellystat_api_key: jellystatKey,
                     jellyseerr_url: jellyseerrUrl,
                     jellyseerr_api_key: jellyseerrKey,
                     emby_url: embyUrl,
@@ -645,65 +612,6 @@ export default function SettingsForm({
                             onChange={(e) => setSonarrKey(e.target.value)}
                         />
                     </div>
-                </div>
-            </div>
-
-            <div className="space-y-4">
-                <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Jellystat</h4>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                        <label htmlFor="jellystatUrl" className="block text-sm font-medium text-gray-300">
-                            URL de l'instance
-                        </label>
-                        <input
-                            type="text"
-                            id="jellystatUrl"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                            placeholder="http://192.168.1.123:3076"
-                            value={jellystatUrl}
-                            onChange={(e) => setJellystatUrl(e.target.value)}
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="jellystatKey" className="block text-sm font-medium text-gray-300">
-                            Clé API
-                        </label>
-                        <input
-                            type="password"
-                            id="jellystatKey"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                            placeholder="Votre clé API Jellystat"
-                            value={jellystatKey}
-                            onChange={(e) => setJellystatKey(e.target.value)}
-                        />
-                    </div>
-                </div>
-
-                <div className="flex items-center space-x-4 pt-2">
-                    <button
-                        type="button"
-                        onClick={handleTestJellystat}
-                        disabled={testingJellystat}
-                        className="flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors disabled:opacity-50 text-sm"
-                    >
-                        {testingJellystat ? (
-                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                        )}
-                        Tester la connexion
-                    </button>
-                    
-                    {jellystatTestResult && (
-                        <div className={`flex items-center text-sm ${jellystatTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
-                            {jellystatTestResult.success ? (
-                                <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                            ) : (
-                                <XCircle className="w-4 h-4 mr-1.5" />
-                            )}
-                            {jellystatTestResult.message}
-                        </div>
-                    )}
                 </div>
             </div>
 

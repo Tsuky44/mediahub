@@ -20,8 +20,7 @@ export function QuickActions({ initialTorrents = [], userName, isAdmin }: QuickA
   const [showResults, setShowResults] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
   const [servicesStatus, setServicesStatus] = useState({
-    emby: 'loading',
-    jellystat: 'loading'
+    emby: 'loading'
   })
 
   // Formatage de la vitesse
@@ -182,15 +181,6 @@ export function QuickActions({ initialTorrents = [], userName, isAdmin }: QuickA
                 <div className={`w-1.5 h-1.5 rounded-full ${servicesStatus.emby === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
                 <span className={`text-xs ${servicesStatus.emby === 'online' ? 'text-green-400' : 'text-red-400'}`}>
                   {servicesStatus.emby === 'online' ? 'En ligne' : 'Hors ligne'}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-300">Jellystat</span>
-              <div className="flex items-center gap-1.5">
-                <div className={`w-1.5 h-1.5 rounded-full ${servicesStatus.jellystat === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                <span className={`text-xs ${servicesStatus.jellystat === 'online' ? 'text-green-400' : 'text-red-400'}`}>
-                  {servicesStatus.jellystat === 'online' ? 'En ligne' : 'Hors ligne'}
                 </span>
               </div>
             </div>

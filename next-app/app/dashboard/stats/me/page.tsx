@@ -1,5 +1,4 @@
 import React from 'react'
-import { WatchHistoryItem } from '@/lib/services/jellystat'
 import { StatsCharts } from '../StatsCharts'
 import { TopItemsTabs } from '@/components/stats/TopItemsTabs'
 import { EmbyImage } from '@/components/EmbyImage'
