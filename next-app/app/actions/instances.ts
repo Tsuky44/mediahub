@@ -9,8 +9,6 @@ export async function createInstance(data: {
   slug: string
   embyUrl: string
   embyApiKey: string
-  jellyseerrUrl?: string
-  jellyseerrApiKey?: string
 }) {
   const user = await getCurrentUser()
 
@@ -26,8 +24,6 @@ export async function createInstance(data: {
       slug,
       embyUrl: data.embyUrl,
       embyApiKey: data.embyApiKey,
-      jellyseerrUrl: data.jellyseerrUrl,
-      jellyseerrApiKey: data.jellyseerrApiKey,
       isDefault: false,
     }
   })

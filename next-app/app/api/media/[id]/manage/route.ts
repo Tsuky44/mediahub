@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
-import { getJellyseerrServiceForUser, getRadarrServiceForUser, getSonarrServiceForUser, getCurrentUser } from '@/lib/auth'
+import { getRadarrServiceForUser, getSonarrServiceForUser, getTmdbServiceForUser, getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { forget } from '@/lib/cache'
 import { revalidatePath } from 'next/cache'
-import { syncJellyseerrRequests } from '@/lib/services/request-sync'
+import { getMediaAvailability } from '@/lib/services/media-status'
+import { forget } from '@/lib/cache'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function POST(
   request: Request,
@@ -12,30 +15,31 @@ export async function POST(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const jellyseerrService = await getJellyseerrServiceForUser()
-  if (!jellyseerrService) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
-
   const { id: tmdbIdStr } = await params
   const { searchParams } = new URL(request.url)
   const action = searchParams.get('action')
-  const targetId = searchParams.get('targetId')
-  const mediaType = searchParams.get('type') as 'movie' | 'tv'
+  const instanceId = parseInt((user as any).instanceId)
 
-  if (action === 'status' && targetId) {
-    const id = parseInt(targetId)
-    const result = await jellyseerrService.updateMediaStatus(id, 'available')
-    
-    if (result.success) {
-      const tmdbId = parseInt(tmdbIdStr)
-      if (mediaType && !isNaN(tmdbId)) {
-        forget(`jellyseerr_availability_${mediaType}_${tmdbId}`)
-        revalidatePath(`/dashboard/media/${tmdbIdStr}`)
-      }
+  try {
+    if (action === 'status') {
+      // Force status to "Available" (5) in local DB
+      await (prisma as any).mediaRequest.updateMany({
+        where: { tmdbId: tmdbIdStr, instanceId },
+        data: { status: 5 }
+      })
+      
+      forget(`media_availability_movie_${tmdbIdStr}`)
+      forget(`media_availability_tv_${tmdbIdStr}`)
+      revalidatePath(`/dashboard/media/${tmdbIdStr}`)
+      
       return NextResponse.json({ success: true })
     }
-  }
 
-  return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+  } catch (error: any) {
+    console.error('[API Manage] POST Error:', error)
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 })
+  }
 }
 
 export async function GET(
@@ -45,12 +49,10 @@ export async function GET(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const jellyseerrService = await getJellyseerrServiceForUser()
-  if (!jellyseerrService) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
-
   const { id: tmdbIdStr } = await params
   const { searchParams } = new URL(request.url)
   const mediaType = searchParams.get('type') as 'movie' | 'tv'
+  const refresh = searchParams.get('refresh') === 'true'
 
   if (!mediaType) {
     return NextResponse.json({ error: 'Missing type' }, { status: 400 })
@@ -58,16 +60,72 @@ export async function GET(
 
   try {
     const tmdbId = parseInt(tmdbIdStr)
-    const media = await jellyseerrService.getMedia(tmdbId, mediaType)
-    
-    if (!media) {
-      return NextResponse.json({ error: 'Media not found in Jellyseerr' }, { status: 404 })
+    if (isNaN(tmdbId)) {
+        return NextResponse.json({ error: 'Invalid TMDB ID' }, { status: 400 })
     }
 
-    return NextResponse.json(media)
-  } catch (error) {
+    const availability = await getMediaAvailability(tmdbId, mediaType, refresh)
+    
+    if (!availability) {
+        throw new Error('Availability data is null')
+    }
+    
+    // Get local requests
+    const instanceId = parseInt((user as any).instanceId)
+    const requests = await (prisma as any).mediaRequest.findMany({
+        where: { tmdbId: tmdbIdStr, instanceId },
+        orderBy: { requestedAt: 'desc' }
+    })
+
+    // Get service URL
+    let externalServiceUrl = null
+    if (availability && availability.details && availability.details.id) {
+        try {
+            if (mediaType === 'movie') {
+                const radarrUrl = await (prisma as any).setting.findFirst({ where: { key: 'radarr_url', instanceId } })
+                if (radarrUrl?.value) {
+                    externalServiceUrl = `${radarrUrl.value.replace(/\/$/, '')}/movie/${availability.details.id}`
+                }
+            } else {
+                const sonarrUrl = await (prisma as any).setting.findFirst({ where: { key: 'sonarr_url', instanceId } })
+                if (sonarrUrl?.value) {
+                    externalServiceUrl = `${sonarrUrl.value.replace(/\/$/, '')}/series/${availability.details.id}`
+                }
+            }
+        } catch (e) {
+            console.warn('[API Manage] Failed to build service URL:', e)
+        }
+    }
+    
+    return NextResponse.json({
+        availability,
+        requests: requests.map((req: any) => {
+            let seasons = []
+            try {
+                if (req.metadata) {
+                    const meta = JSON.parse(req.metadata)
+                    seasons = meta.seasons || []
+                }
+            } catch (e) {
+                console.warn(`[API Manage] Failed to parse metadata for request ${req.id}:`, e)
+            }
+
+            return {
+                id: req.id,
+                status: req.status,
+                createdAt: req.requestedAt,
+                requestedBy: {
+                    displayName: req.requesterName,
+                    email: req.requesterEmail
+                },
+                seasons
+            }
+        }),
+        externalServiceUrl
+    })
+  } catch (error: any) {
     console.error('[API Manage] Error:', error)
-    return NextResponse.json({ error: 'Failed to fetch media info' }, { status: 500 })
+    return NextResponse.json({ error: `Failed to fetch media info: ${error.message || 'Unknown error'}` }, { status: 500 })
   }
 }
 
@@ -78,109 +136,162 @@ export async function DELETE(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const jellyseerrService = await getJellyseerrServiceForUser()
   const radarrService = await getRadarrServiceForUser()
   const sonarrService = await getSonarrServiceForUser()
-
-  if (!jellyseerrService) return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
+  const tmdbService = await getTmdbServiceForUser()
 
   const instanceId = parseInt((user as any).instanceId)
   const { id: tmdbIdStr } = await params
   const { searchParams } = new URL(request.url)
   const action = searchParams.get('action') // 'media' or 'request'
-  const targetId = searchParams.get('targetId')
+  const targetId = searchParams.get('targetId') // Can be comma separated IDs
   const mediaType = searchParams.get('type') as 'movie' | 'tv'
   const deleteFiles = searchParams.get('deleteFiles') === 'true'
 
-  if (!action || !targetId) {
-    return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
-  }
-
   try {
-    const id = parseInt(targetId)
     const tmdbId = parseInt(tmdbIdStr)
     
-    let result: { success: boolean; message?: string };
+    let result: { success: boolean; message?: string } = { success: false };
     
     if (action === 'media') {
-      // First, if deleteFiles is true, try direct Radarr/Sonarr deletion
-      if (deleteFiles) {
-        // We need the external service ID from Jellyseerr
-        const media = await jellyseerrService.getMedia(tmdbId, mediaType)
-        const externalServiceId = media?.mediaInfo?.externalServiceId
-        
-        if (externalServiceId) {
-          console.log(`[API Manage] Attempting direct deletion from ${mediaType === 'movie' ? 'Radarr' : 'Sonarr'} (ID: ${externalServiceId})`)
-          if (mediaType === 'movie' && radarrService) {
-            const directResult = await radarrService.deleteMovie(externalServiceId, true)
-            if (!directResult.success) {
-              console.warn(`[API Manage] Direct Radarr deletion failed: ${directResult.message}. Falling back to Jellyseerr.`)
+        // Delete from Radarr/Sonarr
+        if (mediaType === 'movie') {
+            if (!radarrService) return NextResponse.json({ error: 'Radarr unavailable' }, { status: 503 })
+            
+            const movie = await radarrService.getMovieByTmdbId(tmdbId)
+            if (movie && movie.id) {
+                result = await radarrService.deleteMovie(movie.id, deleteFiles)
+            } else {
+                return NextResponse.json({ error: 'Movie not found in Radarr' }, { status: 404 })
             }
-          } else if (mediaType === 'tv' && sonarrService) {
-            const directResult = await sonarrService.deleteSeries(externalServiceId, true)
-            if (!directResult.success) {
-              console.warn(`[API Manage] Direct Sonarr deletion failed: ${directResult.message}. Falling back to Jellyseerr.`)
-            }
-          }
-        } else {
-          console.warn(`[API Manage] No external service ID found for direct deletion.`)
+        } else if (mediaType === 'tv') {
+             if (!sonarrService || !tmdbService) return NextResponse.json({ error: 'Sonarr/TMDB unavailable' }, { status: 503 })
+             
+             // Get TVDB ID first
+             const externalIds = await tmdbService.getExternalIds('tv', tmdbId)
+             if (!externalIds?.tvdb_id) return NextResponse.json({ error: 'TVDB ID not found' }, { status: 404 })
+             
+             const series = await sonarrService.getSeriesByTvdbId(externalIds.tvdb_id)
+             if (series && series.id) {
+                 result = await sonarrService.deleteSeries(series.id, deleteFiles)
+             } else {
+                 return NextResponse.json({ error: 'Series not found in Sonarr' }, { status: 404 })
+             }
         }
-      }
-
-      // Then always delete from Jellyseerr to clean up their DB
-      result = await jellyseerrService.deleteMedia(id, deleteFiles)
-      
-      if (result?.success) {
-        // Delete any local requests for this media since the media itself is gone
-        await (prisma as any).mediaRequest.deleteMany({
-          where: { tmdbId: tmdbIdStr, instanceId }
-        })
-      }
-    } else if (action === 'request') {
-      result = await jellyseerrService.deleteRequest(id)
-      if (result?.success) {
-        // Delete the local request
-        await (prisma as any).mediaRequest.deleteMany({
-          where: { externalId: targetId, instanceId }
-        })
-      }
-    } else if (action === 'status') {
-      result = await jellyseerrService.updateMediaStatus(id, 'available')
-    } else {
-      return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
-    }
-
-
-    if (result?.success) {
-      // Invalidate the availability cache for this media
-      if (mediaType && !isNaN(tmdbId)) {
-        const cacheKey = `jellyseerr_availability_${mediaType}_${tmdbId}`
-        console.log(`[API Manage] Invalidating cache for: ${cacheKey}`)
-        forget(cacheKey)
         
-        // Trigger Next.js revalidation for the media page AND the requests list immediately
-        revalidatePath(`/dashboard/media/${tmdbIdStr}`)
-        revalidatePath('/dashboard/requests/list')
+        if (result.success) {
+             // Delete local request
+             await (prisma as any).mediaRequest.deleteMany({
+                 where: { tmdbId: tmdbIdStr, instanceId }
+             })
+        }
+    } else if (action === 'request') {
+        if (!targetId) return NextResponse.json({ error: 'Missing targetId' }, { status: 400 })
+        
+        const targetIds = targetId.split(',').map(id => parseInt(id)).filter(id => !isNaN(id))
+        if (targetIds.length === 0) return NextResponse.json({ error: 'Invalid targetId' }, { status: 400 })
 
-        // Petit délai pour laisser le temps à Jellyseerr de mettre à jour son état
-        // Et forcer un second recheck après 2 secondes pour être sûr
-        setTimeout(() => {
-          forget(cacheKey)
-          syncJellyseerrRequests().then(() => {
-            revalidatePath('/dashboard/requests/list')
-          }).catch(err => console.error('[Sync] Background sync failed after deletion:', err))
-        }, 2000)
-      }
-      
-      return NextResponse.json({ success: true })
-    } else {
-      return NextResponse.json({ 
-        error: result?.message || 'Action failed',
-        details: result
-      }, { status: 500 })
+        for (const currentTargetId of targetIds) {
+            // Find the request to know what to unmonitor
+            const mediaRequest = await (prisma as any).mediaRequest.findFirst({
+                where: { id: currentTargetId, instanceId }
+            })
+
+            if (!mediaRequest) continue;
+
+            if (mediaType === 'tv') {
+                if (sonarrService && tmdbService) {
+                    const metadata = mediaRequest.metadata ? JSON.parse(mediaRequest.metadata) : {}
+                    const seasonsToDelete = metadata.seasons || []
+                    
+                    // Find all OTHER requests for this series (excluding ALL requests being deleted in this batch)
+                    const otherRequests = await (prisma as any).mediaRequest.findMany({
+                        where: { 
+                            tmdbId: tmdbIdStr, 
+                            instanceId,
+                            id: { notIn: targetIds }
+                        }
+                    })
+
+                    const stillRequestedSeasons = new Set<number>()
+                    otherRequests.forEach((req: any) => {
+                        try {
+                            const meta = req.metadata ? JSON.parse(req.metadata) : {}
+                            const seasons = meta.seasons || []
+                            seasons.forEach((s: number) => stillRequestedSeasons.add(s))
+                        } catch (e) {}
+                    })
+
+                    const finalSeasonsToUnmonitor = seasonsToDelete.filter((s: number) => !stillRequestedSeasons.has(s))
+
+                    const externalIds = await tmdbService.getExternalIds('tv', tmdbId)
+                    if (externalIds?.tvdb_id) {
+                        try {
+                            if (finalSeasonsToUnmonitor.length > 0) {
+                                const unmonitorResult = await sonarrService.unmonitorSeasons(externalIds.tvdb_id, finalSeasonsToUnmonitor)
+                                
+                                if (unmonitorResult.success && unmonitorResult.series) {
+                                    const series = unmonitorResult.series
+                                    const isAnySeasonMonitored = series.seasons?.some((s: any) => s.seasonNumber > 0 && s.monitored)
+                                    const hasFiles = series.statistics?.episodeFileCount > 0
+                                    
+                                    if (!isAnySeasonMonitored && !hasFiles && series.id) {
+                                        console.log(`[API Manage] Auto-deleting series ${series.id} from Sonarr (no monitored seasons and no files)`)
+                                        await sonarrService.deleteSeries(series.id, false)
+                                    }
+                                }
+                            } else {
+                                // Even if no seasons were unmonitored now, check if we should delete the series
+                                const series = await sonarrService.getSeriesByTvdbId(externalIds.tvdb_id)
+                                if (series && series.id) {
+                                    const isAnySeasonMonitored = series.seasons?.some((s: any) => s.seasonNumber > 0 && s.monitored)
+                                    const hasFiles = series.statistics?.episodeFileCount > 0
+                                    
+                                    if (!isAnySeasonMonitored && !hasFiles) {
+                                        console.log(`[API Manage] Auto-deleting empty series ${series.id} from Sonarr`)
+                                        await sonarrService.deleteSeries(series.id, false)
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('[API Manage] Sonarr cleanup failed (series might already be gone):', e)
+                        }
+                    }
+                }
+            } else if (mediaType === 'movie') {
+                if (radarrService) {
+                    const unmonitorResult = await radarrService.unmonitorMovie(tmdbId)
+                    if (unmonitorResult.success && unmonitorResult.movie) {
+                        const movie = unmonitorResult.movie
+                        if (!movie.monitored && !movie.hasFile && movie.id) {
+                            console.log(`[API Manage] Auto-deleting movie ${movie.id} from Radarr (not monitored and no files)`)
+                            await radarrService.deleteMovie(movie.id, false)
+                        }
+                    }
+                }
+            }
+
+            // Just delete the local DB entry
+            await (prisma as any).mediaRequest.delete({
+                where: { id: currentTargetId }
+            })
+        }
+        result = { success: true }
     }
-  } catch (error) {
+
+    if (result.success) {
+       const tmdbId = parseInt(tmdbIdStr)
+       forget(`media_availability_${mediaType}_${tmdbId}`)
+       revalidatePath(`/dashboard/media/${tmdbIdStr}`)
+       revalidatePath('/dashboard/requests/list')
+       
+       return NextResponse.json({ success: true })
+    } else {
+       return NextResponse.json({ error: result.message || 'Action failed' }, { status: 500 })
+    }
+
+  } catch (error: any) {
     console.error('[API Manage] Delete Error:', error)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 })
   }
 }

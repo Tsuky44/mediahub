@@ -10,10 +10,9 @@ interface SettingsTabsProps {
     dbUsers: any[]
     instancesWithSettings: any[]
     currentInstanceId: number
-    jellyseerrUsers: any[]
 }
 
-export default function SettingsTabs({ dbUsers, instancesWithSettings, currentInstanceId, jellyseerrUsers }: SettingsTabsProps) {
+export default function SettingsTabs({ dbUsers, instancesWithSettings, currentInstanceId }: SettingsTabsProps) {
     const [activeTab, setActiveTab] = useState<'services' | 'users' | 'linking'>('services')
 
     return (
@@ -65,7 +64,6 @@ export default function SettingsTabs({ dbUsers, instancesWithSettings, currentIn
                         <SettingsForm 
                             instances={instancesWithSettings}
                             currentInstanceId={currentInstanceId}
-                            users={jellyseerrUsers}
                         />
                     </div>
                 )}

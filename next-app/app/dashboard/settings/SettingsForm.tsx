@@ -2,22 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Save, Loader2, CheckCircle2, XCircle, RefreshCw, History } from 'lucide-react'
+import { Save, Loader2, CheckCircle2, XCircle, RefreshCw, History, Trash2, ListPlus } from 'lucide-react'
 import { testSmbConnection, testJellystatConnection, testEmbyConnection, testPlexConnection, testJellyfinConnection } from '../downloads/file-actions'
-import { importPlexHistoryAction } from './actions'
-
-interface User {
-    id: number
-    email: string
-    displayName?: string
-}
+import { importPlexHistoryAction, testJellyseerrConnectionAction, importJellyseerrRequestsAction, fixMissingTitlesAction } from './actions'
 
 interface Instance {
     id: number
     name: string
     slug: string
     settings: {
-        jellyseerr_user_id?: string
         qbittorrent_url?: string
         qbittorrent_username?: string
         qbittorrent_password?: string
@@ -32,26 +25,24 @@ interface Instance {
         sonarr_api_key?: string
         jellystat_url?: string
         jellystat_api_key?: string
+        jellyseerr_url?: string
+        jellyseerr_api_key?: string
         emby_url?: string
         emby_api_key?: string
         plex_url?: string
         plex_token?: string
         jellyfin_url?: string
         jellyfin_api_key?: string
-        jellyseerr_url?: string
-        jellyseerr_api_key?: string
         type?: string
     }
 }
 
 interface SettingsFormProps {
-    users: User[]
     instances: Instance[]
     currentInstanceId: number
 }
 
 export default function SettingsForm({ 
-    users, 
     instances,
     currentInstanceId
 }: SettingsFormProps) {
@@ -59,9 +50,6 @@ export default function SettingsForm({
     const currentInstance = instances.find(i => i.id === selectedInstanceId) || instances[0]
     const settings = currentInstance.settings
 
-    const [selectedId, setSelectedId] = useState(settings.jellyseerr_user_id || '')
-    const [jellyseerrUrl, setJellyseerrUrl] = useState(settings.jellyseerr_url || '')
-    const [jellyseerrKey, setJellyseerrKey] = useState(settings.jellyseerr_api_key || '')
     const [qbitUrl, setQbitUrl] = useState(settings.qbittorrent_url || '')
     const [qbitUser, setQbitUser] = useState(settings.qbittorrent_username || '')
     const [qbitPass, setQbitPass] = useState(settings.qbittorrent_password || '')
@@ -79,6 +67,9 @@ export default function SettingsForm({
     const [jellystatUrl, setJellystatUrl] = useState(settings.jellystat_url || '')
     const [jellystatKey, setJellystatKey] = useState(settings.jellystat_api_key || '')
 
+    const [jellyseerrUrl, setJellyseerrUrl] = useState(settings.jellyseerr_url || '')
+    const [jellyseerrKey, setJellyseerrKey] = useState(settings.jellyseerr_api_key || '')
+
     const [embyUrl, setEmbyUrl] = useState(settings.emby_url || '')
     const [embyKey, setEmbyKey] = useState(settings.emby_api_key || '')
 
@@ -90,6 +81,7 @@ export default function SettingsForm({
     const [instanceType, setInstanceType] = useState(settings.type || 'emby')
 
     const [loading, setLoading] = useState(false)
+    const [resetLoading, setResetLoading] = useState(false)
     const [testingSmb, setTestingSmb] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
@@ -97,9 +89,6 @@ export default function SettingsForm({
     useEffect(() => {
         const inst = instances.find(i => i.id === selectedInstanceId) || instances[0]
         const s = inst.settings
-        setSelectedId(s.jellyseerr_user_id || '')
-        setJellyseerrUrl(s.jellyseerr_url || '')
-        setJellyseerrKey(s.jellyseerr_api_key || '')
         setQbitUrl(s.qbittorrent_url || '')
         setQbitUser(s.qbittorrent_username || '')
         setQbitPass(s.qbittorrent_password || '')
@@ -114,6 +103,8 @@ export default function SettingsForm({
         setSonarrKey(s.sonarr_api_key || '')
         setJellystatUrl(s.jellystat_url || '')
         setJellystatKey(s.jellystat_api_key || '')
+        setJellyseerrUrl(s.jellyseerr_url || '')
+        setJellyseerrKey(s.jellyseerr_api_key || '')
         setEmbyUrl(s.emby_url || '')
         setEmbyKey(s.emby_api_key || '')
         setPlexUrl(s.plex_url || '')
@@ -160,6 +151,62 @@ export default function SettingsForm({
             setImportPlexResult({ success: false, message: 'Erreur lors de l\'importation' })
         } finally {
             setImportingPlex(false)
+        }
+    }
+
+    const [testingJellyseerr, setTestingJellyseerr] = useState(false)
+    const [jellyseerrTestResult, setJellyseerrTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [importingJellyseerr, setImportingJellyseerr] = useState(false)
+    const [importJellyseerrResult, setImportJellyseerrResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [fixingTitles, setFixingTitles] = useState(false)
+    const [fixTitlesResult, setFixTitlesResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const handleTestJellyseerr = async () => {
+        setTestingJellyseerr(true)
+        setJellyseerrTestResult(null)
+        try {
+            const res = await testJellyseerrConnectionAction(jellyseerrUrl, jellyseerrKey)
+            setJellyseerrTestResult(res)
+        } catch (error) {
+            setJellyseerrTestResult({ success: false, message: 'Erreur lors du test' })
+        } finally {
+            setTestingJellyseerr(false)
+        }
+    }
+
+    const handleImportJellyseerr = async () => {
+        if (!confirm('Voulez-vous vraiment importer les demandes Jellyseerr ?')) return
+        
+        setImportingJellyseerr(true)
+        setImportJellyseerrResult(null)
+        try {
+            const res = await importJellyseerrRequestsAction(selectedInstanceId)
+            setImportJellyseerrResult(res)
+            if (res.success) {
+                router.refresh()
+            }
+        } catch (error) {
+            setImportJellyseerrResult({ success: false, message: 'Erreur lors de l\'importation' })
+        } finally {
+            setImportingJellyseerr(false)
+        }
+    }
+
+    const handleFixMissingTitles = async () => {
+        setFixingTitles(true)
+        setFixTitlesResult(null)
+        try {
+            const res = await fixMissingTitlesAction(selectedInstanceId)
+            setFixTitlesResult(res)
+            if (res.success) {
+                router.refresh()
+            }
+        } catch (error) {
+            setFixTitlesResult({ success: false, message: 'Erreur lors de la correction' })
+        } finally {
+            setFixingTitles(false)
         }
     }
 
@@ -253,6 +300,32 @@ export default function SettingsForm({
         }
     }
 
+    const handleResetInstance = async () => {
+        if (!confirm('Êtes-vous sûr de vouloir réinitialiser cette instance ? TOUTES les données (historique, utilisateurs, requêtes, etc.) seront supprimées définitivement. Cette action est irréversible.')) {
+            return
+        }
+
+        setResetLoading(true)
+        try {
+            const res = await fetch(`/api/user/instances/${selectedInstanceId}/reset`, {
+                method: 'POST',
+            })
+
+            if (res.ok) {
+                alert('Instance réinitialisée avec succès')
+                router.refresh()
+            } else {
+                const errorData = await res.json().catch(() => ({}))
+                alert(`Erreur lors de la réinitialisation: ${errorData.error || 'Erreur inconnue'}`)
+            }
+        } catch (error) {
+            console.error(error)
+            alert('Erreur lors de la réinitialisation')
+        } finally {
+            setResetLoading(false)
+        }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
@@ -263,9 +336,6 @@ export default function SettingsForm({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     instanceId: selectedInstanceId,
-                    jellyseerrUserId: selectedId,
-                    jellyseerr_url: jellyseerrUrl,
-                    jellyseerr_api_key: jellyseerrKey,
                     qbittorrent_url: qbitUrl,
                     qbittorrent_username: qbitUser,
                     qbittorrent_password: qbitPass,
@@ -280,6 +350,8 @@ export default function SettingsForm({
                     sonarr_api_key: sonarrKey,
                     jellystat_url: jellystatUrl,
                     jellystat_api_key: jellystatKey,
+                    jellyseerr_url: jellyseerrUrl,
+                    jellyseerr_api_key: jellyseerrKey,
                     emby_url: embyUrl,
                     emby_api_key: embyKey,
                     plex_url: plexUrl,
@@ -342,63 +414,31 @@ export default function SettingsForm({
                             </select>
                         </div>
                     </div>
-                </div>
 
-            <div className="space-y-4">
-                <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Jellyseerr</h4>
-                <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-md p-3">
-                    <p className="text-sm text-indigo-200">
-                        <strong>Détection automatique :</strong> Le système mappe désormais automatiquement votre compte Jellyseerr en utilisant votre email ou nom d'utilisateur Emby.
-                    </p>
-                </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                        <label htmlFor="jellyseerrUrl" className="block text-sm font-medium text-gray-300">
-                            URL Jellyseerr
-                        </label>
-                        <input
-                            type="text"
-                            id="jellyseerrUrl"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                            placeholder="https://jellyseerr.example.com"
-                            value={jellyseerrUrl}
-                            onChange={(e) => setJellyseerrUrl(e.target.value)}
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="jellyseerrKey" className="block text-sm font-medium text-gray-300">
-                            Clé API Jellyseerr
-                        </label>
-                        <input
-                            type="password"
-                            id="jellyseerrKey"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                            placeholder="Votre clé API"
-                            value={jellyseerrKey}
-                            onChange={(e) => setJellyseerrKey(e.target.value)}
-                        />
+                    <div className="mt-6 pt-6 border-t border-white/10">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h5 className="text-sm font-medium text-red-400">Zone de danger</h5>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Réinitialiser l'instance supprimera toutes les données mais conservera l'URL Emby.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleResetInstance}
+                                disabled={resetLoading}
+                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 transition-colors"
+                            >
+                                {resetLoading ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                )}
+                                Réinitialiser l'instance
+                            </button>
+                        </div>
                     </div>
                 </div>
-                <div className="opacity-50 pointer-events-none">
-                    <label htmlFor="jellyseerrUser" className="block text-sm font-medium text-gray-300">
-                        Utilisateur par défaut (Fallback)
-                    </label>
-                    <select
-                        id="jellyseerrUser"
-                        name="jellyseerrUser"
-                        className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 pl-3 pr-10 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-                        value={selectedId}
-                        onChange={(e) => setSelectedId(e.target.value)}
-                    >
-                        <option value="">-- Sélectionner un utilisateur --</option>
-                        {users.map((user) => (
-                            <option key={user.id} value={user.id}>
-                                {user.email} {user.displayName ? `(${user.displayName})` : ''}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            </div>
 
             <div className="space-y-4">
                 <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">qBittorrent</h4>
@@ -862,6 +902,117 @@ export default function SettingsForm({
                                     <XCircle className="w-4 h-4 mr-1.5" />
                                 )}
                                 {jellyfinTestResult.message}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between border-b border-gray-700 pb-2">
+                        <h4 className="text-lg font-medium text-white">Jellyseerr</h4>
+                        <span className="text-xs text-gray-400 italic">Migration</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label htmlFor="jellyseerrUrl" className="block text-sm font-medium text-gray-300">
+                                URL Jellyseerr
+                            </label>
+                            <input
+                                type="text"
+                                id="jellyseerrUrl"
+                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="http://192.168.1.100:5055"
+                                value={jellyseerrUrl}
+                                onChange={(e) => setJellyseerrUrl(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="jellyseerrKey" className="block text-sm font-medium text-gray-300">
+                                Clé API Jellyseerr
+                            </label>
+                            <input
+                                type="password"
+                                id="jellyseerrKey"
+                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="Votre clé API Jellyseerr"
+                                value={jellyseerrKey}
+                                onChange={(e) => setJellyseerrKey(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 pt-2">
+                        <button
+                            type="button"
+                            onClick={handleTestJellyseerr}
+                            disabled={testingJellyseerr}
+                            className="flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {testingJellyseerr ? (
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                            )}
+                            Tester la connexion
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleImportJellyseerr}
+                            disabled={importingJellyseerr || testingJellyseerr}
+                            className="flex items-center px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-md transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {importingJellyseerr ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <ListPlus className="w-4 h-4 mr-2" />
+                            )}
+                            Importer les demandes
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleFixMissingTitles}
+                            disabled={fixingTitles}
+                            className="flex items-center px-4 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-md transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {fixingTitles ? (
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                            )}
+                            Corriger les noms manquants
+                        </button>
+                        
+                        {jellyseerrTestResult && (
+                            <div className={`flex items-center text-sm ${jellyseerrTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                                {jellyseerrTestResult.success ? (
+                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                ) : (
+                                    <XCircle className="w-4 h-4 mr-1.5" />
+                                )}
+                                {jellyseerrTestResult.message}
+                            </div>
+                        )}
+
+                        {importJellyseerrResult && (
+                            <div className={`flex items-center text-sm ${importJellyseerrResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                                {importJellyseerrResult.success ? (
+                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                ) : (
+                                    <XCircle className="w-4 h-4 mr-1.5" />
+                                ) }
+                                {importJellyseerrResult.message}
+                            </div>
+                        )}
+
+                        {fixTitlesResult && (
+                            <div className={`flex items-center text-sm ${fixTitlesResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                                {fixTitlesResult.success ? (
+                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                ) : (
+                                    <XCircle className="w-4 h-4 mr-1.5" />
+                                )}
+                                {fixTitlesResult.message}
                             </div>
                         )}
                     </div>

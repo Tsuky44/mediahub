@@ -22,6 +22,7 @@ export interface WatchHistoryItem {
   SeriesName?: string
   Client?: string
   NowPlaying: boolean
+  Source?: string
 }
 
 export interface LibraryStats {

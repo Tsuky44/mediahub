@@ -1,23 +1,36 @@
 'use server'
 
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, getTmdbServiceForUser, getRadarrServiceForUser, getSonarrServiceForUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { syncJellyseerrRequests } from '@/lib/services/request-sync'
 import { revalidatePath } from 'next/cache'
-import { getSetting, setSetting } from '@/lib/settings'
+import { getMediaAvailability } from '@/lib/services/media-status'
 
 export async function forceSyncRequests() {
     try {
-        const result = await syncJellyseerrRequests() as any
+        const user = await getCurrentUser()
+        if (!user) return { success: false }
+        
+        const instanceId = parseInt((user as any).instanceId)
+        
+        // Find all requests for this instance to clear their availability cache
+        const requests = await (prisma as any).mediaRequest.findMany({
+            where: { instanceId }
+        })
+        
+        const { forget } = await import('@/lib/cache')
+        
+        for (const req of requests) {
+            forget(`media_availability_${req.mediaType}_${req.tmdbId}`)
+        }
+        
         revalidatePath('/dashboard/requests/list')
         return { 
             success: true, 
-            syncedCount: result.count || 0,
-            processed: result.count || 0
+            syncedCount: requests.length
         }
-    } catch (error: any) {
-        console.error('Failed to force sync:', error)
-        return { success: false, error: error.message || 'Erreur lors de la synchronisation' }
+    } catch (e) {
+        console.error('Failed to force sync requests:', e)
+        return { success: false }
     }
 }
 
@@ -33,20 +46,7 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
     
     if (!dbUser) return { results: [], total: 0, totalPages: 0 }
 
-    // Check last sync time (instance specific)
-    const lastSyncStr = await getSetting('last_requests_sync', instanceId)
-    const lastSync = lastSyncStr ? parseInt(lastSyncStr) : 0
-    const now = Date.now()
-    const tenMinutes = 10 * 60 * 1000
-
-    if (now - lastSync > tenMinutes) {
-        // Trigger sync in background (fire and forget pattern)
-        syncJellyseerrRequests().then(async () => {
-             await setSetting('last_requests_sync', instanceId, Date.now().toString())
-             revalidatePath('/dashboard/requests/list')
-        }).catch((err: any) => console.error('Background sync failed:', err))
-    }
-
+    const tmdbService = await getTmdbServiceForUser()
     const skip = (page - 1) * pageSize
     
     // Tout le monde voit toutes les demandes de son instance
@@ -68,16 +68,119 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
     ])
 
     // Map DB format to the format expected by the UI
-    const enrichedRequests = requests.map((req: any) => {
-        let metadata = {}
+    const enrichedRequests = await Promise.all(requests.map(async (req: any) => {
+        let metadata: any = {}
         try {
             metadata = req.metadata ? JSON.parse(req.metadata) : {}
         } catch (e) {}
 
+        let status = req.status;
+
+        // Check availability and enrich metadata if poster is missing
+        try {
+            const tmdbIdNum = parseInt(req.tmdbId);
+            if (isNaN(tmdbIdNum)) {
+                console.error(`[FetchRequests] Invalid TMDB ID for request ${req.id}: ${req.tmdbId}`);
+                return {
+                    id: req.id,
+                    externalId: req.externalId,
+                    type: req.mediaType,
+                    status: req.status,
+                    createdAt: req.requestedAt,
+                    isOnEmby: req.isOnEmby,
+                    embyItemId: req.embyItemId,
+                    media: {
+                        tmdbId: req.tmdbId,
+                        title: req.title,
+                        ...metadata
+                    },
+                    requestedBy: {
+                        displayName: req.requesterName,
+                        email: req.requesterEmail
+                    }
+                }
+            }
+
+            const availability = await getMediaAvailability(tmdbIdNum, req.mediaType as 'movie' | 'tv');
+            
+            // Map MediaStatus to numeric status
+            // 1=PENDING, 2=APPROVED/PROCESSING, 3=PROCESSING, 4=PARTIAL, 5=AVAILABLE
+            if (availability.status === 'available') {
+                status = 5;
+            } else if (availability.status === 'partial') {
+                status = 4;
+            } else if (availability.status === 'pending' || availability.status === 'processing') {
+                status = 3;
+            } else if (availability.status === 'unknown') {
+                status = 1;
+            }
+
+            // Enrich metadata with poster if missing or broken
+            const isBrokenPoster = !metadata.posterPath || 
+                                 metadata.posterPath === "" || 
+                                 metadata.posterPath === "null" ||
+                                 metadata.posterPath === "undefined" ||
+                                 metadata.posterPath.startsWith('/api/v3/mediacover') ||
+                                 metadata.posterPath.startsWith('/api/mediacover');
+
+            if (isBrokenPoster) {
+                console.log(`[FetchRequests] Fixing broken poster for ${req.title} (ID: ${req.id}, TMDB: ${req.tmdbId})`);
+                
+                // Prioritize TMDB directly as it's more reliable for the frontend
+                if (tmdbService) {
+                    try {
+                        const poster = await tmdbService.getPosterPath(tmdbIdNum, req.mediaType as 'movie' | 'tv');
+                        if (poster) {
+                            console.log(`[FetchRequests] Found TMDB poster for ${req.title}: ${poster}`);
+                            metadata.posterPath = poster;
+                        } else {
+                            console.warn(`[FetchRequests] No TMDB poster found for ${req.title} (${req.tmdbId})`);
+                        }
+                    } catch (tmdbError) {
+                        console.error(`[FetchRequests] TMDB error for ${req.title}:`, tmdbError);
+                    }
+                }
+
+                // Fallback to Sonarr/Radarr ONLY if it's a remote URL and we still don't have a poster
+                if ((!metadata.posterPath || metadata.posterPath.startsWith('/api')) && availability.details) {
+                    const details = availability.details as any;
+                    const remotePoster = details.remotePoster;
+                    if (remotePoster && remotePoster.startsWith('http')) {
+                        metadata.posterPath = remotePoster;
+                        console.log(`[FetchRequests] Found remote poster from service for ${req.title}: ${remotePoster}`);
+                    }
+                }
+
+                if (metadata.posterPath && !metadata.posterPath.startsWith('/api')) {
+                    // Update DB with enriched metadata
+                    try {
+                        await (prisma as any).mediaRequest.update({
+                            where: { id: req.id },
+                            data: { metadata: JSON.stringify(metadata) }
+                        });
+                        console.log(`[FetchRequests] Updated DB metadata for ${req.title}`);
+                    } catch (dbError) {
+                        console.error(`[FetchRequests] Failed to update DB metadata for ${req.id}:`, dbError);
+                    }
+                }
+            }
+
+            // Update DB if status changed
+            if (status !== req.status) {
+                (prisma as any).mediaRequest.update({
+                    where: { id: req.id },
+                    data: { status: status }
+                }).catch((e: any) => console.error('Failed to update status', e));
+            }
+        } catch (e) {
+            console.error(`Error checking availability for request ${req.id}:`, e);
+        }
+
         return {
-            id: req.externalId || req.id.toString(),
+            id: req.id,
+            externalId: req.externalId,
             type: req.mediaType,
-            status: req.status,
+            status: status,
             createdAt: req.requestedAt,
             isOnEmby: req.isOnEmby,
             embyItemId: req.embyItemId,
@@ -91,7 +194,7 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
                 email: req.requesterEmail
             }
         }
-    })
+    }));
 
     return {
         results: enrichedRequests,

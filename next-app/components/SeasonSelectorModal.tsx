@@ -16,7 +16,7 @@ interface Season {
 
 interface SeasonStatus {
     seasonNumber: number
-    status: number
+    status: 'unknown' | 'available' | 'partial' | 'pending' | 'processing'
 }
 
 interface SeasonSelectorModalProps {
@@ -36,15 +36,9 @@ export function SeasonSelectorModal({ isOpen, onClose, title, tmdbId, seasons, s
     if (!isOpen) return null
 
     // Filter out seasons that are already available or pending
-    // Status 5 = Available, 4 = Partial (might want to request missing episodes? Jellyseerr usually handles this as re-request), 2 = Pending
-    // We allow requesting anything not status 5 or 2 (so we can request missing parts of 4 or new ones)
-    // Actually, if status is 5, we shouldn't request. If 2, already pending.
-    
     const isSeasonAvailableOrPending = (seasonNumber: number) => {
         const status = seasonStatuses.find(s => s.seasonNumber === seasonNumber)?.status
-        // Filter out Available (5), Partial (4), Processing (3), Pending (2)
-        // Leaving only Not Requested (1 or undefined)
-        return status === 5 || status === 4 || status === 3 || status === 2
+        return status === 'available' || status === 'partial' || status === 'processing' || status === 'pending'
     }
 
     const availableSeasonsToRequest = seasons.filter(s => s.season_number > 0 && !isSeasonAvailableOrPending(s.season_number))

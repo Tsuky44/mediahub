@@ -155,6 +155,46 @@ export class EmbyService {
     }
   }
 
+  async getPlaybackReport(params: any = {}) {
+    try {
+      const client = await this.getClient()
+      const response = await client.get('/PlaybackReporting/Report', { params })
+      return response.data
+    } catch (e: any) {
+      if (e.response?.status === 404) {
+        // Fallback to ActivityLog if Report is not available
+        try {
+          const response = await (await this.getClient()).get('/PlaybackReporting/ActivityLog', {
+            params: {
+              StartIndex: params.startIndex || 0,
+              Limit: params.pageSize || params.limit || 2000,
+              MinDate: params.minDate,
+            }
+          })
+          return response.data
+        } catch (e2: any) {
+          console.error(`[EmbyService] getPlaybackReport ActivityLog fallback failed:`, e2.message)
+          throw e2
+        }
+      }
+      console.error(`[EmbyService] getPlaybackReport failed:`, e.message)
+      throw e
+    }
+  }
+
+  async getCustomQuery(query: string) {
+    try {
+      const client = await this.getClient()
+      const response = await client.post('/user_usage_stats/submit_custom_query', {
+        CustomQueryString: query
+      })
+      return response.data
+    } catch (e: any) {
+      console.error(`[EmbyService] getCustomQuery failed:`, e.message)
+      throw e
+    }
+  }
+
   getItemImageUrl(itemId: string, type: string = 'Primary') {
     return `${this.baseUrl}/Items/${itemId}/Images/${type}?api_key=${this.apiKey}`
   }

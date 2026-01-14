@@ -22,6 +22,19 @@ export class TmdbService {
     })
   }
 
+  async getExternalIds(type: 'movie' | 'tv', id: number) {
+    const client = await this.getClient()
+    if (!client) return null
+    
+    try {
+        const response = await client.get(`/${type}/${id}/external_ids`)
+        return response.data
+    } catch (e) {
+        console.error(`[TMDB] Failed to get external IDs for ${type}/${id}`, e)
+        return null
+    }
+  }
+
   async searchMulti(query: string, page = 1) {
     const client = await this.getClient()
     if (!client) return { results: [] }

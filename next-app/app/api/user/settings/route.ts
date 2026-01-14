@@ -32,7 +32,6 @@ export async function POST(request: NextRequest) {
     }
 
     const { 
-        jellyseerrUserId, 
         qbittorrent_url, 
         qbittorrent_username, 
         qbittorrent_password,
@@ -53,8 +52,6 @@ export async function POST(request: NextRequest) {
         plex_token,
         jellyfin_url,
         jellyfin_api_key,
-        jellyseerr_url,
-        jellyseerr_api_key,
         type
     } = body
 
@@ -64,7 +61,6 @@ export async function POST(request: NextRequest) {
     if (emby_url !== undefined || emby_api_key !== undefined || 
         plex_url !== undefined || plex_token !== undefined ||
         jellyfin_url !== undefined || jellyfin_api_key !== undefined ||
-        jellyseerr_url !== undefined || jellyseerr_api_key !== undefined ||
         type !== undefined) {
       
       console.log('[Settings API] Core settings update detected')
@@ -86,8 +82,6 @@ export async function POST(request: NextRequest) {
       setField('plexToken', plex_token)
       setField('jellyfinUrl', jellyfin_url)
       setField('jellyfinApiKey', jellyfin_api_key)
-      setField('jellyseerrUrl', jellyseerr_url)
-      setField('jellyseerrApiKey', jellyseerr_api_key)
       setField('type', type)
       
       console.log('[Settings API] updateData:', JSON.stringify(updateData, null, 2))
@@ -106,7 +100,6 @@ export async function POST(request: NextRequest) {
 
     // Update Global Settings
     const settingsToUpdate = [
-        { key: 'jellyseerr_user_id', value: jellyseerrUserId },
         { key: 'qbittorrent_url', value: qbittorrent_url },
         { key: 'qbittorrent_username', value: qbittorrent_username },
         { key: 'qbittorrent_password', value: qbittorrent_password },
@@ -121,6 +114,8 @@ export async function POST(request: NextRequest) {
         { key: 'sonarr_api_key', value: sonarr_api_key },
         { key: 'jellystat_url', value: jellystat_url },
         { key: 'jellystat_api_key', value: jellystat_api_key },
+        { key: 'jellyseerr_url', value: body.jellyseerr_url },
+        { key: 'jellyseerr_api_key', value: body.jellyseerr_api_key },
     ]
 
     for (const setting of settingsToUpdate) {

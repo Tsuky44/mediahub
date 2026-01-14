@@ -1,4 +1,3 @@
-import { getJellyseerrServiceForUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -36,10 +35,6 @@ export default async function SettingsPage() {
     orderBy: { name: 'asc' }
   })
 
-  // Fetch users from Jellyseerr for sync setting
-  const jellyseerrService = await getJellyseerrServiceForUser()
-  const jellyseerrUsers = jellyseerrService ? await jellyseerrService.getUsers() : []
-
   // Fetch current instance for core Emby config
   const currentInstance = await (prisma as any).instance.findUnique({
     where: { id: instanceId }
@@ -66,8 +61,6 @@ export default async function SettingsPage() {
         plex_token: inst.plexToken,
         jellyfin_url: inst.jellyfinUrl,
         jellyfin_api_key: inst.jellyfinApiKey,
-        jellyseerr_url: inst.jellyseerrUrl,
-        jellyseerr_api_key: inst.jellyseerrApiKey,
         type: inst.type,
       }
     }
@@ -78,7 +71,6 @@ export default async function SettingsPage() {
         dbUsers={dbUsers}
         instancesWithSettings={instancesWithSettings}
         currentInstanceId={instanceId}
-        jellyseerrUsers={jellyseerrUsers}
     />
   )
 }

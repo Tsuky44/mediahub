@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, PlayCircle, Check, Clock, Download } from 'lucide-react'
 import { getSeasonDetails, requestSeason } from '@/app/dashboard/media/[id]/actions'
 import clsx from 'clsx'
@@ -32,7 +32,7 @@ interface Episode {
 
 interface SeasonStatus {
     seasonNumber: number
-    status: number // 5=Available, 4=Partial, 2=Pending
+    status: 'unknown' | 'available' | 'partial' | 'pending' | 'processing'
 }
 
 export interface SeasonProgress {
@@ -64,7 +64,7 @@ export function SeasonList({ tvId, seasons, seasonStatuses, seasonProgress = [] 
                             key={season.id} 
                             tvId={tvId} 
                             season={season} 
-                            initialStatus={status?.status}
+                            initialStatus={status?.status || 'unknown'}
                             title={season.name} 
                             progress={progress}
                         />
@@ -75,7 +75,7 @@ export function SeasonList({ tvId, seasons, seasonStatuses, seasonProgress = [] 
     )
 }
 
-function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: number, season: Season, initialStatus?: number, title: string, progress?: SeasonProgress }) {
+function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: number, season: Season, initialStatus: string, title: string, progress?: SeasonProgress }) {
     const [isOpen, setIsOpen] = useState(false)
     const [episodes, setEpisodes] = useState<Episode[]>([])
     const [loading, setLoading] = useState(false)
@@ -84,9 +84,9 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
     const [requesting, setRequesting] = useState(false)
 
     // Sync status when props change (e.g. after parent re-render/revalidation)
-    if (initialStatus !== undefined && initialStatus !== status) {
+    useEffect(() => {
         setStatus(initialStatus)
-    }
+    }, [initialStatus])
 
     const toggleOpen = async () => {
         if (isOpen) {
@@ -109,12 +109,12 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
 
     const handleRequest = async (e: React.MouseEvent) => {
         e.stopPropagation()
-        if (requesting || status === 2 || status === 3 || status === 4 || status === 5) return
+        if (requesting || status === 'pending' || status === 'processing' || status === 'available') return
 
         setRequesting(true)
         const result = await requestSeason(tvId, season.season_number, title)
         if (result.success) {
-            setStatus(2) // Set to pending
+            setStatus('pending')
         } else {
             alert('Erreur lors de la demande')
         }
@@ -164,19 +164,19 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                             )}
 
                             {/* Status Icon Next to Title */}
-                            {status === 5 && (
+                            {status === 'available' && (
                                 <span className="flex items-center gap-1 rounded-full bg-green-900/50 px-2 py-0.5 text-xs font-medium text-green-400 border border-green-800">
                                     <Check className="h-3 w-3" />
                                     <span className="hidden sm:inline">Disponible</span>
                                 </span>
                             )}
-                            {status === 4 && (
+                            {status === 'partial' && (
                                 <span className="flex items-center gap-1 rounded-full bg-green-900/50 px-2 py-0.5 text-xs font-medium text-green-400 border border-green-800">
                                     <Check className="h-3 w-3" />
                                     <span className="hidden sm:inline">Disponible</span>
                                 </span>
                             )}
-                            {(status === 2 || status === 3) && (
+                            {(status === 'pending' || status === 'processing') && (
                                 <span className="flex items-center gap-1 rounded-full bg-yellow-900/50 px-2 py-0.5 text-xs font-medium text-yellow-400 border border-yellow-800">
                                     <Clock className="h-3 w-3" />
                                     <span className="hidden sm:inline">En attente</span>
@@ -184,7 +184,7 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                             )}
                             
                             {/* Request Button if not requested/available */}
-                            {!status && (
+                            {status === 'unknown' && (
                                 <div
                                     role="button"
                                     onClick={handleRequest}
@@ -198,9 +198,11 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                                     {requesting ? (
                                         <div className="h-3 w-3 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
                                     ) : (
-                                        <Download className="h-3 w-3" />
+                                        <>
+                                            <Download className="h-3 w-3" />
+                                            <span>Demander</span>
+                                        </>
                                     )}
-                                    <span className="hidden sm:inline">Demander</span>
                                 </div>
                             )}
                         </div>

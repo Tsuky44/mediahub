@@ -32,8 +32,6 @@ export async function getSetting(key: string, instanceId: number, defaultValue: 
       if (key === 'plex_token' && instance.plexToken) return instance.plexToken
       if (key === 'jellyfin_url' && instance.jellyfinUrl) return instance.jellyfinUrl
       if (key === 'jellyfin_api_key' && instance.jellyfinApiKey) return instance.jellyfinApiKey
-      if (key === 'jellyseerr_url' && instance.jellyseerrUrl) return instance.jellyseerrUrl
-      if (key === 'jellyseerr_api_key' && instance.jellyseerrApiKey) return instance.jellyseerrApiKey
 
       if (instance.isDefault) {
         const envKey = key.toUpperCase()

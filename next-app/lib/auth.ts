@@ -3,7 +3,6 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 import { EmbyService } from "@/lib/services/emby"
-import { JellyseerrService } from "@/lib/services/jellyseerr"
 import { RadarrService } from "@/lib/services/radarr"
 import { SonarrService } from "@/lib/services/sonarr"
 import { QBittorrentService } from "@/lib/services/qbittorrent"
@@ -244,49 +243,7 @@ export async function getEmbyServiceForUser() {
   }
 }
 
-/**
- * Récupère le service Jellyseerr pour l'utilisateur actuel
- */
-export async function getJellyseerrServiceForUser() {
-  const user = await getCurrentUser()
-  if (!user || !(user as any).instanceId) return null
 
-  const instanceId = parseInt((user as any).instanceId)
-  if (isNaN(instanceId)) return null
-  
-  try {
-    if (!prisma || !(prisma as any).instance) return null
-    let instance = await (prisma as any).instance.findUnique({
-      where: { id: instanceId }
-    })
-
-    if (!instance) {
-      console.error(`[getJellyseerrServiceForUser] Instance ${instanceId} non trouvée`)
-      return null
-    }
-
-    console.debug(`[getJellyseerrServiceForUser] Instance found: ${instance.name}, URL: ${instance.jellyseerrUrl ? 'OK' : 'MISSING'}, API Key: ${instance.jellyseerrApiKey ? 'OK' : 'MISSING'}`)
-
-    if (!instance.jellyseerrUrl || !instance.jellyseerrApiKey) {
-      console.warn(`[getJellyseerrServiceForUser] Jellyseerr config missing for instance ${instance.name}, trying default instance`)
-      const defaultInstance = await (prisma as any).instance.findFirst({ where: { isDefault: true } })
-      if (defaultInstance && defaultInstance.id !== instanceId) {
-        if (defaultInstance.jellyseerrUrl && defaultInstance.jellyseerrApiKey) {
-          instance = defaultInstance
-        }
-      }
-    }
-
-    if (!instance.jellyseerrUrl || !instance.jellyseerrApiKey) {
-      return null
-    }
-
-    return new JellyseerrService(instance.jellyseerrUrl, instance.jellyseerrApiKey)
-  } catch (error) {
-    console.error(`[getJellyseerrServiceForUser] Erreur lors de la récupération de l'instance:`, error)
-    return null
-  }
-}
 
 /**
  * Récupère le service Radarr pour l'utilisateur actuel

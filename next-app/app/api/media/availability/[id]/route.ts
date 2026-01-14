@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getJellyseerrServiceForUser } from '@/lib/auth'
+import { getMediaAvailability } from '@/lib/services/media-status'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(
   request: Request,
@@ -16,15 +19,10 @@ export async function GET(
         return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
     }
 
-    const jellyseerrService = await getJellyseerrServiceForUser()
-    if (!jellyseerrService) {
-        return NextResponse.json({ status: 'unknown', available: false })
-    }
-
-    const availability = await jellyseerrService.getMediaAvailability(tmdbId, type, refresh)
+    const availability = await getMediaAvailability(tmdbId, type, refresh)
     return NextResponse.json(availability)
   } catch (error) {
-    console.error('Failed to check availability:', error)
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    console.error('Availability check failed', error)
+    return NextResponse.json({ status: 'unknown', available: false }, { status: 500 })
   }
 }

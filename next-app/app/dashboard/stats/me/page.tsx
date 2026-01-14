@@ -53,6 +53,22 @@ function sanitizePlaybackDuration(durationInSeconds: number, type: string, actua
 
 
 
+function SourceBadge({ source }: { source?: string }) {
+  if (!source) return null;
+  const s = source.toLowerCase();
+  const colors = 
+    s === 'emby' ? 'bg-green-500/20 text-green-300 border-green-500/30' :
+    s === 'plex' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
+    s === 'jellyfin' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' :
+    'bg-gray-500/20 text-gray-300 border-gray-500/30';
+  
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded border capitalize font-medium ${colors}`}>
+      {s}
+    </span>
+  );
+}
+
 function StatCard({ title, value, subValue, icon }: { title: string, value: string, subValue: string, icon: React.ReactNode }) {
   return (
     <div className="rounded-xl bg-gray-800 p-6 shadow-sm border border-gray-700 hover:border-gray-600 transition-colors">
@@ -231,7 +247,8 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
       ActivityDateInserted: log.startTime.toISOString(),
       DateCreated: log.startTime.toISOString(),
       PlaybackDuration: log.playDuration,
-      RunTimeTicks: Number(log.totalDuration || 0)
+      RunTimeTicks: Number(log.totalDuration || 0),
+      Source: log.source
     }
   })
 
@@ -421,7 +438,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
               {periodTitle}
             </span>
             <span className="text-gray-600">•</span>
-            <span className="text-sm">{totalHours}h de visionnage personnel</span>
+            <span className="text-sm">{totalHours}h de visionnage {userGroupMember ? 'du groupe' : 'personnel'}</span>
           </div>
         </div>
         
@@ -445,10 +462,10 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Mon temps de visionnage" value={`${totalHours}h`} subValue={`Total ${subValueLabel}`} icon={<Clock className="h-5 w-5 text-blue-500" />} />
-        <StatCard title="Mes contenus vus" value={totalPlays.toString()} subValue={`Films & Épisodes (${subValueLabel})`} icon={<Play className="h-5 w-5 text-green-500" />} />
-        <StatCard title="Mon activité récente" value={historyArray.length > 0 ? formatDistanceToNow(new Date(historyArray[0].ActivityDateInserted || historyArray[0].DateCreated), { addSuffix: true, locale: fr }) : 'Aucune'} subValue="Dernière session" icon={<Activity className="h-5 w-5 text-purple-500" />} />
-        <StatCard title="Ma moyenne journalière" value={Math.round(totalHours / (days || 1)).toString() + 'h'} subValue="Heures / jour" icon={<TrendingUp className="h-5 w-5 text-orange-500" />} />
+        <StatCard title={userGroupMember ? "Temps de visionnage (Groupe)" : "Mon temps de visionnage"} value={`${totalHours}h`} subValue={`Total ${subValueLabel}`} icon={<Clock className="h-5 w-5 text-blue-500" />} />
+        <StatCard title={userGroupMember ? "Contenus vus (Groupe)" : "Mes contenus vus"} value={totalPlays.toString()} subValue={`Films & Épisodes (${subValueLabel})`} icon={<Play className="h-5 w-5 text-green-500" />} />
+        <StatCard title={userGroupMember ? "Activité récente (Groupe)" : "Mon activité récente"} value={historyArray.length > 0 ? formatDistanceToNow(new Date(historyArray[0].ActivityDateInserted || historyArray[0].DateCreated), { addSuffix: true, locale: fr }) : 'Aucune'} subValue="Dernière session" icon={<Activity className="h-5 w-5 text-purple-500" />} />
+        <StatCard title={userGroupMember ? "Moyenne journalière (Groupe)" : "Ma moyenne journalière"} value={Math.round(totalHours / (days || 1)).toString() + 'h'} subValue="Heures / jour" icon={<TrendingUp className="h-5 w-5 text-orange-500" />} />
       </div>
 
       <StatsCharts 
@@ -477,6 +494,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
               <thead>
                 <tr className="bg-gray-900/50 text-gray-400 text-xs uppercase tracking-wider">
                   <th className="px-6 py-4 font-medium">Contenu</th>
+                  {userGroupMember && <th className="px-6 py-4 font-medium">Utilisateur</th>}
                   <th className="px-6 py-4 font-medium">Client / Appareil</th>
                   <th className="px-6 py-4 font-medium">Date</th>
                   <th className="px-6 py-4 font-medium text-right">Durée</th>
@@ -500,7 +518,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
                       parts.push(item.SeriesName);
                     }
                     if (item.ParentIndexNumber !== undefined && item.IndexNumber !== undefined) {
-                      parts.push(`S${item.ParentIndexNumber} • Épisode ${item.IndexNumber}`);
+                      parts.push(`S${item.ParentIndexNumber} E${item.IndexNumber}`);
                     } else if (item.NowPlayingItemName && item.NowPlayingItemName !== displayName && item.NowPlayingItemName !== item.SeriesName) {
                       parts.push(item.NowPlayingItemName);
                     }
@@ -522,8 +540,11 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
                              />
                           </div>
                           <div>
-                            <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
-                              {displayName}
+                            <div className="flex items-center gap-2">
+                              <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
+                                {displayName}
+                              </div>
+                              <SourceBadge source={item.Source} />
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-900 text-gray-500 font-medium border border-gray-700">
@@ -538,13 +559,17 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
                           </div>
                         </div>
                       </td>
+                      {userGroupMember && (
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2 text-sm text-gray-300">
+                            <User className="h-3.5 w-3.5 text-gray-500" />
+                            {item.UserName}
+                          </div>
+                        </td>
+                      )}
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-300">{item.Client || item.ClientName || 'Client web'}</div>
                         <div className="text-xs text-gray-500">{item.DeviceName || 'Inconnu'}</div>
-                        <div className="text-[10px] text-blue-400/80 mt-1 flex items-center gap-1 font-medium uppercase tracking-wider">
-                          <User size={10} className="text-blue-500" />
-                          {item.UserName || item.userName || 'Utilisateur'}
-                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-400">
                         {formatDistanceToNow(new Date(item.ActivityDateInserted || item.DateCreated), { addSuffix: true, locale: fr })}
@@ -557,7 +582,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
                 })}
                 {aggregatedHistory.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-6 py-10 text-center text-gray-500 italic">
+                    <td colSpan={userGroupMember ? 5 : 4} className="px-6 py-10 text-center text-gray-500 italic">
                       Aucun historique de visionnage trouvé
                     </td>
                   </tr>

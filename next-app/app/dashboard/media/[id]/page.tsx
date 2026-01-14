@@ -1,4 +1,4 @@
-import { getEmbyServiceForUser, getJellyseerrServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
+import { getEmbyServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Image from 'next/image'
@@ -15,6 +15,7 @@ import WatchLaterButton from './WatchLaterButton'
 import { ManageMediaButton } from './ManageMediaButton'
 import { isInWatchLater } from '../watch-later-actions'
 import { getSetting } from '@/lib/settings'
+import { getMediaAvailability } from '@/lib/services/media-status'
 
 async function getImdbRating(imdbId: string) {
     try {
@@ -52,7 +53,6 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   const user = await getCurrentUser()
   const instanceId = parseInt((user as any)?.instanceId || '0')
   const embyService = await getEmbyServiceForUser()
-  const jellyseerrService = await getJellyseerrServiceForUser()
 
   const videos = details.videos?.results || []
   const trailer = videos.find((v: any) => v.type === 'Trailer' && v.site === 'YouTube')
@@ -60,7 +60,7 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   const credits = details.credits || { cast: [] }
   const cast = credits.cast ? credits.cast.slice(0, 25) : [] // Limit to top 25 cast members for scroll view
 
-  const availability = jellyseerrService ? await jellyseerrService.getMediaAvailability(tmdbId, mediaType) : { status: null }
+  const availability = await getMediaAvailability(tmdbId, mediaType)
   const isWatchLaterItem = await isInWatchLater(id, mediaType)
 
   // TMDB Ratings and External IDs
@@ -225,6 +225,9 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                                     {availability.status === 'available' && (
                                         <span className="bg-green-600/80 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase backdrop-blur-sm">Disponible</span>
                                     )}
+                                    {availability.status === 'partial' && (
+                                        <span className="bg-purple-600/80 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase backdrop-blur-sm">Partiellement disponible</span>
+                                    )}
                                 </div>
                             )}
                             <h1 className="text-4xl md:text-5xl font-extrabold text-white leading-tight">
@@ -387,9 +390,9 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                     )}
 
                     {/* Technical Info Table */}
-                    <div className="bg-gray-900/40 backdrop-blur-md rounded-xl border border-white/5 overflow-hidden shadow-xl">
+                    <div className="bg-gray-900/40 backdrop-blur-md rounded-xl border border-white/5 shadow-xl">
                         {/* Rating Row */}
-                        <div className="flex items-center justify-center gap-8 py-4 bg-white/5">
+                        <div className="flex items-center justify-center gap-8 py-4 bg-white/5 rounded-t-xl">
                             <div className="flex items-center gap-2">
                                 <span className="bg-[#f5c518] text-black text-[10px] font-black px-1.5 py-0.5 rounded-sm">IMDb</span>
                                 <span className="text-white font-bold text-sm">{details.vote_average?.toFixed(1) || '0.0'}</span>
@@ -450,7 +453,7 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
 
                         {/* Watch Providers - Integrated Row */}
                         {watchProviders.length > 0 && (
-                            <div className="px-4 py-3 flex items-center justify-between border-t border-white/5 bg-white/[0.02]">
+                            <div className="px-4 py-3 flex items-center justify-between border-t border-white/5 bg-white/[0.02] rounded-b-xl">
                                 <span className="text-gray-500 text-[11px] font-bold">Disponible sur</span>
                                 <div className="flex gap-2">
                                     {watchProviders.map((provider: any) => (
@@ -459,10 +462,11 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                                                 src={`https://image.tmdb.org/t/p/original${provider.logo_path}`} 
                                                 alt={provider.provider_name}
                                                 className="w-5 h-5 rounded-md shadow-md border border-white/10 group-hover:scale-110 transition duration-300"
-                                                title={provider.provider_name}
                                             />
-                                            <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-[9px] rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-50 pointer-events-none border border-white/10">
+                                            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-gray-900 text-white text-[9px] rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-50 pointer-events-none border border-white/10 shadow-xl">
                                                 {provider.provider_name}
+                                                {/* Arrow */}
+                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                                             </div>
                                         </div>
                                     ))}

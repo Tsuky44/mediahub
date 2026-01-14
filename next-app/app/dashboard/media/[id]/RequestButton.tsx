@@ -31,12 +31,12 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
 
         const interval = setInterval(async () => {
             try {
-                const res = await fetch(`/api/media/availability/${tmdbId}?type=${mediaType}&refresh=true`)
+                const res = await fetch(`/api/media/availability/${tmdbId}?type=${mediaType}&refresh=true&t=${Date.now()}`)
                 if (res.ok) {
                     const data = await res.json()
                     if (data.status !== status) {
                         setStatus(data.status)
-                        if (data.status === 'available' || data.status === 'partial') {
+                        if (data.status === 'available' || data.status === 'partial' || data.status === 'unknown') {
                             router.refresh()
                         }
                     }
@@ -44,7 +44,7 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
             } catch (e) {
                 console.error('Polling failed:', e)
             }
-        }, 10000) // Poll every 10 seconds
+        }, 5000) // Poll every 5 seconds
 
         return () => clearInterval(interval)
     }, [status, tmdbId, mediaType, router])
@@ -116,20 +116,74 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
     }
 
     if (status === 'available') {
+        const hasUnrequestedSeasons = mediaType === 'tv' && seasonStatuses && seasonStatuses.some(s => s.seasonNumber > 0 && s.status === 'unknown');
+        
         return (
-            <button disabled className="flex items-center gap-2 rounded-md bg-green-600/20 px-6 py-3 font-semibold text-green-500 border border-green-600/30 cursor-default">
-                <Check className="h-5 w-5" />
-                Disponible sur Emby
-            </button>
+            <>
+                <div className="flex gap-2">
+                    <button disabled className="flex items-center gap-2 rounded-md bg-green-600/20 px-6 py-3 font-semibold text-green-500 border border-green-600/30 cursor-default">
+                        <Check className="h-5 w-5" />
+                        Disponible sur Emby
+                    </button>
+                    {hasUnrequestedSeasons && (
+                        <button 
+                            onClick={() => setShowSeasonModal(true)}
+                            className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
+                        >
+                            <Plus className="h-5 w-5" />
+                            Demander plus
+                        </button>
+                    )}
+                </div>
+                {mediaType === 'tv' && seasons && seasonStatuses && (
+                    <SeasonSelectorModal
+                        isOpen={showSeasonModal}
+                        onClose={() => setShowSeasonModal(false)}
+                        title={title}
+                        tmdbId={tmdbId}
+                        seasons={seasons}
+                        seasonStatuses={seasonStatuses}
+                        onSuccess={() => {
+                            router.refresh()
+                        }}
+                    />
+                )}
+            </>
         )
     }
 
     if (status === 'pending' || status === 'processing') {
          return (
-            <button disabled className="flex items-center gap-2 rounded-md bg-yellow-600/20 px-6 py-3 font-semibold text-yellow-500 border border-yellow-600/30 cursor-default">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                En cours de traitement...
-            </button>
+            <>
+                <div className="flex gap-2">
+                    <button disabled className="flex items-center gap-2 rounded-md bg-yellow-600/20 px-6 py-3 font-semibold text-yellow-500 border border-yellow-600/30 cursor-default">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        En cours de traitement...
+                    </button>
+                    {mediaType === 'tv' && seasons && seasonStatuses && (
+                        <button 
+                            onClick={() => setShowSeasonModal(true)}
+                            className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
+                        >
+                            <Plus className="h-5 w-5" />
+                            Demander plus
+                        </button>
+                    )}
+                </div>
+                {mediaType === 'tv' && seasons && seasonStatuses && (
+                    <SeasonSelectorModal
+                        isOpen={showSeasonModal}
+                        onClose={() => setShowSeasonModal(false)}
+                        title={title}
+                        tmdbId={tmdbId}
+                        seasons={seasons}
+                        seasonStatuses={seasonStatuses}
+                        onSuccess={() => {
+                            router.refresh()
+                        }}
+                    />
+                )}
+            </>
         )
     }
 

@@ -25,8 +25,6 @@ export default function InstancesClient({ initialInstances }: { initialInstances
     slug: '',
     embyUrl: '',
     embyApiKey: '',
-    jellyseerrUrl: '',
-    jellyseerrApiKey: ''
   })
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -36,7 +34,7 @@ export default function InstancesClient({ initialInstances }: { initialInstances
       const newInstance = await createInstance(formData)
       setInstances([newInstance as any, ...instances])
       setIsAdding(false)
-      setFormData({ name: '', slug: '', embyUrl: '', embyApiKey: '', jellyseerrUrl: '', jellyseerrApiKey: '' })
+      setFormData({ name: '', slug: '', embyUrl: '', embyApiKey: '' })
       toast.success('Instance créée avec succès !')
     } catch (error: any) {
       toast.error(error.message)
