@@ -19,6 +19,7 @@ export async function getSeasonDetails(tvId: number, seasonNumber: number) {
     const user = await getCurrentUser()
     const instanceId = parseInt((user as any)?.instanceId || '0')
     const embyService = await getEmbyServiceForUser()
+    const sonarrService = await getSonarrServiceForUser()
 
     let embyUserId: string | undefined = undefined
     if (user && user.email) {
@@ -42,17 +43,46 @@ export async function getSeasonDetails(tvId: number, seasonNumber: number) {
          }
     }
 
+    // Fetch Sonarr data for release info
+    let sonarrEpisodeFiles: any[] = []
+    if (sonarrService) {
+        // Get external IDs to find TVDB ID
+        const externalIds = await tmdbService.getExternalIds('tv', tvId)
+        if (externalIds && externalIds.tvdb_id) {
+            const sonarrSeries = await sonarrService.getSeriesByTvdbId(externalIds.tvdb_id)
+            if (sonarrSeries && sonarrSeries.id) {
+                sonarrEpisodeFiles = await sonarrService.getEpisodeFiles(sonarrSeries.id)
+                // Filter by season number
+                sonarrEpisodeFiles = sonarrEpisodeFiles.filter((f: any) => f.seasonNumber === seasonNumber)
+            }
+        }
+    }
+
     // Merge everything into TMDB episodes
     if (tmdbData.episodes) {
         tmdbData.episodes = tmdbData.episodes.map((ep: any) => {
             const embyEp = embyEpisodes.find((e: any) => e.IndexNumber === ep.episode_number)
+            
+            // Find release title from Sonarr
+            // Note: In Sonarr, an episode file can contain multiple episodes
+            // We'll try to find the file that contains this episode number
+            // But since getEpisodeFiles usually returns files linked to episodes, we'll look for a match
+            // However, Sonarr episode files don't directly have episode numbers, episodes have episodeFileId
+            // A better way is to get episodes from Sonarr for the series
             
             return {
                 ...ep,
                 userData: {
                     played: embyEp?.UserData?.Played || false,
                     playedPercentage: embyEp?.UserData?.PlayedPercentage
-                }
+                },
+                releaseTitle: sonarrEpisodeFiles.find((f: any) => {
+                    // This is a bit simplified, but often the file path contains the episode number
+                    const epNumStr = `E${ep.episode_number.toString().padStart(2, '0')}`
+                    const seaNumStr = `S${seasonNumber.toString().padStart(2, '0')}`
+                    const filename = (f.sceneName || f.relativePath || '').toUpperCase()
+                    return filename.includes(seaNumStr) && filename.includes(epNumStr)
+                })?.sceneName || undefined
             }
         })
     }

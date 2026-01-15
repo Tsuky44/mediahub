@@ -54,15 +54,16 @@ export async function getMediaAvailability(tmdbId: number, mediaType: 'movie' | 
                     const hasFiles = fileCount > 0;
                     // A season is complete only if it has episodes and all are present
                     const isComplete = totalEpisodes > 0 && fileCount >= totalEpisodes;
+                    
+                    // A season is monitored if the season itself is monitored AND it's not a dummy season
+                    // Sonarr sometimes returns monitored: true for seasons that aren't actually active
                     const isMonitored = s.monitored;
                     
                     let status: MediaStatus = 'unknown';
-                    if (hasFiles) {
-                        if (isComplete) {
-                            status = 'available';
-                        } else {
-                            status = 'partial';
-                        }
+                    if (isComplete) {
+                        status = 'available';
+                    } else if (hasFiles) {
+                        status = 'partial';
                     } else if (isMonitored) {
                         status = 'pending';
                     }

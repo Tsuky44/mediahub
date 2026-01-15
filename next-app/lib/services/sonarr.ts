@@ -1,5 +1,38 @@
 import axios from 'axios'
 
+export interface SonarrEpisodeFile {
+  id: number;
+  seriesId: number;
+  seasonNumber: number;
+  relativePath: string;
+  path: string;
+  size: number;
+  dateAdded: string;
+  sceneName: string;
+  quality: {
+    quality: {
+      id: number;
+      name: string;
+      source: string;
+      resolution: number;
+    };
+    revision: {
+      version: number;
+      real: number;
+      isRepack: boolean;
+    };
+  };
+  languages: {
+      id: number;
+      name: string;
+  }[];
+  mediaInfo?: {
+    audioChannels: number;
+    audioCodec: string;
+    videoCodec: string;
+  };
+}
+
 export interface SonarrSeason {
   seasonNumber: number;
   monitored: boolean;
@@ -196,6 +229,19 @@ export class SonarrService {
     } catch (e: any) {
       console.error(`[Sonarr] Failed to lookup series ${tvdbId}:`, e.message)
       return null
+    }
+  }
+
+  async getEpisodeFiles(seriesId: number) {
+    const client = this.getClient()
+    try {
+      const response = await client.get('/episodefile', {
+        params: { seriesId }
+      })
+      return response.data as SonarrEpisodeFile[]
+    } catch (e: any) {
+      console.error(`[Sonarr] Failed to fetch episode files for series ${seriesId}:`, e.message)
+      return []
     }
   }
 

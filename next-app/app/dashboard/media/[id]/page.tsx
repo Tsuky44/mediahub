@@ -76,7 +76,7 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
 
   const cast = normalizedCredits.cast.slice(0, 25) // Top 25 pour le slider rapide
 
-  const availability = await getMediaAvailability(tmdbId, mediaType)
+  const availability = await getMediaAvailability(tmdbId, mediaType, true)
   const isWatchLaterItem = await isInWatchLater(id, mediaType)
 
   // TMDB Ratings and External IDs

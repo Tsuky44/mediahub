@@ -1,5 +1,36 @@
 import axios from 'axios'
 
+export interface RadarrMovieFile {
+  id: number;
+  relativePath: string;
+  path: string;
+  size: number;
+  dateAdded: string;
+  sceneName?: string;
+  quality: {
+    quality: {
+      id: number;
+      name: string;
+      source: string;
+      resolution: number;
+    };
+    revision: {
+      version: number;
+      real: number;
+      isRepack: boolean;
+    };
+  };
+  mediaInfo?: {
+    audioChannels: number;
+    audioCodec: string;
+    videoCodec: string;
+  };
+  languages: {
+      id: number;
+      name: string;
+  }[];
+}
+
 export interface RadarrMovie {
   id: number;
   title: string;
@@ -14,6 +45,7 @@ export interface RadarrMovie {
   qualityProfileId: number;
   added: string;
   hasFile: boolean;
+  movieFile?: RadarrMovieFile;
   tags: number[];
 }
 
