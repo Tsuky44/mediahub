@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { EmbyService } from "@/lib/services/emby"
 import { RadarrService } from "@/lib/services/radarr"
 import { SonarrService } from "@/lib/services/sonarr"
-import { QBittorrentService } from "@/lib/services/qbittorrent"
+import { ProwlarrService } from '@/lib/services/prowlarr'
+import { QBittorrentService } from '@/lib/services/qbittorrent'
 import { SmbService } from "@/lib/services/smb"
 import { TmdbService } from "@/lib/services/tmdb"
 import { getSetting } from "@/lib/settings"
@@ -287,6 +288,33 @@ export async function getSonarrServiceForUser() {
     return new SonarrService(sonarrUrl, sonarrApiKey)
   } catch (error) {
     console.error(`[getSonarrServiceForUser] Erreur:`, error)
+    return null
+  }
+}
+
+/**
+ * Récupère le service Prowlarr pour l'utilisateur actuel ou pour une instance spécifique
+ */
+export async function getProwlarrServiceForUser(instanceId?: number) {
+  let targetInstanceId = instanceId
+
+  if (!targetInstanceId) {
+    const user = await getCurrentUser()
+    if (!user || !(user as any).instanceId) return null
+    targetInstanceId = parseInt((user as any).instanceId)
+  }
+
+  if (!targetInstanceId || isNaN(targetInstanceId)) return null
+  
+  try {
+    const prowlarrUrl = await getSetting('prowlarr_url', targetInstanceId)
+    const prowlarrApiKey = await getSetting('prowlarr_api_key', targetInstanceId)
+
+    if (!prowlarrUrl || !prowlarrApiKey) return null
+
+    return new ProwlarrService(prowlarrUrl, prowlarrApiKey)
+  } catch (error) {
+    console.error(`[getProwlarrServiceForUser] Erreur:`, error)
     return null
   }
 }

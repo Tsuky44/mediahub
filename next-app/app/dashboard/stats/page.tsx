@@ -611,7 +611,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     const currentYear = period === 'year' ? (params.year ? parseInt(params.year) : now.getFullYear()) : null;
 
     return (
-      <div className="space-y-8 p-6 pb-20">
+      <div className="max-w-7xl mx-auto w-full space-y-8 p-6 pb-20">
         {statsHeader}
         <div className="flex flex-col items-center justify-center min-h-[40vh] p-6 text-center space-y-6">
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-10 max-w-2xl w-full space-y-6">
@@ -662,7 +662,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   }
 
   return (
-    <div className="space-y-8 p-6 pb-20">
+    <div className="max-w-7xl mx-auto w-full space-y-8 p-6 pb-20">
       {statsHeader}
       
       {/* Period Selectors */}

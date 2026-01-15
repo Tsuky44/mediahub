@@ -46,7 +46,7 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto w-full space-y-6">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <h2 className="text-2xl font-bold text-white">{title}</h2>
             <div className="flex items-center gap-4 w-full sm:w-auto">

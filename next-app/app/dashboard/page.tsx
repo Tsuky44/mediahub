@@ -135,7 +135,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col space-y-8 pb-8">
+    <div className="max-w-7xl mx-auto w-full min-h-screen flex flex-col space-y-8 pb-8">
       <WelcomePopup show={showWelcome} userRole={userRole} />
       {/* Barre de recherche et Actions Rapides (Largeur totale) */}
       <div className="flex-shrink-0">

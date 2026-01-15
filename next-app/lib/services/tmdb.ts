@@ -220,7 +220,7 @@ export class TmdbService {
     try {
         const response = await client.get(`/${type}/${id}`, {
             params: {
-                append_to_response: 'videos,credits,watch/providers,keywords,external_ids,recommendations,similar'
+                append_to_response: `videos,${type === 'tv' ? 'aggregate_credits' : 'credits'},watch/providers,keywords,external_ids,recommendations,similar`
             }
         })
         return response.data
@@ -271,12 +271,14 @@ export class TmdbService {
     }
   }
 
-  async getSimilar(id: number, type: 'movie' | 'tv') {
+  async getSimilar(id: number, type: 'movie' | 'tv', page = 1) {
     const client = await this.getClient()
     if (!client) return { results: [] }
     
     try {
-        const response = await client.get(`/${type}/${id}/similar`)
+        const response = await client.get(`/${type}/${id}/similar`, {
+            params: { page }
+        })
         return response.data
     } catch (e) {
         console.error(`Failed to get similar for ${type} ${id}`, e)

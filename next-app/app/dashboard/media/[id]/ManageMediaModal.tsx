@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Trash2, Settings, Loader2, Calendar, User, Eye, CheckCircle2, AlertTriangle, FileText, ExternalLink, AlertCircle } from 'lucide-react'
+import { X, Trash2, Settings, Loader2, Calendar, User, Eye, CheckCircle2, AlertTriangle, FileText, ExternalLink, AlertCircle, Search, Download } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { InteractiveSearch } from './InteractiveSearch'
 
 interface ManageMediaModalProps {
   isOpen: boolean
@@ -18,11 +19,13 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
   const [error, setError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState<string | null>(null) // Comma separated IDs
   const [selectedRequests, setSelectedRequests] = useState<number[]>([])
+  const [activeTab, setActiveTab] = useState<'general' | 'interactive'>('general')
   const router = useRouter()
 
   useEffect(() => {
     if (isOpen) {
       fetchMediaInfo()
+      setActiveTab('general')
     }
   }, [isOpen, tmdbId, mediaType])
 
@@ -154,21 +157,53 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
       
-      <div className="relative w-full max-w-2xl bg-[#1e293b] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+      <div className={`relative w-full ${activeTab === 'interactive' || activeTab === 'prowlarr' ? 'max-w-7xl' : 'max-w-2xl'} bg-[#1e293b] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh] transition-all duration-300`}>
         {/* Header */}
-        <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/5">
-          <div>
-            <h2 className="text-2xl font-bold text-indigo-400">Gérer {mediaType === 'tv' ? 'Série' : 'Film'}</h2>
-            <p className="text-gray-400 text-sm font-medium">{title}</p>
+        <div className="border-b border-white/5 bg-white/5">
+          <div className="p-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-indigo-400">Gérer {mediaType === 'tv' ? 'Série' : 'Film'}</h2>
+              <p className="text-gray-400 text-sm font-medium">{title}</p>
+            </div>
+            <button onClick={onClose} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors">
+              <X className="h-6 w-6" />
+            </button>
           </div>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors">
-            <X className="h-6 w-6" />
-          </button>
+          
+          {/* Tabs */}
+          {hasMediaInService && (
+            <div className="flex px-6 gap-6">
+              <button
+                onClick={() => setActiveTab('general')}
+                className={`pb-4 text-sm font-medium transition-colors border-b-2 ${
+                  activeTab === 'general' 
+                    ? 'border-indigo-500 text-white' 
+                    : 'border-transparent text-gray-400 hover:text-white'
+                }`}
+              >
+                Général
+              </button>
+              <button
+                onClick={() => setActiveTab('interactive')}
+                className={`pb-4 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 ${
+                  activeTab === 'interactive' 
+                    ? 'border-indigo-500 text-white' 
+                    : 'border-transparent text-gray-400 hover:text-white'
+                }`}
+              >
+                <Search className="w-4 h-4" />
+                Recherche Interactive
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Content */}
         <div className="p-6 overflow-y-auto space-y-8 custom-scrollbar">
-          {loading ? (
+          {activeTab === 'interactive' ? (
+             <InteractiveSearch tmdbId={tmdbId} mediaType={mediaType} title={title} />
+          ) : (
+          loading ? (
             <div className="py-20 flex flex-col items-center justify-center gap-4">
               <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
               <p className="text-gray-400 animate-pulse">Chargement des données...</p>
@@ -354,7 +389,8 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
                 </section>
               )}
             </>
-          )}
+          )
+        )}
         </div>
 
         {/* Footer */}

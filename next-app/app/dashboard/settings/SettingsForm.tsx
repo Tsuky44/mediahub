@@ -23,6 +23,8 @@ interface Instance {
         radarr_api_key?: string
         sonarr_url?: string
         sonarr_api_key?: string
+        prowlarr_url?: string
+        prowlarr_api_key?: string
         jellyseerr_url?: string
         jellyseerr_api_key?: string
         emby_url?: string
@@ -62,6 +64,9 @@ export default function SettingsForm({
     const [sonarrUrl, setSonarrUrl] = useState(settings.sonarr_url || '')
     const [sonarrKey, setSonarrKey] = useState(settings.sonarr_api_key || '')
 
+    const [prowlarrUrl, setProwlarrUrl] = useState(settings.prowlarr_url || '')
+    const [prowlarrKey, setProwlarrKey] = useState(settings.prowlarr_api_key || '')
+
     const [jellyseerrUrl, setJellyseerrUrl] = useState(settings.jellyseerr_url || '')
     const [jellyseerrKey, setJellyseerrKey] = useState(settings.jellyseerr_api_key || '')
 
@@ -80,6 +85,29 @@ export default function SettingsForm({
     const [testingSmb, setTestingSmb] = useState(false)
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
+    const [testingEmby, setTestingEmby] = useState(false)
+    const [embyTestResult, setEmbyTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [testingPlex, setTestingPlex] = useState(false)
+    const [plexTestResult, setPlexTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [testingJellyfin, setTestingJellyfin] = useState(false)
+    const [jellyfinTestResult, setJellyfinTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [importingPlex, setImportingPlex] = useState(false)
+    const [importPlexResult, setImportPlexResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [testingJellyseerr, setTestingJellyseerr] = useState(false)
+    const [jellyseerrTestResult, setJellyseerrTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [importingJellyseerr, setImportingJellyseerr] = useState(false)
+    const [importJellyseerrResult, setImportJellyseerrResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [fixingTitles, setFixingTitles] = useState(false)
+    const [fixTitlesResult, setFixTitlesResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const router = useRouter()
+
     // Update form when instance changes
     useEffect(() => {
         const inst = instances.find(i => i.id === selectedInstanceId) || instances[0]
@@ -93,8 +121,13 @@ export default function SettingsForm({
         setSmbShare(s.smb_share || '')
         setSmbPath(s.smb_path || '')
         setRadarrUrl(s.radarr_url || '')
-    const [jellyseerrUrl, setJellyseerrUrl] = useState(settings.jellyseerr_url || '')
-    const [jellyseerrKey, setJellyseerrKey] = useState(settings.jellyseerr_api_key || '')
+        setRadarrKey(s.radarr_api_key || '')
+        setSonarrUrl(s.sonarr_url || '')
+        setSonarrKey(s.sonarr_api_key || '')
+        setProwlarrUrl(s.prowlarr_url || '')
+        setProwlarrKey(s.prowlarr_api_key || '')
+        setJellyseerrUrl(s.jellyseerr_url || '')
+        setJellyseerrKey(s.jellyseerr_api_key || '')
         setEmbyUrl(s.emby_url || '')
         setEmbyKey(s.emby_api_key || '')
         setPlexUrl(s.plex_url || '')
@@ -108,20 +141,6 @@ export default function SettingsForm({
         setTestResult(null)
     }, [selectedInstanceId, instances])
     
-    const [testingEmby, setTestingEmby] = useState(false)
-    const [embyTestResult, setEmbyTestResult] = useState<{ success: boolean; message: string } | null>(null)
-
-    const [testingPlex, setTestingPlex] = useState(false)
-    const [plexTestResult, setPlexTestResult] = useState<{ success: boolean; message: string } | null>(null)
-
-    const [testingJellyfin, setTestingJellyfin] = useState(false)
-    const [jellyfinTestResult, setJellyfinTestResult] = useState<{ success: boolean; message: string } | null>(null)
-
-    const [importingPlex, setImportingPlex] = useState(false)
-    const [importPlexResult, setImportPlexResult] = useState<{ success: boolean; message: string } | null>(null)
-
-    const router = useRouter()
-
     const handleImportPlex = async () => {
         if (!confirm('Voulez-vous vraiment importer tout l\'historique Plex ? Cela peut prendre du temps.')) return
         
@@ -139,15 +158,6 @@ export default function SettingsForm({
             setImportingPlex(false)
         }
     }
-
-    const [testingJellyseerr, setTestingJellyseerr] = useState(false)
-    const [jellyseerrTestResult, setJellyseerrTestResult] = useState<{ success: boolean; message: string } | null>(null)
-
-    const [importingJellyseerr, setImportingJellyseerr] = useState(false)
-    const [importJellyseerrResult, setImportJellyseerrResult] = useState<{ success: boolean; message: string } | null>(null)
-
-    const [fixingTitles, setFixingTitles] = useState(false)
-    const [fixTitlesResult, setFixTitlesResult] = useState<{ success: boolean; message: string } | null>(null)
 
     const handleTestJellyseerr = async () => {
         setTestingJellyseerr(true)
@@ -317,6 +327,8 @@ export default function SettingsForm({
                     radarr_api_key: radarrKey,
                     sonarr_url: sonarrUrl,
                     sonarr_api_key: sonarrKey,
+                    prowlarr_url: prowlarrUrl,
+                    prowlarr_api_key: prowlarrKey,
                     jellyseerr_url: jellyseerrUrl,
                     jellyseerr_api_key: jellyseerrKey,
                     emby_url: embyUrl,
@@ -812,6 +824,37 @@ export default function SettingsForm({
                                 {jellyfinTestResult.message}
                             </div>
                         )}
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Prowlarr</h4>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label htmlFor="prowlarrUrl" className="block text-sm font-medium text-gray-300">
+                                URL
+                            </label>
+                            <input
+                                type="text"
+                                id="prowlarrUrl"
+                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="http://localhost:9696"
+                                value={prowlarrUrl}
+                                onChange={(e) => setProwlarrUrl(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="prowlarrKey" className="block text-sm font-medium text-gray-300">
+                                Clé API
+                            </label>
+                            <input
+                                type="text"
+                                id="prowlarrKey"
+                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                value={prowlarrKey}
+                                onChange={(e) => setProwlarrKey(e.target.value)}
+                            />
+                        </div>
                     </div>
                 </div>
 

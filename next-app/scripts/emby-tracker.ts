@@ -1,13 +1,13 @@
-import WebSocket from 'ws';
 import dotenv from 'dotenv';
+// Load environment variables before other imports
+dotenv.config();
+
+import WebSocket from 'ws';
 import { EmbyService } from '../lib/services/emby';
 import { PlexService } from '../lib/services/plex';
 import { getPrisma } from '../lib/prisma';
 import { Server } from 'socket.io';
 import http from 'http';
-
-// Load environment variables
-dotenv.config();
 
 // FIX: Global BigInt serialization for JSON
 // This prevents crashes when sending BigInt values over Socket.IO

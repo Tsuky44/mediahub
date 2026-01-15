@@ -1,5 +1,5 @@
 import { getServerSession } from 'next-auth'
-import { authOptions, getQBittorrentServiceForUser, getSmbServiceForUser } from '@/lib/auth'
+import { authOptions, getQBittorrentServiceForUser, getSmbServiceForUser, getProwlarrServiceForUser } from '@/lib/auth'
 import { AlertCircle, Settings } from 'lucide-react'
 import Link from 'next/link'
 import DownloadsClient from './DownloadsClient'
@@ -24,10 +24,17 @@ export default async function DownloadsPage() {
   }
 
   // Check services
+  console.log('Debug Services:', {
+    hasQbt: typeof getQBittorrentServiceForUser,
+    hasSmb: typeof getSmbServiceForUser,
+    hasProwlarr: typeof getProwlarrServiceForUser
+  })
+
   const qbtService = await getQBittorrentServiceForUser()
   const smbService = await getSmbServiceForUser()
+  const prowlarrService = typeof getProwlarrServiceForUser === 'function' ? await getProwlarrServiceForUser() : null
 
-  if (!qbtService && !smbService) {
+  if (!qbtService && !smbService && !prowlarrService) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 animate-in fade-in duration-500">
         <div className="w-20 h-20 rounded-3xl bg-amber-500/10 flex items-center justify-center text-amber-500 mb-2">
@@ -51,5 +58,9 @@ export default async function DownloadsPage() {
     )
   }
 
-  return <DownloadsClient hasQbit={!!qbtService} hasSmb={!!smbService} />
+  return (
+    <div className="w-full">
+      <DownloadsClient hasQbit={!!qbtService} hasSmb={!!smbService} hasProwlarr={!!prowlarrService} />
+    </div>
+  )
 }

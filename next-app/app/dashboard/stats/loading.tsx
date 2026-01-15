@@ -25,7 +25,7 @@ export default function StatsLoading() {
       {/* Skeleton-like placeholder hint */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-4xl opacity-20 pointer-events-none">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-24 bg-gray-800 rounded-xl border border-gray-700" />
+          <div key={i} className="h-24 bg-gray-800/50 border border-gray-700/30 rounded-xl" />
         ))}
       </div>
     </div>

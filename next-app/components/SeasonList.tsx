@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, PlayCircle, Check, Clock, Download } from 'lucide-react'
-import { getSeasonDetails, requestSeason } from '@/app/dashboard/media/[id]/actions'
-import clsx from 'clsx'
+import { ChevronDown, ChevronUp, PlayCircle, Check, Clock } from 'lucide-react'
+import { getSeasonDetails } from '@/app/dashboard/media/[id]/actions'
 
 interface Season {
     id: number
@@ -50,11 +49,12 @@ interface SeasonListProps {
 }
 
 export function SeasonList({ tvId, seasons, seasonStatuses, seasonProgress = [] }: SeasonListProps) {
-    const sortedSeasons = [...seasons].sort((a, b) => a.season_number - b.season_number)
+    const sortedSeasons = [...seasons]
+        .filter(s => s.season_number > 0)
+        .sort((a, b) => a.season_number - b.season_number)
 
     return (
         <div className="space-y-4">
-            <h3 className="text-xl font-bold text-white mb-4">Saisons</h3>
             <div className="space-y-2">
                 {sortedSeasons.map((season) => {
                     const status = seasonStatuses.find(s => s.seasonNumber === season.season_number)
@@ -81,7 +81,6 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
     const [loading, setLoading] = useState(false)
     const [loaded, setLoaded] = useState(false)
     const [status, setStatus] = useState(initialStatus)
-    const [requesting, setRequesting] = useState(false)
 
     // Sync status when props change (e.g. after parent re-render/revalidation)
     useEffect(() => {
@@ -105,20 +104,6 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
             }
             setLoading(false)
         }
-    }
-
-    const handleRequest = async (e: React.MouseEvent) => {
-        e.stopPropagation()
-        if (requesting || status === 'pending' || status === 'processing' || status === 'available') return
-
-        setRequesting(true)
-        const result = await requestSeason(tvId, season.season_number, title)
-        if (result.success) {
-            setStatus('pending')
-        } else {
-            alert('Erreur lors de la demande')
-        }
-        setRequesting(false)
     }
 
     return (
@@ -182,36 +167,13 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                                     <span className="hidden sm:inline">En attente</span>
                                 </span>
                             )}
-                            
-                            {/* Request Button if not requested/available */}
-                            {status === 'unknown' && (
-                                <div
-                                    role="button"
-                                    onClick={handleRequest}
-                                    className={clsx(
-                                        "flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border transition-colors",
-                                        requesting 
-                                            ? "bg-gray-700 text-gray-400 border-gray-600 cursor-wait" 
-                                            : "bg-indigo-600/80 text-white border-indigo-500 hover:bg-indigo-500 cursor-pointer"
-                                    )}
-                                >
-                                    {requesting ? (
-                                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-                                    ) : (
-                                        <>
-                                            <Download className="h-3 w-3" />
-                                            <span>Demander</span>
-                                        </>
-                                    )}
-                                </div>
-                            )}
                         </div>
                         <p className="text-sm text-gray-400">
-                            {season.episode_count} épisodes • {season.air_date ? new Date(season.air_date).getFullYear() : 'N/A'}
+                            {season.episode_count} épisodes • {new Date(season.air_date).getFullYear() || 'N/A'}
                         </p>
                     </div>
                 </div>
-                {isOpen ? <ChevronUp className="text-gray-400" /> : <ChevronDown className="text-gray-400" />}
+                {isOpen ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
             </button>
 
             {isOpen && (

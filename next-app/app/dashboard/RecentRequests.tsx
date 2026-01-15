@@ -59,7 +59,7 @@ export function RecentRequests({ requests }: { requests: MediaRequest[] }) {
           <p className="text-gray-500 text-sm">Aucune demande récente.</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent min-h-0">
+        <div className="flex-1 overflow-y-auto pr-2 min-h-0">
           <div className="space-y-3">
             {requests.map((request) => (
               <div key={request.id} className="flex items-center gap-4 p-3 rounded-xl bg-gray-800/30 border border-gray-700/30 hover:border-indigo-500/30 transition-all group">

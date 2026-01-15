@@ -122,7 +122,7 @@ export default function FileManager() {
 
     return (
         <div className="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-            <div className="p-4 border-b border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between bg-gray-900/50 gap-4">
+            <div className="p-3 border-b border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between bg-gray-900/50 gap-4">
                 <div className="flex items-center space-x-4 min-w-0">
                     {path && (
                         <button 
@@ -163,16 +163,16 @@ export default function FileManager() {
                 <table className="w-full divide-y divide-gray-700 table-fixed">
                     <thead className="bg-gray-900/30">
                         <tr>
-                            <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-6 py-3">Nom</th>
-                            <th className="hidden sm:table-cell w-24 text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Taille</th>
-                            <th className="hidden md:table-cell w-32 text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Modifié</th>
-                            <th className="w-36 text-right text-xs font-medium text-gray-400 uppercase tracking-wider px-6 py-3">Actions</th>
+                            <th className="text-left text-[10px] font-medium text-gray-400 uppercase tracking-wider px-4 py-2.5">Nom</th>
+                            <th className="hidden sm:table-cell w-24 text-left text-[10px] font-medium text-gray-400 uppercase tracking-wider px-3 py-2.5">Taille</th>
+                            <th className="hidden md:table-cell w-32 text-left text-[10px] font-medium text-gray-400 uppercase tracking-wider px-3 py-2.5">Modifié</th>
+                            <th className="w-32 text-right text-[10px] font-medium text-gray-400 uppercase tracking-wider px-4 py-2.5">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-700">
                         {loading ? (
                             <tr>
-                                <td colSpan={4} className="px-6 py-10 text-center">
+                                <td colSpan={4} className="px-4 py-10 text-center">
                                     <div className="flex flex-col items-center">
                                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-2"></div>
                                         <span className="text-gray-400">Chargement des fichiers...</span>
@@ -181,25 +181,25 @@ export default function FileManager() {
                             </tr>
                         ) : error ? (
                             <tr>
-                                <td colSpan={4} className="px-6 py-10 text-center text-red-400">
+                                <td colSpan={4} className="px-4 py-10 text-center text-red-400">
                                     {error}
                                 </td>
                             </tr>
                         ) : filteredFiles.length === 0 ? (
                             <tr>
-                                <td colSpan={4} className="px-6 py-10 text-center text-gray-400">
+                                <td colSpan={4} className="px-4 py-10 text-center text-gray-400">
                                     {searchQuery ? `Aucun résultat pour "${searchQuery}"` : "Ce dossier est vide"}
                                 </td>
                             </tr>
                         ) : (
                             filteredFiles.map((file) => (
                                 <tr key={file.name} className="hover:bg-gray-700/50 transition-colors group">
-                                    <td className="px-6 py-4 overflow-hidden">
+                                    <td className="px-4 py-3 overflow-hidden">
                                         <div className="flex items-center min-w-0">
                                             {file.type === 'd' ? (
-                                                <FolderIcon className="w-5 h-5 text-yellow-500 mr-3 flex-shrink-0" />
+                                                <FolderIcon className="w-4 h-4 text-yellow-500 mr-2.5 flex-shrink-0" />
                                             ) : (
-                                                <DocumentIcon className="w-5 h-5 text-gray-400 mr-3 flex-shrink-0" />
+                                                <DocumentIcon className="w-4 h-4 text-gray-400 mr-2.5 flex-shrink-0" />
                                             )}
                                             <button 
                                                 onClick={() => file.type === 'd' ? handleFolderClick(file.name) : null}
@@ -210,34 +210,34 @@ export default function FileManager() {
                                             </button>
                                         </div>
                                     </td>
-                                    <td className="hidden sm:table-cell px-4 py-4 whitespace-nowrap text-sm text-gray-400">
+                                    <td className="hidden sm:table-cell px-3 py-3 whitespace-nowrap text-xs text-gray-400">
                                         {file.type === 'd' ? '--' : formatSize(file.size)}
                                     </td>
-                                    <td className="hidden md:table-cell px-4 py-4 whitespace-nowrap text-sm text-gray-400">
+                                    <td className="hidden md:table-cell px-3 py-3 whitespace-nowrap text-xs text-gray-400">
                                         {new Date(file.mtime).toLocaleDateString()}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <div className="flex items-center justify-end space-x-2">
+                                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                                        <div className="flex items-center justify-end space-x-1.5">
                                             <button 
                                                 onClick={() => handleDownload(file)}
                                                 title={file.type === 'd' ? "Télécharger (ZIP)" : "Télécharger"}
                                                 className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded-md transition-all"
                                             >
-                                                <ArrowDownTrayIcon className="w-5 h-5" />
+                                                <ArrowDownTrayIcon className="w-4 h-4" />
                                             </button>
                                             <button 
                                                 onClick={() => handleShare(file)}
                                                 title="Partager"
                                                 className="p-1.5 text-gray-400 hover:text-indigo-400 hover:bg-gray-600 rounded-md transition-all"
                                             >
-                                                <ShareIcon className="w-5 h-5" />
+                                                <ShareIcon className="w-4 h-4" />
                                             </button>
                                             <button 
                                                 onClick={() => handleDeleteClick(file)}
                                                 title="Supprimer"
                                                 className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-600 rounded-md transition-all"
                                             >
-                                                <TrashIcon className="w-5 h-5" />
+                                                <TrashIcon className="w-4 h-4" />
                                             </button>
                                         </div>
                                     </td>

@@ -292,4 +292,54 @@ export class SonarrService {
       return { success: false, message: e.message }
     }
   }
+
+  async getEpisodes(seriesId: number) {
+    const client = this.getClient()
+    try {
+      const response = await client.get('/episode', {
+        params: { seriesId }
+      })
+      return response.data
+    } catch (e: any) {
+      console.error(`[Sonarr] Failed to fetch episodes for series ${seriesId}:`, e.message)
+      return []
+    }
+  }
+
+  async getReleases(episodeId: number) {
+    const client = this.getClient()
+    try {
+      const response = await client.get('/release', { params: { episodeId } })
+      return response.data
+    } catch (e: any) {
+      console.error(`[Sonarr] Failed to fetch releases for episode ${episodeId}:`, e.message)
+      return []
+    }
+  }
+
+  async getSeasonReleases(seriesId: number, seasonNumber: number) {
+    const client = this.getClient()
+    try {
+      const response = await client.get('/release', { params: { seriesId, seasonNumber } })
+      return response.data
+    } catch (e: any) {
+      console.error(`[Sonarr] Failed to fetch releases for series ${seriesId} season ${seasonNumber}:`, e.message)
+      return []
+    }
+  }
+
+  async downloadRelease(guid: string, indexerId: number) {
+    const client = this.getClient()
+    try {
+      const response = await client.post('/release', {
+        guid,
+        indexerId
+      })
+      return { success: true, data: response.data }
+    } catch (e: any) {
+      const errorMsg = e.response?.data?.message || e.message
+      console.error(`[Sonarr] Failed to download release ${guid}:`, errorMsg)
+      return { success: false, message: errorMsg }
+    }
+  }
 }

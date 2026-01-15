@@ -17,6 +17,21 @@ export async function generateMetadata({ params }: PersonPageProps): Promise<Met
     return { title: `${person.name} - MediaHub` }
 }
 
+const DEPT_TRANSLATIONS: Record<string, string> = {
+    "Acting": "Interprétation",
+    "Directing": "Réalisation",
+    "Writing": "Scénario",
+    "Production": "Production",
+    "Camera": "Image",
+    "Editing": "Montage",
+    "Art": "Direction Artistique",
+    "Costume & Make-Up": "Costumes et Maquillage",
+    "Sound": "Son",
+    "Visual Effects": "Effets Visuels",
+    "Crew": "Équipe Technique",
+    "Lighting": "Lumière"
+}
+
 export default async function PersonPage({ params }: PersonPageProps) {
     const { id } = await params
     const tmdbService = await getTmdbServiceForUser()
@@ -75,7 +90,7 @@ export default async function PersonPage({ params }: PersonPageProps) {
                             <div className="space-y-4">
                                 <div>
                                     <span className="block text-gray-500 text-xs uppercase font-bold tracking-wider">Connu pour</span>
-                                    <span className="text-gray-200 text-sm">{person.known_for_department}</span>
+                                    <span className="text-gray-200 text-sm">{DEPT_TRANSLATIONS[person.known_for_department] || person.known_for_department}</span>
                                 </div>
                                 
                                 {person.birthday && (

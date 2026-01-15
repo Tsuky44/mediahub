@@ -18,9 +18,9 @@ export function CastList({ cast }: CastListProps) {
     if (!cast || cast.length === 0) return null
 
     return (
-        <div className="mt-12">
+        <div>
             <h3 className="text-xl font-bold text-white mb-4">Têtes d'affiche</h3>
-            <div className="flex overflow-x-auto gap-4 pb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+            <div className="flex overflow-x-auto gap-4 pb-4">
                 {cast.map((actor) => (
                     <Link 
                         key={actor.id} 

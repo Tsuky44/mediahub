@@ -215,4 +215,32 @@ export class RadarrService {
       return { success: false, message: e.message }
     }
   }
+
+  async getReleases(movieId: number) {
+    const client = this.getClient()
+    try {
+      const response = await client.get('/release', {
+        params: { movieId }
+      })
+      return response.data
+    } catch (e: any) {
+      console.error(`[Radarr] Failed to fetch releases for movie ${movieId}:`, e.message)
+      return []
+    }
+  }
+
+  async downloadRelease(guid: string, indexerId: number) {
+    const client = this.getClient()
+    try {
+      const response = await client.post('/release', {
+        guid,
+        indexerId
+      })
+      return { success: true, data: response.data }
+    } catch (e: any) {
+      const errorMsg = e.response?.data?.message || e.message
+      console.error(`[Radarr] Failed to download release ${guid}:`, errorMsg)
+      return { success: false, message: errorMsg }
+    }
+  }
 }

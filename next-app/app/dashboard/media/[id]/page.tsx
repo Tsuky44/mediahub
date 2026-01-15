@@ -8,7 +8,9 @@ import RequestButton from './RequestButton'
 import { SeasonList } from '@/components/SeasonList'
 import { PlayButton } from '@/components/PlayButton'
 import { CastList } from '@/components/CastList'
+import FullCreditsButton from './FullCreditsButton'
 import { TrailerButton } from '@/components/TrailerButton'
+import { ChevronRight } from 'lucide-react'
 import { MediaSlider } from '@/components/MediaSlider'
 import FavoriteButton from './FavoriteButton'
 import WatchLaterButton from './WatchLaterButton'
@@ -57,8 +59,21 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   const videos = details.videos?.results || []
   const trailer = videos.find((v: any) => v.type === 'Trailer' && v.site === 'YouTube')
 
-  const credits = details.credits || { cast: [] }
-  const cast = credits.cast ? credits.cast.slice(0, 25) : [] // Limit to top 25 cast members for scroll view
+  const rawCredits = mediaType === 'tv' ? (details.aggregate_credits || { cast: [], crew: [] }) : (details.credits || { cast: [], crew: [] })
+  
+  // Normaliser les crédits (TMDB utilise aggregate_credits pour les séries avec une structure différente)
+  const normalizedCredits = {
+    cast: (rawCredits.cast || []).map((c: any) => ({
+        ...c,
+        character: mediaType === 'tv' ? (c.roles?.map((r: any) => r.character).join(' / ') || c.character) : c.character
+    })),
+    crew: (rawCredits.crew || []).map((c: any) => ({
+        ...c,
+        job: mediaType === 'tv' ? (c.jobs?.map((j: any) => j.job).join(' / ') || c.job) : c.job
+    }))
+  }
+
+  const cast = normalizedCredits.cast.slice(0, 25) // Top 25 pour le slider rapide
 
   const availability = await getMediaAvailability(tmdbId, mediaType)
   const isWatchLaterItem = await isInWatchLater(id, mediaType)
@@ -68,9 +83,9 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   const watchProviders = (details['watch/providers']?.results?.FR?.flatrate || [])
     .filter((p: any) => !p.provider_name.toLowerCase().includes('ads'))
   const keywords = (details.keywords?.keywords || details.keywords?.results || []).slice(0, 15)
-  const director = credits.crew?.find((c: any) => c.job === 'Director')?.name
-  const writers = credits.crew?.filter((c: any) => ['Screenplay', 'Writer', 'Story'].includes(c.job)).slice(0, 3).map((c: any) => c.name)
-  const editors = credits.crew?.filter((c: any) => c.job === 'Editor').slice(0, 2).map((c: any) => c.name)
+  const director = normalizedCredits.crew?.find((c: any) => c.job === 'Director' || c.job === 'Executive Producer')?.name
+  const writers = normalizedCredits.crew?.filter((c: any) => ['Screenplay', 'Writer', 'Story'].includes(c.job)).slice(0, 3).map((c: any) => c.name)
+  const editors = normalizedCredits.crew?.filter((c: any) => c.job === 'Editor').slice(0, 2).map((c: any) => c.name)
 
   // Fetch User Progress from Emby
   let userProgress = null
@@ -337,19 +352,19 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-y-8 gap-x-4 pt-4">
                         {director && (
                             <div>
-                                <h4 className="font-bold text-white text-sm">Director</h4>
+                                <h4 className="font-bold text-white text-sm">Réalisateur</h4>
                                 <p className="text-gray-400 text-sm">{director}</p>
                             </div>
                         )}
                         {writers && writers.length > 0 && writers.map((w: string, i: number) => (
                             <div key={i}>
-                                <h4 className="font-bold text-white text-sm">Screenplay</h4>
+                                <h4 className="font-bold text-white text-sm">Scénario</h4>
                                 <p className="text-gray-400 text-sm">{w}</p>
                             </div>
                         ))}
                         {editors && editors.length > 0 && editors.map((e: string, i: number) => (
                             <div key={i}>
-                                <h4 className="font-bold text-white text-sm">Editor</h4>
+                                <h4 className="font-bold text-white text-sm">Montage</h4>
                                 <p className="text-gray-400 text-sm">{e}</p>
                             </div>
                         ))}
@@ -495,12 +510,17 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
 
                     {/* Cast Section */}
                     <section>
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold text-white">Casting</h2>
-                            <button className="text-sm text-gray-400 hover:text-white transition flex items-center gap-1">
-                                Voir l'équipe complète <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                            </button>
-                        </div>
+                        <FullCreditsButton 
+                            cast={normalizedCredits.cast || []} 
+                            crew={normalizedCredits.crew || []} 
+                        >
+                            <div className="group flex items-center gap-2 mb-6 cursor-pointer w-fit">
+                                <h2 className="text-2xl font-bold text-white group-hover:text-indigo-400 transition-colors">
+                                    Casting
+                                </h2>
+                                <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all translate-y-[1px]" />
+                            </div>
+                        </FullCreditsButton>
                         <CastList cast={cast} />
                     </section>
                 </div>
@@ -512,6 +532,7 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                             title="Recommandations" 
                             items={recommendations} 
                             mediaType={mediaType}
+                            viewAllLink={`/dashboard/media/${tmdbId}/recommendations?type=${mediaType}`}
                         />
                     )}
 
@@ -520,6 +541,7 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                             title="Titres similaires" 
                             items={similar} 
                             mediaType={mediaType}
+                            viewAllLink={`/dashboard/media/${tmdbId}/similar?type=${mediaType}`}
                         />
                     )}
                 </div>
