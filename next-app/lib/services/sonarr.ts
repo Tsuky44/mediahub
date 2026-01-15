@@ -69,6 +69,28 @@ export interface AddSeriesOptions {
   searchNow?: boolean;
 }
 
+export interface SonarrQueueItem {
+  id: number;
+  size: number;
+  sizeleft: number;
+  timeleft: string;
+  estimatedCompletionTime: string;
+  status: string;
+  trackedDownloadStatus: string;
+  title: string;
+  series?: {
+    id: number;
+    title: string;
+    tvdbId: number;
+  };
+  episode?: {
+    id: number;
+    episodeNumber: number;
+    seasonNumber: number;
+    title: string;
+  };
+}
+
 export class SonarrService {
   private baseUrl: string
   private apiKey: string
@@ -86,6 +108,17 @@ export class SonarrService {
       },
       timeout: 10000
     })
+  }
+
+  async getQueue() {
+    const client = this.getClient()
+    try {
+      const response = await client.get('/queue')
+      return (response.data.records || response.data) as SonarrQueueItem[]
+    } catch (e: any) {
+      console.error('[Sonarr] Failed to fetch queue:', e.message)
+      return []
+    }
   }
 
   async getProfiles() {

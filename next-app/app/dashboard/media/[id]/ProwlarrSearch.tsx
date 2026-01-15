@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Download, Loader2, Database, AlertCircle, CheckCircle2, Filter, Music, Film, Tv, Gamepad, Book, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Download, Loader2, Database, AlertCircle, CheckCircle2, Filter, Music, Film, Tv, Gamepad, Book, ChevronDown, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { searchProwlarr, downloadTorrent, getProwlarrIndexers } from './prowlarr-actions'
 
 interface ProwlarrSearchProps {
@@ -31,6 +31,7 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
   const [selectedIndexers, setSelectedIndexers] = useState<number[]>([])
   const [selectedCategories, setSelectedCategories] = useState<number[]>([])
   const [showFilters, setShowFilters] = useState(false)
+  const [showRecent, setShowRecent] = useState(false)
 
   // Selection state
   const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
@@ -78,7 +79,7 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
     const hasQuery = query.trim().length > 0
     const hasFilters = selectedCategories.length > 0 || selectedIndexers.length > 0
     
-    if (!hasQuery && !hasFilters) return
+    if (!hasQuery && !hasFilters && !showRecent) return
     
     setLoading(true)
     setError(null)
@@ -91,7 +92,7 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
     
     try {
       const res = await searchProwlarr(
-          hasQuery ? query : '', 
+          (showRecent && !hasQuery) ? '' : query, 
           selectedIndexers.length > 0 ? selectedIndexers : undefined,
           selectedCategories.length > 0 ? selectedCategories : undefined,
           RESULTS_PER_PAGE,
@@ -239,7 +240,7 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch(0)}
-                        placeholder={selectedCategories.length > 0 || selectedIndexers.length > 0 ? "Recherche optionnelle..." : "Rechercher un torrent..."}
+                        placeholder="Rechercher un torrent..."
                         className="w-full bg-gray-900/50 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all"
                     />
                 </div>
@@ -261,7 +262,7 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
                 </button>
                 <button 
                     onClick={() => handleSearch(0)}
-                    disabled={loading || (!query.trim() && selectedCategories.length === 0 && selectedIndexers.length === 0)}
+                    disabled={loading || (!query.trim() && !showRecent && selectedCategories.length === 0 && selectedIndexers.length === 0)}
                     className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
                 >
                     {loading && results.length === 0 ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
@@ -273,15 +274,29 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
             {showFilters && (
                 <div className="space-y-4 p-4 bg-gray-900/40 border border-white/5 rounded-xl animate-in slide-in-from-top-2 duration-200">
                     <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                        <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                            <Filter className="h-4 w-4 text-indigo-400" />
-                            Options de filtrage
-                        </h3>
-                        {(selectedCategories.length > 0 || selectedIndexers.length > 0) && (
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                <Filter className="h-4 w-4 text-indigo-400" />
+                                Options de filtrage
+                            </h3>
+                            <button
+                                onClick={() => setShowRecent(!showRecent)}
+                                className={`flex items-center gap-2 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border ${
+                                    showRecent 
+                                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' 
+                                    : 'bg-white/5 border-white/5 text-gray-500 hover:text-gray-300'
+                                }`}
+                            >
+                                <Clock className="h-3 w-3" />
+                                Nouveautés (RSS)
+                            </button>
+                        </div>
+                        {(selectedCategories.length > 0 || selectedIndexers.length > 0 || showRecent) && (
                             <button 
                                 onClick={() => {
                                     setSelectedCategories([])
                                     setSelectedIndexers([])
+                                    setShowRecent(false)
                                 }}
                                 className="text-[10px] text-gray-500 hover:text-indigo-400 font-bold uppercase tracking-wider transition-colors"
                             >

@@ -97,6 +97,30 @@ export async function resumeTorrents(hashes: string[]) {
   }
 }
 
+export async function getCategories() {
+  try {
+    await checkAccess()
+    const qbtService = await getQBittorrentServiceForUser()
+    if (!qbtService) return {}
+    return await qbtService.getCategories()
+  } catch (e) {
+    console.error('Failed to get categories', e)
+    return {}
+  }
+}
+
+export async function getTags() {
+  try {
+    await checkAccess()
+    const qbtService = await getQBittorrentServiceForUser()
+    if (!qbtService) return []
+    return await qbtService.getTags()
+  } catch (e) {
+    console.error('Failed to get tags', e)
+    return []
+  }
+}
+
 export async function deleteSmbPath(path: string) {
   try {
     await checkAccess()

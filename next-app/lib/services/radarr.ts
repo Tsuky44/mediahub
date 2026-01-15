@@ -30,6 +30,22 @@ export interface RadarrMovieOptions {
   searchNow?: boolean;
 }
 
+export interface RadarrQueueItem {
+  id: number;
+  size: number;
+  sizeleft: number;
+  timeleft: string;
+  estimatedCompletionTime: string;
+  status: string;
+  trackedDownloadStatus: string;
+  title: string;
+  movie?: {
+    id: number;
+    title: string;
+    tmdbId: number;
+  };
+}
+
 export class RadarrService {
   private baseUrl: string
   private apiKey: string
@@ -47,6 +63,17 @@ export class RadarrService {
       },
       timeout: 10000
     })
+  }
+
+  async getQueue() {
+    const client = this.getClient()
+    try {
+      const response = await client.get('/queue')
+      return (response.data.records || response.data) as RadarrQueueItem[]
+    } catch (e: any) {
+      console.error('[Radarr] Failed to fetch queue:', e.message)
+      return []
+    }
   }
 
   async getProfiles() {

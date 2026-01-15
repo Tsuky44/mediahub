@@ -18,6 +18,7 @@ import { ManageMediaButton } from './ManageMediaButton'
 import { isInWatchLater } from '../watch-later-actions'
 import { getSetting } from '@/lib/settings'
 import { getMediaAvailability } from '@/lib/services/media-status'
+import { DownloadStatusCard } from './DownloadStatusCard'
 
 async function getImdbRating(imdbId: string) {
     try {
@@ -80,6 +81,7 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
 
   // TMDB Ratings and External IDs
   const ratingImdb = details.external_ids?.imdb_id ? await getImdbRating(details.external_ids.imdb_id) : null
+  const tvdbId = details.external_ids?.tvdb_id
   const watchProviders = (details['watch/providers']?.results?.FR?.flatrate || [])
     .filter((p: any) => !p.provider_name.toLowerCase().includes('ads'))
   const keywords = (details.keywords?.keywords || details.keywords?.results || []).slice(0, 15)
@@ -319,6 +321,14 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                             />
                          )}
                     </div>
+
+                    {/* Download Status */}
+                    <DownloadStatusCard 
+                        tmdbId={tmdbId} 
+                        mediaType={mediaType} 
+                        tvdbId={tvdbId} 
+                        title={title}
+                    />
 
                     {/* Progress Bar (TV Series) */}
                     {mediaType === 'tv' && userProgress && userProgress.totalEpisodes > 0 && (

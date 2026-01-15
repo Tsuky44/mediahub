@@ -20,6 +20,10 @@ export interface Torrent {
   num_incomplete: number
   num_complete: number
   tracker: string
+  category: string
+  last_activity: number
+  completion_on: number
+  availability: number
 }
 
 export class QBittorrentService {
@@ -166,6 +170,20 @@ export class QBittorrentService {
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded'
         }
+    })
+  }
+
+  async getCategories() {
+    return this.request<Record<string, { name: string, savePath: string }>>({
+        method: 'GET',
+        url: '/api/v2/torrents/categories'
+    })
+  }
+
+  async getTags() {
+    return this.request<string[]>({
+        method: 'GET',
+        url: '/api/v2/torrents/tags'
     })
   }
 }

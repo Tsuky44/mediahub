@@ -1,6 +1,6 @@
 # Documentation Technique - Système de Statistiques Emby
 
-Ce système remplace Jellystat par une solution intégrée à Next.js, utilisant Prisma pour le stockage et les WebSockets pour le suivi en temps réel.
+Ce système est une solution intégrée à Next.js, utilisant Prisma pour le stockage et les WebSockets pour le suivi en temps réel.
 
 ## Architecture
 
@@ -28,20 +28,6 @@ Il est recommandé d'utiliser un gestionnaire de processus comme **PM2** :
 ```bash
 pm2 start "npx tsx scripts/emby-tracker.ts" --name emby-tracker
 ```
-
-## Migration depuis Jellystat
-
-Un script est fourni pour migrer l'historique depuis une base de données Jellystat (PostgreSQL).
-
-1.  Configurez les variables d'environnement dans le fichier `.env` :
-    - `JELLYSTAT_DB_HOST`
-    - `JELLYSTAT_DB_USER`
-    - `JELLYSTAT_DB_PASSWORD`
-    - `JELLYSTAT_DB_NAME`
-2.  Exécutez la migration :
-    ```bash
-    npx tsx scripts/migrate-jellystat.ts
-    ```
 
 ## Robustesse et Fonctionnalités
 

@@ -85,6 +85,11 @@ export class ProwlarrService {
       params.append('limit', limit.toString())
       params.append('offset', offset.toString())
       
+      // Si la query est vide, on force le mode RSS/Recent
+      if (!query) {
+        params.delete('query')
+      }
+
       if (indexerIds && indexerIds.length > 0) {
         params.append('indexerIds', indexerIds.join(','))
       }
