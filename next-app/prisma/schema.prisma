@@ -48,6 +48,13 @@ model User {
   jellyseerrUserId String?        @map("jellyseerr_user_id")
   role             String         @default("user")
   roleVersion      Int            @default(0) @map("role_version")
+
+  // RBAC
+  roleId           String?        @map("role_id")
+  userRole         Role?          @relation(fields: [roleId], references: [id])
+  permissions      Permission[]   @relation("UserDirectPermissions")
+  auditLogs        AuditLog[]
+
   hasSeenWelcome   Boolean        @default(false) @map("has_seen_welcome")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
@@ -316,4 +323,67 @@ model EmbyActivityLog {
   @@index([embyUserId])
   @@index([startTime])
   @@map("emby_activity_logs")
+}
+
+model DockerGroup {
+  id        String              @id @default(cuid())
+  name      String
+  members   DockerGroupMember[]
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  @@map("docker_groups")
+}
+
+model DockerGroupMember {
+  id            String      @id @default(cuid())
+  groupId       String      @map("group_id")
+  containerName String      @map("container_name")
+  group         DockerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, containerName])
+  @@map("docker_group_members")
+}
+
+// RBAC Models
+
+model Role {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  displayName String?      @map("display_name")
+  description String?
+  isSystem    Boolean      @default(false) @map("is_system")
+  priority    Int          @default(0)
+  permissions Permission[]
+  users       User[]
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  category    String   @default("general")
+  roles       Role[]
+  users       User[]   @relation("UserDirectPermissions")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("permissions")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    Int      @map("user_id")
+  action    String
+  entity    String
+  entityId  String   @map("entity_id")
+  details   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
 }

@@ -17,7 +17,7 @@ import {
     MagnifyingGlassIcon
 } from '@heroicons/react/24/outline'
 
-export default function FileManager() {
+export default function FileManager({ canManage }: { canManage: boolean }) {
     const [path, setPath] = useState('')
     const [files, setFiles] = useState<FileInfo[]>([])
     const [loading, setLoading] = useState(true)
@@ -225,20 +225,24 @@ export default function FileManager() {
                                             >
                                                 <ArrowDownTrayIcon className="w-4 h-4" />
                                             </button>
-                                            <button 
-                                                onClick={() => handleShare(file)}
-                                                title="Partager"
-                                                className="p-1.5 text-gray-400 hover:text-indigo-400 hover:bg-gray-600 rounded-md transition-all"
-                                            >
-                                                <ShareIcon className="w-4 h-4" />
-                                            </button>
-                                            <button 
-                                                onClick={() => handleDeleteClick(file)}
-                                                title="Supprimer"
-                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-600 rounded-md transition-all"
-                                            >
-                                                <TrashIcon className="w-4 h-4" />
-                                            </button>
+                                            {canManage && (
+                                                <>
+                                                    <button 
+                                                        onClick={() => handleShare(file)}
+                                                        title="Partager"
+                                                        className="p-1.5 text-gray-400 hover:text-indigo-400 hover:bg-gray-600 rounded-md transition-all"
+                                                    >
+                                                        <ShareIcon className="w-4 h-4" />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleDeleteClick(file)}
+                                                        title="Supprimer"
+                                                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-gray-600 rounded-md transition-all"
+                                                    >
+                                                        <TrashIcon className="w-4 h-4" />
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>

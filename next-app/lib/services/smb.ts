@@ -141,18 +141,34 @@ export class SmbService {
         });
 
         try {
-            await new Promise<void>((resolve, reject) => {
-                testClient.readdir('', (err: any) => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
+            await Promise.race([
+                new Promise<void>((resolve, reject) => {
+                    testClient.readdir('', (err: any) => {
+                        if (err) {
+                            console.error('[SMB Test] readdir error:', err);
+                            reject(err);
+                        } else {
+                            resolve();
+                        }
+                    });
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Le serveur ne répond pas (timeout)')), 10000))
+            ]);
             testClient.disconnect();
             return true;
-        } catch (err) {
+        } catch (err: any) {
             console.error('SMB Test Connection Error:', err);
             try { testClient.disconnect(); } catch (e) {}
-            throw err;
+            
+            // Traduction des erreurs communes pour l'utilisateur
+            let errorMessage = err.message || 'Échec de la connexion';
+            if (err.code === 'STATUS_LOGON_FAILURE') errorMessage = 'Identifiants (utilisateur/mot de passe) incorrects';
+            if (err.code === 'STATUS_BAD_NETWORK_NAME') errorMessage = 'Nom du partage introuvable';
+            if (err.code === 'STATUS_ACCESS_DENIED') errorMessage = 'Accès refusé au partage';
+            if (err.code === 'ECONNREFUSED' || err.code === 'EHOSTUNREACH') errorMessage = 'Hôte (IP) inaccessible';
+            if (err.code === 'STATUS_CONNECTION_REFUSED') errorMessage = 'Le serveur a refusé la connexion (vérifiez que le SMB est activé)';
+            
+            throw new Error(errorMessage);
         }
     }
 

@@ -8,9 +8,41 @@ import { PlexService } from '../lib/services/plex';
 import { getPrisma } from '../lib/prisma';
 import { Server } from 'socket.io';
 import http from 'http';
+import Docker from 'dockerode';
+import { Writable } from 'stream';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const dockerOptions: any = {};
+let docker: Docker;
+
+function initDocker(host?: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const options: any = {};
+  const dockerHost = host || process.env.DOCKER_HOST;
+
+  if (dockerHost) {
+    if (dockerHost.startsWith('tcp://')) {
+      const url = new URL(dockerHost.replace('tcp://', 'http://'));
+      options.host = url.hostname;
+      options.port = url.port;
+      console.log(`[Tracker] Dockerode initialized with TCP: ${options.host}:${options.port}`);
+    } else {
+      options.socketPath = dockerHost;
+      console.log(`[Tracker] Dockerode initialized with socket: ${options.socketPath}`);
+    }
+  } else {
+    options.socketPath = '/var/run/docker.sock';
+    console.log(`[Tracker] Dockerode initialized with default socket: ${options.socketPath}`);
+  }
+  docker = new Docker(options);
+}
+
+// Initial placeholder init
+initDocker();
 
 // FIX: Global BigInt serialization for JSON
 // This prevents crashes when sending BigInt values over Socket.IO
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 (BigInt.prototype as any).toJSON = function () {
   return Number(this);
 };
@@ -74,7 +106,211 @@ io.on('connection', (socket) => {
       });
   });
 
+  // Docker Logs Handling
+  let logStream: any = null;
+  let logWritable: Writable | null = null;
+  // Docker Terminal Handling
+  let terminalStream: any = null;
+  let terminalExec: any = null;
+
+  socket.on('start_terminal_session', async (rawContainerId: any) => {
+    try {
+      const containerId = String(rawContainerId).trim();
+      console.log(`[Tracker] Client ${socket.id} requested terminal for container: "${containerId}"`);
+
+      // Cleanup existing session if any
+      if (terminalStream) {
+        terminalStream.end();
+        terminalStream.destroy();
+        terminalStream = null;
+      }
+
+      // Re-initialize docker (reuse logic from logs)
+      const prisma = getPrisma() as any;
+      const instances = await prisma.instance.findMany();
+      if (!process.env.DOCKER_HOST) {
+          let dockerHostFound = false;
+          // Check Settings model
+          if (prisma.setting) {
+            for (const inst of instances) {
+              const dockerHostSetting = await prisma.setting.findFirst({
+                where: { key: 'docker_host', instanceId: inst.id }
+              });
+              if (dockerHostSetting?.value) {
+                initDocker(dockerHostSetting.value);
+                dockerHostFound = true;
+                break;
+              }
+            }
+          }
+          // Fallback to Instance JSON
+          if (!dockerHostFound) {
+            const unraidInstance = instances.find((i: any) => i.settings && typeof i.settings === 'object' && i.settings.docker_host);
+            if (unraidInstance) {
+              initDocker((unraidInstance.settings as any).docker_host);
+            }
+          }
+      }
+
+      const container = docker.getContainer(containerId);
+      
+      // FIX: Ensure container exists and is running before exec
+      const containerInfo = await container.inspect();
+      if (!containerInfo.State.Running) {
+          throw new Error('Le conteneur doit être en cours d\'exécution pour accéder à la console');
+      }
+
+      // Create exec instance
+      // Try bash first, fallback to sh
+      const exec = await container.exec({
+        AttachStdin: true,
+        AttachStdout: true,
+        AttachStderr: true,
+        Tty: true,
+        Cmd: ['/bin/sh', '-c', 'if [ -x /bin/bash ]; then exec /bin/bash; else exec /bin/sh; fi'],
+        Env: ['TERM=xterm-256color']
+      });
+
+      terminalExec = exec;
+
+      // Start exec instance
+      const stream = await exec.start({
+        hijack: true,
+        stdin: true,
+        // Detach: false,
+        // Tty: true
+      });
+
+      terminalStream = stream;
+
+      // Handle output from container -> frontend
+      // Dockerode stream is a duplex stream
+      stream.on('data', (chunk: Buffer) => {
+        socket.emit('terminal_output', chunk.toString('utf-8'));
+      });
+
+      stream.on('end', () => {
+        socket.emit('terminal_exit');
+        terminalStream = null;
+      });
+
+      stream.on('error', (err: any) => {
+        console.error(`[Tracker] Terminal stream error: ${err.message}`);
+        socket.emit('terminal_error', err.message);
+      });
+
+      console.log(`[Tracker] Terminal session started for ${containerId}`);
+
+    } catch (err: any) {
+      console.error(`[Tracker] Error starting terminal: ${err.message}`);
+      socket.emit('terminal_error', err.message);
+    }
+  });
+
+  socket.on('terminal_input', (data: string) => {
+    if (terminalStream) {
+      terminalStream.write(data);
+    }
+  });
+
+  socket.on('terminal_resize', (size: { cols: number, rows: number }) => {
+    if (terminalExec) {
+      terminalExec.resize({ h: size.rows, w: size.cols });
+    }
+  });
+
+  socket.on('subscribe_docker_logs', async (rawContainerId: any) => {
+    try {
+      const containerId = String(rawContainerId).trim();
+      console.log(`[Tracker] Client ${socket.id} subscribed to logs for container: "${containerId}"`);
+
+      if (logStream) {
+        logStream.destroy();
+        logStream = null;
+      }
+      
+      // Re-initialize docker before using it to ensure we have the latest host
+      const prisma = getPrisma() as any;
+      const instances = await prisma.instance.findMany();
+      if (!process.env.DOCKER_HOST) {
+        let dockerHostFound = false;
+        
+        // Check Settings model
+        if (prisma.setting) {
+          for (const inst of instances) {
+            const dockerHostSetting = await prisma.setting.findFirst({
+              where: { key: 'docker_host', instanceId: inst.id }
+            });
+            if (dockerHostSetting?.value) {
+              initDocker(dockerHostSetting.value);
+              dockerHostFound = true;
+              break;
+            }
+          }
+        }
+
+        // Fallback to Instance JSON
+        if (!dockerHostFound) {
+          const unraidInstance = instances.find((i: any) => i.settings && typeof i.settings === 'object' && i.settings.docker_host);
+          if (unraidInstance) {
+            initDocker((unraidInstance.settings as any).docker_host);
+          }
+        }
+      }
+
+      // Create a writable stream that emits to socket
+      logWritable = new Writable({
+        write(chunk, encoding, callback) {
+          socket.emit('docker_log_chunk', chunk.toString('utf-8'));
+          callback();
+        }
+      });
+
+      const container = docker.getContainer(containerId);
+      console.log(`[Tracker] Getting logs for container object: ${container.id || containerId}`);
+      const stream = await container.logs({
+        follow: true,
+        stdout: true,
+        stderr: true,
+        tail: 100
+      });
+      
+      logStream = stream;
+      
+      // Demultiplex stream to remove header bytes and separate stdout/stderr
+      container.modem.demuxStream(stream, logWritable, logWritable);
+
+      stream.on('end', () => {
+        socket.emit('docker_log_end');
+      });
+
+      stream.on('error', (err: any) => {
+        console.error(`[Tracker] Log stream error: ${err.message}`);
+        socket.emit('docker_log_error', err.message);
+      });
+
+    } catch (err: any) {
+      console.error(`[Tracker] Error streaming logs: ${err.message}`);
+      socket.emit('docker_log_error', err.message);
+    }
+  });
+
+  socket.on('unsubscribe_docker_logs', () => {
+    console.log(`[Tracker] Client ${socket.id} unsubscribed from logs`);
+    if (logStream) {
+      logStream.destroy();
+      logStream = null;
+    }
+    if (logWritable) {
+        logWritable.end();
+        logWritable = null;
+    }
+  });
+
   socket.on('disconnect', () => {
+    if (logStream) {
+      logStream.destroy();
+    }
     console.log(`[Tracker] Frontend client disconnected: ${socket.id}`);
   });
 });
@@ -271,6 +507,44 @@ async function startTracker() {
   const availableModels = Object.keys(p).filter(key => !key.startsWith('_') && !key.startsWith('$'));
   console.log(`[Tracker] Available Prisma models: ${availableModels.join(', ')}`);
   
+  const instances = await p.instance.findMany();
+  console.log(`[Tracker] Loaded ${instances.length} instances from DB`);
+  
+  // Try to find a Docker Host in settings if not in ENV
+  if (!process.env.DOCKER_HOST) {
+    let dockerHostFound = false;
+    
+    // First check the Settings model (where SettingsForm saves it)
+    if (p.setting) {
+      for (const inst of instances) {
+        const dockerHostSetting = await p.setting.findFirst({
+          where: { key: 'docker_host', instanceId: inst.id }
+        });
+        if (dockerHostSetting?.value) {
+          console.log(`[Tracker] Initializing Dockerode from Setting model (instance ${inst.id}): ${dockerHostSetting.value}`);
+          initDocker(dockerHostSetting.value);
+          dockerHostFound = true;
+          break;
+        }
+      }
+    }
+
+    // Fallback to Instance settings JSON field (legacy/backup)
+    if (!dockerHostFound) {
+      const unraidInstance = instances.find((i: any) => i.settings && typeof i.settings === 'object' && i.settings.docker_host);
+      if (unraidInstance) {
+        const host = (unraidInstance.settings as any).docker_host;
+        console.log(`[Tracker] Initializing Dockerode from Instance JSON (instance ${unraidInstance.id}): ${host}`);
+        initDocker(host);
+        dockerHostFound = true;
+      }
+    }
+
+    if (!dockerHostFound) {
+      console.log(`[Tracker] No docker_host found in DB (Settings model or Instance JSON).`);
+    }
+  }
+
   // 1. Initial connection to all instances in DB
   await refreshInstances();
 

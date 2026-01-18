@@ -1,6 +1,7 @@
 'use server'
 
 import { FileInfo, SmbService } from '@/lib/services/smb';
+import { UnraidService } from '@/lib/services/unraid';
 import { prisma } from '@/lib/prisma';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
@@ -22,6 +23,7 @@ export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[
 
 export async function createPublicShare(filePath: string, expiresDays?: number) {
     try {
+        await checkAccess('downloads.manage');
         const session = await getServerSession(authOptions);
         if (!session?.user || !(session.user as any).instanceId) {
             return { success: false, error: 'Non autorisé' };
@@ -114,5 +116,19 @@ export async function testJellyfinConnection(url: string, apiKey: string) {
     } catch (e: any) {
         console.error('Jellyfin ping failed:', e.message);
         return { success: false, error: 'Serveur Jellyfin injoignable ou invalide' };
+    }
+}
+
+export async function testUnraidConnection(url: string, apiKey: string) {
+    try {
+        const unraidService = new UnraidService(url, apiKey);
+        const stats = await unraidService.getStorageStats();
+        if (stats) {
+            return { success: true };
+        }
+        return { success: false, error: 'Impossible de récupérer les statistiques Unraid' };
+    } catch (e: any) {
+        console.error('Unraid connection test failed:', e.message);
+        return { success: false, error: 'Serveur Unraid injoignable ou clé API invalide' };
     }
 }

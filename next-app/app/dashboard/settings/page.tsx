@@ -8,11 +8,28 @@ export const dynamic = 'force-dynamic'
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
   
-  if (!session || !session.user || (session.user as any).role !== 'admin') {
+  if (!session || !session.user) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+          <h2 className="text-2xl font-bold text-white">Non connecté</h2>
+          <p className="text-gray-400">Veuillez vous connecter pour accéder à cette page.</p>
+        </div>
+      )
+  }
+
+  const userRole = (session.user as any).role
+  const userPermissions = (session.user as any).permissions || []
+  
+  const hasAccess = userRole === 'admin' || 
+                    userPermissions.includes('settings.view') || 
+                    userPermissions.includes('users.view') ||
+                    userPermissions.includes('settings.manage')
+
+  if (!hasAccess) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
           <h2 className="text-2xl font-bold text-white">Accès restreint</h2>
-          <p className="text-gray-400">Seul l'administrateur peut modifier les paramètres.</p>
+          <p className="text-gray-400">Vous n'avez pas les permissions nécessaires pour accéder à cette page.</p>
         </div>
       )
   }
@@ -71,6 +88,8 @@ export default async function SettingsPage() {
         dbUsers={dbUsers}
         instancesWithSettings={instancesWithSettings}
         currentInstanceId={instanceId}
+        userRole={userRole}
+        userPermissions={userPermissions}
     />
   )
 }

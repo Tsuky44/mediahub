@@ -3,12 +3,22 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { setSetting } from '@/lib/settings'
 import { prisma } from '@/lib/prisma'
+import { PERMISSIONS } from '@/lib/permissions'
+import { logAction } from '@/lib/audit'
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
   
-  if (!session || !session.user || (session.user as any).role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized. Only admins can manage settings.' }, { status: 401 })
+  if (!session || !session.user) {
+    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
+  }
+
+  const isSuperAdmin = (session.user as any).role === 'admin'
+  const userPermissions = (session.user as any).permissions || []
+  const hasAccess = isSuperAdmin || userPermissions.includes(PERMISSIONS.SETTINGS_MANAGE)
+
+  if (!hasAccess) {
+    return NextResponse.json({ error: 'Forbidden. Permission settings.manage required.' }, { status: 403 })
   }
 
   try {
@@ -52,6 +62,9 @@ export async function POST(request: NextRequest) {
         plex_token,
         jellyfin_url,
         jellyfin_api_key,
+        unraid_url,
+        unraid_api_key,
+        docker_host,
         type
     } = body
 
@@ -116,6 +129,9 @@ export async function POST(request: NextRequest) {
         { key: 'prowlarr_api_key', value: prowlarr_api_key },
         { key: 'jellyseerr_url', value: body.jellyseerr_url },
         { key: 'jellyseerr_api_key', value: body.jellyseerr_api_key },
+        { key: 'unraid_url', value: unraid_url },
+        { key: 'unraid_api_key', value: unraid_api_key },
+        { key: 'docker_host', value: docker_host },
     ]
 
     for (const setting of settingsToUpdate) {
@@ -123,6 +139,14 @@ export async function POST(request: NextRequest) {
             await setSetting(setting.key, instanceId, setting.value)
         }
     }
+
+    await logAction(
+      parseInt((session.user as any).id),
+      'UPDATE',
+      'Instance',
+      instanceId.toString(),
+      { action: 'settings_update' }
+    )
 
     return NextResponse.json({ success: true })
 

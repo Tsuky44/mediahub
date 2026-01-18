@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { getSetting } from '@/lib/settings'
 
 export interface ProwlarrIndexer {
   id: number
@@ -121,4 +122,15 @@ export class ProwlarrService {
       return []
     }
   }
+}
+
+export async function getProwlarrServiceForUser() {
+  const [url, key] = await Promise.all([
+    getSetting('prowlarr_url'),
+    getSetting('prowlarr_api_key')
+  ])
+
+  if (!url || !key) return null
+
+  return new ProwlarrService(url, key)
 }

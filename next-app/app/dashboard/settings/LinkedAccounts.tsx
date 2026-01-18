@@ -58,8 +58,8 @@ export default function LinkedAccounts() {
                 const data = await res.json()
                 setGroups(data)
             }
-        } catch (error) {
-            console.error('Error fetching groups:', error)
+        } catch {
+            console.error('Error fetching groups')
         } finally {
             setLoading(false)
         }
@@ -83,8 +83,8 @@ export default function LinkedAccounts() {
                 const text = await res.text()
                 alert(`Erreur lors de la création du groupe: ${text || res.statusText}`)
             }
-        } catch (error) {
-            console.error('Error creating group:', error)
+        } catch {
+            console.error('Error creating group')
             alert('Erreur réseau ou serveur lors de la création du groupe.')
         }
     }
@@ -263,7 +263,7 @@ export default function LinkedAccounts() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                     <div className="bg-gray-900 border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
                         <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
-                            <h3 className="text-lg font-bold text-white">Ajouter un compte à "{selectedGroup?.name}"</h3>
+                            <h3 className="text-lg font-bold text-white">Ajouter un compte à &quot;{selectedGroup?.name}&quot;</h3>
                             <button onClick={() => setShowAddMemberModal(false)} className="text-gray-400 hover:text-white">
                                 <X size={20} />
                             </button>

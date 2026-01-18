@@ -6,6 +6,46 @@ import { importJellyseerrRequests } from '@/lib/jellyseerr-import'
 import { JellyseerrService } from '@/lib/services/jellyseerr'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser, getTmdbServiceForUser } from '@/lib/auth'
+import { UnraidService } from '@/lib/services/unraid'
+
+export async function testUnraidDebugAction(instanceId: number) {
+    try {
+        const user = await getCurrentUser()
+        if (!user || (user as any).role !== 'admin') {
+            throw new Error('Unauthorized')
+        }
+
+        const settings = await (prisma as any).setting.findMany({
+            where: {
+                instanceId,
+                key: { in: ['unraid_url', 'unraid_api_key'] }
+            }
+        });
+
+        const url = settings.find((s: any) => s.key === 'unraid_url')?.value;
+        const apiKey = settings.find((s: any) => s.key === 'unraid_api_key')?.value;
+
+        if (!url || !apiKey) {
+            return { success: false, message: 'Configuration Unraid manquante dans la DB.' };
+        }
+
+        console.log(`[Debug Unraid] Test manuel pour l'instance ${instanceId} sur ${url}`);
+        const service = new UnraidService(url, apiKey);
+        const stats = await service.getStorageStats();
+
+        if (stats) {
+            return { 
+                success: true, 
+                message: `Connexion réussie ! Stockage : ${stats.used} / ${stats.total} (${stats.percent}%)` 
+            };
+        }
+
+        return { success: false, message: 'Échec de la récupération des stats. Vérifiez les logs serveur.' };
+    } catch (error: any) {
+        console.error('[testUnraidDebugAction] Error:', error);
+        return { success: false, message: error.message };
+    }
+}
 
 export async function importPlexHistoryAction(instanceId: number) {
     try {

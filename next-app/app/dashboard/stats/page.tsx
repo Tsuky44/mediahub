@@ -84,6 +84,26 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   }
 
   const user = session.user as any
+  const userRole = user.role
+  const userPermissions = user.permissions || []
+  const canManage = userRole === 'admin' || userPermissions.includes('stats.manage')
+
+
+  if (userRole !== 'admin' && !userPermissions.includes('stats.view')) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
+          <AlertCircle size={48} />
+        </div>
+        <h2 className="text-2xl font-bold text-white">Accès restreint</h2>
+        <p className="text-gray-400">Vous n'avez pas la permission de voir les statistiques.</p>
+        <Link href="/dashboard" className="text-indigo-400 hover:text-indigo-300 transition-colors">
+          Retour au tableau de bord
+        </Link>
+      </div>
+    )
+  }
+
   const userInstanceId = user.instanceId ? parseInt(user.instanceId) : NaN
   
   const params = await searchParams
@@ -568,7 +588,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
         <div className="flex flex-col sm:flex-row items-center gap-4">
           <SourceFilter />
           <div className="flex items-center gap-2">
-            <SyncPluginButton />
+            <SyncPluginButton canManage={canManage} />
             {period !== 'all' && (
               <div className="flex items-center gap-2">
                 <a 

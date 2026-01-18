@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react'
 import { getTorrents, addTorrent, deleteTorrents, pauseTorrents, resumeTorrents, getTags } from './actions'
 import { Torrent } from '@/lib/services/qbittorrent'
-import { Plus, Trash2, Pause, Play, Download, Upload, Clock, FileDown, HardDrive, Search, Users, ArrowUpDown, Tag, X, CheckCircle, Activity, Filter, RotateCcw, Calendar } from 'lucide-react'
+import { Plus, Trash2, Pause, Play, Download, Upload, FileDown, HardDrive, Search, Users, ArrowUpDown, Tag, X, CheckCircle, Activity, Filter, RotateCcw, Calendar } from 'lucide-react'
 import clsx from 'clsx'
 
-export function TorrentManager() {
+export function TorrentManager({ canManage }: { canManage: boolean }) {
     const [torrents, setTorrents] = useState<Torrent[]>([])
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('all')
@@ -21,8 +21,8 @@ export function TorrentManager() {
     const [addMode, setAddMode] = useState<'url' | 'file'>('url')
     const [newTorrentUrl, setNewTorrentUrl] = useState('')
     const [torrentFiles, setTorrentFiles] = useState<FileList | null>(null)
-    const [selectedTorrents, setSelectedTorrents] = useState<string[]>([])
-    const [refreshInterval, setRefreshInterval] = useState(2000)
+    const [selectedTorrents, _setSelectedTorrents] = useState<string[]>([])
+    const [refreshInterval, _setRefreshInterval] = useState(2000)
     const [sortBy, setSortBy] = useState<'name' | 'ratio' | 'upspeed' | 'dlspeed' | 'global_speed' | 'added_on' | 'progress' | 'uploaded' | 'size' | 'amount_left' | 'eta' | 'num_seeds' | 'num_leechs' | 'last_activity' | 'completion_on' | 'availability' | 'downloaded' | 'category'>('added_on')
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
     const [isSortOpen, setIsSortOpen] = useState(false)
@@ -102,7 +102,7 @@ export function TorrentManager() {
         return `${m}m ${seconds % 60}s`
     }
 
-    const getProgressBarColor = (state: string) => {
+    const _getProgressBarColor = (state: string) => {
         const s = state.toLowerCase()
         if (s.includes('error')) return 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]'
         if (s.includes('pause')) return 'bg-gray-600'
@@ -363,7 +363,6 @@ export function TorrentManager() {
                             const isError = stateDisplay.includes('error')
                             const isCompleted = torrent.progress === 1
                             const isUploading = stateDisplay.includes('upload') || (isCompleted && !isPaused)
-                            const isDownloading = stateDisplay.includes('download') || stateDisplay.includes('meta')
                             
                             return (
                                 <div key={torrent.hash} className="bg-[#111827]/80 rounded-xl p-3 border border-gray-800/40 shadow-sm hover:border-gray-700/60 transition-all group overflow-hidden w-full">
@@ -403,18 +402,22 @@ export function TorrentManager() {
                                                 </span>
 
                                                 <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
-                                                    {isPaused ? (
-                                                        <button onClick={() => handleResume(torrent.hash)} className="p-1.5 bg-gray-800/50 hover:bg-green-900/30 text-gray-400 hover:text-green-400 rounded-md transition-all" title="Resume">
-                                                            <Play className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    ) : (
-                                                        <button onClick={() => handlePause(torrent.hash)} className="p-1.5 bg-gray-800/50 hover:bg-yellow-900/30 text-gray-400 hover:text-yellow-400 rounded-md transition-all" title="Pause">
-                                                            <Pause className="h-3.5 w-3.5" />
-                                                        </button>
+                                                    {canManage && (
+                                                        <>
+                                                            {isPaused ? (
+                                                                <button onClick={() => handleResume(torrent.hash)} className="p-1.5 bg-gray-800/50 hover:bg-green-900/30 text-gray-400 hover:text-green-400 rounded-md transition-all" title="Resume">
+                                                                    <Play className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            ) : (
+                                                                <button onClick={() => handlePause(torrent.hash)} className="p-1.5 bg-gray-800/50 hover:bg-yellow-900/30 text-gray-400 hover:text-yellow-400 rounded-md transition-all" title="Pause">
+                                                                    <Pause className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            )}
+                                                            <button onClick={() => handleDeleteClick(torrent)} className="p-1.5 bg-gray-800/50 hover:bg-red-900/30 text-gray-400 hover:text-red-400 rounded-md transition-all" title="Delete">
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </>
                                                     )}
-                                                    <button onClick={() => handleDeleteClick(torrent)} className="p-1.5 bg-gray-800/50 hover:bg-red-900/30 text-gray-400 hover:text-red-400 rounded-md transition-all" title="Delete">
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </button>
                                                 </div>
                                             </div>
                                         </div>

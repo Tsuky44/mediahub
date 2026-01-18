@@ -5,8 +5,12 @@ import { Readable } from 'stream';
 
 export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
-    const userRole = (session?.user as any)?.role || 'user';
-    if (!session || !session.user || (userRole !== 'admin' && userRole !== 'user_plus')) {
+    const user = session?.user as any
+    const permissions = user?.permissions || []
+    const isAdmin = user?.role === 'admin'
+    const canDownload = isAdmin || permissions.includes('downloads.view') || permissions.includes('downloads.manage')
+
+    if (!session || !canDownload) {
         return new NextResponse('Unauthorized', { status: 401 });
     }
 

@@ -3,7 +3,9 @@
 import React, { useState } from 'react'
 import { RefreshCw, Check, AlertCircle } from 'lucide-react'
 
-export function SyncPluginButton({ source }: { source?: string }) {
+export function SyncPluginButton({ source, canManage }: { source?: string, canManage?: boolean }) {
+  if (canManage === false) return null;
+
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')

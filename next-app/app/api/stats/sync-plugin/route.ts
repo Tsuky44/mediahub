@@ -7,7 +7,12 @@ import { PlexService } from '@/lib/services/plex';
 
 export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
+    const user = session?.user as any
+    const permissions = user?.permissions || []
+    const isAdmin = user?.role === 'admin'
+    const canView = isAdmin || permissions.includes('stats.view')
+
+    if (!session || !canView) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

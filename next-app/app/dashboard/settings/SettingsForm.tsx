@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Save, Loader2, CheckCircle2, XCircle, RefreshCw, History, Trash2, ListPlus } from 'lucide-react'
-import { testSmbConnection, testEmbyConnection, testPlexConnection, testJellyfinConnection } from '../downloads/file-actions'
-import { importPlexHistoryAction, testJellyseerrConnectionAction, importJellyseerrRequestsAction, fixMissingTitlesAction } from './actions'
+import { testSmbConnection, testEmbyConnection, testPlexConnection, testJellyfinConnection, testUnraidConnection } from '../downloads/file-actions'
+import { importPlexHistoryAction, testJellyseerrConnectionAction, importJellyseerrRequestsAction, fixMissingTitlesAction, testUnraidDebugAction } from './actions'
 
 interface Instance {
     id: number
@@ -31,6 +31,9 @@ interface Instance {
         plex_token?: string
         jellyfin_url?: string
         jellyfin_api_key?: string
+        unraid_url?: string
+        unraid_api_key?: string
+        docker_host?: string
         type?: string
     }
 }
@@ -38,11 +41,13 @@ interface Instance {
 interface SettingsFormProps {
     instances: Instance[]
     currentInstanceId: number
+    readOnly?: boolean
 }
 
 export default function SettingsForm({ 
     instances,
-    currentInstanceId
+    currentInstanceId,
+    readOnly = false
 }: SettingsFormProps) {
     const [selectedInstanceId, setSelectedInstanceId] = useState(currentInstanceId)
     const currentInstance = instances.find(i => i.id === selectedInstanceId) || instances[0]
@@ -73,6 +78,11 @@ export default function SettingsForm({
 
     const [jellyfinUrl, setJellyfinUrl] = useState(settings.jellyfin_url || '')
     const [jellyfinKey, setJellyfinKey] = useState(settings.jellyfin_api_key || '')
+
+    const [unraidUrl, setUnraidUrl] = useState(settings.unraid_url || '')
+    const [unraidKey, setUnraidKey] = useState(settings.unraid_api_key || '')
+    const [dockerHost, setDockerHost] = useState(settings.docker_host || '')
+
     const [instanceType, setInstanceType] = useState(settings.type || 'emby')
 
     const [loading, setLoading] = useState(false)
@@ -93,18 +103,25 @@ export default function SettingsForm({
         setSmbShare(s.smb_share || '')
         setSmbPath(s.smb_path || '')
         setRadarrUrl(s.radarr_url || '')
-    const [jellyseerrUrl, setJellyseerrUrl] = useState(settings.jellyseerr_url || '')
-    const [jellyseerrKey, setJellyseerrKey] = useState(settings.jellyseerr_api_key || '')
+        setRadarrKey(s.radarr_api_key || '')
+        setSonarrUrl(s.sonarr_url || '')
+        setSonarrKey(s.sonarr_api_key || '')
+        setJellyseerrUrl(s.jellyseerr_url || '')
+        setJellyseerrKey(s.jellyseerr_api_key || '')
         setEmbyUrl(s.emby_url || '')
         setEmbyKey(s.emby_api_key || '')
         setPlexUrl(s.plex_url || '')
         setPlexToken(s.plex_token || '')
         setJellyfinUrl(s.jellyfin_url || '')
         setJellyfinKey(s.jellyfin_api_key || '')
+        setUnraidUrl(s.unraid_url || '')
+        setUnraidKey(s.unraid_api_key || '')
+        setDockerHost(s.docker_host || '')
         setInstanceType(s.type || 'emby')
         setEmbyTestResult(null)
         setPlexTestResult(null)
         setJellyfinTestResult(null)
+        setUnraidTestResult(null)
         setTestResult(null)
     }, [selectedInstanceId, instances])
     
@@ -116,6 +133,22 @@ export default function SettingsForm({
 
     const [testingJellyfin, setTestingJellyfin] = useState(false)
     const [jellyfinTestResult, setJellyfinTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const [testingUnraid, setTestingUnraid] = useState(false)
+    const [unraidTestResult, setUnraidTestResult] = useState<{ success: boolean; message: string } | null>(null)
+
+    const handleTestUnraidDebug = async () => {
+        setTestingUnraid(true)
+        setUnraidTestResult(null)
+        try {
+            const res = await testUnraidDebugAction(selectedInstanceId)
+            setUnraidTestResult(res)
+        } catch {
+            setUnraidTestResult({ success: false, message: 'Erreur lors du test debug' })
+        } finally {
+            setTestingUnraid(false)
+        }
+    }
 
     const [importingPlex, setImportingPlex] = useState(false)
     const [importPlexResult, setImportPlexResult] = useState<{ success: boolean; message: string } | null>(null)
@@ -133,7 +166,7 @@ export default function SettingsForm({
             if (res.success) {
                 router.refresh()
             }
-        } catch (error) {
+        } catch {
             setImportPlexResult({ success: false, message: 'Erreur lors de l\'importation' })
         } finally {
             setImportingPlex(false)
@@ -155,7 +188,7 @@ export default function SettingsForm({
         try {
             const res = await testJellyseerrConnectionAction(jellyseerrUrl, jellyseerrKey)
             setJellyseerrTestResult(res)
-        } catch (error) {
+        } catch {
             setJellyseerrTestResult({ success: false, message: 'Erreur lors du test' })
         } finally {
             setTestingJellyseerr(false)
@@ -173,11 +206,11 @@ export default function SettingsForm({
             if (res.success) {
                 router.refresh()
             }
-        } catch (error) {
-            setImportJellyseerrResult({ success: false, message: 'Erreur lors de l\'importation' })
-        } finally {
-            setImportingJellyseerr(false)
-        }
+        } catch {
+      setImportJellyseerrResult({ success: false, message: 'Erreur lors de l\'importation' })
+    } finally {
+      setImportingJellyseerr(false)
+    }
     }
 
     const handleFixMissingTitles = async () => {
@@ -189,7 +222,7 @@ export default function SettingsForm({
             if (res.success) {
                 router.refresh()
             }
-        } catch (error) {
+        } catch {
             setFixTitlesResult({ success: false, message: 'Erreur lors de la correction' })
         } finally {
             setFixingTitles(false)
@@ -211,8 +244,8 @@ export default function SettingsForm({
             } else {
                 setTestResult({ success: false, message: res.error || 'Échec de la connexion' })
             }
-        } catch (error) {
-            setTestResult({ success: false, message: 'Erreur lors du test' })
+        } catch (error: any) {
+            setTestResult({ success: false, message: error.message || 'Erreur lors du test' })
         } finally {
             setTestingSmb(false)
         }
@@ -228,7 +261,7 @@ export default function SettingsForm({
             } else {
                 setEmbyTestResult({ success: false, message: res.error || 'Échec de la connexion' })
             }
-        } catch (error) {
+        } catch {
             setEmbyTestResult({ success: false, message: 'Erreur lors du test' })
         } finally {
             setTestingEmby(false)
@@ -245,11 +278,11 @@ export default function SettingsForm({
             } else {
                 setPlexTestResult({ success: false, message: res.error || 'Échec de la connexion' })
             }
-        } catch (error) {
-            setPlexTestResult({ success: false, message: 'Erreur lors du test' })
-        } finally {
-            setTestingPlex(false)
-        }
+        } catch {
+      setPlexTestResult({ success: false, message: 'Erreur lors du test' })
+    } finally {
+      setTestingPlex(false)
+    }
     }
 
     const handleTestJellyfin = async () => {
@@ -262,11 +295,28 @@ export default function SettingsForm({
             } else {
                 setJellyfinTestResult({ success: false, message: res.error || 'Échec de la connexion' })
             }
-        } catch (error) {
+        } catch {
             setJellyfinTestResult({ success: false, message: 'Erreur lors du test' })
         } finally {
             setTestingJellyfin(false)
         }
+    }
+
+    const handleTestUnraid = async () => {
+        setTestingUnraid(true)
+        setUnraidTestResult(null)
+        try {
+            const res = await testUnraidConnection(unraidUrl, unraidKey)
+            if (res.success) {
+                setUnraidTestResult({ success: true, message: 'Connexion Unraid réussie !' })
+            } else {
+                setUnraidTestResult({ success: false, message: res.error || 'Échec de la connexion' })
+            }
+        } catch {
+      setUnraidTestResult({ success: false, message: 'Erreur lors du test' })
+    } finally {
+      setTestingUnraid(false)
+    }
     }
 
     const handleResetInstance = async () => {
@@ -325,6 +375,9 @@ export default function SettingsForm({
                     plex_token: plexToken,
                     jellyfin_url: jellyfinUrl,
                     jellyfin_api_key: jellyfinKey,
+                    unraid_url: unraidUrl,
+                    unraid_api_key: unraidKey,
+                    docker_host: dockerHost,
                     type: instanceType
                 })
             })
@@ -371,7 +424,8 @@ export default function SettingsForm({
                             </label>
                             <select
                                 id="instance-type"
-                                className="block w-full rounded-md border-gray-600 bg-gray-700 py-2 pl-3 pr-10 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                disabled={readOnly}
+                                className="block w-full rounded-md border-gray-600 bg-gray-700 py-2 pl-3 pr-10 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm disabled:opacity-50"
                                 value={instanceType}
                                 onChange={(e) => setInstanceType(e.target.value)}
                             >
@@ -387,13 +441,13 @@ export default function SettingsForm({
                             <div>
                                 <h5 className="text-sm font-medium text-red-400">Zone de danger</h5>
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Réinitialiser l'instance supprimera toutes les données mais conservera l'URL Emby.
+                                    Réinitialiser l&apos;instance supprimera toutes les données mais conservera l&apos;URL Emby.
                                 </p>
                             </div>
                             <button
                                 type="button"
                                 onClick={handleResetInstance}
-                                disabled={resetLoading}
+                                disabled={resetLoading || readOnly}
                                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 transition-colors"
                             >
                                 {resetLoading ? (
@@ -401,7 +455,7 @@ export default function SettingsForm({
                                 ) : (
                                     <Trash2 className="h-4 w-4 mr-2" />
                                 )}
-                                Réinitialiser l'instance
+                                Réinitialiser l&apos;instance
                             </button>
                         </div>
                     </div>
@@ -416,7 +470,7 @@ export default function SettingsForm({
                     <input
                         type="text"
                         id="qbitUrl"
-                        className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                        disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                         placeholder="http://localhost:8080"
                         value={qbitUrl}
                         onChange={(e) => setQbitUrl(e.target.value)}
@@ -425,12 +479,12 @@ export default function SettingsForm({
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                         <label htmlFor="qbitUser" className="block text-sm font-medium text-gray-300">
-                            Nom d'utilisateur
+                            Nom d&apos;utilisateur
                         </label>
                         <input
                             type="text"
                             id="qbitUser"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                             placeholder="admin"
                             value={qbitUser}
                             onChange={(e) => setQbitUser(e.target.value)}
@@ -443,13 +497,39 @@ export default function SettingsForm({
                         <input
                             type="password"
                             id="qbitPass"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                             value={qbitPass}
                             onChange={(e) => setQbitPass(e.target.value)}
                         />
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-4 pt-2">
+                        <button
+                            type="button"
+                            onClick={handleTestUnraidDebug}
+                            disabled={testingUnraid}
+                            className="flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {testingUnraid ? (
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                            )}
+                            Tester la connexion Unraid
+                        </button>
+                        
+                        {unraidTestResult && (
+                            <div className={`flex items-center text-sm ${unraidTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                                {unraidTestResult.success ? (
+                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                ) : (
+                                    <XCircle className="w-4 h-4 mr-1.5" />
+                                )}
+                                {unraidTestResult.message}
+                            </div>
+                        )}
                     </div>
                 </div>
-            </div>
 
             <div className="space-y-4">
                 <div className="flex items-center justify-between border-b border-gray-700 pb-2">
@@ -464,7 +544,7 @@ export default function SettingsForm({
                         <input
                             type="text"
                             id="smbHost"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                             placeholder="ex: 192.168.1.50"
                             value={smbHost}
                             onChange={(e) => setSmbHost(e.target.value)}
@@ -477,7 +557,7 @@ export default function SettingsForm({
                         <input
                             type="text"
                             id="smbShare"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                             placeholder="ex: partages"
                             value={smbShare}
                             onChange={(e) => setSmbShare(e.target.value)}
@@ -492,7 +572,7 @@ export default function SettingsForm({
                         <input
                             type="text"
                             id="smbUser"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                             placeholder="Identifiant"
                             value={smbUser}
                             onChange={(e) => setSmbUser(e.target.value)}
@@ -505,7 +585,7 @@ export default function SettingsForm({
                         <input
                             type="password"
                             id="smbPass"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                             value={smbPass}
                             onChange={(e) => setSmbPass(e.target.value)}
                         />
@@ -518,7 +598,7 @@ export default function SettingsForm({
                     <input
                         type="text"
                         id="smbPath"
-                        className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                        disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                         placeholder="path/to/folder"
                         value={smbPath}
                         onChange={(e) => setSmbPath(e.target.value)}
@@ -563,7 +643,7 @@ export default function SettingsForm({
                         <input
                             type="text"
                             id="radarrUrl"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                             placeholder="http://192.168.1.x:7878"
                             value={radarrUrl}
                             onChange={(e) => setRadarrUrl(e.target.value)}
@@ -576,7 +656,7 @@ export default function SettingsForm({
                         <input
                             type="text"
                             id="radarrKey"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                             value={radarrKey}
                             onChange={(e) => setRadarrKey(e.target.value)}
                         />
@@ -594,7 +674,7 @@ export default function SettingsForm({
                         <input
                             type="text"
                             id="sonarrUrl"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                             placeholder="http://192.168.1.x:8989"
                             value={sonarrUrl}
                             onChange={(e) => setSonarrUrl(e.target.value)}
@@ -607,7 +687,7 @@ export default function SettingsForm({
                         <input
                             type="text"
                             id="sonarrKey"
-                            className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                             value={sonarrKey}
                             onChange={(e) => setSonarrKey(e.target.value)}
                         />
@@ -626,7 +706,7 @@ export default function SettingsForm({
                             <input
                                 type="text"
                                 id="embyUrl"
-                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                                 placeholder="http://192.168.1.100:8096"
                                 value={embyUrl}
                                 onChange={(e) => setEmbyUrl(e.target.value)}
@@ -639,12 +719,28 @@ export default function SettingsForm({
                             <input
                                 type="password"
                                 id="embyKey"
-                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                                 placeholder="Votre clé API Emby"
                                 value={embyKey}
                                 onChange={(e) => setEmbyKey(e.target.value)}
                             />
                         </div>
+                    </div>
+                    <div>
+                        <label htmlFor="dockerHost" className="block text-sm font-medium text-gray-300">
+                            Docker Host (Optionnel - pour les logs)
+                        </label>
+                        <input
+                            type="text"
+                            id="dockerHost"
+                            disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                            placeholder="ex: tcp://192.168.1.100:2375 ou /var/run/docker.sock"
+                            value={dockerHost}
+                            onChange={(e) => setDockerHost(e.target.value)}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                            Laissez vide pour utiliser le socket local par défaut. Utilisez tcp:// pour un accès distant.
+                        </p>
                     </div>
                     <div className="flex items-center space-x-4 pt-2">
                         <button
@@ -684,7 +780,7 @@ export default function SettingsForm({
                             <input
                                 type="text"
                                 id="plexUrl"
-                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                                 placeholder="http://192.168.1.100:32400"
                                 value={plexUrl}
                                 onChange={(e) => setPlexUrl(e.target.value)}
@@ -697,7 +793,7 @@ export default function SettingsForm({
                             <input
                                 type="password"
                                 id="plexToken"
-                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                                 placeholder="Votre Token Plex"
                                 value={plexToken}
                                 onChange={(e) => setPlexToken(e.target.value)}
@@ -722,7 +818,7 @@ export default function SettingsForm({
                         <button
                             type="button"
                             onClick={handleImportPlex}
-                            disabled={importingPlex || testingPlex}
+                            disabled={importingPlex || testingPlex || readOnly}
                             className="flex items-center px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-md transition-colors disabled:opacity-50 text-sm"
                         >
                             {importingPlex ? (
@@ -730,7 +826,7 @@ export default function SettingsForm({
                             ) : (
                                 <History className="w-4 h-4 mr-2" />
                             )}
-                            Importer l'historique complet
+                            Importer l&apos;historique complet
                         </button>
                         
                         {plexTestResult && (
@@ -767,7 +863,7 @@ export default function SettingsForm({
                             <input
                                 type="text"
                                 id="jellyfinUrl"
-                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                                 placeholder="http://192.168.1.100:8096"
                                 value={jellyfinUrl}
                                 onChange={(e) => setJellyfinUrl(e.target.value)}
@@ -780,7 +876,7 @@ export default function SettingsForm({
                             <input
                                 type="password"
                                 id="jellyfinKey"
-                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                                 placeholder="Votre clé API Jellyfin"
                                 value={jellyfinKey}
                                 onChange={(e) => setJellyfinKey(e.target.value)}
@@ -816,6 +912,64 @@ export default function SettingsForm({
                 </div>
 
                 <div className="space-y-4">
+                    <h4 className="text-lg font-medium text-white border-b border-gray-700 pb-2">Unraid</h4>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                            <label htmlFor="unraidUrl" className="block text-sm font-medium text-gray-300">
+                                URL Unraid (GraphQL API)
+                            </label>
+                            <input
+                                type="text"
+                                id="unraidUrl"
+                                disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="http://192.168.1.100:3000/graphql"
+                                value={unraidUrl}
+                                onChange={(e) => setUnraidUrl(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="unraidKey" className="block text-sm font-medium text-gray-300">
+                                Clé API Unraid
+                            </label>
+                            <input
+                                type="password"
+                                id="unraidKey"
+                                disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                placeholder="Votre clé API Unraid"
+                                value={unraidKey}
+                                onChange={(e) => setUnraidKey(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-4 pt-2">
+                        <button
+                            type="button"
+                            onClick={handleTestUnraid}
+                            disabled={testingUnraid}
+                            className="flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {testingUnraid ? (
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                            )}
+                            Tester la connexion Unraid
+                        </button>
+                        
+                        {unraidTestResult && (
+                            <div className={`flex items-center text-sm ${unraidTestResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                                {unraidTestResult.success ? (
+                                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                                ) : (
+                                    <XCircle className="w-4 h-4 mr-1.5" />
+                                )}
+                                {unraidTestResult.message}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-gray-700 pb-2">
                         <h4 className="text-lg font-medium text-white">Jellyseerr</h4>
                         <span className="text-xs text-gray-400 italic">Migration</span>
@@ -828,7 +982,7 @@ export default function SettingsForm({
                             <input
                                 type="text"
                                 id="jellyseerrUrl"
-                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                                 placeholder="http://192.168.1.100:5055"
                                 value={jellyseerrUrl}
                                 onChange={(e) => setJellyseerrUrl(e.target.value)}
@@ -841,7 +995,7 @@ export default function SettingsForm({
                             <input
                                 type="password"
                                 id="jellyseerrKey"
-                                className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                                disabled={readOnly} className="mt-1 block w-full disabled:opacity-50 rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
                                 placeholder="Votre clé API Jellyseerr"
                                 value={jellyseerrKey}
                                 onChange={(e) => setJellyseerrKey(e.target.value)}
@@ -866,7 +1020,7 @@ export default function SettingsForm({
                         <button
                             type="button"
                             onClick={handleImportJellyseerr}
-                            disabled={importingJellyseerr || testingJellyseerr}
+                            disabled={importingJellyseerr || testingJellyseerr || readOnly}
                             className="flex items-center px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-md transition-colors disabled:opacity-50 text-sm"
                         >
                             {importingJellyseerr ? (
@@ -880,7 +1034,7 @@ export default function SettingsForm({
                         <button
                             type="button"
                             onClick={handleFixMissingTitles}
-                            disabled={fixingTitles}
+                            disabled={fixingTitles || readOnly}
                             className="flex items-center px-4 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-md transition-colors disabled:opacity-50 text-sm"
                         >
                             {fixingTitles ? (
@@ -930,7 +1084,7 @@ export default function SettingsForm({
             <div className="pt-4">
                 <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || readOnly}
                     className="inline-flex w-full items-center justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 sm:w-auto"
                 >
                     {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import Image from 'next/image'
-import { Home, Film, ListPlus, Settings, LogOut, Search, Download, BarChart3, User, Play, Server, ChevronRight, Loader2 } from 'lucide-react'
+import { Home, Film, ListPlus, Settings, LogOut, Search, Download, BarChart3, User, Play, Server, ChevronRight, Loader2, Container } from 'lucide-react'
 import { signOut, useSession, signIn } from 'next-auth/react'
 import { NotificationBell } from './NotificationBell'
 import clsx from 'clsx'
@@ -24,6 +24,7 @@ const navigation = [
   { name: 'Ma médiathèque', href: '/dashboard/media', icon: Film },
   { name: 'Statistiques', href: '/dashboard/stats', icon: BarChart3 },
   { name: 'Téléchargements', href: '/dashboard/downloads', icon: Download },
+  { name: 'Docker', href: '/dashboard/docker', icon: Container },
 ]
 
 export function Navbar() {
@@ -34,10 +35,14 @@ export function Navbar() {
   const [isLoadingInstances, setIsLoadingInstances] = useState(false)
   const [isSwitching, setIsSwitching] = useState<string | null>(null)
   const userRole = (session?.user as any)?.role || 'user'
+  const userPermissions = (session?.user as any)?.permissions || []
 
   const filteredNavigation = navigation.filter(item => {
     if (item.href === '/dashboard/downloads') {
-      return userRole === 'admin' || userRole === 'user_plus'
+      return userRole === 'admin' || userPermissions.includes('downloads.view') || userPermissions.includes('downloads.manage')
+    }
+    if (item.href === '/dashboard/docker') {
+      return userRole === 'admin' || userPermissions.includes('docker.view') || userPermissions.includes('docker.manage')
     }
     return true
   })

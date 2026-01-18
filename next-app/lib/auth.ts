@@ -49,10 +49,19 @@ export const authOptions: NextAuthOptions = {
                     { email: { contains: session.user.email || '' } },
                     { email: { startsWith: `${emailPrefix}@` } }
                   ]
+                },
+                include: {
+                  userRole: { include: { permissions: true } },
+                  permissions: true
                 }
               })
 
               if (user) {
+                const permissions = Array.from(new Set([
+                  ...(user.userRole?.permissions.map((p: any) => p.name) || []),
+                  ...(user.permissions?.map((p: any) => p.name) || [])
+                ]))
+
                 return {
                   id: user.id.toString(),
                   email: user.email,
@@ -63,6 +72,7 @@ export const authOptions: NextAuthOptions = {
                   instanceSlug: instance.slug,
                   isDefaultInstance: instance.isDefault,
                   role: user.role,
+                  permissions,
                   // @ts-ignore
                   roleVersion: user.roleVersion
                 }
@@ -125,6 +135,10 @@ export const authOptions: NextAuthOptions = {
                 embyUserId: embyUser.User.Id,
                 image: embyUser.User.PrimaryImageTag ? embyService.getItemImageUrl(embyUser.User.Id) : null,
                 role: isFirstUser || embyUser.User.Policy?.IsAdministrator ? 'admin' : 'user'
+              },
+              include: {
+                userRole: { include: { permissions: true } },
+                permissions: true
               }
             })
           } else {
@@ -136,9 +150,18 @@ export const authOptions: NextAuthOptions = {
                 image: embyUser.User.PrimaryImageTag ? embyService.getItemImageUrl(embyUser.User.Id) : user.image,
                 // On garde le rôle admin si l'utilisateur l'est déjà ou si Emby le dit
                 role: user.role === 'admin' || embyUser.User.Policy?.IsAdministrator ? 'admin' : 'user'
+              },
+              include: {
+                userRole: { include: { permissions: true } },
+                permissions: true
               }
             })
           }
+
+          const permissions = Array.from(new Set([
+            ...(user.userRole?.permissions.map((p: any) => p.name) || []),
+            ...(user.permissions?.map((p: any) => p.name) || [])
+          ]))
 
           return {
             id: user.id.toString(),
@@ -150,6 +173,7 @@ export const authOptions: NextAuthOptions = {
             instanceSlug: instance.slug,
             isDefaultInstance: instance.isDefault,
             role: user.role,
+            permissions,
             // @ts-ignore
             roleVersion: user.roleVersion
           }
@@ -174,6 +198,8 @@ export const authOptions: NextAuthOptions = {
         // @ts-ignore
         token.role = user.role
         // @ts-ignore
+        token.permissions = user.permissions
+        // @ts-ignore
         token.roleVersion = user.roleVersion
         // @ts-ignore
         token.instanceId = user.instanceId
@@ -192,6 +218,8 @@ export const authOptions: NextAuthOptions = {
         session.user.embyUserId = token.embyUserId
         // @ts-ignore
         session.user.role = token.role
+        // @ts-ignore
+        session.user.permissions = token.permissions
         // @ts-ignore
         session.user.instanceId = token.instanceId
         // @ts-ignore

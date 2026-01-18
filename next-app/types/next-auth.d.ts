@@ -6,6 +6,7 @@ declare module "next-auth" {
     user: {
       id: string
       role: string
+      permissions: string[]
       embyUserId: string | null
       instanceId: string
       instanceSlug: string
@@ -15,6 +16,7 @@ declare module "next-auth" {
 
   interface User extends DefaultUser {
     role: string
+    permissions: string[]
     roleVersion: number
     embyUserId: string | null
     instanceId: string
@@ -26,6 +28,7 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     role: string
+    permissions: string[]
     roleVersion: number
     embyUserId: string | null
     instanceId: string

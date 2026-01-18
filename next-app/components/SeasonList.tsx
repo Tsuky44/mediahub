@@ -24,7 +24,6 @@ interface Episode {
     air_date: string
     vote_average: number
     runtime: number
-    releaseTitle?: string
     userData?: {
         played: boolean
         playedPercentage?: number
@@ -165,7 +164,13 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                             )}
 
                             {/* Status Icon Next to Title */}
-                            {(status === 'available' || status === 'partial') && (
+                            {status === 'available' && (
+                                <span className="flex items-center gap-1 rounded-full bg-green-900/50 px-2 py-0.5 text-xs font-medium text-green-400 border border-green-800">
+                                    <Check className="h-3 w-3" />
+                                    <span className="hidden sm:inline">Disponible</span>
+                                </span>
+                            )}
+                            {status === 'partial' && (
                                 <span className="flex items-center gap-1 rounded-full bg-green-900/50 px-2 py-0.5 text-xs font-medium text-green-400 border border-green-800">
                                     <Check className="h-3 w-3" />
                                     <span className="hidden sm:inline">Disponible</span>
@@ -178,8 +183,8 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                                 </span>
                             )}
                             
-                            {/* Request Button if not requested/fully available */}
-                            {(status === 'unknown') && (
+                            {/* Request Button if not requested/available */}
+                            {status === 'unknown' && (
                                 <div
                                     role="button"
                                     onClick={handleRequest}
@@ -271,15 +276,6 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                                                 </span>
                                             )}
                                         </div>
-
-                                        {episode.releaseTitle && (
-                                            <div className="mt-4 pt-2 border-t border-white/5">
-                                                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Release</p>
-                                                <p className="text-xs text-emerald-400/80 font-mono truncate" title={episode.releaseTitle}>
-                                                    {episode.releaseTitle}
-                                                </p>
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             ))}

@@ -7,7 +7,7 @@ import { ProwlarrSearch } from '../media/[id]/ProwlarrSearch'
 import { CloudArrowDownIcon, FolderIcon } from '@heroicons/react/24/outline'
 import { Search } from 'lucide-react'
 
-export default function DownloadsClient({ hasQbit, hasSmb, hasProwlarr }: { hasQbit: boolean, hasSmb: boolean, hasProwlarr: boolean }) {
+export default function DownloadsClient({ hasQbit, hasSmb, hasProwlarr, canManage }: { hasQbit: boolean, hasSmb: boolean, hasProwlarr: boolean, canManage: boolean }) {
   const [activeTab, setActiveTab] = useState<'qbit' | 'smb' | 'prowlarr'>(
     hasQbit ? 'qbit' : hasSmb ? 'smb' : hasProwlarr ? 'prowlarr' : 'qbit'
   )
@@ -62,15 +62,15 @@ export default function DownloadsClient({ hasQbit, hasSmb, hasProwlarr }: { hasQ
       
       {activeTab === 'qbit' ? (
         <div className="bg-gray-900/50 rounded-2xl border border-white/5 p-3 sm:p-4">
-          <TorrentManager />
+          <TorrentManager canManage={canManage} />
         </div>
       ) : activeTab === 'smb' ? (
         <div className="bg-gray-900/50 rounded-2xl border border-white/5 p-3 sm:p-4">
-          <FileManager />
+          <FileManager canManage={canManage} />
         </div>
       ) : (
         <div className="bg-gray-900/50 rounded-2xl border border-white/5 p-3 sm:p-4">
-          <ProwlarrSearch title="" />
+          <ProwlarrSearch title="" canManage={canManage} />
         </div>
       )}
     </div>

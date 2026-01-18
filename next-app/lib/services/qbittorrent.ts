@@ -101,33 +101,27 @@ export class QBittorrentService {
       }
   }
 
+  async addTorrent(url: string, category?: string | null) {
+    const params = new URLSearchParams()
+    params.append('urls', url)
+    if (category) params.append('category', category)
+
+    return this.request({
+      method: 'POST',
+      url: '/api/v2/torrents/add',
+      data: params.toString(),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    })
+  }
+
   async getTorrents(filter: string = 'all') {
     return this.request<Torrent[]>({
         method: 'GET',
         url: '/api/v2/torrents/info',
         params: { filter }
     })
-  }
-
-  async addTorrent(urls: string | null, files: any[] | null, savepath?: string) {
-      const formData = new FormData()
-      if (urls) formData.append('urls', urls)
-      if (savepath) formData.append('savepath', savepath)
-      
-      if (files && files.length > 0) {
-          files.forEach(file => {
-              formData.append('torrents', file)
-          })
-      }
-      
-      return this.request({
-          method: 'POST',
-          url: '/api/v2/torrents/add',
-          data: formData,
-          headers: {
-             'Content-Type': 'multipart/form-data'
-          }
-      })
   }
   
   async deleteTorrents(hashes: string[], deleteFiles: boolean = false) {
@@ -186,4 +180,16 @@ export class QBittorrentService {
         url: '/api/v2/torrents/tags'
     })
   }
+}
+
+export async function getQBittorrentServiceForUser() {
+  const [url, user, pass] = await Promise.all([
+    getSetting('qbittorrent_url'),
+    getSetting('qbittorrent_username'),
+    getSetting('qbittorrent_password')
+  ])
+
+  if (!url) return null
+
+  return new QBittorrentService(url, user, pass)
 }

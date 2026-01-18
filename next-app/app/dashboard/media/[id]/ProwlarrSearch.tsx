@@ -514,6 +514,7 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3">
+                                                {canManage && (
                                                 <button
                                                     onClick={() => handleDownload(result.guid, result.downloadUrl || result.magnetUrl)}
                                                     disabled={downloading === result.guid || downloadSuccess === result.guid}
@@ -532,6 +533,7 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
                                                         <Download className="h-4 w-4" />
                                                     )}
                                                 </button>
+                                                )}
                                             </td>
                                         </tr>
                                     ))

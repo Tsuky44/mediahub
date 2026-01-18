@@ -7,8 +7,9 @@ import DownloadsClient from './DownloadsClient'
 export default async function DownloadsPage() {
   const session = await getServerSession(authOptions)
   const userRole = (session?.user as any)?.role || 'user'
+  const userPermissions = (session?.user as any)?.permissions || []
 
-  if (userRole !== 'admin' && userRole !== 'user_plus') {
+  if (userRole !== 'admin' && !userPermissions.includes('downloads.view') && !userPermissions.includes('downloads.manage')) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <div className="p-4 rounded-full bg-red-500/10 text-red-500">
@@ -58,9 +59,16 @@ export default async function DownloadsPage() {
     )
   }
 
+  const canManage = userRole === 'admin' || userPermissions.includes('downloads.manage')
+
   return (
     <div className="w-full">
-      <DownloadsClient hasQbit={!!qbtService} hasSmb={!!smbService} hasProwlarr={!!prowlarrService} />
+      <DownloadsClient 
+        hasQbit={!!qbtService} 
+        hasSmb={!!smbService} 
+        hasProwlarr={!!prowlarrService} 
+        canManage={canManage}
+      />
     </div>
   )
 }

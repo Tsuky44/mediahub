@@ -36,6 +36,17 @@ export class EmbyService {
     })
   }
 
+  async getLibraryStats() {
+    try {
+      const client = await this.getClient(5000)
+      const response = await client.get('/Items/Counts')
+      return response.data
+    } catch (e) {
+      console.error('[EmbyService] getLibraryStats failed:', e)
+      return null
+    }
+  }
+
   async getSystemInfo() {
     try {
       const client = await this.getClient(5000)

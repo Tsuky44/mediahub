@@ -126,8 +126,8 @@ export async function fetchRecentlyWatchedItems() {
         
         const userId = dbUser.embyUserId
         console.log('[fetchRecentlyWatchedItems] Fetching recently played items for user:', userId)
-        // Fetch even more items to ensure we get 4 unique ones even if many episodes of the same series were watched
-        const data = await embyService.getRecentlyPlayedItems(userId, 50)
+        // Réduction du nombre d'items récupérés pour plus de rapidité (20 au lieu de 50)
+        const data = await embyService.getRecentlyPlayedItems(userId, 20)
         const allItems = Array.isArray(data.Items) ? data.Items : []
         
         // Group items by SeriesId (for episodes) or Id (for movies)
@@ -148,13 +148,20 @@ export async function fetchRecentlyWatchedItems() {
 
         console.log('[fetchRecentlyWatchedItems] Found unique items count:', uniqueItems.length)
         
+        // Optimisation : Utiliser un cache local pour les détails des séries afin d'éviter les appels redondants
+        const seriesDetailsCache = new Map<string, any>()
+        
         const enrichedItems = await Promise.all(uniqueItems.map(async (item: any) => {
             let tmdbId = item.ProviderIds?.Tmdb
             const itemType = item.Type === 'Movie' ? 'movie' : (item.Type === 'Series' ? 'tv' : 'tv')
             
             let poster_path = null
             if (item.Type === 'Episode' && item.SeriesId) {
-                const series = await embyService.getItemDetails(item.SeriesId, userId)
+                let series = seriesDetailsCache.get(item.SeriesId)
+                if (!series) {
+                    series = await embyService.getItemDetails(item.SeriesId, userId)
+                    seriesDetailsCache.set(item.SeriesId, series)
+                }
                 const seriesTmdbId = series?.ProviderIds?.Tmdb
                 if (seriesTmdbId && tmdbService) {
                     poster_path = await tmdbService.getPosterPath(parseInt(seriesTmdbId), 'tv')
@@ -245,9 +252,9 @@ export async function fetchUserRecommendations(page: number = 1) {
         // Combine history and requests to find seed TMDB IDs
         const seeds: { id: number; type: 'movie' | 'tv' }[] = []
         
-        // Process history
+        // Process history in parallel
         if (Array.isArray(history)) {
-            for (const item of history) {
+            const historySeeds = await Promise.all(history.slice(0, 5).map(async (item) => {
                 let tmdbId = item.ProviderIds?.Tmdb
                 const type = item.Type === 'Movie' ? 'movie' : (item.Type === 'Series' || item.Type === 'Episode' ? 'tv' : null)
                 
@@ -256,21 +263,27 @@ export async function fetchUserRecommendations(page: number = 1) {
                     tmdbId = series?.ProviderIds?.Tmdb
                 }
 
-                if (tmdbId && type && !seeds.some(s => s.id === parseInt(tmdbId))) {
-                    seeds.push({ id: parseInt(tmdbId), type })
+                if (tmdbId && type) {
+                    return { id: parseInt(tmdbId), type }
                 }
-                if (seeds.length >= 5) break
+                return null
+            }))
+
+            for (const seed of historySeeds) {
+                if (seed && !seeds.some(s => s.id === seed.id)) {
+                    seeds.push(seed as { id: number; type: 'movie' | 'tv' })
+                }
             }
         }
 
         // Process requests if not enough seeds
-        if (seeds.length < 10 && Array.isArray(requests)) {
+        if (seeds.length < 5 && Array.isArray(requests)) {
             for (const req of requests) {
                 const reqTmdbId = parseInt(req.tmdbId)
                 if (req.tmdbId && !seeds.some(s => s.id === reqTmdbId)) {
                     seeds.push({ id: reqTmdbId, type: req.mediaType as 'movie' | 'tv' })
                 }
-                if (seeds.length >= 10) break
+                if (seeds.length >= 5) break
             }
         }
 

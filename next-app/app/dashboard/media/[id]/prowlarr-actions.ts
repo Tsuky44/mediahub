@@ -1,9 +1,12 @@
 'use server'
 
-import { getProwlarrServiceForUser, getQBittorrentServiceForUser } from '@/lib/auth'
+import { getQBittorrentServiceForUser } from '@/lib/services/qbittorrent'
+import { getProwlarrServiceForUser } from '@/lib/services/prowlarr'
+import { checkAccess } from '../../downloads/actions'
 
 export async function searchProwlarr(query: string, indexerIds?: number[], categories?: number[], limit: number = 200, offset: number = 0) {
     try {
+        await checkAccess('downloads.view')
         const prowlarrService = await getProwlarrServiceForUser()
         if (!prowlarrService) return { error: 'Prowlarr non configuré' }
 
@@ -17,6 +20,7 @@ export async function searchProwlarr(query: string, indexerIds?: number[], categ
 
 export async function getProwlarrIndexers() {
     try {
+        await checkAccess('downloads.view')
         const prowlarrService = await getProwlarrServiceForUser()
         if (!prowlarrService) return { error: 'Prowlarr non configuré' }
 
@@ -30,6 +34,7 @@ export async function getProwlarrIndexers() {
 
 export async function downloadTorrent(url: string) {
     try {
+        await checkAccess('downloads.manage')
         const qbtService = await getQBittorrentServiceForUser()
         if (!qbtService) return { error: 'QBittorrent non configuré' }
 

@@ -27,8 +27,8 @@ export function getPrisma() {
   
   // Check if critical models are missing and force recreation if so
   const p = globalThis.prisma as any
-  if (p && (!p.embyLiveSession || !p.embyActivityLog || !p.userGroup) && p.instance) {
-    console.log('[Prisma] Critical models (embyLiveSession/embyActivityLog/userGroup) missing from singleton, recreating client...')
+  if (p && !p.dockerGroup) {
+    console.log('[Prisma] dockerGroup model missing from singleton, recreating client...')
     globalThis.prisma = prismaClientSingleton()
   }
   
