@@ -8,6 +8,7 @@ import axios from 'axios';
 import https from 'https';
 import { getSmbServiceForUser, authOptions } from '@/lib/auth';
 import { getServerSession } from 'next-auth';
+import { checkAccess } from './actions';
 
 export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[]> {
     try {
