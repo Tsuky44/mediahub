@@ -19,7 +19,10 @@ export const DownloadSettings = ({ formData, updateField }: Props) => {
         setProwlarrResult(null)
         try {
             const res = await testProwlarrConnectionAction(formData.prowlarr_url, formData.prowlarr_api_key)
-            setProwlarrResult(res)
+            setProwlarrResult({
+                success: res.success,
+                message: res.message || (res.success ? 'Connexion réussie' : 'Échec de la connexion')
+            })
         } catch (e: any) {
             setProwlarrResult({ success: false, message: e.message })
         } finally {

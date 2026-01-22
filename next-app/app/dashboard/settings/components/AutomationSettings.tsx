@@ -24,7 +24,10 @@ export const AutomationSettings = ({ formData, updateField, instanceId }: Props)
         setJellyseerrResult(null)
         try {
             const res = await testJellyseerrConnectionAction(formData.jellyseerr_url, formData.jellyseerr_api_key)
-            setJellyseerrResult(res)
+            setJellyseerrResult({
+                success: res.success,
+                message: res.message || (res.success ? 'Connexion réussie' : 'Échec de la connexion')
+            })
         } catch (e: any) {
             setJellyseerrResult({ success: false, message: e.message })
         } finally {
@@ -38,7 +41,10 @@ export const AutomationSettings = ({ formData, updateField, instanceId }: Props)
         setImportRequestsResult(null)
         try {
             const res = await importJellyseerrRequestsAction(instanceId)
-            setImportRequestsResult(res)
+            setImportRequestsResult({
+                success: res.success,
+                message: res.message || (res.success ? 'Import réussi' : 'Échec de l\'import')
+            })
         } catch (e: any) {
             setImportRequestsResult({ success: false, message: e.message })
         } finally {
@@ -51,7 +57,10 @@ export const AutomationSettings = ({ formData, updateField, instanceId }: Props)
         setFixTitlesResult(null)
         try {
             const res = await fixMissingTitlesAction(instanceId)
-            setFixTitlesResult(res)
+            setFixTitlesResult({
+                success: res.success,
+                message: res.message || (res.success ? 'Correction terminée' : 'Échec de la correction')
+            })
         } catch (e: any) {
             setFixTitlesResult({ success: false, message: e.message })
         } finally {

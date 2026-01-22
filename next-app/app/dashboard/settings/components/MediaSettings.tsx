@@ -31,7 +31,10 @@ export const MediaSettings = ({ formData, updateField, instanceId }: Props) => {
         setEmbyResult(null)
         try {
             const res = await testEmbyConnection(formData.emby_url, formData.emby_api_key)
-            setEmbyResult(res)
+            setEmbyResult({
+                success: res.success,
+                message: res.success ? 'Connexion réussie' : (res as any).error || 'Échec de la connexion'
+            })
         } catch (e: any) {
             setEmbyResult({ success: false, message: e.message })
         } finally {
@@ -44,7 +47,10 @@ export const MediaSettings = ({ formData, updateField, instanceId }: Props) => {
         setPlexResult(null)
         try {
             const res = await testPlexConnection(formData.plex_url, formData.plex_token)
-            setPlexResult(res)
+            setPlexResult({
+                success: res.success,
+                message: res.success ? 'Connexion réussie' : (res as any).error || 'Échec de la connexion'
+            })
         } catch (e: any) {
             setPlexResult({ success: false, message: e.message })
         } finally {
@@ -57,7 +63,10 @@ export const MediaSettings = ({ formData, updateField, instanceId }: Props) => {
         setImportPlexResult(null)
         try {
             const res = await importPlexHistoryAction(instanceId)
-            setImportPlexResult(res)
+            setImportPlexResult({
+                success: res.success,
+                message: res.success ? 'Import réussi' : (res as any).error || 'Échec de l\'import'
+            })
         } catch (e: any) {
             setImportPlexResult({ success: false, message: e.message })
         } finally {
@@ -70,7 +79,10 @@ export const MediaSettings = ({ formData, updateField, instanceId }: Props) => {
         setJellyfinResult(null)
         try {
             const res = await testJellyfinConnection(formData.jellyfin_url, formData.jellyfin_api_key)
-            setJellyfinResult(res)
+            setJellyfinResult({
+                success: res.success,
+                message: res.success ? 'Connexion réussie' : (res as any).error || 'Échec de la connexion'
+            })
         } catch (e: any) {
             setJellyfinResult({ success: false, message: e.message })
         } finally {

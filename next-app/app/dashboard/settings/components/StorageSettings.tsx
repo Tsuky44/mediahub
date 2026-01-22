@@ -24,13 +24,16 @@ export const StorageSettings = ({ formData, updateField, instanceId }: Props) =>
         setSmbLoading(true)
         setSmbResult(null)
         try {
-            const res = await testSmbConnection(
-                formData.smb_host, 
-                formData.smb_share, 
-                formData.smb_username, 
-                formData.smb_password
-            )
-            setSmbResult(res)
+            const res = await testSmbConnection({
+                host: formData.smb_host, 
+                share: formData.smb_share, 
+                user: formData.smb_username, 
+                pass: formData.smb_password
+            })
+            setSmbResult({
+                success: res.success,
+                message: res.success ? 'Connexion réussie' : (res as any).error || 'Échec de la connexion'
+            })
         } catch (e: any) {
             setSmbResult({ success: false, message: e.message })
         } finally {
@@ -45,11 +48,17 @@ export const StorageSettings = ({ formData, updateField, instanceId }: Props) =>
             // Try direct test first
             const res = await testUnraidConnection(formData.unraid_url, formData.unraid_api_key)
             if (res.success) {
-                setUnraidResult(res)
+                setUnraidResult({
+                    success: true,
+                    message: 'Connexion réussie'
+                })
             } else {
                 // Fallback to debug action if direct test fails (sometimes due to server-side constraints)
                 const debugRes = await testUnraidDebugAction(instanceId)
-                setUnraidResult(debugRes)
+                setUnraidResult({
+                    success: debugRes.success,
+                    message: debugRes.message || (debugRes.success ? 'Connexion réussie' : 'Échec de la connexion')
+                })
             }
         } catch (e: any) {
             setUnraidResult({ success: false, message: e.message })
