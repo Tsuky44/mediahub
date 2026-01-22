@@ -101,17 +101,29 @@ export class QBittorrentService {
       }
   }
 
-  async addTorrent(url: string, category?: string | null) {
-    const params = new URLSearchParams()
-    params.append('urls', url)
-    if (category) params.append('category', category)
+  async addTorrent(url: string, files?: File[], category?: string | null) {
+    const formData = new FormData()
+    
+    if (url) {
+      formData.append('urls', url)
+    }
+    
+    if (files && files.length > 0) {
+      for (const file of files) {
+        // En Node.js (côté serveur), on doit convertir le File en Blob ou Buffer pour FormData si nécessaire
+        // Mais Next.js Server Actions fournit des objets File compatibles
+        formData.append('torrents', file)
+      }
+    }
+
+    if (category) formData.append('category', category)
 
     return this.request({
       method: 'POST',
       url: '/api/v2/torrents/add',
-      data: params.toString(),
+      data: formData,
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        // Axios gère automatiquement le Content-Type pour FormData
       }
     })
   }
