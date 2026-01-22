@@ -11,6 +11,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals.push('ssh2', 'dockerode');
+    }
+    return config;
+  },
 };
 
 export default nextConfig;
