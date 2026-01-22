@@ -62,7 +62,7 @@ export async function downloadTorrent(url: string) {
         const qbtService = await getQBittorrentServiceForUser()
         if (!qbtService) return { error: 'QBittorrent non configuré' }
 
-        await qbtService.addTorrent(url, null)
+        await qbtService.addTorrent(url, [])
         return { success: true }
     } catch (error: any) {
         console.error('Download torrent error:', error)
