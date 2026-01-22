@@ -93,6 +93,28 @@ export async function testJellyseerrConnectionAction(url: string, key: string) {
     }
 }
 
+export async function testProwlarrConnectionAction(url: string, key: string) {
+    try {
+        const user = await getCurrentUser()
+        if (!user || (user as any).role !== 'admin') {
+            throw new Error('Unauthorized')
+        }
+
+        const { ProwlarrService } = await import('@/lib/services/prowlarr')
+        const service = new ProwlarrService(url, key)
+        const indexers = await service.getIndexers()
+        
+        const success = Array.isArray(indexers)
+        
+        return { 
+            success, 
+            message: success ? `Connexion réussie ! ${indexers.length} indexeurs trouvés.` : 'Échec de la connexion. Vérifiez l\'URL et la clé API.' 
+        }
+    } catch (error: any) {
+        return { success: false, message: error.message }
+    }
+}
+
 export async function fixMissingTitlesAction(instanceId: number) {
     try {
         const user = await getCurrentUser()

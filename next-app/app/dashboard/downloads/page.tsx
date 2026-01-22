@@ -68,6 +68,7 @@ export default async function DownloadsPage() {
         hasSmb={!!smbService} 
         hasProwlarr={!!prowlarrService} 
         canManage={canManage}
+        isAdmin={userRole === 'admin'}
       />
     </div>
   )

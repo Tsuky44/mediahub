@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, PlayCircle, Check, Clock, Download } from 'lucide-react'
 import { getSeasonDetails, requestSeason } from '@/app/dashboard/media/[id]/actions'
+import { SearchActions } from '@/components/SearchActions'
 import clsx from 'clsx'
 
 interface Season {
@@ -44,12 +45,14 @@ export interface SeasonProgress {
 
 interface SeasonListProps {
     tvId: number
+    tvdbId?: number
+    title: string
     seasons: Season[]
     seasonStatuses: SeasonStatus[]
     seasonProgress?: SeasonProgress[]
 }
 
-export function SeasonList({ tvId, seasons, seasonStatuses, seasonProgress = [] }: SeasonListProps) {
+export function SeasonList({ tvId, tvdbId, title, seasons, seasonStatuses, seasonProgress = [] }: SeasonListProps) {
     const sortedSeasons = [...seasons].sort((a, b) => a.season_number - b.season_number)
 
     return (
@@ -63,10 +66,12 @@ export function SeasonList({ tvId, seasons, seasonStatuses, seasonProgress = [] 
                         <SeasonItem 
                             key={season.id} 
                             tvId={tvId} 
+                            tvdbId={tvdbId}
                             season={season} 
                             initialStatus={status?.status || 'unknown'}
-                            title={season.name} 
+                            title={title} 
                             progress={progress}
+                            allSeasons={seasons}
                         />
                     )
                 })}
@@ -75,7 +80,7 @@ export function SeasonList({ tvId, seasons, seasonStatuses, seasonProgress = [] 
     )
 }
 
-function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: number, season: Season, initialStatus: string, title: string, progress?: SeasonProgress }) {
+function SeasonItem({ tvId, tvdbId, season, initialStatus, title, progress, allSeasons }: { tvId: number, tvdbId?: number, season: Season, initialStatus: string, title: string, progress?: SeasonProgress, allSeasons: Season[] }) {
     const [isOpen, setIsOpen] = useState(false)
     const [episodes, setEpisodes] = useState<Episode[]>([])
     const [loading, setLoading] = useState(false)
@@ -123,9 +128,9 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
 
     return (
         <div className="overflow-hidden rounded-lg border border-gray-700 bg-gray-800">
-            <button
+            <div
+                className="flex w-full items-center justify-between px-4 py-4 hover:bg-gray-750 transition-colors cursor-pointer"
                 onClick={toggleOpen}
-                className="flex w-full items-center justify-between px-4 py-4 hover:bg-gray-750 transition-colors"
             >
                 <div className="flex items-center gap-4">
                      <div className="h-16 w-12 flex-shrink-0 overflow-hidden rounded bg-gray-900 relative">
@@ -183,6 +188,17 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                                 </span>
                             )}
                             
+                            {/* Search Actions for Season */}
+                            <SearchActions 
+                                title={title}
+                                canManage={true}
+                                mediaType="tv"
+                                tmdbId={tvId}
+                                tvdbId={tvdbId}
+                                seasons={allSeasons}
+                                initialSeason={season.season_number}
+                            />
+
                             {/* Request Button if not requested/available */}
                             {status === 'unknown' && (
                                 <div
@@ -212,7 +228,7 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                     </div>
                 </div>
                 {isOpen ? <ChevronUp className="text-gray-400" /> : <ChevronDown className="text-gray-400" />}
-            </button>
+            </div>
 
             {isOpen && (
                 <div className="border-t border-gray-700 bg-gray-900/50 p-4">
@@ -258,10 +274,24 @@ function SeasonItem({ tvId, season, initialStatus, title, progress }: { tvId: nu
                                     {/* Episode Info */}
                                     <div className="flex-1">
                                         <div className="flex items-start justify-between">
-                                            <h5 className="font-bold text-white">{episode.name}</h5>
-                                            <span className="text-xs text-gray-500">
-                                                {episode.air_date ? new Date(episode.air_date).toLocaleDateString() : ''}
-                                            </span>
+                                            <div className="flex flex-col gap-1">
+                                                <h5 className="font-bold text-white">{episode.name}</h5>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <span className="text-xs text-gray-500">
+                                                    {episode.air_date ? new Date(episode.air_date).toLocaleDateString() : ''}
+                                                </span>
+                                                <SearchActions 
+                                                    title={title}
+                                                    canManage={true}
+                                                    mediaType="tv"
+                                                    tmdbId={tvId}
+                                                    tvdbId={tvdbId}
+                                                    seasons={allSeasons}
+                                                    initialSeason={season.season_number}
+                                                    initialEpisode={episode.episode_number}
+                                                />
+                                            </div>
                                         </div>
                                         <p className="mt-2 text-sm text-gray-400 line-clamp-3">
                                             {episode.overview || "Aucun résumé disponible."}

@@ -64,23 +64,33 @@ export class EmbyService {
   async authenticate(username: string, pw: string) {
     console.log(`[EmbyService] Authenticating user '${username}' against ${this.baseUrl}`)
     try {
+        // Ensure username is trimmed
+        const cleanUsername = username.trim();
+        
         const response = await axios.post(`${this.baseUrl}/Users/AuthenticateByName`, {
-            Username: username,
+            Username: cleanUsername,
             Pw: pw
         }, {
             headers: {
-                'X-Emby-Authorization': `MediaBrowser Client="Emby-App", Device="Web", DeviceId="12345", Version="1.0.0"`,
-                'Content-Type': 'application/json'
+                'X-Emby-Authorization': `MediaBrowser Client="MediaHub", Device="Web Browser", DeviceId="browser-${Math.random().toString(36).substring(7)}", Version="1.0.0"`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             httpsAgent: this.httpsAgent,
-            timeout: 10000,
-            maxRedirects: 0
+            timeout: 20000, // Increased timeout to 20s
+            maxRedirects: 5
         })
+        console.log(`[EmbyService] Auth success for ${cleanUsername}`)
         return response.data
     } catch (e: any) {
-        const errorMsg = e.response?.data ? JSON.stringify(e.response.data) : e.message
-        console.error(`[EmbyService] Auth failed for ${username} at ${this.baseUrl}:`, errorMsg)
-        throw new Error(`Emby Auth Error: ${errorMsg} (URL: ${this.baseUrl})`)
+        const errorStatus = e.response?.status
+        const errorData = e.response?.data
+        console.error(`[EmbyService] Auth failed for ${username} (Status: ${errorStatus}):`, errorData || e.message)
+        
+        if (errorStatus === 401) {
+            throw new Error("Identifiants incorrects sur Emby")
+        }
+        throw new Error(`Erreur Emby (${errorStatus || 'Timeout'}): ${e.message}`)
     }
   }
 

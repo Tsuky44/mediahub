@@ -15,6 +15,7 @@ import { MediaSlider } from '@/components/MediaSlider'
 import FavoriteButton from './FavoriteButton'
 import WatchLaterButton from './WatchLaterButton'
 import { ManageMediaButton } from './ManageMediaButton'
+import { SearchActions } from '@/components/SearchActions'
 import { isInWatchLater } from '../watch-later-actions'
 import { getSetting } from '@/lib/settings'
 import { getMediaAvailability } from '@/lib/services/media-status'
@@ -293,6 +294,17 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                                 mediaType={mediaType} 
                                 title={title} 
                             />
+
+                            {mediaType === 'movie' && (user as any)?.role === 'admin' && (
+                                <SearchActions 
+                                    title={title} 
+                                    canManage={true}
+                                    mediaType={mediaType}
+                                    tmdbId={tmdbId}
+                                    tvdbId={tvdbId}
+                                    seasons={details.seasons}
+                                />
+                            )}
                         </div>
                     </div>
 
@@ -511,6 +523,8 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                             <h2 className="text-2xl font-bold text-white mb-6">Saisons</h2>
                             <SeasonList 
                                 tvId={tmdbId} 
+                                tvdbId={tvdbId}
+                                title={title}
                                 seasons={details.seasons} 
                                 seasonStatuses={(availability as any).seasons || []}
                                 seasonProgress={seasonProgress}

@@ -111,6 +111,7 @@ export interface SonarrQueueItem {
   status: string;
   trackedDownloadStatus: string;
   title: string;
+  downloadId?: string; // Added downloadId (hash)
   series?: {
     id: number;
     title: string;
@@ -141,6 +142,20 @@ export class SonarrService {
       },
       timeout: 10000
     })
+  }
+
+  async sendCommand(name: string, params: any = {}) {
+    const client = this.getClient()
+    try {
+      const response = await client.post('/command', {
+        name,
+        ...params
+      })
+      return { success: true, data: response.data }
+    } catch (e: any) {
+      console.error(`[Sonarr] Failed to send command ${name}:`, e.message)
+      return { success: false, error: e.message }
+    }
   }
 
   async getQueue() {
@@ -336,6 +351,81 @@ export class SonarrService {
     }
   }
 
+  async monitorSeason(tvdbId: number, seasonNumber: number) {
+    const client = this.getClient()
+    try {
+      const series = await this.getSeriesByTvdbId(tvdbId)
+      if (!series || !series.id) {
+        return { success: false, message: 'Series not found in Sonarr' }
+      }
+
+      const seasonIndex = series.seasons.findIndex(s => s.seasonNumber === seasonNumber)
+      if (seasonIndex === -1) {
+          return { success: false, message: 'Season not found in Sonarr' }
+      }
+
+      if (series.seasons[seasonIndex].monitored && series.monitored) {
+          return { success: true, message: 'Season already monitored', series }
+      }
+
+      series.seasons[seasonIndex].monitored = true
+      series.monitored = true // Ensure series is monitored too
+
+      const response = await client.put(`/series/${series.id}`, series)
+      return { success: true, series: response.data }
+    } catch (e: any) {
+      console.error(`[Sonarr] Failed to monitor season ${seasonNumber} for ${tvdbId}:`, e.message)
+      return { success: false, message: e.message }
+    }
+  }
+
+  async monitorEpisode(tvdbId: number, seasonNumber: number, episodeNumber: number) {
+    const client = this.getClient()
+    try {
+      const series = await this.getSeriesByTvdbId(tvdbId)
+      if (!series || !series.id) {
+        return { success: false, message: 'Series not found in Sonarr' }
+      }
+
+      // First ensure the series and season are monitored
+      let seriesChanged = false
+      if (!series.monitored) {
+        series.monitored = true
+        seriesChanged = true
+      }
+
+      const seasonIndex = series.seasons.findIndex(s => s.seasonNumber === seasonNumber)
+      if (seasonIndex !== -1 && !series.seasons[seasonIndex].monitored) {
+        series.seasons[seasonIndex].monitored = true
+        seriesChanged = true
+      }
+
+      if (seriesChanged) {
+        await client.put(`/series/${series.id}`, series)
+      }
+
+      // Now monitor the specific episode
+      const episodes = await this.getEpisodes(series.id)
+      const episode = episodes.find((e: any) => e.seasonNumber === seasonNumber && e.episodeNumber === episodeNumber)
+      
+      if (!episode) {
+        return { success: false, message: 'Episode not found in Sonarr' }
+      }
+
+      if (episode.monitored) {
+        return { success: true, message: 'Episode already monitored' }
+      }
+
+      episode.monitored = true
+      await client.put(`/episode/${episode.id}`, episode)
+
+      return { success: true }
+    } catch (e: any) {
+      console.error(`[Sonarr] Failed to monitor episode S${seasonNumber}E${episodeNumber} for ${tvdbId}:`, e.message)
+      return { success: false, message: e.message }
+    }
+  }
+
   async unmonitorSeasons(tvdbId: number, seasonsToUnmonitor: number[]) {
     const client = this.getClient()
     try {
@@ -418,6 +508,18 @@ export class SonarrService {
     } catch (e: any) {
       const errorMsg = e.response?.data?.message || e.message
       console.error(`[Sonarr] Failed to download release ${guid}:`, errorMsg)
+      return { success: false, message: errorMsg }
+    }
+  }
+
+  async pushRelease(release: any) {
+    const client = this.getClient()
+    try {
+      const response = await client.post('/release/push', release)
+      return { success: true, data: response.data }
+    } catch (e: any) {
+      const errorMsg = e.response?.data?.message || e.message
+      console.error(`[Sonarr] Failed to push release:`, errorMsg)
       return { success: false, message: errorMsg }
     }
   }

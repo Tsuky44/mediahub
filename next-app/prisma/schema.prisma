@@ -11,7 +11,7 @@ model Instance {
   id                Int                      @id @default(autoincrement())
   name              String                   @unique
   slug              String                   @unique
-  type              String                   @default("emby") // emby, jellyfin, plex
+  type              String                   @default("emby")
   embyUrl           String?                  @map("emby_url")
   embyApiKey        String?                  @map("emby_api_key")
   plexUrl           String?                  @map("plex_url")
@@ -28,8 +28,8 @@ model Instance {
   mediaRequests     MediaRequest[]
   notifications     Notification[]
   settings          Setting[]
-  users             User[]
   userGroupMembers  UserGroupMember[]
+  users             User[]
   watchEvents       WatchEvent[]
   watchLater        WatchLater[]
 
@@ -48,23 +48,20 @@ model User {
   jellyseerrUserId String?        @map("jellyseerr_user_id")
   role             String         @default("user")
   roleVersion      Int            @default(0) @map("role_version")
-
-  // RBAC
   roleId           String?        @map("role_id")
-  userRole         Role?          @relation(fields: [roleId], references: [id])
-  permissions      Permission[]   @relation("UserDirectPermissions")
-  auditLogs        AuditLog[]
-
   hasSeenWelcome   Boolean        @default(false) @map("has_seen_welcome")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
   accounts         Account[]
+  auditLogs        AuditLog[]
   requests         MediaRequest[]
   notifications    Notification[]
   sessions         Session[]
   instance         Instance       @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  userRole         Role?          @relation(fields: [roleId], references: [id])
   watchEvents      WatchEvent[]
   watchLater       WatchLater[]
+  permissions      Permission[]   @relation("UserDirectPermissions")
 
   @@unique([email, instanceId])
   @@unique([embyUserId, instanceId])
@@ -252,25 +249,25 @@ model FileShare {
 }
 
 model EmbyLiveSession {
-  id                 String   @id @default(uuid())
-  instanceId         Int      @default(1) @map("instance_id")
-  sessionId          String   @map("session_id")
-  source             String   @default("emby")
-  userId             String   @map("user_id")
-  userName           String   @map("user_name")
-  client             String?
-  device             String?
-  deviceId           String?  @map("device_id")
-  applicationVersion String?  @map("app_version")
-  itemId             String?  @map("item_id")
-  itemName           String?  @map("item_name")
-  itemType           String?  @map("item_type")
-  runTimeTicks       BigInt?  @map("runtime_ticks")
-  isPaused           Boolean  @default(false) @map("is_paused")
-  lastActivity       DateTime @default(now()) @map("last_activity")
-  startedAt          DateTime @default(now()) @map("started_at")
-  playbackPosition   BigInt?  @map("playback_position")
-  accumulatedDuration Int     @default(0) @map("accumulated_duration")
+  id                  String   @id @default(uuid())
+  instanceId          Int      @default(1) @map("instance_id")
+  sessionId           String   @map("session_id")
+  source              String   @default("emby")
+  userId              String   @map("user_id")
+  userName            String   @map("user_name")
+  client              String?
+  device              String?
+  deviceId            String?  @map("device_id")
+  applicationVersion  String?  @map("app_version")
+  itemId              String?  @map("item_id")
+  itemName            String?  @map("item_name")
+  itemType            String?  @map("item_type")
+  runTimeTicks        BigInt?  @map("runtime_ticks")
+  isPaused            Boolean  @default(false) @map("is_paused")
+  lastActivity        DateTime @default(now()) @map("last_activity")
+  startedAt           DateTime @default(now()) @map("started_at")
+  playbackPosition    BigInt?  @map("playback_position")
+  accumulatedDuration Int      @default(0) @map("accumulated_duration")
 
   @@unique([sessionId, instanceId])
   @@map("emby_live_sessions")
@@ -290,11 +287,10 @@ model UserGroupMember {
   id          Int       @id @default(autoincrement())
   userGroupId String    @map("user_group_id")
   instanceId  Int       @map("instance_id")
-  userId      String    @map("user_id") // ID externe (emby_user_id, plex_id, etc)
-  username    String?   // Nom d'utilisateur pour référence
-  
-  userGroup   UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  userId      String    @map("user_id")
+  username    String?
   instance    Instance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  userGroup   UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
 
   @@unique([instanceId, userId])
   @@map("user_group_members")
@@ -328,9 +324,9 @@ model EmbyActivityLog {
 model DockerGroup {
   id        String              @id @default(cuid())
   name      String
-  members   DockerGroupMember[]
   createdAt DateTime            @default(now()) @map("created_at")
   updatedAt DateTime            @updatedAt @map("updated_at")
+  members   DockerGroupMember[]
 
   @@map("docker_groups")
 }
@@ -345,8 +341,6 @@ model DockerGroupMember {
   @@map("docker_group_members")
 }
 
-// RBAC Models
-
 model Role {
   id          String       @id @default(cuid())
   name        String       @unique
@@ -354,10 +348,10 @@ model Role {
   description String?
   isSystem    Boolean      @default(false) @map("is_system")
   priority    Int          @default(0)
-  permissions Permission[]
-  users       User[]
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
+  users       User[]
+  permissions Permission[] @relation("PermissionToRole")
 
   @@map("roles")
 }
@@ -367,10 +361,10 @@ model Permission {
   name        String   @unique
   description String?
   category    String   @default("general")
-  roles       Role[]
-  users       User[]   @relation("UserDirectPermissions")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  roles       Role[]   @relation("PermissionToRole")
+  users       User[]   @relation("UserDirectPermissions")
 
   @@map("permissions")
 }

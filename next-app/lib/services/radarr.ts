@@ -71,6 +71,7 @@ export interface RadarrQueueItem {
   status: string;
   trackedDownloadStatus: string;
   title: string;
+  downloadId?: string; // Added downloadId (hash)
   movie?: {
     id: number;
     title: string;
@@ -95,6 +96,20 @@ export class RadarrService {
       },
       timeout: 10000
     })
+  }
+
+  async sendCommand(name: string, params: any = {}) {
+    const client = this.getClient()
+    try {
+      const response = await client.post('/command', {
+        name,
+        ...params
+      })
+      return { success: true, data: response.data }
+    } catch (e: any) {
+      console.error(`[Radarr] Failed to send command ${name}:`, e.message)
+      return { success: false, error: e.message }
+    }
   }
 
   async getQueue() {
@@ -299,6 +314,18 @@ export class RadarrService {
     } catch (e: any) {
       const errorMsg = e.response?.data?.message || e.message
       console.error(`[Radarr] Failed to download release ${guid}:`, errorMsg)
+      return { success: false, message: errorMsg }
+    }
+  }
+
+  async pushRelease(release: any) {
+    const client = this.getClient()
+    try {
+      const response = await client.post('/release/push', release)
+      return { success: true, data: response.data }
+    } catch (e: any) {
+      const errorMsg = e.response?.data?.message || e.message
+      console.error(`[Radarr] Failed to push release:`, errorMsg)
       return { success: false, message: errorMsg }
     }
   }

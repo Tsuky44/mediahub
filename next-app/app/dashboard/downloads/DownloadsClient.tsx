@@ -1,15 +1,16 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { TorrentManager } from './TorrentManager'
 import FileManager from './FileManager'
-import { ProwlarrSearch } from '../media/[id]/ProwlarrSearch'
+import { ProwlarrSearch } from '@/components/ProwlarrSearch'
 import { CloudArrowDownIcon, FolderIcon } from '@heroicons/react/24/outline'
 import { Search } from 'lucide-react'
 
-export default function DownloadsClient({ hasQbit, hasSmb, hasProwlarr, canManage }: { hasQbit: boolean, hasSmb: boolean, hasProwlarr: boolean, canManage: boolean }) {
+export default function DownloadsClient({ hasQbit, hasSmb, hasProwlarr, canManage, isAdmin }: { hasQbit: boolean, hasSmb: boolean, hasProwlarr: boolean, canManage: boolean, isAdmin?: boolean }) {
   const [activeTab, setActiveTab] = useState<'qbit' | 'smb' | 'prowlarr'>(
-    hasQbit ? 'qbit' : hasSmb ? 'smb' : hasProwlarr ? 'prowlarr' : 'qbit'
+    hasQbit ? 'qbit' : hasSmb ? 'smb' : (hasProwlarr || isAdmin) ? 'prowlarr' : 'qbit'
   )
 
   return (
@@ -44,7 +45,7 @@ export default function DownloadsClient({ hasQbit, hasSmb, hasProwlarr, canManag
                     Explorateur SMB
                 </button>
             )}
-            {hasProwlarr && (
+            {(hasProwlarr || isAdmin) && (
                 <button 
                     onClick={() => setActiveTab('prowlarr')}
                     className={`flex items-center px-4 py-2 rounded-md transition-all ${
@@ -54,7 +55,7 @@ export default function DownloadsClient({ hasQbit, hasSmb, hasProwlarr, canManag
                     }`}
                 >
                     <Search className="w-5 h-5 mr-2" />
-                    Recherche Prowlarr
+                    Recherche Interactive
                 </button>
             )}
         </div>
@@ -70,7 +71,26 @@ export default function DownloadsClient({ hasQbit, hasSmb, hasProwlarr, canManag
         </div>
       ) : (
         <div className="bg-gray-900/50 rounded-2xl border border-white/5 p-3 sm:p-4">
-          <ProwlarrSearch title="" canManage={canManage} />
+          {!hasProwlarr && isAdmin ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
+              <div className="p-4 rounded-full bg-amber-500/10 text-amber-500">
+                <Search size={48} />
+              </div>
+              <h3 className="text-xl font-bold text-white">Prowlarr non configuré</h3>
+              <p className="text-gray-400 max-w-md">
+                Le service Prowlarr n'est pas encore configuré. 
+                En tant qu'administrateur, vous pouvez le configurer dans les paramètres.
+              </p>
+              <Link 
+                href="/dashboard/settings" 
+                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+              >
+                Aller aux paramètres
+              </Link>
+            </div>
+          ) : (
+            <ProwlarrSearch title="" canManage={canManage} />
+          )}
         </div>
       )}
     </div>

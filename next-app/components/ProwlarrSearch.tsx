@@ -2,10 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import { Search, Download, Loader2, Database, AlertCircle, CheckCircle2, Filter, Music, Film, Tv, Gamepad, Book, ChevronDown, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
-import { searchProwlarr, downloadTorrent, getProwlarrIndexers } from './prowlarr-actions'
+import { searchProwlarr, downloadTorrent, getProwlarrIndexers, searchMediaReleases, downloadMediaRelease, getSonarrEpisodes } from '@/app/dashboard/media/[id]/prowlarr-actions'
+import { getSeasonDetails } from '@/app/dashboard/media/[id]/actions'
 
 interface ProwlarrSearchProps {
   title: string
+  canManage?: boolean
+  mediaType?: 'movie' | 'tv'
+  tmdbId?: number
+  tvdbId?: number
+  seasons?: any[]
+  initialSeason?: number | null
+  initialEpisode?: number | null
 }
 
 const CATEGORIES = [
@@ -18,15 +26,20 @@ const CATEGORIES = [
 
 const RESULTS_PER_PAGE = 200
 
-export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
-  const [query, setQuery] = useState(title)
+export function ProwlarrSearch({ title, canManage = true, mediaType, tmdbId, tvdbId, seasons, initialSeason = null, initialEpisode = null }: ProwlarrSearchProps) {
+  const [query, setQuery] = useState(title || '')
   const [results, setResults] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null) // guid of downloading item
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null) // guid of success item
-  
-  // Filters state
+  const [selectedSeason, setSelectedSeason] = useState<number | null>(initialSeason)
+  const [selectedEpisode, setSelectedEpisode] = useState<number | null>(initialEpisode)
+  const [episodeList, setEpisodeList] = useState<any[]>([])
+  const [loadingEpisodes, setLoadingEpisodes] = useState(false)
+  const [searchSource, setSearchSource] = useState<'smart' | 'raw'>('raw')
+
+  // Pagination state
   const [indexers, setIndexers] = useState<any[]>([])
   const [selectedIndexers, setSelectedIndexers] = useState<number[]>([])
   const [selectedCategories, setSelectedCategories] = useState<number[]>([])
@@ -76,10 +89,19 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
   }, [sortBy, sortOrder, results])
 
   const handleSearch = async (newOffset: number = 0, append: boolean = false) => {
-    const hasQuery = query.trim().length > 0
+    const hasQuery = (query || '').trim().length > 0
     const hasFilters = selectedCategories.length > 0 || selectedIndexers.length > 0
     
-    if (!hasQuery && !hasFilters && !showRecent) return
+    // Allow search if we have specific media context even without query
+    const hasContext = !!(mediaType && tmdbId)
+    
+    if (!hasQuery && !hasFilters && !showRecent && !hasContext) return
+    
+    // If TV and using context search, require season
+    if (searchSource === 'smart' && mediaType === 'tv' && tmdbId && selectedSeason === null && !hasQuery) {
+        if (newOffset === 0) setError('Veuillez sélectionner une saison')
+        return
+    }
     
     setLoading(true)
     setError(null)
@@ -91,13 +113,21 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
     }
     
     try {
-      const res = await searchProwlarr(
-          (showRecent && !hasQuery) ? '' : query, 
-          selectedIndexers.length > 0 ? selectedIndexers : undefined,
-          selectedCategories.length > 0 ? selectedCategories : undefined,
-          RESULTS_PER_PAGE,
-          newOffset
-      )
+      let res;
+      // Use Sonarr/Radarr search if context is available and (for TV) season is selected
+      // We prioritize this over Prowlarr raw search if we are in media context
+      if (searchSource === 'smart' && mediaType && tmdbId && (mediaType === 'movie' || (mediaType === 'tv' && selectedSeason !== null))) {
+          res = await searchMediaReleases(mediaType, tmdbId, tvdbId, selectedSeason ?? undefined, selectedEpisode ?? undefined)
+      } else {
+          res = await searchProwlarr(
+              (showRecent && !hasQuery) ? '' : query, 
+              selectedIndexers.length > 0 ? selectedIndexers : undefined,
+              selectedCategories.length > 0 ? selectedCategories : undefined,
+              RESULTS_PER_PAGE,
+              newOffset
+          )
+      }
+
       if (res.error) {
         setError(res.error)
       } else {
@@ -110,9 +140,7 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
             setOffset(newOffset + newResults.length)
         }
         
-        // Si on a reçu au moins 40 résultats, on suppose qu'il peut y en avoir plus
-        // (Certains indexeurs limitent à 50, d'autres à 100, etc.)
-        setHasMore(newResults.length >= 40)
+        setHasMore(newResults.length >= 40) // Heuristic
         
         if (!append) {
             setPage(Math.floor(newOffset / RESULTS_PER_PAGE))
@@ -136,14 +164,104 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
         }
     }
     loadIndexers()
-    handleSearch(0)
+    // Don't auto-search if TV and no season selected
+    if (!(mediaType === 'tv' && selectedSeason === null)) {
+        handleSearch(0)
+    }
   }, [])
 
-  const handleDownload = async (guid: string, url: string) => {
-    if (!url) return
+  // Effect to re-search when season or episode changes
+  useEffect(() => {
+    if (mediaType === 'tv' && selectedSeason !== null) {
+        // Update query for raw search fallback
+        const seasonStr = selectedSeason < 10 ? `0${selectedSeason}` : selectedSeason
+        let newQuery = `${title} S${seasonStr}`
+        if (selectedEpisode) {
+            const episodeStr = selectedEpisode < 10 ? `0${selectedEpisode}` : selectedEpisode
+            newQuery += `E${episodeStr}`
+        }
+        setQuery(newQuery)
+
+        // Always trigger search when season/episode changes
+        handleSearch(0)
+    }
+  }, [selectedSeason, selectedEpisode])
+
+  // Effect to fetch episodes when season changes
+  useEffect(() => {
+    if (mediaType === 'tv' && tmdbId && selectedSeason !== null) {
+        setLoadingEpisodes(true)
+        // Prefer Sonarr episodes if available for better consistency with search
+        getSonarrEpisodes(tmdbId)
+            .then(res => {
+                if (res.episodes) {
+                    // Filter episodes by season
+                    const seasonEpisodes = res.episodes
+                        .filter((e: any) => e.seasonNumber === selectedSeason)
+                        .sort((a: any, b: any) => a.episodeNumber - b.episodeNumber)
+                    
+                    if (seasonEpisodes.length > 0) {
+                        setEpisodeList(seasonEpisodes.map((e: any) => ({
+                            id: e.id,
+                            episode_number: e.episodeNumber,
+                            name: e.title,
+                            overview: e.overview,
+                            hasFile: e.hasFile
+                        })))
+                        return
+                    }
+                }
+                
+                // Fallback to TMDB if Sonarr fails or returns no episodes for this season
+                // This handles cases where the series might not be in Sonarr yet or fully synced
+                return getSeasonDetails(tmdbId, selectedSeason)
+                    .then(data => {
+                        if (data && data.episodes) {
+                            setEpisodeList(data.episodes)
+                        } else {
+                            setEpisodeList([])
+                        }
+                    })
+            })
+            .catch(err => {
+                console.error('Error fetching episodes:', err)
+                setEpisodeList([])
+            })
+            .finally(() => setLoadingEpisodes(false))
+    } else {
+        setEpisodeList([])
+    }
+  }, [mediaType, tmdbId, selectedSeason])
+
+  const handleDownload = async (guid: string, url: string, indexerId?: number) => {
+    // If using Sonarr/Radarr search, url might be null/empty, we use guid and indexerId
+    if (!url && (!mediaType || !tmdbId)) return
+    
     setDownloading(guid)
     try {
-      const res = await downloadTorrent(url)
+      let res;
+      if (mediaType && tmdbId && indexerId) {
+         const result = results.find(r => r.guid === guid)
+         const releaseInfo = result ? {
+             title: result.title,
+             downloadUrl: result.downloadUrl || result.magnetUrl,
+             protocol: result.protocol,
+             publishDate: result.publishDate,
+             indexer: result.indexer,
+             size: result.size,
+             guid: result.guid
+         } : undefined
+
+         res = await downloadMediaRelease(guid, indexerId, mediaType, tmdbId, tvdbId, selectedSeason ?? undefined, selectedEpisode ?? undefined, releaseInfo)
+      } else {
+         if (!url) {
+             alert('URL de téléchargement manquante')
+             setDownloading(null)
+             return
+         }
+         res = await downloadTorrent(url)
+      }
+
       if (res.error) {
         alert(`Erreur: ${res.error}`)
       } else {
@@ -166,11 +284,28 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
     let failCount = 0
 
     for (const result of selectedResults) {
-      const url = result.downloadUrl || result.magnetUrl
-      if (!url) continue
-      
       try {
-        const res = await downloadTorrent(url)
+        let res;
+        if (mediaType && tmdbId && result.indexerId) {
+            const releaseInfo = {
+                title: result.title,
+                downloadUrl: result.downloadUrl || result.magnetUrl,
+                protocol: result.protocol,
+                publishDate: result.publishDate,
+                indexer: result.indexer,
+                size: result.size,
+                guid: result.guid
+            }
+            res = await downloadMediaRelease(result.guid, result.indexerId, mediaType as any, tmdbId as any, tvdbId, selectedSeason ?? undefined, selectedEpisode ?? undefined, releaseInfo)
+        } else {
+            const url = result.downloadUrl || result.magnetUrl
+            if (!url) {
+                failCount++
+                continue
+            }
+            res = await downloadTorrent(url)
+        }
+
         if (res.error) {
           failCount++
         } else {
@@ -232,6 +367,7 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
     <div className="space-y-4 animate-in fade-in duration-500">
         {/* Search Bar */}
         <div className="flex flex-col gap-3">
+
             <div className="flex gap-2">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -262,13 +398,73 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
                 </button>
                 <button 
                     onClick={() => handleSearch(0)}
-                    disabled={loading || (!query.trim() && !showRecent && selectedCategories.length === 0 && selectedIndexers.length === 0)}
+                    disabled={loading || (!(query || '').trim() && !showRecent && selectedCategories.length === 0 && selectedIndexers.length === 0 && !(mediaType && tmdbId && (mediaType === 'movie' || selectedSeason !== null)))}
                     className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
                 >
                     {loading && results.length === 0 ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
                     Rechercher
                 </button>
             </div>
+
+            {/* Season & Episode Selector for TV */}
+            {mediaType === 'tv' && seasons && seasons.length > 0 && (
+                <div className="flex flex-col gap-2 bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-xl animate-in slide-in-from-top-2">
+                    <div className="flex items-center gap-2 mb-1">
+                        <div className="p-1.5 bg-indigo-500/20 rounded-lg">
+                            <Tv className="h-3.5 w-3.5 text-indigo-400" />
+                        </div>
+                        <span className="text-sm font-medium text-indigo-300">
+                            Configuration de la recherche
+                        </span>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        {/* Season Selector */}
+                        <div className="flex-1 flex flex-col gap-1">
+                            <label className="text-xs text-indigo-300/70 font-medium ml-1">Saison</label>
+                            <select 
+                                value={selectedSeason ?? ''}
+                                onChange={(e) => {
+                                    const val = e.target.value ? parseInt(e.target.value) : null
+                                    setSelectedSeason(val)
+                                    // Reset episode when season changes, unless it's the same season (unlikely here)
+                                    if (val !== selectedSeason) setSelectedEpisode(null)
+                                }}
+                                className="w-full bg-gray-900/50 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all hover:bg-gray-900/80"
+                            >
+                                <option value="">-- Sélectionner une saison --</option>
+                                {seasons.filter((s: any) => s.season_number > 0).map((season: any) => (
+                                    <option key={season.season_number} value={season.season_number}>
+                                        {season.name} (Saison {season.season_number}) - {season.episode_count} épisodes
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Episode Selector */}
+                        <div className="flex-1 flex flex-col gap-1">
+                            <label className="text-xs text-indigo-300/70 font-medium ml-1">Épisode</label>
+                            <select 
+                                value={selectedEpisode ?? ''}
+                                onChange={(e) => setSelectedEpisode(e.target.value ? parseInt(e.target.value) : null)}
+                                disabled={selectedSeason === null || loadingEpisodes}
+                                className="w-full bg-gray-900/50 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all hover:bg-gray-900/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <option value="">Toute la saison (Pack)</option>
+                                {loadingEpisodes ? (
+                                    <option disabled>Chargement des épisodes...</option>
+                                ) : (
+                                    episodeList.map((episode: any) => (
+                                        <option key={episode.id} value={episode.episode_number}>
+                                            E{episode.episode_number} - {episode.name}
+                                        </option>
+                                    ))
+                                )}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Expanded Filters */}
             {showFilters && (
@@ -466,7 +662,10 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
                                 {results.length === 0 && !loading ? (
                                     <tr>
                                         <td colSpan={7} className="px-4 py-12 text-center text-gray-500 italic">
-                                            Aucun résultat trouvé
+                                            <div className="flex flex-col items-center justify-center">
+                                                <Search className="h-12 w-12 mb-4 opacity-20" />
+                                                <p>Aucun résultat trouvé</p>
+                                            </div>
                                         </td>
                                     </tr>
                                 ) : (
@@ -516,7 +715,7 @@ export function ProwlarrSearch({ title }: ProwlarrSearchProps) {
                                             <td className="px-4 py-3">
                                                 {canManage && (
                                                 <button
-                                                    onClick={() => handleDownload(result.guid, result.downloadUrl || result.magnetUrl)}
+                                                    onClick={() => handleDownload(result.guid, result.downloadUrl || result.magnetUrl, result.indexerId)}
                                                     disabled={downloading === result.guid || downloadSuccess === result.guid}
                                                     className={`p-2.5 rounded-lg transition-all active:scale-95 ${
                                                         downloadSuccess === result.guid

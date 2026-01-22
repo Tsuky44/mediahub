@@ -85,3 +85,66 @@ export async function getSeriesEpisodes(tmdbId: number) {
     return { error: error.message }
   }
 }
+
+export async function triggerAutomaticSearch(
+    mediaType: 'movie' | 'tv',
+    tmdbId: number,
+    tvdbId?: number,
+    seasonNumber?: number,
+    episodeNumber?: number
+) {
+    try {
+        if (mediaType === 'movie') {
+            const radarr = await getRadarrServiceForUser()
+            if (!radarr) return { error: 'Radarr not configured' }
+            
+            const movie = await radarr.getMovieByTmdbId(tmdbId)
+            if (!movie || !movie.id) return { error: 'Movie not found in Radarr' }
+            
+            const result = await radarr.sendCommand('MoviesSearch', { movieIds: [movie.id] })
+            if (!result.success) return { error: result.error }
+            return { success: true, message: 'Recherche automatique lancée' }
+        } else {
+             const sonarr = await getSonarrServiceForUser()
+             if (!sonarr) return { error: 'Sonarr not configured' }
+             
+             let seriesId: number | undefined;
+             
+             if (tvdbId) {
+                 const series = await sonarr.getSeriesByTvdbId(tvdbId)
+                 if (series) seriesId = series.id
+             }
+             
+             if (!seriesId) {
+                  const tmdbService = await getTmdbServiceForUser()
+                  if (!tmdbService) return { error: 'TMDB service not configured' }
+                  const externalIds = await tmdbService.getExternalIds('tv', tmdbId)
+                  if (!externalIds?.tvdb_id) return { error: 'TVDB ID not found' }
+                  const series = await sonarr.getSeriesByTvdbId(externalIds.tvdb_id)
+                  if (!series) return { error: 'Series not found in Sonarr' }
+                  seriesId = series.id
+             }
+
+             if (!seriesId) return { error: 'Series not found in Sonarr' }
+
+             if (episodeNumber !== undefined && seasonNumber !== undefined) {
+                 const episodes = await sonarr.getEpisodes(seriesId)
+                 const episode = episodes.find((e: any) => e.seasonNumber === seasonNumber && e.episodeNumber === episodeNumber)
+                 if (!episode) return { error: 'Episode not found in Sonarr' }
+                 
+                 const result = await sonarr.sendCommand('EpisodeSearch', { episodeIds: [episode.id] })
+                 if (!result.success) return { error: result.error }
+             } else if (seasonNumber !== undefined) {
+                 const result = await sonarr.sendCommand('SeasonSearch', { seriesId, seasonNumber })
+                 if (!result.success) return { error: result.error }
+             } else {
+                 const result = await sonarr.sendCommand('SeriesSearch', { seriesId })
+                 if (!result.success) return { error: result.error }
+             }
+             return { success: true, message: 'Recherche automatique lancée' }
+        }
+    } catch (error: any) {
+        console.error('Auto search error:', error)
+        return { error: error.message }
+    }
+}

@@ -95,14 +95,25 @@ export async function POST(request: NextRequest) {
       setField('plexToken', plex_token)
       setField('jellyfinUrl', jellyfin_url)
       setField('jellyfinApiKey', jellyfin_api_key)
-      setField('type', type)
+      
+      // Handle type separately to avoid null
+      if (type) {
+        updateData['type'] = type
+      }
       
       console.log('[Settings API] updateData:', JSON.stringify(updateData, null, 2))
       
       try {
-        await (prisma as any).instance.update({
+        await (prisma as any).instance.upsert({
           where: { id: instanceId },
-          data: updateData
+          update: updateData,
+          create: { 
+            id: instanceId,
+            name: `Instance ${instanceId}`,
+            slug: `instance-${instanceId}`,
+            type: type || 'emby',
+            ...updateData 
+          }
         })
         console.log('[Settings API] Instance core settings updated successfully')
       } catch (prismaError: any) {
