@@ -49,7 +49,7 @@ export async function addTorrent(formData: FormData) {
     // Filter out empty files if any (sometimes empty input sends empty file)
     const validFiles = files.filter(f => f.size > 0)
 
-    await qbtService.addTorrent(urls, validFiles)
+    await qbtService.addTorrent(urls || '', validFiles)
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
