@@ -95,7 +95,8 @@ export async function checkDownloadStatus(
                         const qbit = await getQBittorrentServiceForUser()
                         if (qbit) {
                             const torrents = await qbit.getTorrents()
-                            const torrent = torrents.find(t => t.hash.toLowerCase() === item.downloadId.toLowerCase())
+                            const downloadId = item.downloadId
+                            const torrent = torrents.find(t => t.hash.toLowerCase() === downloadId.toLowerCase())
                             if (torrent) {
                                 qbitStats = {
                                     progress: torrent.progress * 100,
@@ -229,7 +230,8 @@ export async function checkDownloadStatus(
                             // Check for qBittorrent stats for this specific item
                             let qbitStats = null
                             if (downloadingItem.downloadId) {
-                                const torrent = qbitTorrents.find((t: any) => t.hash.toLowerCase() === downloadingItem.downloadId!.toLowerCase())
+                                const downloadId = downloadingItem.downloadId
+                                const torrent = qbitTorrents.find((t: any) => t.hash.toLowerCase() === downloadId.toLowerCase())
                                 if (torrent) {
                                     qbitStats = {
                                         progress: torrent.progress * 100,
