@@ -11,6 +11,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  experimental: {
+    turbo: {
+      resolveAlias: {
+        ssh2: 'ssh2',
+        dockerode: 'dockerode'
+      }
+    }
+  },
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals.push('ssh2', 'dockerode');
