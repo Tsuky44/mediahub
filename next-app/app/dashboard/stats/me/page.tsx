@@ -10,6 +10,30 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 
+interface WatchHistoryItem {
+  Id?: string | number;
+  ItemId?: string;
+  NowPlayingItemId?: string;
+  UserId?: string;
+  UserName?: string;
+  Name?: string;
+  SeriesName?: string;
+  SeriesId?: string;
+  TmdbId?: string;
+  SeasonName?: string;
+  IndexNumber?: number;
+  ParentIndexNumber?: number;
+  Type?: string;
+  Client?: string;
+  DeviceName?: string;
+  ActivityDateInserted?: string;
+  DateCreated?: string;
+  PlaybackDuration?: number;
+  RunTimeTicks?: number;
+  Source?: string;
+  DateInserted?: string;
+}
+
 export const dynamic = 'force-dynamic'
 
 /**
@@ -370,7 +394,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
     const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']
     const activity = monthNames.map(month => ({ name: month, value: 0 }))
     historyArray.forEach((item: WatchHistoryItem) => {
-      const dateString = item.ActivityDateInserted || item.DateCreated || (item as any).DateInserted
+      const dateString = item.ActivityDateInserted || item.DateCreated || item.DateInserted
       if (!dateString) return
       const date = new Date(dateString)
       const monthIdx = date.getMonth()

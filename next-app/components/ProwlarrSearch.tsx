@@ -128,8 +128,9 @@ export function ProwlarrSearch({ title, canManage = true, mediaType, tmdbId, tvd
           )
       }
 
-      if (res.error) {
-        setError(res.error)
+      const anyRes = res as any
+      if (anyRes.error) {
+        setError(anyRes.error)
       } else {
         const newResults = res.results || []
         if (append) {
@@ -262,8 +263,10 @@ export function ProwlarrSearch({ title, canManage = true, mediaType, tmdbId, tvd
          res = await downloadTorrent(url)
       }
 
-      if (res.error) {
-        alert(`Erreur: ${res.error}`)
+      const anyRes = res as any
+      const errorMsg = anyRes.error || (anyRes.success === false ? anyRes.message : null)
+      if (errorMsg) {
+        alert(`Erreur: ${errorMsg}`)
       } else {
         setDownloadSuccess(guid)
         setTimeout(() => setDownloadSuccess(null), 3000)
@@ -306,7 +309,9 @@ export function ProwlarrSearch({ title, canManage = true, mediaType, tmdbId, tvd
             res = await downloadTorrent(url)
         }
 
-        if (res.error) {
+        const anyRes = res as any
+        const errorMsg = anyRes.error || (anyRes.success === false ? anyRes.message : null)
+        if (errorMsg) {
           failCount++
         } else {
           successCount++

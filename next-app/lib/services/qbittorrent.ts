@@ -1,5 +1,4 @@
 import axios, { AxiosInstance } from 'axios'
-import { getSetting } from '@/lib/settings'
 
 export interface Torrent {
   hash: string
@@ -192,16 +191,4 @@ export class QBittorrentService {
         url: '/api/v2/torrents/tags'
     })
   }
-}
-
-export async function getQBittorrentServiceForUser() {
-  const [url, user, pass] = await Promise.all([
-    getSetting('qbittorrent_url'),
-    getSetting('qbittorrent_username'),
-    getSetting('qbittorrent_password')
-  ])
-
-  if (!url) return null
-
-  return new QBittorrentService(url, user, pass)
 }
