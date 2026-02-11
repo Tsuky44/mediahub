@@ -88,8 +88,11 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const userPermissions = user.permissions || []
   const canManage = userRole === 'admin' || userPermissions.includes('stats.manage')
 
+  // Granular stats permissions
+  const hasGlobalView = userRole === 'admin' || userPermissions.includes('stats.view_global')
+  const hasSelfView = userRole === 'admin' || userPermissions.includes('stats.view_self')
 
-  if (userRole !== 'admin' && !userPermissions.includes('stats.view')) {
+  if (!hasGlobalView && !hasSelfView) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <div className="p-4 rounded-full bg-red-500/10 text-red-500">
@@ -202,25 +205,41 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     });
   });
 
+  const activityWhere: any = {
+     instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
+     source: sourceFilter !== 'all' ? sourceFilter : undefined,
+     startTime: {
+       gte: startDate,
+       lte: endDate
+     }
+  }
+
+  const liveWhere: any = {
+     instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
+     source: sourceFilter !== 'all' ? sourceFilter : undefined,
+  }
+
+  // Apply self-only filter if user doesn't have global view
+  if (!hasGlobalView && hasSelfView) {
+      if (user.embyUserId) {
+        activityWhere.embyUserId = user.embyUserId
+        liveWhere.userId = user.embyUserId
+      } else {
+        // Fallback by name if ID is missing
+        activityWhere.userName = user.name
+        liveWhere.userName = user.name
+      }
+  }
+
   const [historyRaw, embySessionsRaw] = await Promise.all([
     (prisma as any).embyActivityLog.findMany({
-       where: {
-         instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
-         source: sourceFilter !== 'all' ? sourceFilter : undefined,
-         startTime: {
-           gte: startDate,
-           lte: endDate
-         }
-       },
+       where: activityWhere,
        orderBy: {
          startTime: 'desc'
        }
      }),
      (prisma as any).embyLiveSession.findMany({
-       where: {
-         instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
-         source: sourceFilter !== 'all' ? sourceFilter : undefined,
-       }
+       where: liveWhere
      })
    ])
 

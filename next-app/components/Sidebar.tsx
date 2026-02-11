@@ -23,10 +23,27 @@ export function Sidebar() {
 
   const filteredNavigation = navigation.filter(item => {
     if (item.href === '/dashboard/downloads') {
-      return userRole === 'admin' || userRole === 'user_plus'
+      return userRole === 'admin' || 
+             (session?.user as any)?.permissions?.includes('downloads.view')
     }
     if (item.href === '/dashboard/docker') {
-      return userRole === 'admin'
+      return userRole === 'admin' || 
+             (session?.user as any)?.permissions?.includes('docker.view')
+    }
+    if (item.href === '/dashboard/requests') {
+         // Liste des demandes (pour tout le monde qui a view)
+         // La création est une autre permission, mais l'accès à l'onglet dépend de view
+         return userRole === 'admin' || 
+                (session?.user as any)?.permissions?.includes('requests.search.view')
+     }
+    if (item.href === '/dashboard/stats') {
+        return userRole === 'admin' || 
+               (session?.user as any)?.permissions?.includes('stats.view_global') || 
+               (session?.user as any)?.permissions?.includes('stats.view_self')
+    }
+    if (item.href === '/dashboard/media') {
+        return userRole === 'admin' || 
+               (session?.user as any)?.permissions?.includes('media.view')
     }
     return true
   })

@@ -13,64 +13,26 @@ interface Permission {
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string, icon: any }> = {
-    'DASHBOARD': { label: 'Tableau de bord', icon: Layout },
-    'REQUESTS': { label: 'Demandes & Médias', icon: MessageSquare },
-    'STATS': { label: 'Statistiques', icon: BarChart3 },
-    'DOWNLOADS': { label: 'Téléchargements', icon: Download },
-    'DOCKER': { label: 'Docker', icon: Server },
-    'ADMIN': { label: 'Administration', icon: Shield },
+    'Paramètres': { label: 'Paramètres & Admin', icon: Settings },
+    'Docker': { label: 'Infrastructure Docker', icon: Server },
+    'Téléchargements': { label: 'Téléchargements', icon: Download },
+    'Ma médiathèque': { label: 'Ma médiathèque', icon: Film },
+    'Demandes': { label: 'Demandes', icon: MessageSquare },
+    'Statistiques': { label: 'Statistiques', icon: BarChart3 },
 }
 
 const getTabCategory = (rawCategory: string): string => {
-    const cat = rawCategory.toUpperCase()
-    if (['ADMIN', 'USERS', 'ROLES', 'SETTINGS', 'LOGS', 'SYSTEM'].includes(cat)) return 'ADMIN'
-    if (['REQUESTS', 'MEDIA'].includes(cat)) return 'REQUESTS'
-    if (['STATS'].includes(cat)) return 'STATS'
-    if (['DOWNLOADS'].includes(cat)) return 'DOWNLOADS'
-    if (['DOCKER'].includes(cat)) return 'DOCKER'
-    if (['DASHBOARD'].includes(cat)) return 'DASHBOARD'
-    return 'ADMIN' // Fallback
+    // La catégorie vient directement de la DB
+    if (CATEGORY_CONFIG[rawCategory]) return rawCategory
+    // Fallback mapping si besoin
+    if (rawCategory === 'Système' || rawCategory === 'Utilisateurs') return 'Paramètres'
+    if (rawCategory === 'Infrastructure') return 'Docker'
+    if (rawCategory === 'Médias') return 'Ma médiathèque'
+    if (rawCategory === 'Demander' || rawCategory === 'Mes demandes') return 'Demandes'
+    return 'Paramètres'
 }
 
-const getPermissionLabel = (name: string) => {
-    switch (name) {
-        // Administration
-        case 'admin.access': return 'Accès Administration'
-        case 'users.view': return 'Voir les utilisateurs'
-        case 'users.manage': return 'Gérer les utilisateurs'
-        case 'roles.manage': return 'Gérer les rôles & permissions'
-        case 'settings.view': return 'Voir les réglages'
-        case 'settings.manage': return 'Modifier les réglages'
-        case 'logs.view': return 'Voir les logs système'
-        
-        // Docker
-        case 'docker.view': return 'Voir les conteneurs'
-        case 'docker.manage': return 'Contrôler les conteneurs (Start/Stop)'
-        
-        // Téléchargements
-        case 'downloads.view': return 'Voir les téléchargements'
-        case 'downloads.manage': return 'Gérer les téléchargements'
-        
-        // Requêtes
-        case 'requests.view': return 'Voir toutes les demandes'
-        case 'requests.create': return 'Demander des films & séries'
-        case 'requests.manage': return 'Gérer les demandes (Approuver/Refuser)'
-        
-        // Médias
-        case 'media.manage': return 'Gérer la médiathèque (Emby)'
-        
-        // Stats
-        case 'stats.view': return 'Voir les statistiques'
-        
-        // Dashboard
-        case 'dashboard.view': return 'Accès Tableau de bord'
-
-        default:
-            if (name.endsWith('.manage')) return 'Contrôle Total'
-            if (name.endsWith('.view')) return 'Lecture Seule'
-            return name
-    }
-}
+// Plus besoin de getPermissionLabel car la description vient de la DB
 
 interface Role {
     id: string
@@ -111,7 +73,7 @@ export default function RoleManagement({ readOnly = false }: { readOnly?: boolea
                     // Select first available category based on order
                     if (permsData.length > 0) {
                         const tabs = new Set(permsData.map((p: Permission) => getTabCategory(p.category)))
-                        const order = ['DASHBOARD', 'REQUESTS', 'STATS', 'DOWNLOADS', 'DOCKER', 'ADMIN']
+                        const order = ['Demandes', 'Ma médiathèque', 'Téléchargements', 'Statistiques', 'Docker', 'Paramètres']
                         const firstTab = order.find(t => tabs.has(t)) || Array.from(tabs)[0] as string
                         setSelectedCategory(firstTab)
                     }
@@ -291,7 +253,7 @@ export default function RoleManagement({ readOnly = false }: { readOnly?: boolea
                                 <div className="flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 custom-scrollbar">
                                     {Object.keys(groupedPermissions)
                                         .sort((a, b) => {
-                                            const order = ['DASHBOARD', 'REQUESTS', 'STATS', 'DOWNLOADS', 'DOCKER', 'ADMIN']
+                                            const order = ['Demander', 'Mes demandes', 'Ma médiathèque', 'Téléchargements', 'Statistiques', 'Docker', 'Paramètres']
                                             return order.indexOf(a) - order.indexOf(b)
                                         })
                                         .map((category) => {
@@ -387,7 +349,7 @@ export default function RoleManagement({ readOnly = false }: { readOnly?: boolea
                                                         </div>
                                                         <div className="flex-1">
                                                             <div className={clsx("font-bold transition-colors", isSelected ? "text-indigo-400" : "text-gray-300")}>
-                                                                {getPermissionLabel(perm.name)}
+                                                                {perm.description || perm.name}
                                                             </div>
                                                             <div className="text-sm text-gray-500 mt-1 leading-relaxed">
                                                                 {perm.description}

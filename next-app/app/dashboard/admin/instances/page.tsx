@@ -16,6 +16,11 @@ export default async function InstancesPage() {
     orderBy: { createdAt: 'desc' }
   })
 
+  const inviteCodes = await (prisma as any).inviteCode.findMany({
+    where: { used: false },
+    orderBy: { createdAt: 'desc' }
+  })
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       <div className="flex flex-col space-y-2">
@@ -23,7 +28,7 @@ export default async function InstancesPage() {
         <p className="text-gray-400">Créez et gérez des instances isolées pour vos amis.</p>
       </div>
 
-      <InstancesClient initialInstances={instances} />
+      <InstancesClient initialInstances={instances} initialInviteCodes={inviteCodes} />
     </div>
   )
 }

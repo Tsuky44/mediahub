@@ -1,0 +1,32 @@
+services:
+  app:
+    build:
+      context: ./next-app
+      dockerfile: Dockerfile
+      target: runner
+    container_name: mediahub-app
+    ports:
+      - "3008:3000"
+    environment:
+      - DATABASE_URL=file:/data/db/dev.db
+      - NODE_ENV=production
+      # - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - ./data:/data/db
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    # Uncomment if you encounter permission issues with Docker socket
+    # user: root
+
+  tracker:
+    build:
+      context: ./next-app
+      dockerfile: Dockerfile
+      target: tracker
+    container_name: mediahub-tracker
+    environment:
+      - DATABASE_URL=file:/data/db/dev.db
+      - NODE_ENV=production
+    volumes:
+      - ./data:/data/db
+    restart: unless-stopped

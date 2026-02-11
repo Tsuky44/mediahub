@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Loader2, Server, CheckCircle2 } from 'lucide-react'
+import { Loader2, Server, CheckCircle2, Ticket, ArrowLeft } from 'lucide-react'
+import { createInstanceWithInvite } from '@/app/actions/instances'
+import { toast } from 'react-hot-toast'
 
 interface Instance {
   id: number;
@@ -25,6 +27,34 @@ export default function LoginForm() {
   const [discoveredInstances, setDiscoveredInstances] = useState<Instance[]>([])
   const [showInstanceModal, setShowInstanceModal] = useState(false)
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null)
+  const [showCreateInstance, setShowCreateInstance] = useState(false)
+  const [inviteFormData, setInviteFormData] = useState({
+    name: '',
+    slug: '',
+    embyUrl: '',
+    embyApiKey: '',
+    inviteCode: ''
+  })
+
+  const handleCreateWithInvite = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      const res = await createInstanceWithInvite(inviteFormData)
+      if (res.success) {
+        toast.success('Instance créée ! Connectez-vous maintenant.')
+        setShowCreateInstance(false)
+        setInviteFormData({ name: '', slug: '', embyUrl: '', embyApiKey: '', inviteCode: '' })
+        // On redirige vers la même page mais avec le slug de la nouvelle instance
+        router.push(`/login?instance=${res.instance.slug}`)
+      }
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const performSignIn = async (slug: string) => {
     try {
@@ -91,6 +121,102 @@ export default function LoginForm() {
     setShowInstanceModal(false);
     setLoading(true);
     await performSignIn(instance.slug);
+  }
+
+  if (showCreateInstance) {
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+        <div className="flex items-center gap-2 mb-4">
+          <button 
+            onClick={() => setShowCreateInstance(false)}
+            className="p-2 -ml-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-white/5"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h2 className="text-xl font-bold text-white">Créer une instance</h2>
+        </div>
+
+        {error && (
+          <div className="rounded-md bg-red-900/50 p-4 border border-red-900">
+            <div className="flex">
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-200">{error}</h3>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleCreateWithInvite} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Code d'invitation</label>
+            <input
+              type="text"
+              required
+              placeholder="XXXX-XXXX"
+              value={inviteFormData.inviteCode}
+              onChange={e => setInviteFormData({ ...inviteFormData, inviteCode: e.target.value.toUpperCase() })}
+              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm px-4 py-3 transition-all duration-300 font-mono tracking-wider"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Nom de votre instance</label>
+            <input
+              type="text"
+              required
+              placeholder="Mon Serveur"
+              value={inviteFormData.name}
+              onChange={e => setInviteFormData({ ...inviteFormData, name: e.target.value })}
+              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Identifiant URL (Slug)</label>
+            <input
+              type="text"
+              required
+              placeholder="mon-serveur"
+              value={inviteFormData.slug}
+              onChange={e => setInviteFormData({ ...inviteFormData, slug: e.target.value })}
+              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
+            />
+          </div>
+
+          <div className="pt-2 border-t border-white/5">
+            <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">URL Emby</label>
+            <input
+              type="url"
+              required
+              placeholder="https://votre-emby.com"
+              value={inviteFormData.embyUrl}
+              onChange={e => setInviteFormData({ ...inviteFormData, embyUrl: e.target.value })}
+              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Clé API Emby</label>
+            <input
+              type="password"
+              required
+              placeholder="Votre clé API"
+              value={inviteFormData.embyApiKey}
+              onChange={e => setInviteFormData({ ...inviteFormData, embyApiKey: e.target.value })}
+              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex w-full justify-center rounded-2xl border border-transparent bg-amber-500 px-4 py-3 text-sm font-bold text-black shadow-xl shadow-amber-500/20 hover:bg-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 active:scale-[0.98] mt-6"
+          >
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Créer mon instance'}
+          </button>
+        </form>
+      </div>
+    )
   }
 
   return (
@@ -164,6 +290,24 @@ export default function LoginForm() {
             )}
           </button>
         </div>
+
+        <div className="relative py-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-white/10"></div>
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-transparent px-2 text-gray-500 backdrop-blur-xl">Ou</span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowCreateInstance(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white hover:bg-white/10 transition-all duration-300 active:scale-[0.98]"
+        >
+          <Ticket className="w-4 h-4 text-amber-400" />
+          Créer une instance
+        </button>
       </form>
 
       {/* Instance Selection Modal */}

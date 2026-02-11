@@ -289,11 +289,13 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                                 />
                             )}
                             
+                            {((user as any)?.role === 'admin' || (user as any)?.permissions?.includes('requests.details.manage')) && (
                             <ManageMediaButton 
                                 tmdbId={tmdbId} 
                                 mediaType={mediaType} 
                                 title={title} 
                             />
+                            )}
 
                             {mediaType === 'movie' && (user as any)?.role === 'admin' && (
                                 <SearchActions 

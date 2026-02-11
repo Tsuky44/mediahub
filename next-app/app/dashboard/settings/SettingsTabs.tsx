@@ -25,14 +25,16 @@ export default function SettingsTabs({
     userPermissions
 }: SettingsTabsProps) {
     const isAdmin = userRole === 'admin'
-    const hasSettingsView = isAdmin || userPermissions.includes('settings.view') || userPermissions.includes('settings.manage')
-    const hasUsersView = isAdmin || userPermissions.includes('users.view') || userPermissions.includes('users.manage')
-    const hasRolesView = isAdmin || userPermissions.includes('roles.manage')
-    const hasLinkingView = isAdmin || userPermissions.includes('settings.manage')
+    // User requested strict restriction: "tout se qui est dans l'onglet paramètre laisse le pour les administrateur"
+    // So we remove granular checks for settings and force admin only.
+    const hasSettingsView = isAdmin
+    const hasUsersView = isAdmin
+    const hasRolesView = isAdmin
+    const hasLinkingView = isAdmin
 
-    const canManageSettings = isAdmin || userPermissions.includes('settings.manage')
-    const canManageUsers = isAdmin || userPermissions.includes('users.manage')
-    const canManageRoles = isAdmin || userPermissions.includes('roles.manage')
+    const canManageSettings = isAdmin
+    const canManageUsers = isAdmin
+    const canManageRoles = isAdmin
 
     // Determine initial active tab based on permissions
     const getInitialTab = () => {

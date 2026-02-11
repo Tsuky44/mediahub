@@ -39,10 +39,22 @@ export function Navbar() {
 
   const filteredNavigation = navigation.filter(item => {
     if (item.href === '/dashboard/downloads') {
-      return userRole === 'admin' || userPermissions.includes('downloads.view') || userPermissions.includes('downloads.manage')
+      return userRole === 'admin' || userPermissions.includes('downloads.view')
     }
     if (item.href === '/dashboard/docker') {
-      return userRole === 'admin' || userPermissions.includes('docker.view') || userPermissions.includes('docker.manage')
+      return userRole === 'admin' || userPermissions.includes('docker.view')
+    }
+    if (item.href === '/dashboard/requests') {
+       return userRole === 'admin' || userPermissions.includes('requests.search.view')
+     }
+     if (item.href === '/dashboard/requests/list') {
+       return userRole === 'admin' || userPermissions.includes('requests.list.view')
+     }
+    if (item.href === '/dashboard/media') {
+      return userRole === 'admin' || userPermissions.includes('media.view')
+    }
+    if (item.href === '/dashboard/stats') {
+      return userRole === 'admin' || userPermissions.includes('stats.view_global') || userPermissions.includes('stats.view_self')
     }
     return true
   })
@@ -201,7 +213,7 @@ export function Navbar() {
                           Mes Statistiques
                         </Link>
                         
-                        {(session?.user as any)?.role === 'admin' && (
+                        {((session?.user as any)?.role === 'admin' || (session?.user as any)?.permissions?.includes('settings.view')) && (
                           <>
                             <Link 
                               href="/dashboard/settings" 

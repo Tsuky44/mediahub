@@ -125,6 +125,15 @@ export const authOptions: NextAuthOptions = {
           })
 
           const email = embyUser.User.Email || `${embyUser.User.Name.toLowerCase()}@${instanceSlug}.local`
+          
+          // Déterminer le rôle à attribuer
+          const shouldBeAdmin = isFirstUser || embyUser.User.Policy?.IsAdministrator
+          let roleId = undefined
+          
+          if (shouldBeAdmin) {
+            const adminRole = await (prisma as any).role.findUnique({ where: { name: 'admin' } })
+            if (adminRole) roleId = adminRole.id
+          }
 
           if (!user) {
             user = await (prisma as any).user.create({
@@ -134,7 +143,8 @@ export const authOptions: NextAuthOptions = {
                 name: embyUser.User.Name,
                 embyUserId: embyUser.User.Id,
                 image: embyUser.User.PrimaryImageTag ? embyService.getItemImageUrl(embyUser.User.Id) : null,
-                role: isFirstUser || embyUser.User.Policy?.IsAdministrator ? 'admin' : 'user'
+                role: shouldBeAdmin ? 'admin' : 'user',
+                roleId: roleId // Peut être undefined (donc null) pour les users normaux
               },
               include: {
                 userRole: { include: { permissions: true } },
@@ -143,13 +153,22 @@ export const authOptions: NextAuthOptions = {
             })
           } else {
             // Mettre à jour les infos si nécessaire
+            const newRole = user.role === 'admin' || shouldBeAdmin ? 'admin' : 'user'
+            
+            // Si l'utilisateur devient admin ou l'était déjà, on s'assure qu'il a le roleId
+            let newRoleId = user.roleId
+            if (newRole === 'admin' && (!user.roleId || user.role !== 'admin')) {
+               const adminRole = await (prisma as any).role.findUnique({ where: { name: 'admin' } })
+               if (adminRole) newRoleId = adminRole.id
+            }
+
             user = await (prisma as any).user.update({
               where: { id: user.id },
               data: {
                 name: embyUser.User.Name,
                 image: embyUser.User.PrimaryImageTag ? embyService.getItemImageUrl(embyUser.User.Id) : user.image,
-                // On garde le rôle admin si l'utilisateur l'est déjà ou si Emby le dit
-                role: user.role === 'admin' || embyUser.User.Policy?.IsAdministrator ? 'admin' : 'user'
+                role: newRole,
+                roleId: newRoleId
               },
               include: {
                 userRole: { include: { permissions: true } },

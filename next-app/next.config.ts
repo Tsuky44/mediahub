@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   /* config options here */
   reactCompiler: true,
   images: {
@@ -16,6 +17,14 @@ const nextConfig: NextConfig = {
       config.externals.push('ssh2', 'dockerode');
     }
     return config;
+  },
+  experimental: {
+    turbo: {
+      resolveAlias: {
+        'ssh2': 'ssh2',
+        'dockerode': 'dockerode',
+      },
+    },
   },
 };
 

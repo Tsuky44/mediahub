@@ -58,9 +58,10 @@ interface InfiniteRequestListProps {
         total: number
         totalPages: number
     }
+    canManage?: boolean
 }
 
-export function InfiniteRequestList({ initialData }: InfiniteRequestListProps) {
+export function InfiniteRequestList({ initialData, canManage = false }: InfiniteRequestListProps) {
     const [items, setItems] = useState(initialData.results)
     const [page, setPage] = useState(1)
     const [hasMore, setHasMore] = useState(initialData.totalPages > 1)
@@ -72,6 +73,7 @@ export function InfiniteRequestList({ initialData }: InfiniteRequestListProps) {
     const { ref, inView } = useInView()
 
     const toggleSelection = (requestId: number) => {
+        if (!canManage) return
         setSelectedIds(prev => 
             prev.includes(requestId) 
                 ? prev.filter(id => id !== requestId) 
@@ -80,6 +82,7 @@ export function InfiniteRequestList({ initialData }: InfiniteRequestListProps) {
     }
 
     const toggleSelectAll = () => {
+        if (!canManage) return
         if (selectedIds.length === items.length) {
             setSelectedIds([])
         } else {
@@ -237,7 +240,7 @@ export function InfiniteRequestList({ initialData }: InfiniteRequestListProps) {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    {selectedIds.length > 0 && (
+                    {canManage && selectedIds.length > 0 && (
                         <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-300">
                             <button
                                 onClick={handleBulkDelete}
@@ -263,17 +266,19 @@ export function InfiniteRequestList({ initialData }: InfiniteRequestListProps) {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <button 
-                        onClick={toggleSelectAll}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white hover:bg-zinc-800/50 transition-all text-sm font-medium"
-                    >
-                        {selectedIds.length === items.length && items.length > 0 ? (
-                            <CheckSquare className="w-4 h-4 text-indigo-400" />
-                        ) : (
-                            <Square className="w-4 h-4" />
-                        )}
-                        Tout sélectionner
-                    </button>
+                    {canManage && (
+                        <button 
+                            onClick={toggleSelectAll}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white hover:bg-zinc-800/50 transition-all text-sm font-medium"
+                        >
+                            {selectedIds.length === items.length && items.length > 0 ? (
+                                <CheckSquare className="w-4 h-4 text-indigo-400" />
+                            ) : (
+                                <Square className="w-4 h-4" />
+                            )}
+                            Tout sélectionner
+                        </button>
+                    )}
 
                     <button 
                         onClick={handleRefresh}
@@ -397,18 +402,20 @@ export function InfiniteRequestList({ initialData }: InfiniteRequestListProps) {
                                             </Link>
                                             
                                             <div className="flex items-center gap-3 self-start">
+                                                {canManage && (
                                                 <button
-                              onClick={(e) => handleDelete(e, request.id, media.title || 'Sans titre', media.tmdbId, mediaType)}
-                              disabled={deletingId === request.id}
-                              className="p-2 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all disabled:opacity-50 relative z-10"
-                              title="Supprimer la demande"
-                          >
+                                                    onClick={(e) => handleDelete(e, request.id, media.title || 'Sans titre', media.tmdbId, mediaType)}
+                                                    disabled={deletingId === request.id}
+                                                    className="p-2 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all disabled:opacity-50 relative z-10"
+                                                    title="Supprimer la demande"
+                                                >
                                                     {deletingId === request.id ? (
                                                         <Loader2 className="w-4 h-4 animate-spin" />
                                                     ) : (
                                                         <Trash2 className="w-4 h-4" />
                                                     )}
                                                 </button>
+                                                )}
                                             </div>
                                         </div>
 

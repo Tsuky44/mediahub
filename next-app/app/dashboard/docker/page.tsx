@@ -34,8 +34,9 @@ export default function DockerPage() {
   const user = session?.user as any
   const isAdmin = user?.role === 'admin'
   const permissions = user?.permissions || []
-  const canView = isAdmin || permissions.includes('docker.view') || permissions.includes('docker.manage')
+  const canView = isAdmin || permissions.includes('docker.view') || permissions.includes('docker.manage') || permissions.includes('docker.console')
   const canManage = isAdmin || permissions.includes('docker.manage')
+  const canConsole = isAdmin || permissions.includes('docker.console')
 
   const [containers, setContainers] = useState<DockerContainer[]>([])
   const [groups, setGroups] = useState<DockerGroup[]>([])
@@ -247,7 +248,7 @@ export default function DockerPage() {
                             >
                                 <FileText className="w-4 h-4" />
                             </button>
-                            {canManage && (
+                            {canConsole && (
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); setTerminalContainer(container) }}
                                     className="p-2 rounded-lg bg-zinc-500/5 hover:bg-zinc-500/20 text-zinc-500/70 hover:text-zinc-400 border border-zinc-500/10 hover:border-zinc-500/30 transition-all disabled:opacity-50"

@@ -1,9 +1,22 @@
 import { fetchUserRequests } from './actions'
 import { InfiniteRequestList } from './InfiniteRequestList'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
 export default async function RequestsListPage() {
+  const session = await getServerSession(authOptions)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = session?.user as any
+  const canView = user?.role === 'admin' || user?.permissions?.includes('requests.list.view')
+  const canManage = user?.role === 'admin' || user?.permissions?.includes('requests.list.manage')
+
+  if (!canView) {
+      redirect('/dashboard')
+  }
+
   const initialData = await fetchUserRequests(1, 20)
 
   return (
@@ -15,7 +28,7 @@ export default async function RequestsListPage() {
         </div>
       </div>
 
-      <InfiniteRequestList initialData={initialData} />
+      <InfiniteRequestList initialData={initialData} canManage={canManage} />
     </div>
   )
 }

@@ -32,8 +32,23 @@ model Instance {
   users             User[]
   watchEvents       WatchEvent[]
   watchLater        WatchLater[]
+  inviteCodes       InviteCode[]
 
   @@map("instances")
+}
+
+model InviteCode {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique
+  instanceId Int      @map("instance_id")
+  used       Boolean  @default(false)
+  usedBy     Int?     @unique @map("used_by")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  
+  instance   Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@map("invite_codes")
 }
 
 model User {
