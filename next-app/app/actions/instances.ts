@@ -108,12 +108,29 @@ export async function createInstanceWithInvite(data: {
   embyApiKey: string
   inviteCode: string
 }) {
-  const invite = await (prisma as any).inviteCode.findUnique({
-    where: { code: data.inviteCode.toUpperCase(), used: false }
-  })
+  // Check if this is the first instance (setup mode)
+  const instanceCount = await (prisma as any).instance.count()
+  const isFirstInstance = instanceCount === 0
 
-  if (!invite) {
-    throw new Error("Code d'invitation invalide ou déjà utilisé.")
+  if (!isFirstInstance) {
+    // Normal flow: require invite code
+    if (!data.inviteCode) {
+      throw new Error("Code d'invitation requis.")
+    }
+
+    const invite = await (prisma as any).inviteCode.findUnique({
+      where: { code: data.inviteCode.toUpperCase(), used: false }
+    })
+
+    if (!invite) {
+      throw new Error("Code d'invitation invalide ou déjà utilisé.")
+    }
+
+    // Mark invite as used after successful creation (transaction would be better but keeping it simple for now)
+    await (prisma as any).inviteCode.update({
+      where: { id: invite.id },
+      data: { used: true }
+    })
   }
 
   const slug = data.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-')
@@ -132,13 +149,8 @@ export async function createInstanceWithInvite(data: {
       slug,
       embyUrl: data.embyUrl,
       embyApiKey: data.embyApiKey,
-      isDefault: false,
+      isDefault: isFirstInstance, // First instance is always default
     }
-  })
-
-  await (prisma as any).inviteCode.update({
-    where: { id: invite.id },
-    data: { used: true }
   })
 
   return { success: true, instance }
