@@ -13,12 +13,14 @@ services:
       - NEXTAUTH_URL=http://localhost:3008
       - NEXTAUTH_SECRET=fc6d0136203923971842095817349502934851029384
       # - DOCKER_HOST=unix:///var/run/docker.sock
+    env_file:
+      - ./next-app/.env
     volumes:
       - ./data:/data/db
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     # Uncomment if you encounter permission issues with Docker socket
-    # user: root
+    user: root
 
   tracker:
     build:
@@ -31,6 +33,9 @@ services:
       - NODE_ENV=production
       - NEXTAUTH_URL=http://localhost:3008
       - NEXTAUTH_SECRET=fc6d0136203923971842095817349502934851029384
+    env_file:
+      - ./next-app/.env
     volumes:
       - ./data:/data/db
     restart: unless-stopped
+    user: root
