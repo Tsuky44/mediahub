@@ -6,8 +6,9 @@ services:
       target: runner
     container_name: mediahub-app
     ports:
-      - "3008:3000"
+      - "3008:3008"
     environment:
+      - PORT=3008
       - DATABASE_URL=file:/data/db/dev.db
       - NODE_ENV=production
       - NEXTAUTH_URL=http://localhost:3008
