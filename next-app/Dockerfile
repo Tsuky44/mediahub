@@ -36,6 +36,9 @@ RUN \
 FROM base AS runner
 WORKDIR /app
 
+# Install OpenSSL for Prisma
+RUN apk add --no-cache openssl
+
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
 
@@ -66,6 +69,9 @@ CMD ["node", "server.js"]
 # Tracker image
 FROM base AS tracker
 WORKDIR /app
+
+# Install OpenSSL for Prisma
+RUN apk add --no-cache openssl
 
 ENV NODE_ENV production
 
