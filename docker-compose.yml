@@ -27,6 +27,8 @@ services:
     environment:
       - DATABASE_URL=file:/data/db/dev.db
       - NODE_ENV=production
+      - NEXTAUTH_URL=http://localhost:3008
+      - NEXTAUTH_SECRET=super-secret-key-change-me
     volumes:
       - ./data:/data/db
     restart: unless-stopped
