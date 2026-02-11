@@ -441,6 +441,17 @@ export async function getSmbServiceByInstanceId(instanceId: number) {
  * Récupère le service TMDB pour l'utilisateur actuel ou pour une instance spécifique
  */
 export async function getTmdbServiceForUser(instanceId?: number) {
+  // FORCE USE OF HARDCODED API KEY AS REQUESTED BY USER - GLOBAL OVERRIDE
+  try {
+    const tmdbApiKey = '7f43cb4adbc635ccad5c04412b284d34'
+    console.debug(`[getTmdbServiceForUser] Service initialized with HARDCODED API Key (prefix: ${tmdbApiKey.substring(0, 4)}...)`)
+    return new TmdbService(tmdbApiKey)
+  } catch (error) {
+    console.error(`[getTmdbServiceForUser] Error initializing service:`, error)
+    return null
+  }
+
+  /*
   let targetInstanceId = instanceId
 
   if (!targetInstanceId) {
@@ -499,9 +510,5 @@ export async function getTmdbServiceForUser(instanceId?: number) {
     console.debug(`[getTmdbServiceForUser] Service initialized with API Key (prefix: ${tmdbApiKey.substring(0, 4)}...)`)
     return new TmdbService(tmdbApiKey)
     */
-  } catch (error) {
-    console.error(`[getTmdbServiceForUser] Error:`, error)
-    return null
-  }
 }
 
