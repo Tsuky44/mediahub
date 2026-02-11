@@ -36,8 +36,9 @@ RUN \
 FROM base AS runner
 WORKDIR /app
 
-# Install OpenSSL for Prisma
+# Install OpenSSL for Prisma and global prisma CLI
 RUN apk add --no-cache openssl
+RUN npm install -g prisma@5.22.0
 
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
@@ -57,6 +58,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
+COPY --from=builder --chown=nextjs:nodejs /app/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 USER nextjs
 
@@ -65,7 +68,7 @@ EXPOSE 3008
 ENV PORT 3008
 ENV HOSTNAME "0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["./entrypoint.sh"]
 
 # Tracker image
 FROM base AS tracker
