@@ -14,7 +14,7 @@ interface Instance {
   embyUrl: string;
 }
 
-export default function LoginForm() {
+export default function LoginForm({ hasInstances = true }: { hasInstances?: boolean }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
@@ -27,14 +27,21 @@ export default function LoginForm() {
   const [discoveredInstances, setDiscoveredInstances] = useState<Instance[]>([])
   const [showInstanceModal, setShowInstanceModal] = useState(false)
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null)
-  const [showCreateInstance, setShowCreateInstance] = useState(false)
+  const [showCreateInstance, setShowCreateInstance] = useState(!hasInstances)
   const [inviteFormData, setInviteFormData] = useState({
-    name: '',
-    slug: '',
+    name: 'Main Server',
+    slug: 'main',
     embyUrl: '',
     embyApiKey: '',
     inviteCode: ''
   })
+
+  // Force show create instance if no instances exist
+  useEffect(() => {
+    if (!hasInstances) {
+      setShowCreateInstance(true)
+    }
+  }, [hasInstances])
 
   const handleCreateWithInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -127,13 +134,17 @@ export default function LoginForm() {
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
         <div className="flex items-center gap-2 mb-4">
-          <button 
-            onClick={() => setShowCreateInstance(false)}
-            className="p-2 -ml-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-white/5"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <h2 className="text-xl font-bold text-white">Créer une instance</h2>
+          {hasInstances && (
+            <button 
+              onClick={() => setShowCreateInstance(false)}
+              className="p-2 -ml-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-white/5"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
+          <h2 className="text-xl font-bold text-white">
+            {hasInstances ? 'Créer une instance' : 'Configuration initiale'}
+          </h2>
         </div>
 
         {error && (
@@ -147,17 +158,19 @@ export default function LoginForm() {
         )}
 
         <form onSubmit={handleCreateWithInvite} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Code d'invitation</label>
-            <input
-              type="text"
-              required
-              placeholder="XXXX-XXXX"
-              value={inviteFormData.inviteCode}
-              onChange={e => setInviteFormData({ ...inviteFormData, inviteCode: e.target.value.toUpperCase() })}
-              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm px-4 py-3 transition-all duration-300 font-mono tracking-wider"
-            />
-          </div>
+          {hasInstances && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Code d'invitation</label>
+              <input
+                type="text"
+                required
+                placeholder="XXXX-XXXX"
+                value={inviteFormData.inviteCode}
+                onChange={e => setInviteFormData({ ...inviteFormData, inviteCode: e.target.value.toUpperCase() })}
+                className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm px-4 py-3 transition-all duration-300 font-mono tracking-wider"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Nom de votre instance</label>
@@ -171,11 +184,11 @@ export default function LoginForm() {
             />
           </div>
 
-          <div>
+          <div className={hasInstances ? "block" : "hidden"}>
             <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Identifiant URL (Slug)</label>
             <input
               type="text"
-              required
+              required={hasInstances}
               placeholder="mon-serveur"
               value={inviteFormData.slug}
               onChange={e => setInviteFormData({ ...inviteFormData, slug: e.target.value })}
@@ -212,7 +225,7 @@ export default function LoginForm() {
             disabled={loading}
             className="flex w-full justify-center rounded-2xl border border-transparent bg-amber-500 px-4 py-3 text-sm font-bold text-black shadow-xl shadow-amber-500/20 hover:bg-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 active:scale-[0.98] mt-6"
           >
-            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Créer mon instance'}
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (hasInstances ? 'Créer mon instance' : 'Configurer le serveur')}
           </button>
         </form>
       </div>

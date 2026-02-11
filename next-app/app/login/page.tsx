@@ -5,6 +5,8 @@ import { getTmdbServiceForUser } from '@/lib/auth'
 import BackgroundSlideshow from './BackgroundSlideshow'
 import Image from 'next/image'
 
+import { prisma } from '@/lib/prisma'
+
 export const metadata: Metadata = {
   title: 'Connexion - MediaHub',
   description: 'Connectez-vous à votre compte MediaHub',
@@ -12,6 +14,14 @@ export const metadata: Metadata = {
 
 export default async function LoginPage() {
   let backdrops: string[] = []
+  let hasInstances = false
+  
+  try {
+    const instanceCount = await prisma.instance.count()
+    hasInstances = instanceCount > 0
+  } catch (error) {
+    console.warn('[LoginPage] Failed to check instances:', error)
+  }
   
   try {
     // Fetch trending movies and TV shows from TMDB for high quality backdrops
@@ -65,7 +75,7 @@ export default async function LoginPage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
             </div>
           }>
-            <LoginForm />
+            <LoginForm hasInstances={hasInstances} />
           </Suspense>
         </div>
         
