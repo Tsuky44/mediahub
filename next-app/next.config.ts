@@ -19,11 +19,11 @@ const nextConfig: NextConfig = {
     return config;
   },
   experimental: {
-    turbo: {
-      resolveAlias: {
-        'ssh2': 'ssh2',
-        'dockerode': 'dockerode',
-      },
+  },
+  turbo: {
+    resolveAlias: {
+      'ssh2': 'ssh2',
+      'dockerode': 'dockerode',
     },
   },
 };
