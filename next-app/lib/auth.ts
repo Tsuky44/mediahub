@@ -12,6 +12,7 @@ import { TmdbService } from "@/lib/services/tmdb"
 import { getSetting } from "@/lib/settings"
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
   adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
