@@ -467,6 +467,12 @@ export async function getTmdbServiceForUser(instanceId?: number) {
   if (!targetInstanceId || isNaN(targetInstanceId)) return null
   
   try {
+    // FORCE USE OF HARDCODED API KEY AS REQUESTED BY USER
+    const tmdbApiKey = '7f43cb4adbc635ccad5c04412b284d34'
+    console.debug(`[getTmdbServiceForUser] Service initialized with HARDCODED API Key (prefix: ${tmdbApiKey.substring(0, 4)}...)`)
+    return new TmdbService(tmdbApiKey)
+
+    /*
     if (!prisma || !(prisma as any).setting) return null
     let tmdbApiKey = await getSetting('tmdb_api_key', targetInstanceId)
     
@@ -479,6 +485,12 @@ export async function getTmdbServiceForUser(instanceId?: number) {
       }
     }
 
+    // Fallback: Use hardcoded API Key if available
+    if (!tmdbApiKey) {
+      console.warn(`[getTmdbServiceForUser] Using fallback TMDB API Key`)
+      tmdbApiKey = '7f43cb4adbc635ccad5c04412b284d34'
+    }
+
     if (!tmdbApiKey) {
       console.error(`[getTmdbServiceForUser] No TMDB API Key found for instance ${targetInstanceId} or default instance`)
       return null
@@ -486,6 +498,7 @@ export async function getTmdbServiceForUser(instanceId?: number) {
 
     console.debug(`[getTmdbServiceForUser] Service initialized with API Key (prefix: ${tmdbApiKey.substring(0, 4)}...)`)
     return new TmdbService(tmdbApiKey)
+    */
   } catch (error) {
     console.error(`[getTmdbServiceForUser] Error:`, error)
     return null
