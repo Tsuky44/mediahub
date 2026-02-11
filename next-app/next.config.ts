@@ -20,12 +20,6 @@ const nextConfig: NextConfig = {
   },
   experimental: {
   },
-  turbo: {
-    resolveAlias: {
-      'ssh2': 'ssh2',
-      'dockerode': 'dockerode',
-    },
-  },
 };
 
 export default nextConfig;
