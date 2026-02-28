@@ -1,4 +1,5 @@
 import { getRadarrServiceForUser, getSonarrServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
+import { SonarrSeries, SonarrSeason } from '@/lib/services/sonarr'
 import { remember, forget, cache } from '@/lib/cache'
 
 export type MediaStatus = 'unknown' | 'available' | 'partial' | 'pending' | 'processing'
@@ -6,7 +7,7 @@ export type MediaStatus = 'unknown' | 'available' | 'partial' | 'pending' | 'pro
 export interface MediaAvailability {
     status: MediaStatus;
     available: boolean;
-    seasons?: { seasonNumber: number; status: MediaStatus; available: boolean }[];
+    seasons?: { seasonNumber: number; status: MediaStatus; available: boolean; totalEpisodes?: number }[];
     details?: any;
 }
 
@@ -47,7 +48,7 @@ export async function getMediaAvailability(tmdbId: number, mediaType: 'movie' | 
                 if (!series || !series.id) return { status: 'unknown' as MediaStatus, available: false }
 
                 // Check seasons
-                const seasons = series.seasons.map(s => {
+                const seasons = (series as unknown as SonarrSeries).seasons.map((s: SonarrSeason) => {
                     const totalEpisodes = s.statistics?.totalEpisodeCount || 0;
                     const fileCount = s.statistics?.episodeFileCount || 0;
                     
@@ -71,7 +72,8 @@ export async function getMediaAvailability(tmdbId: number, mediaType: 'movie' | 
                     return {
                         seasonNumber: s.seasonNumber,
                         status,
-                        available: hasFiles
+                        available: hasFiles,
+                        totalEpisodes
                     }
                 });
 
@@ -79,22 +81,33 @@ export async function getMediaAvailability(tmdbId: number, mediaType: 'movie' | 
                 let overallStatus: MediaStatus = 'unknown';
                 const allSeasons = seasons.filter(s => s.seasonNumber > 0); // Ignore specials for overall logic
                 
-                const anyAvailable = allSeasons.some(s => s.available);
-                const anyPending = allSeasons.some(s => s.status === 'pending');
-                const anyPartial = allSeasons.some(s => s.status === 'partial');
+                // Filter out seasons that are not monitored and have no files (irrelevant)
+                const relevantSeasons = allSeasons.filter(s => s.status !== 'unknown');
                 
-                // Strict availability: All seasons must be 'available'
-                const allAvailable = allSeasons.length > 0 && allSeasons.every(s => s.status === 'available');
+                const anyAvailable = relevantSeasons.some(s => s.available);
+                const anyPending = relevantSeasons.some(s => s.status === 'pending');
+                const anyPartial = relevantSeasons.some(s => s.status === 'partial');
                 
-                // Sonarr's percentage can be misleading as it only counts monitored episodes
-                const percentOfEpisodes = series.statistics?.percentOfEpisodes || 0;
+                // Strict availability: All valid seasons (with episodes) must be 'available'
+                // This includes unmonitored seasons if they exist in Sonarr but are missing locally
+                const validSeasons = allSeasons.filter(s => (s.totalEpisodes || 0) > 0);
+                const allAvailable = validSeasons.length > 0 && validSeasons.every(s => s.status === 'available');
                 
+                // If the user hasn't requested anything (no monitored seasons) and no files exist, it should be unknown
+                // Unless the series itself is monitored (pending)
+                const hasAnyFiles = validSeasons.some(s => s.available);
+
+
                 if (allAvailable) {
                     overallStatus = 'available';
-                } else if (anyAvailable || anyPartial || (percentOfEpisodes > 0 && percentOfEpisodes < 100)) {
+                } else if (hasAnyFiles) {
+                    // Only mark as partial if we actually have SOME files
                     overallStatus = 'partial';
                 } else if (anyPending || series.monitored) {
                     overallStatus = 'pending';
+                } else {
+                    // No files, no monitored seasons -> Unknown (or just not requested)
+                    overallStatus = 'unknown';
                 }
 
                 // If we have seasons but none are requested/available, it stays unknown

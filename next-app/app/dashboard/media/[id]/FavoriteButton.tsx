@@ -47,10 +47,10 @@ export default function FavoriteButton({ embyItemId, initialIsFavorite, tmdbId, 
             onClick={handleToggle}
             disabled={loading}
             className={clsx(
-                "p-2.5 rounded-lg border transition flex items-center justify-center",
+                "p-3 rounded-full border transition-all duration-300 flex items-center justify-center hover:scale-105 active:scale-95",
                 isFavorite 
-                    ? "bg-red-500/20 border-red-500/50 text-red-500 hover:bg-red-500/30" 
-                    : "bg-gray-800/50 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-white"
+                    ? "bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.2)]" 
+                    : "bg-gray-800/40 border-white/10 text-gray-400 hover:bg-gray-700/60 hover:text-white hover:border-white/20 backdrop-blur-md"
             )}
             title={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
         >

@@ -4,7 +4,7 @@ import React from 'react'
 import { Activity, Clock, Film, Play, Wifi, WifiOff } from 'lucide-react'
 import { useLiveSessions, LiveSession } from '@/hooks/useLiveSessions'
 
-export function LiveSessions({ sessions: initialSessions, instanceId, filteredInstanceIds }: { sessions: any[], instanceId?: number, filteredInstanceIds?: number[] }) {
+export function LiveSessions({ sessions: initialSessions, canManage }: { sessions: any[], canManage?: boolean }) {
   // Use WebSocket for real-time updates
   const { sessions: wsSessions, isConnected } = useLiveSessions(initialSessions)
   const [sessions, setSessions] = React.useState<any[]>(initialSessions)
@@ -25,16 +25,8 @@ export function LiveSessions({ sessions: initialSessions, instanceId, filteredIn
   React.useEffect(() => {
     if (!sessions) return
     
-    // Filter sessions by instanceId or source type if provided
-    const filteredSessions = sessions.filter(s => {
-        // Source filtering logic
-        if (filteredInstanceIds && filteredInstanceIds.length > 0) {
-          if (!filteredInstanceIds.includes(s.instanceId)) return false
-        } else if (instanceId && s.instanceId !== instanceId) {
-          return false
-        }
-        return true
-    })
+    // Filter sessions by source type if provided
+    const filteredSessions = sessions
 
     // Initialize interpolated sessions only when filtered sessions change
     setInterpolatedSessions(prev => {
@@ -64,7 +56,7 @@ export function LiveSessions({ sessions: initialSessions, instanceId, filteredIn
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [sessions, instanceId, filteredInstanceIds])
+  }, [sessions])
   
   // Memoize active sessions to avoid re-filtering on every render
   const activeSessions = React.useMemo(() => 
@@ -107,27 +99,52 @@ export function LiveSessions({ sessions: initialSessions, instanceId, filteredIn
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {activeSessions.map((session) => {
             const isEpisode = session.itemType === 'Episode'
-            const mediaInfo = session.mediaInfo || {}
             
             let displayName = session.itemName
             let subName = `${session.userName} • ${session.device}`
 
-            if (isEpisode) {
-                if (mediaInfo.seriesName) {
-                    displayName = mediaInfo.seriesName
-                    subName = `${session.itemName} • ${subName}`
-                } else if (session.itemName?.includes(' : ')) {
-                    const parts = session.itemName.split(' : ')
-                    displayName = parts[0]
-                    subName = `${parts.slice(1).join(' : ')} • ${subName}`
-                }
+            // Normalize data from different sources/formats
+            const mediaInfo = typeof session.mediaInfo === 'string' 
+                ? JSON.parse(session.mediaInfo) 
+                : (session.mediaInfo || {})
 
-                const s = mediaInfo.seasonIndex
-                const e = mediaInfo.episodeIndex
+            const seriesName = session.seriesName || session.SeriesName || mediaInfo.seriesName || mediaInfo.SeriesName
+            const seasonIndex = session.seasonIndex ?? session.ParentIndexNumber ?? mediaInfo.seasonIndex ?? mediaInfo.ParentIndexNumber
+            const episodeIndex = session.episodeIndex ?? session.IndexNumber ?? mediaInfo.episodeIndex ?? mediaInfo.IndexNumber
+
+            if (isEpisode) {
+                const s = seasonIndex
+                const e = episodeIndex
+                let seString = ''
+                
                 if (s !== undefined && e !== undefined) {
                     const seasonStr = s < 10 ? `0${s}` : s
                     const episodeStr = e < 10 ? `0${e}` : e
-                    subName = `S${seasonStr}E${episodeStr} • ${subName}`
+                    seString = `S${seasonStr}E${episodeStr}`
+                }
+
+                if (seriesName) {
+                    // Format: Series Name - SxxExx - Episode Title
+                    displayName = seriesName
+                    if (seString) displayName += ` - ${seString}`
+                    
+                    let episodeTitle = session.itemName || ''
+                    // Remove series name if present at start to avoid duplication
+                    if (episodeTitle.startsWith(seriesName)) {
+                         episodeTitle = episodeTitle.substring(seriesName.length).replace(/^[\s-:]+/, '')
+                    }
+                    
+                    if (episodeTitle) displayName += ` - ${episodeTitle}`
+                    // subName remains just user info (defined at line 105)
+                } else if (session.itemName?.includes(' : ')) {
+                    const parts = session.itemName.split(' : ')
+                    displayName = parts[0]
+                    if (seString) displayName += ` - ${seString}`
+                    if (parts.length > 1) displayName += ` - ${parts.slice(1).join(' : ')}`
+                } else {
+                    if (seString) {
+                        displayName = `${seString} - ${displayName}`
+                    }
                 }
             }
             

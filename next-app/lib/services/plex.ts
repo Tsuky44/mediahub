@@ -1,19 +1,22 @@
 import axios from 'axios';
 import https from 'https';
 
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
 export class PlexService {
-  private baseUrl: string;
-  private token: string;
   private httpsAgent = new https.Agent({
     rejectUnauthorized: false
   });
 
-  constructor(baseUrl: string, token: string) {
+  constructor(private baseUrl: string, private token: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
-    this.token = token;
   }
 
-  private async getClient(timeout: number = 10000) {
+  async getClient(timeout = 10000) {
     return axios.create({
       baseURL: this.baseUrl,
       params: {
@@ -34,7 +37,7 @@ export class PlexService {
       // Plex structure: MediaContainer -> Metadata[]
       return response.data.MediaContainer?.Metadata || [];
     } catch (e: any) {
-      console.error(`[PlexService] getSessions failed at ${this.baseUrl}:`, e.message);
+      error(`[PlexService] getSessions failed at ${this.baseUrl}:`, e.message);
       return [];
     }
   }
@@ -53,7 +56,7 @@ export class PlexService {
       return response.data.MediaContainer?.Metadata || [];
     } catch (e: any) {
       // History might not be available or permission denied
-      console.warn(`[PlexService] getHistory failed (might be expected):`, e.message);
+      warn(`[PlexService] getHistory failed (might be expected):`, e.message);
       return [];
     }
   }
@@ -64,40 +67,168 @@ export class PlexService {
       const response = await client.get(`/library/metadata/${ratingKey}`);
       return response.data.MediaContainer?.Metadata?.[0] || null;
     } catch (e: any) {
-      console.error(`[PlexService] getItemDetails failed for ${ratingKey}:`, e.message);
+      error(`[PlexService] getItemDetails failed for ${ratingKey}:`, e.message);
       return null;
     }
   }
 
   async getUsers() {
+    let allUsers: any[] = [];
+    let lastError: Error | null = null;
+
+    // 1. Try /accounts (often contains friends/managed users)
     try {
-      const client = await this.getClient();
-      // Try /accounts which is common for local users on many Plex versions
+      const client = await this.getClient(15000);
+      log(`[PlexService] Fetching users from ${this.baseUrl}/accounts...`);
       const response = await client.get('/accounts');
       const accounts = response.data.MediaContainer?.Account || [];
-      return accounts.map((acc: any) => ({
-        Id: String(acc.id),
-        Name: acc.name || acc.title
-      }));
+      log(`[PlexService] Found ${accounts.length} users via /accounts`);
+      
+      if (Array.isArray(accounts)) {
+        log(`[PlexService] Processing ${accounts.length} accounts...`);
+        const validAccounts = accounts.filter((acc: any) => {
+            const isValid = acc.id && acc.id !== '0' && acc.id !== 0 && (acc.name || acc.title || acc.username);
+            if (!isValid) {
+                log(`[PlexService] Skipping account: ID=${acc.id}, Name=${acc.name}, Title=${acc.title}`);
+            }
+            return isValid;
+        });
+        
+        log(`[PlexService] Found ${validAccounts.length} valid accounts.`);
+
+        allUsers = [...allUsers, ...validAccounts.map((acc: any) => ({
+          Id: String(acc.id),
+          Name: acc.name || acc.title || acc.username || `Plex User ${acc.id}`,
+          Email: acc.email,
+          Thumb: acc.thumb
+        }))];
+      }
     } catch (e: any) {
-      console.warn(`[PlexService] getUsers (/accounts) failed:`, e.message);
+      warn(`[PlexService] getUsers (/accounts) failed:`, e.message);
+      lastError = e;
+    }
+
+    // 2. Try /users (active sessions or connected users sometimes)
+    if (allUsers.length === 0) {
       try {
-        // Fallback to /users
-        const client = await this.getClient();
+        const client = await this.getClient(15000);
+        log(`[PlexService] Fetching users from ${this.baseUrl}/users...`);
         const response = await client.get('/users');
         const users = response.data.MediaContainer?.User || [];
-        return users.map((u: any) => ({
-          Id: String(u.id),
-          Name: u.name || u.title
-        }));
-      } catch (e2: any) {
-        console.warn(`[PlexService] getUsers (/users) failed:`, e2.message);
-        return [];
+        log(`[PlexService] Found ${users.length} users via /users`);
+        
+        if (Array.isArray(users)) {
+          allUsers = [...allUsers, ...users.map((u: any) => ({
+            Id: String(u.id),
+            Name: u.name || u.title,
+            Email: u.email,
+            Thumb: u.thumb
+          }))];
+        }
+      } catch (e: any) {
+        warn(`[PlexService] getUsers (/users) failed:`, e.message);
+        lastError = e;
       }
     }
+
+    // If we found no users and had an error, re-throw it so sync knows it failed
+    if (allUsers.length === 0 && lastError) {
+      throw lastError;
+    }
+
+    const uniqueUsers = Array.from(new Map(allUsers.map(item => [item.Id, item])).values());
+    
+    return uniqueUsers;
   }
   
-  // Helper to normalize Plex session to Emby-like structure for the tracker
+  getItemImageUrl(itemId: string) {
+    // For user thumbs, if it's a URL (like from Plex.tv), return it as is
+    if (itemId.startsWith('http')) return itemId;
+    // Otherwise, it's a transcode request
+    return `${this.baseUrl}/photo/:/transcode?width=400&height=400&minSize=1&url=${encodeURIComponent(itemId)}&X-Plex-Token=${this.token}`
+  }
+
+  async authenticate(username: string, pw: string) {
+    log(`[PlexService] Authenticating user '${username}' against ${this.baseUrl}`)
+    
+    // Note: Plex usually requires OAuth or plex.tv auth. 
+    // Direct authentication against a local PMS server is possible if "List of IP addresses and networks that are allowed without auth" is configured or via specific headers, 
+    // but typically we authenticate against plex.tv to get a token, then use that token to talk to the server.
+    // However, if the user provides a local username/password, we might be trying to auth against plex.tv.
+    
+    // For this implementation, we will try to authenticate against plex.tv to get a token.
+    try {
+        const response = await axios.post('https://plex.tv/users/sign_in.json', {
+            user: {
+                login: username,
+                password: pw
+            }
+        }, {
+            headers: {
+                'X-Plex-Client-Identifier': 'mediahub-client-' + Math.random().toString(36).substring(7),
+                'X-Plex-Product': 'MediaHub',
+                'X-Plex-Version': '1.0.0'
+            },
+            httpsAgent: this.httpsAgent,
+            timeout: 15000 // 15s timeout
+        });
+        
+        const user = response.data.user;
+        log(`[PlexService] Plex.tv auth success for ${username}`);
+        
+        // Return a structure similar to what we use for Emby/Jellyfin to normalize usage in auth.ts
+        return {
+            User: {
+                Id: String(user.id),
+                Name: user.username,
+                Email: user.email,
+                PrimaryImageTag: user.thumb, // Plex returns a URL for thumb
+                AccessToken: user.authToken // Critical: this is the token for the server
+            },
+            AccessToken: user.authToken
+        };
+
+    } catch (e: any) {
+        error(`[PlexService] Plex.tv auth failed:`, e.message);
+        throw new Error('Plex authentication failed');
+    }
+  }
+
+  async validateToken(token: string) {
+    try {
+        const response = await axios.get('https://plex.tv/api/v2/user', {
+            headers: {
+                'X-Plex-Token': token,
+                'X-Plex-Product': 'MediaHub',
+                'X-Plex-Client-Identifier': 'mediahub-client-generic',
+                'Accept': 'application/json'
+            },
+            httpsAgent: this.httpsAgent,
+            timeout: 10000
+        });
+
+        const user = response.data;
+        // log(`[PlexService] Token validation success for ${user.username}`);
+        
+        return {
+            User: {
+                Id: String(user.id),
+                Name: user.username,
+                Email: user.email,
+                PrimaryImageTag: user.thumb,
+                AccessToken: token
+            },
+            AccessToken: token
+        };
+    } catch (e: any) {
+        error(`[PlexService] Token validation failed:`, e.message);
+        throw new Error('Invalid Plex token');
+    }
+  }
+
+  // Removed duplicate getItemImageUrl
+
+
   static normalizeSession(session: any) {
     const user = session.User || {};
     const player = session.Player || {};

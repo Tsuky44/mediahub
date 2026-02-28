@@ -7,7 +7,9 @@ import { triggerAutomaticSearch } from '@/app/dashboard/media/[id]/interactive-a
 
 interface SearchActionsProps {
   title: string
-  canManage?: boolean
+  canManage?: boolean // Deprecated, use specific flags below
+  canTriggerSearch?: boolean
+  canInteractiveSearch?: boolean
   mediaType?: 'movie' | 'tv'
   tmdbId?: number
   tvdbId?: number
@@ -20,6 +22,8 @@ interface SearchActionsProps {
 export function SearchActions({
   title,
   canManage = true,
+  canTriggerSearch,
+  canInteractiveSearch,
   mediaType = 'movie',
   tmdbId,
   tvdbId,
@@ -28,6 +32,10 @@ export function SearchActions({
   initialEpisode = null,
   className
 }: SearchActionsProps) {
+  // Backwards compatibility defaults
+  const allowTrigger = canTriggerSearch ?? canManage
+  const allowInteractive = canInteractiveSearch ?? canManage
+
   const [isInteractiveOpen, setIsInteractiveOpen] = useState(false)
   const [autoSearching, setAutoSearching] = useState(false)
 
@@ -50,26 +58,31 @@ export function SearchActions({
 
   return (
     <div className={`flex items-center gap-1 ${className}`}>
-        <button
-            onClick={handleAutoSearch}
-            className="p-1.5 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-            title="Recherche automatique"
-            disabled={autoSearching}
-        >
-            {autoSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-        </button>
-        <button
-            onClick={(e) => {
-                e.stopPropagation()
-                setIsInteractiveOpen(true)
-            }}
-            className="p-1.5 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-            title="Recherche interactive"
-        >
-            <User className="w-4 h-4" />
-        </button>
+        {allowTrigger && (
+            <button
+                onClick={handleAutoSearch}
+                className="p-1.5 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                title="Recherche automatique"
+                disabled={autoSearching}
+            >
+                {autoSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            </button>
+        )}
+        
+        {allowInteractive && (
+            <button
+                onClick={(e) => {
+                    e.stopPropagation()
+                    setIsInteractiveOpen(true)
+                }}
+                className="p-1.5 rounded-md hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                title="Recherche interactive"
+            >
+                <User className="w-4 h-4" />
+            </button>
+        )}
 
-      {isInteractiveOpen && (
+      {isInteractiveOpen && allowInteractive && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
             <div className="p-4 border-b border-white/10 flex items-center justify-between bg-slate-800/50">
@@ -92,7 +105,7 @@ export function SearchActions({
             <div className="flex-1 overflow-y-auto p-6">
               <ProwlarrSearch
                 title={title}
-                canManage={canManage}
+                canManage={allowInteractive}
                 mediaType={mediaType}
                 tmdbId={tmdbId}
                 tvdbId={tvdbId}

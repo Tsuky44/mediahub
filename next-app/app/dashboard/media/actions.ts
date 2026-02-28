@@ -5,12 +5,17 @@ import { getCurrentUser, getEmbyServiceForUser, getTmdbServiceForUser } from '@/
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
 export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false) {
     try {
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const instanceId = parseInt((user as any).instanceId)
         const embyService = await getEmbyServiceForUser()
         const tmdbService = await getTmdbServiceForUser()
         
@@ -18,8 +23,7 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
 
         const dbUser = await (prisma as any).user.findFirst({
             where: { 
-                email: user.email,
-                instanceId
+                email: user.email
             }
         })
         
@@ -95,18 +99,17 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
             total_pages: Math.ceil((data.TotalRecordCount || 0) / limit)
         }
     } catch (e) {
-        console.error('Failed to fetch Emby media', e)
+        error('Failed to fetch Emby media', e)
         return { results: [], total_pages: 0 }
     }
 }
 
 export async function fetchRecentlyWatchedItems() {
     try {
-        console.log('[fetchRecentlyWatchedItems] Getting current user...')
+        log('[fetchRecentlyWatchedItems] Getting current user...')
         const user = await getCurrentUser()
         if (!user || !user.email) return []
 
-        const instanceId = parseInt((user as any).instanceId)
         const embyService = await getEmbyServiceForUser()
         const tmdbService = await getTmdbServiceForUser()
         
@@ -114,18 +117,17 @@ export async function fetchRecentlyWatchedItems() {
 
         const dbUser = await (prisma as any).user.findFirst({
             where: { 
-                email: user.email,
-                instanceId
+                email: user.email
             }
         })
 
         if (!dbUser || !dbUser.embyUserId) {
-            console.log('[fetchRecentlyWatchedItems] User not linked to Emby')
+            log('[fetchRecentlyWatchedItems] User not linked to Emby')
             return []
         }
         
         const userId = dbUser.embyUserId
-        console.log('[fetchRecentlyWatchedItems] Fetching recently played items for user:', userId)
+        log('[fetchRecentlyWatchedItems] Fetching recently played items for user:', userId)
         // Réduction du nombre d'items récupérés pour plus de rapidité (20 au lieu de 50)
         const data = await embyService.getRecentlyPlayedItems(userId, 20)
         const allItems = Array.isArray(data.Items) ? data.Items : []
@@ -146,7 +148,7 @@ export async function fetchRecentlyWatchedItems() {
             uniqueItems.push(item)
         }
 
-        console.log('[fetchRecentlyWatchedItems] Found unique items count:', uniqueItems.length)
+        log('[fetchRecentlyWatchedItems] Found unique items count:', uniqueItems.length)
         
         // Optimisation : Utiliser un cache local pour les détails des séries afin d'éviter les appels redondants
         const seriesDetailsCache = new Map<string, any>()
@@ -204,7 +206,7 @@ export async function fetchRecentlyWatchedItems() {
 
         return enrichedItems
     } catch (e) {
-        console.error('[fetchRecentlyWatchedItems] Failed to fetch items', e)
+        error('[fetchRecentlyWatchedItems] Failed to fetch items', e)
         return []
     }
 }
@@ -214,7 +216,6 @@ export async function fetchUserRecommendations(page: number = 1) {
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const instanceId = parseInt((user as any).instanceId)
         const embyService = await getEmbyServiceForUser()
         const tmdbService = await getTmdbServiceForUser()
         
@@ -222,8 +223,7 @@ export async function fetchUserRecommendations(page: number = 1) {
 
         const dbUser = await (prisma as any).user.findFirst({
             where: { 
-                email: user.email,
-                instanceId
+                email: user.email
             }
         })
 
@@ -239,7 +239,6 @@ export async function fetchUserRecommendations(page: number = 1) {
         // 2. Get user's recent requests from local DB
         const requests = await (prisma as any).mediaRequest.findMany({
             where: {
-                instanceId,
                 OR: [
                     { requesterEmail: user.email },
                     { userId: dbUser.id }
@@ -331,7 +330,7 @@ export async function fetchUserRecommendations(page: number = 1) {
         }
 
     } catch (e) {
-        console.error('[fetchUserRecommendations] Failed', e)
+        error('[fetchUserRecommendations] Failed', e)
         return { results: [], total_pages: 0 }
     }
 }
@@ -341,7 +340,6 @@ export async function fetchServerTrends(page: number = 1) {
         const user = await getCurrentUser()
         if (!user) return { results: [], total_pages: 0 }
 
-        const instanceId = parseInt((user as any).instanceId)
         const embyService = await getEmbyServiceForUser()
         const tmdbService = await getTmdbServiceForUser()
         
@@ -357,7 +355,6 @@ export async function fetchServerTrends(page: number = 1) {
                 itemId: true
             },
             where: {
-                instanceId,
                 playedAt: {
                     gte: thirtyDaysAgo
                 }
@@ -379,7 +376,6 @@ export async function fetchServerTrends(page: number = 1) {
                 tmdbId: true
             },
             where: {
-                instanceId,
                 requestedAt: {
                     gte: thirtyDaysAgo
                 }
@@ -451,7 +447,7 @@ export async function fetchServerTrends(page: number = 1) {
             total_pages: 1
         }
     } catch (e) {
-        console.error('[fetchServerTrends] Failed', e)
+        error('[fetchServerTrends] Failed', e)
         return { results: [], total_pages: 0 }
     }
 }
@@ -461,14 +457,12 @@ export async function toggleFavorite(itemId: string, isFavorite: boolean) {
         const user = await getCurrentUser()
         if (!user || !user.email) return false
 
-        const instanceId = parseInt((user as any).instanceId)
         const embyService = await getEmbyServiceForUser()
         if (!embyService) return false
 
         const dbUser = await (prisma as any).user.findFirst({
             where: { 
-                email: user.email,
-                instanceId
+                email: user.email
             }
         })
 
@@ -479,7 +473,7 @@ export async function toggleFavorite(itemId: string, isFavorite: boolean) {
         revalidatePath('/')
         return true
     } catch (e) {
-        console.error('Failed to toggle favorite', e)
+        error('Failed to toggle favorite', e)
         return false
     }
 }

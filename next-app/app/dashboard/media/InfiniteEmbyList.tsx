@@ -62,7 +62,7 @@ export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, wat
 
   return (
     <div className="space-y-6">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-6">
         {items.map((item) => (
           <MediaCard key={item.id} item={item} showFavoriteButton={true} />
         ))}

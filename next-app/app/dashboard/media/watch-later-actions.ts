@@ -4,6 +4,12 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
 export interface WatchLaterItem {
     id: number
     mediaId: string
@@ -24,30 +30,28 @@ export async function toggleWatchLater(params: {
     isEmbyItem: boolean
 }) {
     try {
-        console.log('[WatchLater] Toggling:', params.title, params.mediaId);
+        log('[WatchLater] Toggling:', params.title, params.mediaId);
         const user = await getCurrentUser()
         if (!user || !(user as any).id) {
-            console.error('[WatchLater] Unauthorized');
+            error('[WatchLater] Unauthorized');
             return { success: false, error: 'Vous devez être connecté pour faire cela.' }
         }
 
         const userId = parseInt((user as any).id)
-        const instanceId = parseInt((user as any).instanceId)
         
         // Verify if user exists in DB before creating relation (in case of DB reset)
-        const userExists = await (prisma as any).user.findFirst({ 
-            where: { id: userId, instanceId } 
+        const userExists = await prisma.user.findUnique({ 
+            where: { id: userId } 
         });
         if (!userExists) {
-             console.error('[WatchLater] User not found in DB:', userId);
+             error('[WatchLater] User not found in DB:', userId);
              return { success: false, error: 'Session invalide. Veuillez vous déconnecter et vous reconnecter.' }
         }
 
         // Find if it exists either by mediaId OR tmdbId (if provided)
-        const existing = await (prisma as any).watchLater.findFirst({
+        const existing = await prisma.watchLater.findFirst({
             where: {
                 userId,
-                instanceId,
                 mediaType: params.mediaType,
                 OR: [
                     { mediaId: params.mediaId },
@@ -61,19 +65,18 @@ export async function toggleWatchLater(params: {
         })
 
         if (existing) {
-            console.log('[WatchLater] Removing item:', existing.id);
-            await (prisma as any).watchLater.delete({
+            log('[WatchLater] Removing item:', existing.id);
+            await prisma.watchLater.delete({
                 where: { id: existing.id }
             })
             revalidatePath('/dashboard/requests')
             revalidatePath('/dashboard/media')
             return { success: true, action: 'removed' }
         } else {
-            console.log('[WatchLater] Adding item:', params.title);
-            await (prisma as any).watchLater.create({
+            log('[WatchLater] Adding item:', params.title);
+            await prisma.watchLater.create({
                 data: {
                     userId,
-                    instanceId,
                     mediaId: params.mediaId,
                     tmdbId: params.tmdbId,
                     mediaType: params.mediaType,
@@ -86,8 +89,8 @@ export async function toggleWatchLater(params: {
             revalidatePath('/dashboard/media')
             return { success: true, action: 'added' }
         }
-    } catch (error) {
-        console.error('Failed to toggle watch later:', error)
+    } catch (e) {
+        error('Failed to toggle watch later:', e)
         return { success: false, error: 'Erreur interne du serveur' }
     }
 }
@@ -99,17 +102,45 @@ export async function getWatchLaterList() {
         if (!user || !(user as any).id) return []
 
         const userId = parseInt((user as any).id)
-        const instanceId = parseInt((user as any).instanceId)
 
-        const items = await (prisma as any).watchLater.findMany({
-            where: { userId, instanceId },
-            orderBy: { createdAt: 'desc' }
+        const items = await prisma.watchLater.findMany({
+            where: {
+                userId
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
         })
 
-        return items as WatchLaterItem[]
-    } catch (error) {
-        console.error('Failed to get watch later list:', error)
+        return items
+    } catch (e) {
+        error('Failed to get watch later list:', e)
         return []
+    }
+}
+
+export async function isInWatchLater(mediaId: string, mediaType: string): Promise<boolean> {
+    try {
+        const user = await getCurrentUser()
+        if (!user || !(user as any).id) return false
+
+        const userId = parseInt((user as any).id)
+        
+        const existing = await prisma.watchLater.findFirst({
+            where: {
+                userId,
+                mediaType,
+                OR: [
+                    { mediaId },
+                    { tmdbId: mediaId }
+                ]
+            }
+        })
+        
+        return !!existing
+    } catch (e) {
+        error('Failed to check if in watch later:', e)
+        return false
     }
 }
 
@@ -119,53 +150,32 @@ export async function areInWatchLater(items: { id: string, mediaType: string }[]
         if (!user || !(user as any).id) return []
 
         const userId = parseInt((user as any).id)
-        const instanceId = parseInt((user as any).instanceId)
+        
+        if (!items || items.length === 0) return []
 
         const ids = items.map(i => i.id)
         
-        const existing = await (prisma as any).watchLater.findMany({
+        const matches = await prisma.watchLater.findMany({
             where: {
                 userId,
-                instanceId,
                 OR: [
                     { mediaId: { in: ids } },
                     { tmdbId: { in: ids } }
                 ]
-            },
-            select: { mediaId: true, tmdbId: true, mediaType: true }
-        })
-
-        // Return an array of keys "mediaType:id" that are in watch later
-        return existing.map((item: any) => `${item.mediaType}:${item.tmdbId || item.mediaId}`)
-    } catch (error) {
-        console.error('Failed to check watch later status batch:', error)
-        return []
-    }
-}
-
-export async function isInWatchLater(id: string, mediaType: string) {
-    try {
-        const user = await getCurrentUser()
-        if (!user || !(user as any).id) return false
-
-        const userId = parseInt((user as any).id)
-        const instanceId = parseInt((user as any).instanceId)
-
-        const existing = await (prisma as any).watchLater.findFirst({
-            where: {
-                userId,
-                instanceId,
-                mediaType,
-                OR: [
-                    { mediaId: id },
-                    { tmdbId: id }
-                ]
             }
         })
-
-        return !!existing
-    } catch (error) {
-        console.error('Failed to check watch later status:', error)
-        return false
+        
+        const result: string[] = []
+        for (const match of matches) {
+             result.push(`${match.mediaType}:${match.mediaId}`)
+             if (match.tmdbId) {
+                 result.push(`${match.mediaType}:${match.tmdbId}`)
+             }
+        }
+        
+        return result
+    } catch (e) {
+        error('Failed to check watch later status:', e)
+        return []
     }
 }

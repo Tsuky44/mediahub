@@ -29,6 +29,24 @@ export const InputField = ({ label, value, onChange, type = "text", placeholder 
     </div>
 )
 
+export const CheckboxField = ({ label, checked, onChange, description, readOnly = false }: { label: string, checked: boolean, onChange: (checked: boolean) => void, description?: string, readOnly?: boolean }) => (
+    <div className="flex items-start space-x-3">
+        <div className="flex h-6 items-center">
+            <input
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => onChange(e.target.checked)}
+                disabled={readOnly}
+                className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
+            />
+        </div>
+        <div className="text-sm">
+            <label className="font-medium text-gray-300">{label}</label>
+            {description && <p className="text-gray-400">{description}</p>}
+        </div>
+    </div>
+)
+
 export const SectionHeader = ({ icon: Icon, title, description }: { icon: LucideIcon, title: string, description: string }) => (
     <div className="mb-6 flex items-center gap-3 border-b border-gray-700 pb-4">
         <div className="rounded-lg bg-indigo-500/10 p-2">

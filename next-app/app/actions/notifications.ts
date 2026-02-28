@@ -9,15 +9,9 @@ export async function getNotifications() {
     const user = await getCurrentUser()
     if (!user || !user.email) return []
 
-    const instanceId = parseInt((user as any).instanceId)
-    if (isNaN(instanceId)) return []
-
     const dbUser = await (prisma as any).user.findUnique({
       where: { 
-        email_instanceId: {
-          email: user.email,
-          instanceId
-        }
+        email: user.email
       },
       select: { id: true }
     })
@@ -42,15 +36,9 @@ export async function getUnreadCount() {
     const user = await getCurrentUser()
     if (!user || !user.email) return 0
 
-    const instanceId = parseInt((user as any).instanceId)
-    if (isNaN(instanceId)) return 0
-
     const dbUser = await (prisma as any).user.findUnique({
       where: { 
-        email_instanceId: {
-          email: user.email,
-          instanceId
-        }
+        email: user.email
       },
       select: { id: true }
     })
@@ -94,15 +82,9 @@ export async function markAllAsRead() {
     const user = await getCurrentUser()
     if (!user || !user.email) return { success: false }
 
-    const instanceId = parseInt((user as any).instanceId)
-    if (isNaN(instanceId)) return { success: false }
-
     const dbUser = await (prisma as any).user.findUnique({
       where: { 
-        email_instanceId: {
-          email: user.email,
-          instanceId
-        }
+        email: user.email
       },
       select: { id: true }
     })

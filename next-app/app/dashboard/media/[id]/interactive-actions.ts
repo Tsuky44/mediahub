@@ -1,9 +1,23 @@
 'use server'
 
-import { getRadarrServiceForUser, getSonarrServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
+import { getRadarrServiceForUser, getSonarrServiceForUser, getTmdbServiceForUser, getCurrentUser } from '@/lib/auth'
+import { defineAbilityFor, Actions, Subjects } from '@/lib/ability'
+
+async function checkPermission(action: Actions, subject: Subjects) {
+  const user = await getCurrentUser()
+  if (!user) throw new Error('Unauthorized')
+  
+  const ability = defineAbilityFor(user)
+  // Allow if specific permission is granted OR if user has full 'manage' access on Media
+  if (!ability.can(action, subject) && !ability.can('manage', subject)) {
+    throw new Error('Forbidden: Insufficient permissions')
+  }
+}
 
 export async function searchReleases(tmdbId: number, mediaType: 'movie' | 'tv', episodeId?: number, seasonNumber?: number) {
   try {
+    await checkPermission('interactive_search', 'Media')
+
     if (mediaType === 'movie') {
       const radarrService = await getRadarrServiceForUser()
       if (!radarrService) return { error: 'Radarr not configured' }
@@ -44,6 +58,8 @@ export async function searchReleases(tmdbId: number, mediaType: 'movie' | 'tv', 
 
 export async function downloadRelease(mediaType: 'movie' | 'tv', guid: string, indexerId: number) {
   try {
+    await checkPermission('interactive_search', 'Media')
+
     if (mediaType === 'movie') {
       const radarrService = await getRadarrServiceForUser()
       if (!radarrService) return { error: 'Radarr not configured' }
@@ -67,6 +83,8 @@ export async function downloadRelease(mediaType: 'movie' | 'tv', guid: string, i
 
 export async function getSeriesEpisodes(tmdbId: number) {
   try {
+    await checkPermission('interactive_search', 'Media')
+
     const sonarrService = await getSonarrServiceForUser()
     const tmdbService = await getTmdbServiceForUser()
     if (!sonarrService || !tmdbService) return { error: 'Services not configured' }
@@ -94,6 +112,8 @@ export async function triggerAutomaticSearch(
     episodeNumber?: number
 ) {
     try {
+        await checkPermission('trigger_search', 'Media')
+
         if (mediaType === 'movie') {
             const radarr = await getRadarrServiceForUser()
             if (!radarr) return { error: 'Radarr not configured' }

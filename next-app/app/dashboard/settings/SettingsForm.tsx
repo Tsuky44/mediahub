@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Save, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import clsx from 'clsx'
 import { TabNavigation } from './components/TabNavigation'
@@ -12,27 +12,33 @@ import { StorageSettings } from './components/StorageSettings'
 import { MaintenanceSettings } from './components/MaintenanceSettings'
 import { SettingsFormData, TabType } from './components/types'
 
-interface Instance {
-    id: number
-    name: string
-    slug: string
-    settings: Partial<SettingsFormData>
-}
-
 interface SettingsFormProps {
-    instances: Instance[]
-    currentInstanceId: number
+    settings: Partial<SettingsFormData>
     readOnly?: boolean
 }
 
 export default function SettingsForm({ 
-    instances,
-    currentInstanceId,
+    settings,
     readOnly = false
 }: SettingsFormProps) {
     const router = useRouter()
-    const [activeTab, setActiveTab] = useState<TabType>('media')
-    const [selectedInstanceId, setSelectedInstanceId] = useState(currentInstanceId)
+    const searchParams = useSearchParams()
+    const subtab = searchParams.get('subtab')
+
+    const [activeTab, setActiveTab] = useState<TabType>(() => {
+        if (subtab && ['media', 'downloads', 'automation', 'storage', 'maintenance'].includes(subtab)) {
+            return subtab as TabType
+        }
+        return 'media'
+    })
+
+    // Update tab if URL param changes
+    useEffect(() => {
+        if (subtab && ['media', 'downloads', 'automation', 'storage', 'maintenance'].includes(subtab)) {
+            setActiveTab(subtab as TabType)
+        }
+    }, [subtab])
+
     const [loading, setLoading] = useState(false)
     const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
@@ -60,27 +66,28 @@ export default function SettingsForm({
         plex_token: '',
         jellyfin_url: '',
         jellyfin_api_key: '',
+        auth_emby_enabled: true,
+        auth_plex_enabled: false,
+        auth_jellyfin_enabled: false,
         unraid_url: '',
         unraid_api_key: '',
         docker_host: '',
-        type: 'emby'
     }
 
     const [formData, setFormData] = useState<SettingsFormData>(initialFormData)
 
-    // Load settings when instance changes
+    // Load settings
     useEffect(() => {
-        const inst = instances.find(i => i.id === selectedInstanceId) || instances[0]
-        if (inst && inst.settings) {
+        if (settings) {
             setFormData(prev => ({
                 ...initialFormData,
-                ...inst.settings
+                ...settings
             } as SettingsFormData))
         }
         setStatusMessage(null)
-    }, [selectedInstanceId, instances])
+    }, [settings])
 
-    const updateField = (field: keyof SettingsFormData, value: string) => {
+    const updateField = (field: keyof SettingsFormData, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }))
     }
 
@@ -93,89 +100,89 @@ export default function SettingsForm({
             const res = await fetch('/api/user/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    instanceId: selectedInstanceId,
-                    ...formData
-                }),
+                body: JSON.stringify(formData),
             })
 
-            const data = await res.json()
-
-            if (!res.ok) throw new Error(data.error || 'Erreur lors de la sauvegarde')
-
-            setStatusMessage({ type: 'success', text: 'Paramètres sauvegardés avec succès !' })
-            router.refresh()
-        } catch (error: any) {
-            setStatusMessage({ type: 'error', text: error.message })
+            if (res.ok) {
+                setStatusMessage({ type: 'success', text: 'Paramètres sauvegardés avec succès' })
+                router.refresh()
+            } else {
+                const data = await res.json()
+                setStatusMessage({ type: 'error', text: data.error || 'Une erreur est survenue' })
+            }
+        } catch (error) {
+            setStatusMessage({ type: 'error', text: 'Impossible de contacter le serveur' })
         } finally {
             setLoading(false)
         }
     }
 
     return (
-        <div className="space-y-6">
-            {/* Instance Selector */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <select
-                        value={selectedInstanceId}
-                        onChange={(e) => setSelectedInstanceId(parseInt(e.target.value))}
-                        disabled={readOnly || instances.length <= 1}
-                        className="rounded-lg border-gray-600 bg-gray-700 py-2 pl-4 pr-10 text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-                    >
-                        {instances.map((inst) => (
-                            <option key={inst.id} value={inst.id}>
-                                {inst.name}
-                            </option>
-                        ))}
-                    </select>
-                    {loading && <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />}
-                </div>
+        <form onSubmit={handleSubmit} className="space-y-8">
+            <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
 
-                {statusMessage && (
-                    <div className={clsx(
-                        "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium",
-                        statusMessage.type === 'success' ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
-                    )}>
-                        {statusMessage.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                        {statusMessage.text}
-                    </div>
+            <div className="space-y-6 min-h-[400px]">
+                {activeTab === 'media' && (
+                    <MediaSettings 
+                        formData={formData} 
+                        updateField={updateField} 
+                        readOnly={readOnly}
+                    />
+                )}
+                {activeTab === 'downloads' && (
+                    <DownloadSettings 
+                        formData={formData} 
+                        updateField={updateField} 
+                        readOnly={readOnly}
+                    />
+                )}
+                {activeTab === 'automation' && (
+                    <AutomationSettings 
+                        formData={formData} 
+                        updateField={updateField} 
+                        readOnly={readOnly}
+                    />
+                )}
+                {activeTab === 'storage' && (
+                    <StorageSettings 
+                        formData={formData} 
+                        updateField={updateField} 
+                        readOnly={readOnly}
+                    />
+                )}
+                {activeTab === 'maintenance' && (
+                    <MaintenanceSettings 
+                        formData={formData} 
+                        updateField={updateField} 
+                        readOnly={readOnly}
+                    />
                 )}
             </div>
 
-            {/* Main Form */}
-            <form onSubmit={handleSubmit} className="space-y-6">
-                <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
-
-                <div className="min-h-[400px]">
-                    {activeTab === 'media' && (
-                        <MediaSettings formData={formData} updateField={updateField} instanceId={selectedInstanceId} />
+            {!readOnly && (
+                <div className="flex items-center justify-end gap-4 pt-6 border-t border-white/10">
+                    {statusMessage && (
+                        <div className={clsx(
+                            "flex items-center gap-2 text-sm font-medium animate-in fade-in slide-in-from-right-4",
+                            statusMessage.type === 'success' ? "text-green-400" : "text-red-400"
+                        )}>
+                            {statusMessage.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                            {statusMessage.text}
+                        </div>
                     )}
-                    {activeTab === 'downloads' && (
-                        <DownloadSettings formData={formData} updateField={updateField} />
-                    )}
-                    {activeTab === 'automation' && (
-                        <AutomationSettings formData={formData} updateField={updateField} instanceId={selectedInstanceId} />
-                    )}
-                    {activeTab === 'storage' && (
-                        <StorageSettings formData={formData} updateField={updateField} instanceId={selectedInstanceId} />
-                    )}
-                    {activeTab === 'maintenance' && (
-                        <MaintenanceSettings formData={formData} updateField={updateField} />
-                    )}
-                </div>
-
-                <div className="sticky bottom-4 flex justify-end rounded-lg border border-gray-700 bg-gray-800/90 p-4 shadow-lg backdrop-blur-sm">
                     <button
                         type="submit"
-                        disabled={loading || readOnly}
-                        className="flex items-center gap-2 rounded-lg bg-indigo-600 px-6 py-2.5 font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+                        disabled={loading}
+                        className={clsx(
+                            "flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-all shadow-lg shadow-indigo-900/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed",
+                            loading && "animate-pulse"
+                        )}
                     >
-                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-                        Sauvegarder les modifications
+                        {loading ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                        <span>Enregistrer</span>
                     </button>
                 </div>
-            </form>
-        </div>
+            )}
+        </form>
     )
 }

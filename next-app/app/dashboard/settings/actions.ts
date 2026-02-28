@@ -7,8 +7,35 @@ import { JellyseerrService } from '@/lib/services/jellyseerr'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser, getTmdbServiceForUser } from '@/lib/auth'
 import { UnraidService } from '@/lib/services/unraid'
+import { QBittorrentService } from '@/lib/services/qbittorrent'
 
-export async function testUnraidDebugAction(instanceId: number) {
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
+export async function testQBittorrentConnectionAction(url: string, username?: string, password?: string) {
+    try {
+        const user = await getCurrentUser()
+        if (!user || (user as any).role !== 'admin') {
+            throw new Error('Unauthorized')
+        }
+
+        const service = new QBittorrentService(url, username, password)
+        const result = await service.testConnection()
+        
+        if (result.success) {
+            return { success: true, message: `Connexion réussie ! Version : ${result.version}` }
+        } else {
+            return { success: false, message: `Échec de la connexion : ${result.error}` }
+        }
+    } catch (error: any) {
+        return { success: false, message: error.message }
+    }
+}
+
+export async function testUnraidDebugAction() {
     try {
         const user = await getCurrentUser()
         if (!user || (user as any).role !== 'admin') {
@@ -17,7 +44,6 @@ export async function testUnraidDebugAction(instanceId: number) {
 
         const settings = await (prisma as any).setting.findMany({
             where: {
-                instanceId,
                 key: { in: ['unraid_url', 'unraid_api_key'] }
             }
         });
@@ -29,7 +55,7 @@ export async function testUnraidDebugAction(instanceId: number) {
             return { success: false, message: 'Configuration Unraid manquante dans la DB.' };
         }
 
-        console.log(`[Debug Unraid] Test manuel pour l'instance ${instanceId} sur ${url}`);
+        log(`[Debug Unraid] Test manuel sur ${url}`);
         const service = new UnraidService(url, apiKey);
         const stats = await service.getStorageStats();
 
@@ -42,21 +68,21 @@ export async function testUnraidDebugAction(instanceId: number) {
 
         return { success: false, message: 'Échec de la récupération des stats. Vérifiez les logs serveur.' };
     } catch (error: any) {
-        console.error('[testUnraidDebugAction] Error:', error);
+        error('[testUnraidDebugAction] Error:', error);
         return { success: false, message: error.message };
     }
 }
 
-export async function importPlexHistoryAction(instanceId: number) {
+export async function importPlexHistoryAction() {
     try {
         const user = await getCurrentUser()
         if (!user || (user as any).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
-        console.log(`[Action] Starting Plex history import for instance ${instanceId}`)
+        log(`[Action] Starting Plex history import`)
         
-        const result = await importPlexHistory(prisma as any, instanceId)
+        const result = await importPlexHistory(prisma as any)
         
         revalidatePath('/dashboard/settings')
         revalidatePath('/dashboard')
@@ -66,7 +92,7 @@ export async function importPlexHistoryAction(instanceId: number) {
             message: `Import réussi : ${result.imported} nouveaux éléments, ${result.skipped} ignorés.` 
         }
     } catch (error: any) {
-        console.error('[importPlexHistoryAction] Error:', error)
+        error('[importPlexHistoryAction] Error:', error)
         return { 
             success: false, 
             message: error.message || 'Erreur lors de l\'importation' 
@@ -115,26 +141,22 @@ export async function testProwlarrConnectionAction(url: string, key: string) {
     }
 }
 
-export async function fixMissingTitlesAction(instanceId: number) {
+export async function fixMissingTitlesAction() {
     try {
         const user = await getCurrentUser()
         if (!user || (user as any).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
-        const tmdb = await getTmdbServiceForUser(instanceId)
+        const tmdb = await getTmdbServiceForUser()
         if (!tmdb) {
-            throw new Error('Clé API TMDB manquante (vérifiez la configuration de l\'instance par défaut).')
+            throw new Error('Clé API TMDB manquante (vérifiez la configuration).')
         }
         
-        const requests = await (prisma as any).mediaRequest.findMany({
-            where: {
-                instanceId
-            }
-        })
+        const requests = await (prisma as any).mediaRequest.findMany({})
 
         let fixed = 0
-        console.log(`[fixMissingTitlesAction] Checking ${requests.length} requests for instance ${instanceId}`)
+        log(`[fixMissingTitlesAction] Checking ${requests.length} requests`)
 
         for (const req of requests) {
             if (!req.tmdbId) continue
@@ -148,7 +170,7 @@ export async function fixMissingTitlesAction(instanceId: number) {
 
             if (!isMissing) continue
 
-            console.log(`[fixMissingTitlesAction] Fixing title for ${req.mediaType} ${req.tmdbId}`)
+            log(`[fixMissingTitlesAction] Fixing title for ${req.mediaType} ${req.tmdbId}`)
             const details = await tmdb.getDetails(parseInt(req.tmdbId), req.mediaType as 'movie' | 'tv')
             
             if (details) {
@@ -174,7 +196,7 @@ export async function fixMissingTitlesAction(instanceId: number) {
     }
 }
 
-export async function importJellyseerrRequestsAction(instanceId: number) {
+export async function importJellyseerrRequestsAction() {
     try {
         const user = await getCurrentUser()
         if (!user || (user as any).role !== 'admin') {
@@ -182,16 +204,14 @@ export async function importJellyseerrRequestsAction(instanceId: number) {
         }
 
         // Delete all existing requests first as requested
-        console.log(`[Action] Deleting all requests for instance ${instanceId}`)
-        await (prisma as any).mediaRequest.deleteMany({
-            where: { instanceId }
-        })
+        log(`[Action] Deleting all requests`)
+        await (prisma as any).mediaRequest.deleteMany({})
 
-        const result = await importJellyseerrRequests(prisma as any, instanceId)
+        const result = await importJellyseerrRequests(prisma as any)
         
         // After import, run the fix titles action automatically
-        console.log(`[Action] Fixing missing titles for instance ${instanceId}`)
-        await fixMissingTitlesAction(instanceId)
+        log(`[Action] Fixing missing titles`)
+        await fixMissingTitlesAction()
         
         revalidatePath('/dashboard/requests')
         revalidatePath('/dashboard/settings')

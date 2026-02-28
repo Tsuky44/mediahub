@@ -5,6 +5,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
   
@@ -17,26 +23,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Synchroniser toutes les instances ayant Jellyseerr configuré
-    const instances = await prisma.instance.findMany({
-      where: {
-        jellyseerrUrl: { not: null },
-        jellyseerrApiKey: { not: null }
-      }
-    });
-
-    for (const instance of instances) {
-      console.log(`[Sync] Syncing Jellyseerr requests for instance: ${instance.name}`);
-      await importJellyseerrRequests(prisma, instance.id);
-    }
+    // Synchroniser Jellyseerr (configuration globale)
+    log(`[Sync] Syncing Jellyseerr requests...`);
+    await importJellyseerrRequests(prisma);
 
     revalidatePath('/dashboard/requests/list')
     return NextResponse.json({ 
       success: true,
-      message: `Sync completed for ${instances.length} instances`
+      message: `Sync completed`
     })
   } catch (error: any) {
-    console.error('[Sync] Jellyseerr sync failed:', error);
+    error('[Sync] Jellyseerr sync failed:', error);
     return NextResponse.json({ 
       success: false,
       error: 'Sync failed', 

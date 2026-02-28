@@ -1,6 +1,7 @@
 import { getEmbyServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { defineAbilityFor } from '@/lib/ability'
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -10,16 +11,26 @@ import { PlayButton } from '@/components/PlayButton'
 import { CastList } from '@/components/CastList'
 import FullCreditsButton from './FullCreditsButton'
 import { TrailerButton } from '@/components/TrailerButton'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Clock } from 'lucide-react'
 import { MediaSlider } from '@/components/MediaSlider'
 import FavoriteButton from './FavoriteButton'
 import WatchLaterButton from './WatchLaterButton'
 import { ManageMediaButton } from './ManageMediaButton'
+import { SubscribeButton } from './SubscribeButton'
+import { getSubscriptionStatus } from './subscribe-actions'
 import { SearchActions } from '@/components/SearchActions'
 import { isInWatchLater } from '../watch-later-actions'
 import { getSetting } from '@/lib/settings'
 import { getMediaAvailability } from '@/lib/services/media-status'
 import { DownloadStatusCard } from './DownloadStatusCard'
+import { UserActivityButton } from '@/components/UserActivityButton'
+import { CalendarButton } from '@/components/CalendarButton'
+
+const isDev = process.env.NODE_ENV === 'development';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 async function getImdbRating(imdbId: string) {
     try {
@@ -55,7 +66,24 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   }
 
   const user = await getCurrentUser()
-  const instanceId = parseInt((user as any)?.instanceId || '0')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ability = defineAbilityFor(user as any)
+  
+  if (ability.cannot('read', 'Media') && ability.cannot('read', 'Library')) {
+    return (
+      <div className="flex h-[50vh] flex-col items-center justify-center text-center">
+        <h1 className="mb-4 text-3xl font-bold text-white">Accès Refusé</h1>
+        <p className="mb-8 text-gray-400">Vous n'avez pas la permission de consulter ce contenu.</p>
+        <Link 
+          href="/dashboard" 
+          className="rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-indigo-500"
+        >
+          Retour au tableau de bord
+        </Link>
+      </div>
+    )
+  }
+
   const embyService = await getEmbyServiceForUser()
 
   const videos = details.videos?.results || []
@@ -79,6 +107,7 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
 
   const availability = await getMediaAvailability(tmdbId, mediaType, true)
   const isWatchLaterItem = await isInWatchLater(id, mediaType)
+  const isSubscribed = await getSubscriptionStatus(id, mediaType)
 
   // TMDB Ratings and External IDs
   const ratingImdb = details.external_ids?.imdb_id ? await getImdbRating(details.external_ids.imdb_id) : null
@@ -96,14 +125,27 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   let seasonProgress: any[] = []
   let embyItem: any = null
   let embyServerId: string | null = null
+  let isInCalendar = false
   
   if (user && user.email) {
-      const dbUser = await (prisma as any).user.findFirst({
+      const dbUser = await (prisma as any).user.findUnique({
           where: { 
-            email: user.email,
-            instanceId
+            email: user.email
           }
       })
+
+      if (dbUser) {
+          const calendarEvent = await (prisma as any).userCalendarEvent.findUnique({
+              where: {
+                  userId_tmdbId_mediaType: {
+                      userId: dbUser.id,
+                      tmdbId: tmdbId.toString(),
+                      mediaType
+                  }
+              }
+          })
+          isInCalendar = !!calendarEvent
+      }
       
       if (dbUser && dbUser.embyUserId && embyService) {
           embyUserId = dbUser.embyUserId
@@ -132,9 +174,9 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
 
                    // Calculate per-season progress for TV shows
                   if (mediaType === 'tv') {
-                       console.log(`[MediaDetails] Fetching episodes for series ${embyItem.Id}`)
+                       log(`[MediaDetails] Fetching episodes for series ${embyItem.Id}`)
                        const allEpisodes = await embyService.getEpisodes(dbUser.embyUserId, embyItem.Id)
-                       console.log(`[MediaDetails] Found ${allEpisodes.length} episodes`)
+                       log(`[MediaDetails] Found ${allEpisodes.length} episodes`)
                        
                        // Recalculate progress if missing from UserData (common for Series)
                        if (userProgress && allEpisodes.length > 0) {
@@ -175,16 +217,16 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                   }
                   
                   if (userProgress) {
-                      console.log('[MediaDetails] User Progress:', JSON.stringify(userProgress, null, 2))
+                      log('[MediaDetails] User Progress:', JSON.stringify(userProgress, null, 2))
                   }
               }
           } catch (e) {
-              console.error('Failed to fetch Emby progress', e)
+              error('Failed to fetch Emby progress', e)
           }
       }
   }
 
-  const embyUrl = await getSetting('emby_url', instanceId)
+  const embyUrl = await getSetting('emby_url')
   if (!embyUrl) {
       // This is not fatal but we should handle it if we want to show Play button
   }
@@ -199,77 +241,92 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
   const similar = details.similar?.results || []
 
   return (
-    <div className="relative min-h-screen bg-[#0f172a] text-gray-300">
-        {/* Backdrop */}
-        <div className="absolute inset-0 h-[70vh] w-full overflow-hidden">
+    <div className="relative min-h-screen bg-[#0f172a] text-gray-300 overflow-x-hidden font-sans selection:bg-indigo-500/30">
+        {/* Backdrop Fixe avec effet de profondeur */}
+        <div className="fixed inset-0 h-screen w-full overflow-hidden z-0 pointer-events-none">
              {backdropUrl && (
                  <>
                     <img 
                         src={backdropUrl} 
                         alt={title} 
-                        className="h-full w-full object-cover opacity-30"
+                        className="h-full w-full object-cover opacity-40 scale-105"
                     />
                     {/* Immersive Gradients */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/60 to-transparent"></div>
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#0f172a] via-[#0f172a]/20 to-transparent"></div>
-                    <div className="absolute inset-0 bg-gradient-to-l from-[#0f172a]/20 via-transparent to-transparent"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent"></div>
+                    <div className="absolute inset-0 bg-gradient-to-r from-[#0f172a] via-[#0f172a]/40 to-transparent"></div>
+                    <div className="absolute inset-0 backdrop-blur-[1px]"></div>
                  </>
              )}
         </div>
 
-        <div className="relative mx-auto max-w-[1600px] px-4 py-8 sm:px-8 lg:px-12">
+        <div className="relative z-10 mx-auto max-w-[1600px] px-4 py-12 sm:px-8 lg:px-12">
             {/* Header Section (Jellyseerr Style) */}
-            <div className="flex flex-col md:flex-row gap-8 items-end mb-12">
-                {/* Poster */}
-                <div className="flex-shrink-0 -mb-12 md:mb-0">
-                    <div className="overflow-hidden rounded-xl shadow-2xl ring-1 ring-white/10 transition-transform duration-300 hover:scale-[1.02]">
-                        <img 
-                            src={posterUrl} 
-                            alt={title} 
-                            className="h-[450px] w-[300px] object-cover"
-                        />
+            <div className="flex flex-col md:flex-row gap-10 items-start md:items-end mb-16">
+                {/* Poster avec effet de lueur */}
+                <div className="flex-shrink-0 mx-auto md:mx-0 w-full md:w-auto flex justify-center md:block">
+                    <div className="relative group">
+                        <div className="absolute -inset-1 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
+                        <div className="relative overflow-hidden rounded-xl shadow-2xl ring-1 ring-white/10 transition-transform duration-500 group-hover:scale-[1.02] group-hover:rotate-1 w-[220px] sm:w-[320px]">
+                            <img 
+                                src={posterUrl} 
+                                alt={title} 
+                                className="w-full h-auto aspect-[2/3] object-cover"
+                            />
+                        </div>
                     </div>
                 </div>
 
                 {/* Title and Quick Actions */}
-                <div className="flex-1 w-full space-y-6 pb-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="space-y-1">
+                <div className="flex-1 w-full min-w-0 space-y-8 pb-2">
+                    <div className="flex flex-col gap-6">
+                        <div className="space-y-3">
                             {availability.status && (
-                                <div className="mb-2">
+                                <div className="flex flex-wrap gap-2 mb-3">
                                     {availability.status === 'pending' && (
-                                        <span className="bg-indigo-600/80 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase backdrop-blur-sm">Demandé</span>
+                                        <span className="bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm shadow-[0_0_10px_rgba(99,102,241,0.2)]">Demandé</span>
                                     )}
                                     {availability.status === 'available' && (
-                                        <span className="bg-green-600/80 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase backdrop-blur-sm">Disponible</span>
+                                        <span className="bg-green-500/20 border border-green-500/30 text-green-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm shadow-[0_0_10px_rgba(74,222,128,0.2)]">Disponible</span>
                                     )}
                                     {availability.status === 'partial' && (
-                                        <span className="bg-purple-600/80 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase backdrop-blur-sm">Partiellement disponible</span>
+                                        <span className="bg-purple-500/20 border border-purple-500/30 text-purple-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm shadow-[0_0_10px_rgba(168,85,247,0.2)]">Partiellement disponible</span>
                                     )}
                                 </div>
                             )}
-                            <h1 className="text-4xl md:text-5xl font-extrabold text-white leading-tight">
-                                {title} <span className="text-gray-500 font-light">({releaseDate ? new Date(releaseDate).getFullYear() : ''})</span>
-                                {mediaType === 'movie' && userProgress?.played && (
-                                    <span className="ml-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/20 border border-green-500/30 text-green-500 text-xs font-bold uppercase tracking-wider">
-                                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                                        Vu
-                                    </span>
-                                )}
+                            
+                            <h1 className="text-4xl md:text-6xl font-black text-white leading-tight break-words drop-shadow-lg tracking-tight">
+                                {title} <span className="text-gray-500 font-thin">({releaseDate ? new Date(releaseDate).getFullYear() : ''})</span>
                             </h1>
-                            <div className="flex flex-wrap items-center gap-x-2 text-sm font-medium text-gray-400">
+                            
+                            {mediaType === 'movie' && userProgress?.played && (
+                                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold uppercase tracking-wider backdrop-blur-md">
+                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                    <span>Vu</span>
+                                </div>
+                            )}
+
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-gray-400">
                                 {details.content_ratings?.results?.find((r: any) => r.iso_3166_1 === 'US')?.rating && (
-                                    <span className="border border-gray-600 px-1 rounded text-[10px]">{details.content_ratings.results.find((r: any) => r.iso_3166_1 === 'US').rating}</span>
+                                    <span className="border border-white/20 px-2 py-0.5 rounded text-xs text-gray-300 bg-white/5 backdrop-blur-sm">{details.content_ratings.results.find((r: any) => r.iso_3166_1 === 'US').rating}</span>
                                 )}
-                                {details.runtime && <span>| {details.runtime} minutes</span>}
+                                {details.runtime && (
+                                    <div className="flex items-center gap-1.5">
+                                        <Clock className="w-4 h-4 text-gray-500" />
+                                        <span>{Math.floor(details.runtime / 60)}h {details.runtime % 60}m</span>
+                                    </div>
+                                )}
                                 {details.genres && (
-                                    <span>| {details.genres.map((g: any) => g.name).join(', ')}</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {details.genres.map((g: any) => (
+                                            <span key={g.id} className="text-gray-300 hover:text-white transition-colors cursor-default">• {g.name}</span>
+                                        ))}
+                                    </div>
                                 )}
                             </div>
                         </div>
 
                         {/* Action Buttons aligned right */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-4 pt-2">
                             <WatchLaterButton 
                                 mediaId={embyItem ? embyItem.Id : id}
                                 tmdbId={id}
@@ -278,6 +335,13 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                                 posterPath={details.poster_path}
                                 isEmbyItem={!!embyItem}
                                 initialIsWatchLater={isWatchLaterItem}
+                            />
+
+                            <SubscribeButton 
+                                tmdbId={id}
+                                mediaType={mediaType}
+                                title={title}
+                                initialIsSubscribed={isSubscribed}
                             />
                             
                             {embyItem && (
@@ -289,7 +353,21 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                                 />
                             )}
                             
-                            {((user as any)?.role === 'admin' || (user as any)?.permissions?.includes('requests.details.manage')) && (
+                            <UserActivityButton 
+                                tmdbId={tmdbId} 
+                                mediaType={mediaType} 
+                                title={title} 
+                            />
+
+                            <CalendarButton 
+                                tmdbId={tmdbId.toString()} 
+                                mediaType={mediaType} 
+                                title={title} 
+                                releaseDate={releaseDate}
+                                initialIsInCalendar={isInCalendar}
+                            />
+                            
+                            {ability.can('manage_settings', 'Media') && (
                             <ManageMediaButton 
                                 tmdbId={tmdbId} 
                                 mediaType={mediaType} 
@@ -297,10 +375,11 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                             />
                             )}
 
-                            {mediaType === 'movie' && (user as any)?.role === 'admin' && (
+                            {mediaType === 'movie' && (ability.can('trigger_search', 'Media') || ability.can('interactive_search', 'Media')) && (
                                 <SearchActions 
                                     title={title} 
-                                    canManage={true}
+                                    canTriggerSearch={ability.can('trigger_search', 'Media')}
+                                    canInteractiveSearch={ability.can('interactive_search', 'Media')}
                                     mediaType={mediaType}
                                     tmdbId={tmdbId}
                                     tvdbId={tvdbId}
@@ -310,15 +389,16 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-white/5">
                         <RequestButton 
                             tmdbId={tmdbId} 
                             mediaType={mediaType} 
                             title={title}
-                            initialStatus={availability.status || 'unknown'}
+                            initialStatus={availability.status}
                             seasons={details.seasons}
                             seasonStatuses={(availability as any).seasons || []}
-                         />
+                            canRequest={ability.can('create', 'MediaRequest')}
+                        />
                          
                          {embyItem && embyServerId && embyUrl && (
                              <PlayButton 
@@ -530,6 +610,8 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                                 seasons={details.seasons} 
                                 seasonStatuses={(availability as any).seasons || []}
                                 seasonProgress={seasonProgress}
+                                canTriggerSearch={ability.can('trigger_search', 'Media')}
+                                canInteractiveSearch={ability.can('interactive_search', 'Media')}
                             />
                         </section>
                     )}

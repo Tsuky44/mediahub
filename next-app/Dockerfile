@@ -16,6 +16,8 @@ RUN \
 
 # Rebuild the source code only when needed
 FROM base AS builder
+RUN apk add --no-cache libc6-compat openssl
+ENV DATABASE_URL="file:./db.sqlite"
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -23,7 +25,7 @@ COPY . .
 # Generate Prisma Client
 RUN npx prisma generate
 
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN \
   if [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build; \
@@ -40,8 +42,8 @@ WORKDIR /app
 RUN apk add --no-cache openssl
 RUN npm install -g prisma@5.22.0
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
@@ -59,14 +61,17 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
 COPY --from=builder --chown=nextjs:nodejs /app/entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+# Ensure Unix line endings and executable permission
+RUN sed -i 's/\r$//' ./entrypoint.sh && chmod +x ./entrypoint.sh
 
 USER nextjs
 
 EXPOSE 3008
 
-ENV PORT 3008
-ENV HOSTNAME "0.0.0.0"
+ENV PORT=3008
+ENV HOSTNAME="0.0.0.0"
+# Fix for OpenSSL legacy provider error with smb2
+ENV NODE_OPTIONS="--openssl-legacy-provider"
 
 CMD ["./entrypoint.sh"]
 
@@ -77,7 +82,7 @@ WORKDIR /app
 # Install OpenSSL for Prisma
 RUN apk add --no-cache openssl
 
-ENV NODE_ENV production
+ENV NODE_ENV=production
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

@@ -1,95 +1,90 @@
 import { prisma } from '@/lib/prisma'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getRealUser } from '@/lib/auth'
 import SettingsTabs from './SettingsTabs'
+import { getSetting } from '@/lib/settings'
+import { AbilityProvider } from '@/components/AbilityProvider'
 
 export const dynamic = 'force-dynamic'
 
 export default async function SettingsPage() {
-  const session = await getServerSession(authOptions)
-  
-  if (!session || !session.user) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-          <h2 className="text-2xl font-bold text-white">Non connecté</h2>
-          <p className="text-gray-400">Veuillez vous connecter pour accéder à cette page.</p>
-        </div>
-      )
-  }
+  try {
+    const user = await getRealUser()
+    
+    if (!user) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+            <h2 className="text-2xl font-bold text-white">Non connecté</h2>
+            <p className="text-gray-400">Veuillez vous connecter pour accéder à cette page.</p>
+          </div>
+        )
+    }
 
-  const userRole = (session.user as any).role
-  const userPermissions = (session.user as any).permissions || []
-  
-  const hasAccess = userRole === 'admin' || 
-                    userPermissions.includes('settings.view') || 
-                    userPermissions.includes('users.view') ||
-                    userPermissions.includes('settings.manage')
+    const userRole = (user as any).role
+    
+    const hasAccess = userRole === 'admin'
 
-  if (!hasAccess) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-          <h2 className="text-2xl font-bold text-white">Accès restreint</h2>
-          <p className="text-gray-400">Vous n'avez pas les permissions nécessaires pour accéder à cette page.</p>
-        </div>
-      )
-  }
+    if (!hasAccess) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+            <h2 className="text-2xl font-bold text-white">Accès restreint</h2>
+            <p className="text-gray-400">Vous n'avez pas les permissions nécessaires pour accéder à cette page.</p>
+          </div>
+        )
+    }
 
-  const instanceIdStr = (session.user as any).instanceId
-  const instanceId = instanceIdStr ? parseInt(instanceIdStr) : NaN
+    // Fetch users from DB for role management
+    const dbUsers = await prisma.user.findMany({
+      orderBy: { name: 'asc' },
+      include: { roleRef: true }
+    })
 
-  if (isNaN(instanceId)) {
+    // Fetch roles
+    const roles = await prisma.role.findMany({
+      orderBy: { name: 'asc' }
+    })
+
+    // Fetch user groups
+    const userGroups = await prisma.userGroup.findMany({
+      include: {
+        role: true,
+        members: {
+          include: {
+            user: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    // Fetch all settings
+    const settingsList = await prisma.setting.findMany({})
+    
+    const settings = settingsList.reduce((acc: any, curr: any) => ({ ...acc, [curr.key]: curr.value }), {})
+    
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <h2 className="text-2xl font-bold text-white">Erreur d'instance</h2>
-        <p className="text-gray-400">Impossible d'identifier votre instance. Veuillez vous reconnecter.</p>
+      <AbilityProvider user={user}>
+        <SettingsTabs 
+            dbUsers={dbUsers}
+            settings={settings}
+            userRole={userRole}
+            roles={roles}
+            userGroups={userGroups}
+        />
+      </AbilityProvider>
+    )
+  } catch (error: any) {
+    console.error('[SettingsPage] Error rendering settings page:', error)
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4 p-8">
+        <h2 className="text-2xl font-bold text-red-500">Erreur serveur</h2>
+        <p className="text-gray-400 text-center max-w-lg">
+          Une erreur est survenue lors du chargement des paramètres. 
+          Veuillez consulter les logs du serveur pour plus de détails.
+        </p>
+        <div className="bg-black/30 p-4 rounded-lg text-sm font-mono text-gray-300 w-full overflow-auto max-h-60">
+          {error.message || JSON.stringify(error)}
+        </div>
       </div>
     )
   }
-
-  // Fetch users from DB for role management (instance filtered)
-  const dbUsers = await (prisma as any).user.findMany({
-    where: { instanceId },
-    orderBy: { name: 'asc' }
-  })
-
-  // Fetch current instance for core Emby config
-  const currentInstance = await (prisma as any).instance.findUnique({
-    where: { id: instanceId }
-  })
-
-  // Fetch all instances for the dropdown
-  const allInstances = await (prisma as any).instance.findMany({
-    include: {
-        settings: true
-    }
-  })
-
-  const instancesWithSettings = allInstances.map((inst: any) => ({
-    id: inst.id,
-    name: inst.name,
-    slug: inst.slug,
-    settings: {
-      ...(inst.settings?.reduce((acc: any, curr: any) => ({ ...acc, [curr.key]: curr.value }), {}) || {}),
-      // Add core fields to settings object for form compatibility
-      ...{
-        emby_url: inst.embyUrl,
-        emby_api_key: inst.embyApiKey,
-        plex_url: inst.plexUrl,
-        plex_token: inst.plexToken,
-        jellyfin_url: inst.jellyfinUrl,
-        jellyfin_api_key: inst.jellyfinApiKey,
-        type: inst.type,
-      }
-    }
-  }))
-
-  return (
-    <SettingsTabs 
-        dbUsers={dbUsers}
-        instancesWithSettings={instancesWithSettings}
-        currentInstanceId={instanceId}
-        userRole={userRole}
-        userPermissions={userPermissions}
-    />
-  )
 }

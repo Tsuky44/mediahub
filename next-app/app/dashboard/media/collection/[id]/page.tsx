@@ -1,6 +1,7 @@
-import { getTmdbServiceForUser } from '@/lib/auth'
+import { getTmdbServiceForUser, getCurrentUser } from '@/lib/auth'
 import { MediaCard } from '@/components/MediaCard'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { defineAbilityFor } from '@/lib/ability'
 
 export default async function CollectionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -8,6 +9,14 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
 
   if (isNaN(collectionId)) {
     notFound()
+  }
+
+  const user = await getCurrentUser()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ability = defineAbilityFor(user as any)
+
+  if (ability.cannot('read', 'Media') && ability.cannot('read', 'Library')) {
+    redirect('/dashboard')
   }
 
   const tmdbService = await getTmdbServiceForUser()

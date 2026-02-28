@@ -139,54 +139,19 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
   // @ts-ignore
   const currentEmbyUserId = session.user.embyUserId
   const user = session.user as any
-  const instanceId = parseInt(user.instanceId)
 
-  // Check if user is part of a group
-  const userGroupMember = await (prisma as any).userGroupMember.findFirst({
-    where: {
-      instanceId: instanceId,
-      userId: currentEmbyUserId
-    },
-    include: {
-      userGroup: {
-        include: {
-          members: true
-        }
-      }
-    }
-  })
+  // Simplified logic: Prioritize ID, fallback to Name
+  let whereCondition: any = {}
 
-  let whereCondition: any = {
-    instanceId: instanceId,
-    OR: [
-      { embyUserId: currentEmbyUserId },
-      { userName: { equals: currentUserName, mode: 'insensitive' } }
-    ]
-  }
-
-  if (userGroupMember) {
-    const groupMembers = userGroupMember.userGroup.members
-    whereCondition = {
-      OR: groupMembers.map((member: any) => ({
-        instanceId: member.instanceId,
-        embyUserId: member.userId
-      }))
-    }
-  }
-
-  // Fetch instance config
-  const instance = await (prisma as any).instance.findUnique({
-    where: { id: instanceId }
-  })
-
-  if (!instance) {
+  if (currentEmbyUserId) {
+    whereCondition = { embyUserId: currentEmbyUserId }
+  } else if (currentUserName) {
+    whereCondition = { userName: currentUserName }
+  } else {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
-          <Activity size={48} />
-        </div>
-        <h2 className="text-2xl font-bold text-white">Instance non trouvée</h2>
-        <p className="text-gray-400">Impossible de charger vos statistiques pour cette instance.</p>
+        <h2 className="text-2xl font-bold text-white">Impossible de charger les statistiques</h2>
+        <p className="text-gray-400">Votre utilisateur n'est pas correctement identifié (Pas de nom ni d'ID Emby).</p>
       </div>
     )
   }
@@ -231,7 +196,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
   }
 
   // 3. Fetch Data (Prisma)
-  const historyRaw = await (prisma as any).embyActivityLog.findMany({
+  const historyRaw = await prisma.embyActivityLog.findMany({
     where: {
       ...whereCondition,
       startTime: {
@@ -347,271 +312,205 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
        // Update tmdbId if missing
        const currentTmdbId = item.TmdbId
        if (!existing.tmdbId && currentTmdbId) {
-         existing.tmdbId = currentTmdbId
-       }
-       // Update imageItemId if it was a fallback and we found a better one
-       if (isSeries && existing.imageItemId === existing.ItemId && item.SeriesId) {
-         existing.imageItemId = item.SeriesId;
-       }
-       const currentDate = new Date(item.ActivityDateInserted || item.DateCreated)
-       if (currentDate > existing.lastView) {
-         existing.lastView = currentDate
+          existing.tmdbId = currentTmdbId
        }
      }
-   })
+  })
 
   const mostViewedMovies = Array.from(mostViewedMoviesMap.values())
     .sort((a, b) => b.count - a.count)
     .slice(0, 10)
 
   const mostViewedSeries = Array.from(mostViewedSeriesMap.values())
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => b.totalDuration - a.totalDuration)
     .slice(0, 10)
 
-  // Hourly & Daily Activity
-  const hourlyActivity = Array.from({ length: 24 }, (_, i) => ({ name: `${i}h`, value: 0 }))
-  historyArray.forEach((item: WatchHistoryItem) => {
-    const date = new Date(item.ActivityDateInserted || item.DateCreated!)
-    const hour = date.getHours()
-    if (hourlyActivity[hour]) hourlyActivity[hour].value++
-  })
+  // Calculate global stats
+  let totalDuration = 0
+  let totalPlays = 0
+  let moviePlays = 0
+  let episodePlays = 0
 
-  const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
-  const dailyActivity = dayNames.map(day => ({ name: day, value: 0 }))
-  historyArray.forEach((item: WatchHistoryItem) => {
-    const date = new Date(item.ActivityDateInserted || item.DateCreated!)
-    const dayIdx = date.getDay()
-    if (dailyActivity[dayIdx]) dailyActivity[dayIdx].value++
-  })
-  const orderedDailyActivity = [
-    dailyActivity[1], dailyActivity[2], dailyActivity[3], 
-    dailyActivity[4], dailyActivity[5], dailyActivity[6], dailyActivity[0]
-  ]
-
-  // Monthly activity for yearly view
-  let monthlyActivity: { name: string, value: number }[] | undefined = undefined
-  if (period === 'year') {
-    const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']
-    const activity = monthNames.map(month => ({ name: month, value: 0 }))
-    historyArray.forEach((item: WatchHistoryItem) => {
-      const dateString = item.ActivityDateInserted || item.DateCreated || item.DateInserted
-      if (!dateString) return
-      const date = new Date(dateString)
-      const monthIdx = date.getMonth()
-      if (activity[monthIdx]) activity[monthIdx].value++
-    })
-    monthlyActivity = activity
-  }
-
-
-
-  const totalWatchTimeSeconds = historyArray.reduce((acc: number, item: any) => {
-    const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie')
+  historyArray.forEach((item: any) => {
+    const isSeries = item.Type === 'Episode' || !!item.SeriesName || !!item.SeriesId;
+    const type = isSeries ? 'Episode' : (item.Type || 'Movie');
     const itemId = item.NowPlayingItemId || item.ItemId;
     const actualDuration = itemDurations[itemId];
-    return acc + sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration)
-  }, 0)
-  const totalHours = Math.round(totalWatchTimeSeconds / 3600)
-  const totalPlays = historyArray.length
-  const subValueLabel = period === 'week' ? '7 jours' : period === 'year' ? 'Année' : 'Mois'
-
-  // Aggregated history for the table
-  const aggregatedHistory: any[] = []
-  const historyMap = new Map<string, any>()
-  historyArray.forEach((item: any) => {
-    const itemId = item.NowPlayingItemId
-    const date = new Date(item.ActivityDateInserted || item.DateCreated)
-    const key = `${itemId}`
-    const itemType = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie')
-    const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, itemType)
-
-    if (historyMap.has(key)) {
-      const existing = historyMap.get(key)
-      const existingDate = new Date(existing.ActivityDateInserted || existing.DateCreated)
-      const diffDays = Math.abs(date.getTime() - existingDate.getTime()) / (1000 * 60 * 60 * 24)
-      if (diffDays <= 7) {
-        existing.PlaybackDuration = (existing.PlaybackDuration || 0) + sanitizedDuration
-        if (date > existingDate) {
-          existing.ActivityDateInserted = item.ActivityDateInserted
-          existing.DateCreated = item.DateCreated
-        }
-        return
-      }
+    const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration);
+    
+    totalDuration += sanitizedDuration
+    totalPlays += 1
+    if (isSeries) {
+      episodePlays += 1
+    } else {
+      moviePlays += 1
     }
-    const isSeriesItem = itemType === 'Episode' || !!item.SeriesName
-    const newItem = { 
-      ...item,
-      PlaybackDuration: sanitizedDuration,
-      imageItemId: isSeriesItem ? (item.SeriesId || itemId) : itemId,
-      tmdbId: item.TmdbId,
-      mediaType: itemType === 'Episode' ? 'tv' : 'movie'
-    }
-    historyMap.set(key, newItem)
-    aggregatedHistory.push(newItem)
   })
-  aggregatedHistory.sort((a, b) => new Date(b.ActivityDateInserted || b.DateCreated).getTime() - new Date(a.ActivityDateInserted || a.DateCreated).getTime())
+
+  const hours = Math.floor(totalDuration / 3600)
+  const minutes = Math.floor((totalDuration % 3600) / 60)
+  
+  // Calculate average daily
+  const dailyAverageSeconds = totalDuration / Math.max(days, 1)
+  const dailyHours = Math.floor(dailyAverageSeconds / 3600)
+  const dailyMinutes = Math.floor((dailyAverageSeconds % 3600) / 60)
+
+  // Recent History
+  const recentHistory = historyArray.slice(0, 20).map((item: any) => ({
+    ...item,
+    imageItemId: (item.Type === 'Episode' || item.SeriesId) ? (item.SeriesId || item.ItemId) : item.ItemId
+  }))
+
+  // 4. Calculate Charts Data
+  const hourlyActivity = Array.from({ length: 24 }, (_, i) => ({
+    name: `${i}h`,
+    value: 0
+  }))
+
+  const dailyActivityMap = new Map<string, number>()
+  const daysOrder = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+  
+  historyArray.forEach((item: any) => {
+    const date = new Date(item.ActivityDateInserted)
+    
+    // Hourly
+    const hour = date.getHours()
+    if (hour >= 0 && hour < 24) {
+      hourlyActivity[hour].value++
+    }
+
+    // Daily
+    const dayName = date.toLocaleDateString('fr-FR', { weekday: 'long' })
+    const dayNameCap = dayName.charAt(0).toUpperCase() + dayName.slice(1)
+    dailyActivityMap.set(dayNameCap, (dailyActivityMap.get(dayNameCap) || 0) + 1)
+  })
+
+  const dailyActivity = daysOrder.map(day => ({
+    name: day,
+    value: dailyActivityMap.get(day) || 0
+  }))
 
   return (
-    <div className="space-y-8 p-6 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-bold text-white tracking-tight">Mes Statistiques</h1>
-          <div className="flex items-center gap-2 text-gray-400">
-            <span className="text-sm font-medium px-2 py-0.5 bg-gray-800 rounded text-blue-400 border border-gray-700">
-              {periodTitle}
-            </span>
-            <span className="text-gray-600">•</span>
-            <span className="text-sm">{totalHours}h de visionnage {userGroupMember ? 'du groupe' : 'personnel'}</span>
-          </div>
+    <div className="space-y-8 p-4 md:p-8">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-3">
+            <Activity className="text-blue-500" />
+            Mes Statistiques
+          </h1>
+          <p className="text-gray-400 mt-1">
+            Analyse de votre consommation média personnelle
+          </p>
         </div>
         
-        <div className="flex flex-col sm:flex-row items-center gap-4">
-          <div className="flex items-center gap-2">
-            <a href="/dashboard/stats/me" className="px-3 py-1.5 bg-gray-800/50 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs font-medium text-gray-300 flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" /> Aujourd'hui
-            </a>
-            <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700">
-              <a href={prevHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors"><ChevronLeft className="h-5 w-5" /></a>
-              <div className="h-4 w-px bg-gray-700 mx-1" />
-              <a href={nextHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors"><ChevronRight className="h-5 w-5" /></a>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700">
-            <PeriodButton active={period === 'week'} href="?period=week" label="Semaine" />
-            <PeriodButton active={period === 'month'} href="?period=month" label="Mois" />
-            <PeriodButton active={period === 'year'} href="?period=year" label="Année" />
-          </div>
+        <div className="flex bg-gray-800/50 p-1 rounded-xl border border-gray-700/50">
+          <PeriodButton active={period === 'week'} href="?period=week" label="Semaine" />
+          <PeriodButton active={period === 'month'} href="?period=month" label="Mois" />
+          <PeriodButton active={period === 'year'} href="?period=year" label="Année" />
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title={userGroupMember ? "Temps de visionnage (Groupe)" : "Mon temps de visionnage"} value={`${totalHours}h`} subValue={`Total ${subValueLabel}`} icon={<Clock className="h-5 w-5 text-blue-500" />} />
-        <StatCard title={userGroupMember ? "Contenus vus (Groupe)" : "Mes contenus vus"} value={totalPlays.toString()} subValue={`Films & Épisodes (${subValueLabel})`} icon={<Play className="h-5 w-5 text-green-500" />} />
-        <StatCard title={userGroupMember ? "Activité récente (Groupe)" : "Mon activité récente"} value={historyArray.length > 0 ? formatDistanceToNow(new Date(historyArray[0].ActivityDateInserted || historyArray[0].DateCreated), { addSuffix: true, locale: fr }) : 'Aucune'} subValue="Dernière session" icon={<Activity className="h-5 w-5 text-purple-500" />} />
-        <StatCard title={userGroupMember ? "Moyenne journalière (Groupe)" : "Ma moyenne journalière"} value={Math.round(totalHours / (days || 1)).toString() + 'h'} subValue="Heures / jour" icon={<TrendingUp className="h-5 w-5 text-orange-500" />} />
+      {/* Navigation Période */}
+      <div className="flex items-center justify-between bg-gray-800/30 p-4 rounded-xl border border-gray-700/50">
+        <a href={prevHref} className="p-2 hover:bg-gray-700 rounded-full transition-colors">
+          <ChevronLeft size={20} className="text-gray-400" />
+        </a>
+        <div className="flex items-center gap-2 font-medium text-white">
+          <Calendar size={18} className="text-blue-500" />
+          {periodTitle}
+        </div>
+        <a href={nextHref} className="p-2 hover:bg-gray-700 rounded-full transition-colors">
+          <ChevronRight size={20} className="text-gray-400" />
+        </a>
       </div>
 
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          title="Temps de visionnage" 
+          value={`${hours}h ${minutes}m`}
+          subValue={`${dailyHours}h ${dailyMinutes}m / jour en moyenne`}
+          icon={<Clock className="text-blue-500" />}
+        />
+        <StatCard 
+          title="Total Lectures" 
+          value={totalPlays.toString()}
+          subValue={`${moviePlays} films, ${episodePlays} épisodes`}
+          icon={<Play className="text-green-500" />}
+        />
+        <StatCard 
+          title="Films les plus vus" 
+          value={mostViewedMovies[0]?.Name || '-'}
+          subValue={`${mostViewedMovies[0]?.count || 0} visionnages`}
+          icon={<TrendingUp className="text-purple-500" />}
+        />
+        <StatCard 
+          title="Série favorite" 
+          value={mostViewedSeries[0]?.Name || '-'}
+          subValue={`${Math.round((mostViewedSeries[0]?.totalDuration || 0) / 3600)}h regardées`}
+          icon={<User className="text-orange-500" />}
+        />
+      </div>
+
+      {/* Charts */}
       <StatsCharts 
-        hourlyActivity={hourlyActivity} 
-        dailyActivity={orderedDailyActivity} 
-        monthlyActivity={monthlyActivity}
+        hourlyActivity={hourlyActivity}
+        dailyActivity={dailyActivity}
       />
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        <div className="lg:col-span-1">
+      {/* Top Items Tabs */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <TrendingUp size={20} className="text-yellow-500" />
+            Top Contenus
+          </h2>
           <TopItemsTabs 
-            movies={mostViewedMovies} 
-            series={mostViewedSeries} 
-            instanceId={instanceId} 
-            title="Mes favoris"
+            movies={mostViewedMovies}
+            series={mostViewedSeries}
           />
         </div>
 
-        <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <Clock className="h-5 w-5 text-blue-500" /> 
-            Mon historique
+        {/* Recent History List */}
+        <div className="space-y-4">
+           <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Clock size={20} className="text-blue-500" />
+            Historique Récent
           </h2>
-          <div className="rounded-xl bg-gray-900/40 border border-gray-700/50 overflow-hidden backdrop-blur-md shadow-2xl ring-1 ring-white/5">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-900/50 text-gray-400 text-xs uppercase tracking-wider">
-                  <th className="px-6 py-4 font-medium">Contenu</th>
-                  {userGroupMember && <th className="px-6 py-4 font-medium">Utilisateur</th>}
-                  <th className="px-6 py-4 font-medium">Client / Appareil</th>
-                  <th className="px-6 py-4 font-medium">Date</th>
-                  <th className="px-6 py-4 font-medium text-right">Durée</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700/50">
-                {aggregatedHistory.slice(0, 50).map((item: any) => {
-                  const isSeries = item.ItemType === 'Episode' || item.Type === 'Episode' || !!item.SeriesName;
-                  
-                  // For episodes, we want the episode name as title
-                  const isEpisode = item.Type === 'Episode' || item.ItemType === 'Episode';
-                  const displayName = isEpisode 
-                    ? (item.Name || item.ItemName || item.NowPlayingItemName)
-                    : (isSeries ? (item.SeriesName || item.Name) : (item.NowPlayingItemName || item.Name || item.ItemName));
-
-                  // Construct subtitle: Series Name • S1 E3
-                  let subName = null;
-                  if (isSeries) {
-                    const parts = [];
-                    if (item.SeriesName && item.SeriesName !== displayName) {
-                      parts.push(item.SeriesName);
-                    }
-                    if (item.ParentIndexNumber !== undefined && item.IndexNumber !== undefined) {
-                      parts.push(`S${item.ParentIndexNumber} E${item.IndexNumber}`);
-                    } else if (item.NowPlayingItemName && item.NowPlayingItemName !== displayName && item.NowPlayingItemName !== item.SeriesName) {
-                      parts.push(item.NowPlayingItemName);
-                    }
-                    subName = parts.length > 0 ? parts.join(' • ') : null;
-                  }
-
-                  return (
-                    <tr key={item.Id || `${item.NowPlayingItemId}-${item.ActivityDateInserted}`} className="hover:bg-blue-500/5 transition-colors group">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="relative h-10 w-7 flex-shrink-0 overflow-hidden rounded bg-gray-900 border border-gray-700/50">
-                             <EmbyImage 
-                               itemId={item.imageItemId || item.NowPlayingItemId || item.ItemId || item.Id} 
-                               alt={displayName} 
-                               itemName={displayName}
-                               instanceId={instanceId} 
-                               tmdbId={item.tmdbId}
-                               mediaType={item.mediaType}
-                             />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-sm font-medium text-white group-hover:text-blue-400 transition-colors">
-                                {displayName}
-                              </div>
-                              <SourceBadge source={item.Source} />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-900 text-gray-500 font-medium border border-gray-700">
-                                {isSeries ? 'Série' : 'Film'}
-                              </span>
-                              {subName && (
-                                <span className="text-[10px] text-gray-500 truncate max-w-[250px]">
-                                  {subName}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      {userGroupMember && (
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2 text-sm text-gray-300">
-                            <User className="h-3.5 w-3.5 text-gray-500" />
-                            {item.UserName}
-                          </div>
-                        </td>
-                      )}
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-300">{item.Client || item.ClientName || 'Client web'}</div>
-                        <div className="text-xs text-gray-500">{item.DeviceName || 'Inconnu'}</div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-400">
-                        {formatDistanceToNow(new Date(item.ActivityDateInserted || item.DateCreated), { addSuffix: true, locale: fr })}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-mono text-blue-400">
-                        {Math.floor((item.PlaybackDuration || 0) / 60)}m
-                      </td>
-                    </tr>
-                  );
-                })}
-                {aggregatedHistory.length === 0 && (
-                  <tr>
-                    <td colSpan={userGroupMember ? 5 : 4} className="px-6 py-10 text-center text-gray-500 italic">
-                      Aucun historique de visionnage trouvé
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="bg-gray-800/30 rounded-xl border border-gray-700/50 overflow-hidden">
+            {recentHistory.length > 0 ? (
+              <div className="divide-y divide-gray-700/50">
+                {recentHistory.map((item: any, i: number) => (
+                  <div key={i} className="p-3 hover:bg-gray-700/30 transition-colors flex gap-3 items-center">
+                    <div className="w-12 h-16 bg-gray-900 rounded-md overflow-hidden flex-shrink-0 relative">
+                      <EmbyImage 
+                        itemId={item.imageItemId}
+                        className="w-full h-full object-cover"
+                        alt={item.Name}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-white truncate">{item.Name}</div>
+                      <div className="text-sm text-gray-400 truncate">
+                        {item.SeriesName && <span className="text-blue-400">{item.SeriesName} • </span>}
+                        {formatDistanceToNow(new Date(item.DateCreated), { addSuffix: true, locale: fr })}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-gray-500">
+                          {Math.round((item.PlaybackDuration || 0) / 60)} min
+                        </span>
+                        <SourceBadge source={item.Source} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                Aucun historique récent
+              </div>
+            )}
           </div>
         </div>
       </div>

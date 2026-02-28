@@ -1,20 +1,19 @@
 import { PrismaClient } from '@prisma/client';
 import { JellyseerrService } from './services/jellyseerr';
-import { getTmdbServiceForUser } from './auth';
+import { getTmdbService } from './services/tmdb';
 
-export async function importJellyseerrRequests(prisma: PrismaClient, instanceId: number) {
-  const instance = await prisma.instance.findUnique({
-    where: { id: instanceId }
-  });
+export async function importJellyseerrRequests(prisma: PrismaClient) {
+  const jellyseerrUrl = process.env.JELLYSEERR_URL;
+  const jellyseerrApiKey = process.env.JELLYSEERR_API_KEY;
 
-  if (!instance || !instance.jellyseerrUrl || !instance.jellyseerrApiKey) {
-    throw new Error('Jellyseerr n\'est pas configuré pour cette instance.');
+  if (!jellyseerrUrl || !jellyseerrApiKey) {
+    throw new Error('Jellyseerr n\'est pas configuré.');
   }
 
   // Get TMDB Service using global config logic
-  const tmdb = await getTmdbServiceForUser(instanceId);
+  const tmdb = await getTmdbService();
 
-  const jellyseerr = new JellyseerrService(instance.jellyseerrUrl, instance.jellyseerrApiKey);
+  const jellyseerr = new JellyseerrService(jellyseerrUrl, jellyseerrApiKey);
   const requests = await jellyseerr.getAllRequests();
 
   let imported = 0;
@@ -25,7 +24,6 @@ export async function importJellyseerrRequests(prisma: PrismaClient, instanceId:
       // Check if already exists
       const existing = await (prisma as any).mediaRequest.findFirst({
         where: {
-          instanceId,
           tmdbId: String(req.media.tmdbId),
           mediaType: req.type
         }
@@ -48,7 +46,8 @@ export async function importJellyseerrRequests(prisma: PrismaClient, instanceId:
       let title = req.media.mediaType === 'movie' ? (req.media.title || 'Unknown Movie') : (req.media.name || 'Unknown Show');
       
       if (tmdb && (title === 'Unknown Movie' || title === 'Unknown Show')) {
-        const details = await tmdb.getDetails(req.media.tmdbId, req.type);
+        const tmdbId = typeof req.media.tmdbId === 'string' ? parseInt(req.media.tmdbId) : req.media.tmdbId;
+        const details = await tmdb.getDetails(tmdbId, req.type);
         if (details) {
           title = (req.type === 'movie' ? details.title : details.name) || title;
         }
@@ -59,7 +58,6 @@ export async function importJellyseerrRequests(prisma: PrismaClient, instanceId:
       if (req.requestedBy) {
         const user = await prisma.user.findFirst({
           where: {
-            instanceId,
             OR: [
               { email: req.requestedBy.email },
               { jellyseerrUserId: String(req.requestedBy.id) }
@@ -73,7 +71,6 @@ export async function importJellyseerrRequests(prisma: PrismaClient, instanceId:
 
       await (prisma as any).mediaRequest.create({
         data: {
-          instanceId,
           userId,
           mediaType: req.type,
           tmdbId: String(req.media.tmdbId),

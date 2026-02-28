@@ -8,63 +8,35 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Instance {
-  id                Int                      @id @default(autoincrement())
-  name              String                   @unique
-  slug              String                   @unique
-  type              String                   @default("emby")
-  embyUrl           String?                  @map("emby_url")
-  embyApiKey        String?                  @map("emby_api_key")
-  plexUrl           String?                  @map("plex_url")
-  plexToken         String?                  @map("plex_token")
-  jellyfinUrl       String?                  @map("jellyfin_url")
-  jellyfinApiKey    String?                  @map("jellyfin_api_key")
-  jellyseerrUrl     String?                  @map("jellyseerr_url")
-  jellyseerrApiKey  String?                  @map("jellyseerr_api_key")
-  isDefault         Boolean                  @default(false) @map("is_default")
-  createdAt         DateTime                 @default(now()) @map("created_at")
-  updatedAt         DateTime                 @updatedAt @map("updated_at")
-  fileShares        FileShare[]
-  mediaAvailability MediaAvailabilityIndex[]
-  mediaRequests     MediaRequest[]
-  notifications     Notification[]
-  settings          Setting[]
-  userGroupMembers  UserGroupMember[]
-  users             User[]
-  watchEvents       WatchEvent[]
-  watchLater        WatchLater[]
-  inviteCodes       InviteCode[]
+model UserCalendarEvent {
+  id        String   @id @default(uuid())
+  userId    Int      @map("user_id")
+  mediaType String   @map("media_type")
+  tmdbId    String   @map("tmdb_id")
+  title     String
+  releaseDate DateTime @map("release_date")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("instances")
-}
-
-model InviteCode {
-  id         Int      @id @default(autoincrement())
-  code       String   @unique
-  instanceId Int      @map("instance_id")
-  used       Boolean  @default(false)
-  usedBy     Int?     @unique @map("used_by")
-  expiresAt  DateTime? @map("expires_at")
-  createdAt  DateTime @default(now()) @map("created_at")
-  
-  instance   Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-
-  @@map("invite_codes")
+  @@unique([userId, tmdbId, mediaType])
+  @@index([userId, releaseDate])
+  @@map("user_calendar_events")
 }
 
 model User {
   id               Int            @id @default(autoincrement())
-  instanceId       Int            @map("instance_id")
   name             String
-  email            String
+  email            String         @unique
   emailVerified    DateTime?
   password         String?
   image            String?
-  embyUserId       String?        @map("emby_user_id")
+  embyUserId       String?        @unique @map("emby_user_id")
+  jellyfinUserId   String?        @unique @map("jellyfin_user_id")
+  plexUserId       String?        @unique @map("plex_user_id")
   jellyseerrUserId String?        @map("jellyseerr_user_id")
-  role             String         @default("user")
-  roleVersion      Int            @default(0) @map("role_version")
+  role             String         @default("user") // Denormalized role name
   roleId           String?        @map("role_id")
+  roleRef          Role?          @relation(fields: [roleId], references: [id])
   hasSeenWelcome   Boolean        @default(false) @map("has_seen_welcome")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
@@ -73,21 +45,18 @@ model User {
   requests         MediaRequest[]
   notifications    Notification[]
   sessions         Session[]
-  instance         Instance       @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  userRole         Role?          @relation(fields: [roleId], references: [id])
   watchEvents      WatchEvent[]
   watchLater       WatchLater[]
-  permissions      Permission[]   @relation("UserDirectPermissions")
+  calendarEvents   UserCalendarEvent[]
+  groupMemberships UserGroupMember[]
+  subscriptions    MediaSubscription[]
 
-  @@unique([email, instanceId])
-  @@unique([embyUserId, instanceId])
   @@map("users")
 }
 
 model Notification {
   id         Int      @id @default(autoincrement())
   userId     Int      @map("user_id")
-  instanceId Int      @map("instance_id")
   title      String
   message    String
   type       String
@@ -98,7 +67,6 @@ model Notification {
   link       String?
   createdAt  DateTime @default(now()) @map("created_at")
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instance   Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
   @@map("notifications")
@@ -107,7 +75,6 @@ model Notification {
 model WatchLater {
   id         Int      @id @default(autoincrement())
   userId     Int      @map("user_id")
-  instanceId Int      @map("instance_id")
   mediaId    String   @map("media_id")
   tmdbId     String?  @map("tmdb_id")
   mediaType  String   @map("media_type")
@@ -116,7 +83,6 @@ model WatchLater {
   isEmbyItem Boolean  @default(false) @map("is_emby_item")
   createdAt  DateTime @default(now()) @map("created_at")
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instance   Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
   @@unique([userId, mediaId, mediaType])
   @@map("watch_later")
@@ -163,7 +129,6 @@ model VerificationToken {
 model MediaRequest {
   id              Int       @id @default(autoincrement())
   userId          Int?      @map("user_id")
-  instanceId      Int       @map("instance_id")
   mediaType       String    @map("media_type")
   tmdbId          String    @map("tmdb_id")
   title           String
@@ -182,7 +147,6 @@ model MediaRequest {
   requesterEmail  String?   @map("requester_email")
   requesterAvatar String?   @map("requester_avatar")
   user            User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  instance        Instance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([mediaType, status])
@@ -193,7 +157,6 @@ model MediaRequest {
 model WatchEvent {
   id              Int      @id @default(autoincrement())
   userId          Int?     @map("user_id")
-  instanceId      Int      @map("instance_id")
   embyUserId      String   @map("emby_user_id")
   itemId          String   @map("item_id")
   itemType        String?  @map("item_type")
@@ -213,7 +176,6 @@ model WatchEvent {
   sessionId       String?  @map("session_id")
   userName        String?  @map("user_name")
   user            User?    @relation(fields: [userId], references: [id])
-  instance        Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
   @@unique([embyUserId, itemId, playedAt])
   @@map("watch_events")
@@ -221,22 +183,18 @@ model WatchEvent {
 
 model Setting {
   id         Int      @id @default(autoincrement())
-  instanceId Int      @map("instance_id")
-  key        String
+  key        String   @unique
   value      String?
   type       String   @default("string")
   group      String   @default("general")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
-  instance   Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
-  @@unique([key, instanceId])
   @@map("settings")
 }
 
 model MediaAvailabilityIndex {
   id               Int      @id @default(autoincrement())
-  instanceId       Int      @map("instance_id")
   tmdbId           String   @map("tmdb_id")
   mediaType        String   @map("media_type")
   isAvailable      Boolean  @default(false) @map("is_available")
@@ -245,29 +203,38 @@ model MediaAvailabilityIndex {
   lastCheckedAt    DateTime @default(now()) @map("last_checked_at")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
-  instance         Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
-  @@unique([tmdbId, instanceId])
+  @@unique([tmdbId, mediaType])
   @@index([mediaType, isAvailable])
   @@map("media_availability_index")
 }
 
+model MediaSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  tmdbId    String   @map("tmdb_id")
+  mediaType String   @map("media_type")
+  title     String
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tmdbId, mediaType])
+  @@map("media_subscriptions")
+}
+
 model FileShare {
   id         String    @id @default(uuid())
-  instanceId Int       @map("instance_id")
   filePath   String    @map("file_path")
   token      String    @unique
   expiresAt  DateTime? @map("expires_at")
   createdAt  DateTime  @default(now()) @map("created_at")
-  instance   Instance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
   @@map("file_shares")
 }
 
 model EmbyLiveSession {
   id                  String   @id @default(uuid())
-  instanceId          Int      @default(1) @map("instance_id")
-  sessionId           String   @map("session_id")
+  sessionId           String   @unique @map("session_id")
   source              String   @default("emby")
   userId              String   @map("user_id")
   userName            String   @map("user_name")
@@ -285,13 +252,14 @@ model EmbyLiveSession {
   playbackPosition    BigInt?  @map("playback_position")
   accumulatedDuration Int      @default(0) @map("accumulated_duration")
 
-  @@unique([sessionId, instanceId])
   @@map("emby_live_sessions")
 }
 
 model UserGroup {
   id        String            @id @default(uuid())
   name      String
+  roleId    String?           @map("role_id")
+  role      Role?             @relation(fields: [roleId], references: [id])
   createdAt DateTime          @default(now()) @map("created_at")
   updatedAt DateTime          @updatedAt @map("updated_at")
   members   UserGroupMember[]
@@ -302,19 +270,17 @@ model UserGroup {
 model UserGroupMember {
   id          Int       @id @default(autoincrement())
   userGroupId String    @map("user_group_id")
-  instanceId  Int       @map("instance_id")
-  userId      String    @map("user_id")
+  userId      Int       @map("user_id")
   username    String?
-  instance    Instance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   userGroup   UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([instanceId, userId])
+  @@unique([userGroupId, userId])
   @@map("user_group_members")
 }
 
 model EmbyActivityLog {
   id            String    @id @default(uuid())
-  instanceId    Int       @default(1) @map("instance_id")
   source        String    @default("emby")
   embyUserId    String    @map("emby_user_id")
   userName      String    @map("user_name")
@@ -331,7 +297,6 @@ model EmbyActivityLog {
   ipAddress     String?   @map("ip_address")
   mediaInfo     String?   @map("media_info")
 
-  @@index([instanceId])
   @@index([embyUserId])
   @@index([startTime])
   @@map("emby_activity_logs")
@@ -357,34 +322,6 @@ model DockerGroupMember {
   @@map("docker_group_members")
 }
 
-model Role {
-  id          String       @id @default(cuid())
-  name        String       @unique
-  displayName String?      @map("display_name")
-  description String?
-  isSystem    Boolean      @default(false) @map("is_system")
-  priority    Int          @default(0)
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
-  users       User[]
-  permissions Permission[] @relation("PermissionToRole")
-
-  @@map("roles")
-}
-
-model Permission {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  category    String   @default("general")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  roles       Role[]   @relation("PermissionToRole")
-  users       User[]   @relation("UserDirectPermissions")
-
-  @@map("permissions")
-}
-
 model AuditLog {
   id        String   @id @default(cuid())
   userId    Int      @map("user_id")
@@ -396,4 +333,29 @@ model AuditLog {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("audit_logs")
+}
+
+model Role {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String?
+  isSystem    Boolean      @default(false) @map("is_system")
+  permissions Permission[]
+  users       User[]
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  userGroups  UserGroup[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  action      String   
+  subject     String   
+  conditions  String?  
+  roleId      String   @map("role_id")
+  role        Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@map("permissions")
 }

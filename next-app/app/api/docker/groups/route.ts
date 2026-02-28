@@ -3,15 +3,14 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { defineAbilityFor } from '@/lib/ability'
 
 export async function GET() {
   const session = await getServerSession(authOptions)
   const user = session?.user as any
-  const permissions = user?.permissions || []
-  const isAdmin = user?.role === 'admin'
-  const canView = isAdmin || permissions.includes('docker.view') || permissions.includes('docker.manage')
+  const ability = defineAbilityFor(user)
   
-  if (!session || !canView) {
+  if (!session || !ability.can('read', 'Docker')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -35,11 +34,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   const user = session?.user as any
-  const permissions = user?.permissions || []
-  const isAdmin = user?.role === 'admin'
-  const canManage = isAdmin || permissions.includes('docker.manage')
+  const ability = defineAbilityFor(user)
 
-  if (!session || !canManage) {
+  if (!session || !ability.can('manage_groups', 'Docker')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

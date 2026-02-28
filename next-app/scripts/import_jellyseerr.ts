@@ -1,35 +1,29 @@
 import { PrismaClient } from '@prisma/client'
 import { importJellyseerrRequests } from '../lib/jellyseerr-import'
-import { getTmdbServiceForUser } from '../lib/auth'
+import { getTmdbService } from '../lib/services/tmdb'
 
 const prisma = new PrismaClient()
 
 async function main() {
-  const instanceId = 1 // Tsukyflix
-  
-  console.log(`[Script] Starting clean import for instance ${instanceId}`)
+  console.log(`[Script] Starting clean import`)
   
   // 1. Delete existing requests
   console.log('[Script] Deleting existing requests...')
-  const deleted = await prisma.mediaRequest.deleteMany({
-    where: { instanceId }
-  })
+  const deleted = await prisma.mediaRequest.deleteMany({})
   console.log(`[Script] Deleted ${deleted.count} requests.`)
   
   // 2. Import from Jellyseerr
   console.log('[Script] Importing from Jellyseerr...')
-  const result = await importJellyseerrRequests(prisma as any, instanceId)
+  const result = await importJellyseerrRequests(prisma as any)
   console.log(`[Script] Imported ${result.imported} requests.`)
   
   // 3. Fix titles
   console.log('[Script] Fixing missing titles via TMDB...')
-  const tmdb = await getTmdbServiceForUser(instanceId)
+  const tmdb = await getTmdbService()
   if (!tmdb) {
     console.error('[Script] TMDB service not available')
   } else {
-    const requests = await prisma.mediaRequest.findMany({
-      where: { instanceId }
-    })
+    const requests = await prisma.mediaRequest.findMany({})
     
     let fixed = 0
     for (const req of requests) {

@@ -5,16 +5,21 @@ import { authOptions } from '@/lib/auth'
 import { UnraidService } from '@/lib/services/unraid'
 import { DockerService } from '@/lib/services/docker'
 import { prisma } from '@/lib/prisma'
+import { defineAbilityFor } from '@/lib/ability'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   
   const user = session?.user as any
-  const permissions = user?.permissions || []
-  const isAdmin = user?.role === 'admin'
-  const canManage = isAdmin || permissions.includes('docker.manage')
+  const ability = defineAbilityFor(user)
 
-  if (!session || !canManage) {
+  if (!session || !ability.can('manage_containers', 'Docker')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -27,15 +32,15 @@ export async function POST(request: Request) {
     }
 
     // Try direct Docker action first (more reliable)
-    console.log(`[API] Attempting direct Docker action: ${action} on ${containerId}`)
-    const dockerSuccess = await DockerService.containerAction(containerId, action)
+    log(`[API] Attempting direct Docker action: ${action} on ${containerId}`)
+    const dockerResult = await DockerService.containerAction(containerId, action)
     
-    if (dockerSuccess) {
+    if (dockerResult.success) {
         return NextResponse.json({ success: true, method: 'docker' })
     }
 
     // Fallback to Unraid API if Docker action fails
-    console.log(`[API] Docker action failed, falling back to Unraid API for ${action}`)
+    log(`[API] Docker action failed (${dockerResult.error}), falling back to Unraid API for ${action}`)
     const unraidUrlSetting = await prisma.setting.findFirst({ where: { key: 'unraid_url' } })
     const unraidApiKeySetting = await prisma.setting.findFirst({ where: { key: 'unraid_api_key' } })
 
@@ -48,10 +53,11 @@ export async function POST(request: Request) {
         }
     }
 
-    return NextResponse.json({ error: 'Action failed on both Docker and Unraid API' }, { status: 500 })
+    // Return the specific Docker error if Unraid also failed or wasn't configured
+    return NextResponse.json({ error: dockerResult.error || 'Action failed on both Docker and Unraid API' }, { status: 500 })
 
   } catch (error: any) {
-    console.error('[API] Error performing docker action:', error)
+    error('[API] Error performing docker action:', error)
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }

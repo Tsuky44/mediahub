@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getRadarrServiceForUser, getSonarrServiceForUser, getTmdbServiceForUser, getCurrentUser } from '@/lib/auth'
-import { getSetting } from '@/lib/settings'
+import { getCurrentUser } from '@/lib/auth'
+import { getRadarrService } from '@/lib/services/radarr'
+import { getSonarrService } from '@/lib/services/sonarr'
+import { getTmdbService } from '@/lib/services/tmdb'
 import { prisma } from '@/lib/prisma'
 import { forget } from '@/lib/cache'
 import { revalidatePath } from 'next/cache'
+import { defineAbilityFor } from '@/lib/ability'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser()
@@ -11,7 +20,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const instanceId = parseInt((user as any).instanceId)
+  const ability = defineAbilityFor(user)
+  if (!ability.can('create', 'MediaRequest')) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 })
+  }
 
   try {
     const body = await request.json()
@@ -25,7 +37,7 @@ export async function POST(request: NextRequest) {
     let externalId: string | undefined
 
     if (mediaType === 'movie') {
-        const radarrService = await getRadarrServiceForUser()
+        const radarrService = await getRadarrService()
         if (!radarrService) {
             return NextResponse.json({ error: 'Radarr not configured' }, { status: 503 })
         }
@@ -59,8 +71,8 @@ export async function POST(request: NextRequest) {
         if (addResult.movie?.id) externalId = addResult.movie.id.toString()
 
     } else if (mediaType === 'tv') {
-        const sonarrService = await getSonarrServiceForUser()
-        const tmdbService = await getTmdbServiceForUser()
+        const sonarrService = await getSonarrService()
+        const tmdbService = await getTmdbService()
         
         if (!sonarrService || !tmdbService) {
             return NextResponse.json({ error: 'Sonarr or TMDB not configured' }, { status: 503 })
@@ -87,7 +99,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Series not found in Sonarr lookup' }, { status: 404 })
         }
 
-        let seasonsToRequest = lookup.seasons.map(s => s.seasonNumber)
+        let seasonsToRequest = lookup.seasons.map((s: any) => s.seasonNumber)
         
         // If specific seasons are provided in the body, use them
         if (body.seasons) {
@@ -96,8 +108,7 @@ export async function POST(request: NextRequest) {
                 // Fetch other active requests to maintain monitoring for previously requested seasons
                 const activeRequests = await (prisma as any).mediaRequest.findMany({
                     where: { 
-                        tmdbId: tmdbId.toString(),
-                        instanceId
+                        tmdbId: tmdbId.toString()
                     }
                 })
                 
@@ -142,7 +153,7 @@ export async function POST(request: NextRequest) {
             
             // Get user info
             const dbUser = await (prisma as any).user.findFirst({ 
-                where: { email: user.email || '', instanceId } 
+                where: { email: user.email || '' } 
             })
             
             // ALWAYS create a new request instead of merging for TV series
@@ -151,13 +162,13 @@ export async function POST(request: NextRequest) {
             if (mediaType === 'movie') {
                 if (externalId) {
                     existingRequest = await (prisma as any).mediaRequest.findFirst({
-                        where: { externalId: externalId, instanceId }
+                        where: { externalId: externalId }
                     })
                 }
                 
                 if (!existingRequest) {
                      existingRequest = await (prisma as any).mediaRequest.findFirst({
-                        where: { tmdbId: tmdbId.toString(), instanceId }
+                        where: { tmdbId: tmdbId.toString() }
                      })
                 }
             }
@@ -168,8 +179,8 @@ export async function POST(request: NextRequest) {
                     seasons = Array.isArray(body.seasons) ? body.seasons : [body.seasons]
                 } else {
                     // Fallback to all seasons if it's a new series request without specific seasons
-                    const sonarrService = await getSonarrServiceForUser()
-                    const tmdbService = await getTmdbServiceForUser()
+                    const sonarrService = await getSonarrService()
+                    const tmdbService = await getTmdbService()
                     if (sonarrService && tmdbService) {
                         const externalIds = await tmdbService.getExternalIds('tv', tmdbId)
                         if (externalIds?.tvdb_id) {
@@ -198,7 +209,6 @@ export async function POST(request: NextRequest) {
                     const existingSeasonRequest = await (prisma as any).mediaRequest.findFirst({
                         where: {
                             tmdbId: tmdbId.toString(),
-                            instanceId,
                             mediaType: 'tv',
                             metadata: {
                                 contains: `"seasons":[${seasonNum}]`
@@ -207,13 +217,12 @@ export async function POST(request: NextRequest) {
                     })
 
                     if (existingSeasonRequest) {
-                        console.log(`[Request API] Season ${seasonNum} already requested, skipping duplicate entry creation`)
+                        log(`[Request API] Season ${seasonNum} already requested, skipping duplicate entry creation`)
                         continue
                     }
 
                     await (prisma as any).mediaRequest.create({
                         data: {
-                            instanceId,
                             externalId: externalId || `pending_${tmdbId}_${Date.now()}_s${seasonNum}`,
                             tmdbId: tmdbId.toString(),
                             mediaType: mediaType,
@@ -233,7 +242,6 @@ export async function POST(request: NextRequest) {
             } else {
                 await (prisma as any).mediaRequest.create({
                     data: {
-                        instanceId,
                         externalId: externalId || `pending_${tmdbId}_${Date.now()}`,
                         tmdbId: tmdbId.toString(),
                         mediaType: mediaType,
@@ -251,9 +259,9 @@ export async function POST(request: NextRequest) {
                 })
             }
 
-            console.log(`[Request API] Immediate local DB update success for ${title}`)
+            log(`[Request API] Immediate local DB update success for ${title}`)
         } catch (dbError) {
-            console.error('[Request API] Failed to update local DB immediately:', dbError)
+            error('[Request API] Failed to update local DB immediately:', dbError)
             // Non-blocking error, we continue
         }
 
@@ -268,7 +276,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (e: any) {
-    console.error('Request failed', e)
+    error('Request failed', e)
     return NextResponse.json({ error: e.message || 'Internal Server Error' }, { status: 500 })
   }
 }

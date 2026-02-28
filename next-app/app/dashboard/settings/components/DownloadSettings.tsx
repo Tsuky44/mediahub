@@ -2,17 +2,42 @@ import { useState } from 'react'
 import { Download, Globe } from 'lucide-react'
 import { InputField, SectionHeader, TestButton, TestResult } from './SharedComponents'
 import { SettingsFormData } from './types'
-import { testProwlarrConnectionAction } from '../actions'
+import { testProwlarrConnectionAction, testQBittorrentConnectionAction } from '../actions'
 
 interface Props {
     formData: SettingsFormData
     updateField: (field: keyof SettingsFormData, value: string) => void
+    readOnly?: boolean
 }
 
-export const DownloadSettings = ({ formData, updateField }: Props) => {
+export const DownloadSettings = ({ formData, updateField, readOnly }: Props) => {
+    // QBittorrent States
+    const [qbitLoading, setQbitLoading] = useState(false)
+    const [qbitResult, setQbitResult] = useState<TestResult | null>(null)
+
     // Prowlarr States
     const [prowlarrLoading, setProwlarrLoading] = useState(false)
     const [prowlarrResult, setProwlarrResult] = useState<TestResult | null>(null)
+
+    const handleTestQBittorrent = async () => {
+        setQbitLoading(true)
+        setQbitResult(null)
+        try {
+            const res = await testQBittorrentConnectionAction(
+                formData.qbittorrent_url, 
+                formData.qbittorrent_username, 
+                formData.qbittorrent_password
+            )
+            setQbitResult({
+                success: res.success,
+                message: res.message || (res.success ? 'Connexion réussie' : 'Échec de la connexion')
+            })
+        } catch (e: any) {
+            setQbitResult({ success: false, message: e.message })
+        } finally {
+            setQbitLoading(false)
+        }
+    }
 
     const handleTestProwlarr = async () => {
         setProwlarrLoading(true)
@@ -60,6 +85,11 @@ export const DownloadSettings = ({ formData, updateField }: Props) => {
                         />
                     </div>
                 </div>
+                <TestButton 
+                    onClick={handleTestQBittorrent} 
+                    loading={qbitLoading} 
+                    result={qbitResult} 
+                />
             </div>
 
             {/* Prowlarr Section */}

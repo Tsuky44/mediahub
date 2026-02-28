@@ -44,29 +44,29 @@ export function MediaTabs({ movies, series }: MediaTabsProps) {
 
                 {/* Tabs */}
                 <div className="flex justify-center border-b border-gray-700 order-1 md:order-2 md:flex-1 md:border-b-0">
-                    <div className="flex space-x-8">
+                    <div className="flex p-1 bg-gray-900/50 rounded-full border border-gray-800/50 backdrop-blur-md">
                         <button
                             onClick={() => setActiveTab('movies')}
-                            className={`group flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all border-b-2 md:border-b-0 md:rounded-md md:px-3 ${
+                            className={`group flex items-center gap-2 px-6 py-2 text-sm font-medium transition-all rounded-full ${
                                 activeTab === 'movies'
-                                    ? 'border-indigo-500 text-indigo-400 md:bg-gray-800'
-                                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 md:hover:bg-gray-800/50'
+                                    ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(79,70,229,0.3)]'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
                             }`}
                             title="Films"
                         >
-                            <Clapperboard className={`h-5 w-5 ${activeTab === 'movies' ? 'fill-current' : ''}`} />
+                            <Clapperboard className={`h-4 w-4 ${activeTab === 'movies' ? 'fill-current' : ''}`} />
                             <span className="hidden sm:inline">Films ({filteredMovies.length})</span>
                         </button>
                         <button
                             onClick={() => setActiveTab('series')}
-                            className={`group flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all border-b-2 md:border-b-0 md:rounded-md md:px-3 ${
+                            className={`group flex items-center gap-2 px-6 py-2 text-sm font-medium transition-all rounded-full ${
                                 activeTab === 'series'
-                                    ? 'border-indigo-500 text-indigo-400 md:bg-gray-800'
-                                    : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600 md:hover:bg-gray-800/50'
+                                    ? 'bg-indigo-600 text-white shadow-[0_0_15px_rgba(79,70,229,0.3)]'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
                             }`}
                             title="Séries"
                         >
-                            <Tv className={`h-5 w-5 ${activeTab === 'series' ? 'fill-current' : ''}`} />
+                            <Tv className={`h-4 w-4 ${activeTab === 'series' ? 'fill-current' : ''}`} />
                             <span className="hidden sm:inline">Séries ({filteredSeries.length})</span>
                         </button>
                     </div>

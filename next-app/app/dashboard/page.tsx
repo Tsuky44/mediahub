@@ -1,5 +1,6 @@
 import { getEmbyServiceForUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getTmdbService } from '@/lib/services/tmdb'
 import { fetchRecentlyWatchedItems, fetchUserRecommendations } from './media/actions'
 import { RecentlyWatched } from './media/RecentlyWatched'
 import { Recommendations } from './media/Recommendations'
@@ -11,19 +12,21 @@ import Link from 'next/link'
 import { getTorrents } from './downloads/actions'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { defineAbilityFor } from '@/lib/ability'
 import { WelcomePopup } from '@/components/WelcomePopup'
+import { ReleaseCalendar } from '@/components/ReleaseCalendar'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
   const user = session?.user as any
+  const ability = defineAbilityFor(user)
   const userRole = user?.role || 'user'
   const isAdminOrUserPlus = userRole === 'admin' || userRole === 'user_plus'
-  const instanceId = user?.instanceId ? parseInt(user.instanceId) : NaN
   const userId = user?.id ? parseInt(user.id) : NaN
 
-  if (isNaN(instanceId) || isNaN(userId)) {
+  if (isNaN(userId)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-gray-900/50 rounded-2xl border border-gray-800">
         <h2 className="text-2xl font-bold text-white mb-2">Erreur d'authentification</h2>
@@ -35,20 +38,27 @@ export default async function DashboardPage() {
   const embyService = await getEmbyServiceForUser()
 
   // Check if user has seen welcome popup
-  const dbUser = await (prisma as any).user.findFirst({
+  const dbUser = await prisma.user.findUnique({
     where: { 
-      id: userId,
-      instanceId
+      id: userId
     }
   })
   // @ts-ignore
   const showWelcome = dbUser ? !dbUser.hasSeenWelcome : true
 
-  const embyUrl = await getSetting('emby_url', instanceId)
+  const settings = await prisma.setting.findMany({
+    where: { key: { in: ['emby_url', 'qbittorrent_url', 'smb_host', 'docker_host', 'unraid_url'] } }
+  })
+
+  const embyUrl = settings.find(s => s.key === 'emby_url')?.value
+  const hasQbit = !!settings.find(s => s.key === 'qbittorrent_url' && s.value)
+  const hasSmb = !!settings.find(s => s.key === 'smb_host' && s.value)
+  const hasDownloads = hasQbit || hasSmb
+  const hasDocker = !!settings.find(s => s.key === 'docker_host' && s.value) || !!settings.find(s => s.key === 'unraid_url' && s.value)
 
   if (!embyUrl) {
     // Only show the configuration warning for the default instance or if user is admin
-    const isBaseAdmin = userRole === 'admin' && user?.isDefaultInstance
+    const isBaseAdmin = userRole === 'admin'
     
     if (isBaseAdmin || !embyUrl) {
       return (
@@ -84,14 +94,13 @@ export default async function DashboardPage() {
   // Parallel fetching for performance
   const [sessionsRes, requestsRes, watchedRes, recsRes, torrentsRes] = await Promise.allSettled([
     embyService ? embyService.getSessions() : Promise.resolve([]),
-    (prisma as any).mediaRequest.findMany({
-      where: { instanceId },
+    ability.can('read', 'MediaRequest') ? prisma.mediaRequest.findMany({
       orderBy: { requestedAt: 'desc' },
       take: 20
-    }),
+    }) : Promise.resolve([]),
     fetchRecentlyWatchedItems(),
     fetchUserRecommendations(),
-    getTorrents('all')
+    ability.can('read', 'Downloads') ? getTorrents('all') : Promise.resolve([])
   ])
 
   // Process sessions
@@ -106,24 +115,45 @@ export default async function DashboardPage() {
 
   // Process requests
   if (requestsRes.status === 'fulfilled') {
-    recentRequests = requestsRes.value.map((req: any) => {
-      let metadata = {}
+    const tmdbService = await getTmdbService()
+    
+    recentRequests = await Promise.all(requestsRes.value.map(async (req: any) => {
+      let metadata: any = {}
       try {
         metadata = req.metadata ? JSON.parse(req.metadata) : {}
       } catch (e) {}
+
+      let posterPath = metadata.posterPath
+      
+      // If posterPath is missing or looks like a local Sonarr/Radarr path, try to get from TMDB
+      if ((!posterPath || posterPath.includes('MediaCover')) && req.tmdbId && tmdbService) {
+        try {
+           const tmdbIdNum = parseInt(req.tmdbId)
+           if (!isNaN(tmdbIdNum)) {
+             const details = await tmdbService.getDetails(tmdbIdNum, req.mediaType as 'movie' | 'tv')
+             if (details && details.poster_path) {
+               posterPath = details.poster_path
+             }
+           }
+        } catch (e) {
+           // ignore error
+        }
+      }
+
       return {
         id: req.id.toString(),
         type: req.mediaType,
         status: req.status,
         media: {
           title: req.title,
-          posterPath: (metadata as any).posterPath
+          posterPath: posterPath,
+          tmdbId: req.tmdbId
         },
         requestedBy: {
           displayName: req.requesterName || 'Inconnu'
         }
       }
-    })
+    }))
   }
 
   // Process watched & recommendations
@@ -135,7 +165,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto w-full min-h-screen flex flex-col space-y-8 pb-8">
+    <div className="w-full px-2 md:px-4 mx-auto min-h-screen flex flex-col space-y-6 pb-8">
       <WelcomePopup show={showWelcome} userRole={userRole} />
       {/* Barre de recherche et Actions Rapides (Largeur totale) */}
       <div className="flex-shrink-0">
@@ -143,21 +173,25 @@ export default async function DashboardPage() {
           initialTorrents={activeTorrents} 
           userName={user?.name || ''} 
           isAdmin={isAdminOrUserPlus}
+          configStatus={{ hasDownloads, hasDocker }}
         />
       </div>
       
       {/* Zone de contenu scindée */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
-        {/* Colonne de Gauche : Médias (Prend toute sa hauteur, pas de scroll interne) */}
-        <div className="xl:col-span-2 space-y-8">
+        {/* Colonne de Gauche : Médias */}
+        <div className={`space-y-8 ${ability.can('read', 'MediaRequest') ? 'xl:col-span-2' : 'xl:col-span-3'}`}>
+          <ReleaseCalendar />
           <RecentlyWatched items={recentlyWatched} />
           <Recommendations items={recommendations} />
         </div>
         
         {/* Colonne de Droite : Dernières demandes (Fixe et défilante) */}
-        <div className="xl:sticky xl:top-8 h-[calc(100vh-160px)] overflow-hidden">
-          <RecentRequests requests={recentRequests} />
-        </div>
+        {ability.can('read', 'MediaRequest') && (
+          <div className="xl:sticky xl:top-8 h-[calc(100vh-160px)] overflow-hidden">
+            <RecentRequests requests={recentRequests} />
+          </div>
+        )}
       </div>
     </div>
   )

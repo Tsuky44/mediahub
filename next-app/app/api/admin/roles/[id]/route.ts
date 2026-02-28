@@ -1,112 +1,129 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { PERMISSIONS } from '@/lib/permissions'
-import { logAction } from '@/lib/audit'
+import { getRealUser } from '@/lib/auth'
 
-export async function PUT(
-  req: Request,
+export async function GET(
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
+  const user = await getRealUser()
+  if (!user || (user as any).role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-  // Check permission
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userRole = (session.user as any).role
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userPermissions = (session.user as any).permissions || []
-  const hasAccess = userRole === 'admin' || userPermissions.includes(PERMISSIONS.ROLES_MANAGE)
+  const { id } = await params
+  const role = await (prisma as any).role.findUnique({
+    where: { id },
+    include: {
+      permissions: true
+    }
+  })
 
-  if (!hasAccess) return new NextResponse('Forbidden', { status: 403 })
+  if (!role) {
+    return NextResponse.json({ error: 'Role not found' }, { status: 404 })
+  }
+
+  return NextResponse.json(role)
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getRealUser()
+  if (!user || (user as any).role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { id } = await params
+  const { name, description, permissions } = await request.json()
 
   try {
-    const { displayName, description, permissions, priority } = await req.json()
-    const { id } = await params
+    // Check if role is system role and prevent name change
+    const role = await (prisma as any).role.findUnique({
+      where: { id }
+    })
 
-    // Check if system role
-    const currentRole = await prisma.role.findUnique({ where: { id } })
-    if (!currentRole) return new NextResponse('Role not found', { status: 404 })
+    if (role.isSystem && name !== role.name) {
+      return NextResponse.json({ error: 'Cannot rename system role' }, { status: 400 })
+    }
 
-    const role = await prisma.role.update({
+    // Update basic info
+    const updatedRole = await (prisma as any).role.update({
       where: { id },
       data: {
-        displayName,
-        description,
-        priority,
-        permissions: {
-          set: permissions?.map((p: string) => ({ name: p })) || []
-        }
-      },
-      include: {
-        permissions: true
+        name,
+        description
       }
     })
 
-    await logAction(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      parseInt((session.user as any).id),
-      'UPDATE',
-      'Role',
-      role.id,
-      { displayName, permissions }
-    )
+    // If permissions are provided, update them
+    if (permissions) {
+      // First delete all existing permissions
+      await (prisma as any).permission.deleteMany({
+        where: { roleId: id }
+      })
 
-    return NextResponse.json(role)
+      // Then create new ones
+      if (permissions.length > 0) {
+        await (prisma as any).permission.createMany({
+          data: permissions.map((p: any) => ({
+            roleId: id,
+            action: p.action,
+            subject: p.subject,
+            conditions: p.conditions ? JSON.stringify(p.conditions) : null
+          }))
+        })
+      }
+    }
+
+    return NextResponse.json(updatedRole)
   } catch (error) {
-    console.error('Error updating role:', error)
-    return new NextResponse('Internal Server Error', { status: 500 })
+    console.error('Failed to update role:', error)
+    return NextResponse.json({ error: 'Failed to update role' }, { status: 500 })
   }
 }
 
 export async function DELETE(
-  req: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) return new NextResponse('Unauthorized', { status: 401 })
+  const user = await getRealUser()
+  if (!user || (user as any).role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-  // Check permission
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userRole = (session.user as any).role
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userPermissions = (session.user as any).permissions || []
-  const hasAccess = userRole === 'admin' || userPermissions.includes(PERMISSIONS.ROLES_MANAGE)
-
-  if (!hasAccess) return new NextResponse('Forbidden', { status: 403 })
-
+  const { id } = await params
+  
   try {
-    const { id } = await params
+    const role = await (prisma as any).role.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { users: true }
+        }
+      }
+    })
 
-    // Check if system role
-    const currentRole = await prisma.role.findUnique({ where: { id } })
-    if (!currentRole) return new NextResponse('Role not found', { status: 404 })
-    
-    if (currentRole.isSystem) {
-        return new NextResponse('Cannot delete system role', { status: 400 })
+    if (!role) {
+      return NextResponse.json({ error: 'Role not found' }, { status: 404 })
     }
 
-    // Check if role is assigned to users
-    const usageCount = await prisma.user.count({ where: { roleId: id } })
-    if (usageCount > 0) {
-        return new NextResponse(`Role is assigned to ${usageCount} users`, { status: 400 })
+    if (role.isSystem) {
+      return NextResponse.json({ error: 'Cannot delete system role' }, { status: 400 })
     }
 
-    await prisma.role.delete({ where: { id } })
+    if (role._count.users > 0) {
+      return NextResponse.json({ error: 'Cannot delete role with assigned users' }, { status: 400 })
+    }
 
-    await logAction(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      parseInt((session.user as any).id),
-      'DELETE',
-      'Role',
-      id,
-      { name: currentRole.name }
-    )
+    await (prisma as any).role.delete({
+      where: { id }
+    })
 
-    return new NextResponse(null, { status: 204 })
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error deleting role:', error)
-    return new NextResponse('Internal Server Error', { status: 500 })
+    console.error('Failed to delete role:', error)
+    return NextResponse.json({ error: 'Failed to delete role' }, { status: 500 })
   }
 }

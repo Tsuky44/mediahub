@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { DockerService } from '@/lib/services/docker'
+import { defineAbilityFor } from '@/lib/ability'
 
 export async function GET(
   req: Request,
@@ -12,11 +13,9 @@ export async function GET(
   
   // Check auth
   const user = session?.user as any
-  const permissions = user?.permissions || []
-  const isAdmin = user?.role === 'admin'
-  const canView = isAdmin || permissions.includes('docker.view') || permissions.includes('docker.manage')
+  const ability = defineAbilityFor(user)
 
-  if (!session || !canView) {
+  if (!session || !ability.can('read_details', 'Docker')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

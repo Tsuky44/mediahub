@@ -4,8 +4,11 @@ import { Suspense } from 'react'
 import { getTmdbServiceForUser } from '@/lib/auth'
 import BackgroundSlideshow from './BackgroundSlideshow'
 import Image from 'next/image'
-
+import { isAppConfigured } from '@/lib/setup'
+import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
+
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Connexion - MediaHub',
@@ -13,28 +16,39 @@ export const metadata: Metadata = {
 }
 
 export default async function LoginPage() {
-  let backdrops: string[] = []
-  let hasInstances = false
-  
-  try {
-    const instanceCount = await prisma.instance.count()
-    hasInstances = instanceCount > 0
-  } catch (error) {
-    console.warn('[LoginPage] Failed to check instances:', error)
+  // Check if setup is required
+  const configured = await isAppConfigured()
+  if (!configured) {
+    redirect('/setup')
   }
+
+  // Fetch enabled auth providers
+  const embyEnabled = await prisma.setting.findFirst({ where: { key: 'auth_emby_enabled' } })
+  const plexEnabled = await prisma.setting.findFirst({ where: { key: 'auth_plex_enabled' } })
+  const jellyfinEnabled = await prisma.setting.findFirst({ where: { key: 'auth_jellyfin_enabled' } })
+
+  const enabledProviders = {
+    emby: embyEnabled ? embyEnabled.value === 'true' : true, // Default true
+    plex: plexEnabled ? plexEnabled.value === 'true' : false, // Default false
+    jellyfin: jellyfinEnabled ? jellyfinEnabled.value === 'true' : false // Default false
+  }
+
+  let backdrops: string[] = []
   
   try {
     // Fetch trending movies and TV shows from TMDB for high quality backdrops
+    // Note: This might fail if no global TMDB key is set yet, or if it requires a user context.
+    // Ideally we should have a public getTmdbService or similar, but for now we try.
     const tmdbService = await getTmdbServiceForUser()
-    const items = tmdbService ? (await tmdbService.getTrending('all', 1)).results || [] : []
     
-    backdrops = items
-      .filter((item: any) => item.backdrop_path)
-      .map((item: any) => `https://image.tmdb.org/t/p/original${item.backdrop_path}`)
-      .slice(0, 15)
-
-    if (backdrops.length === 0) {
-      console.warn('[LoginPage] No backdrops found from TMDB trending')
+    if (tmdbService) {
+        const trending = await tmdbService.getTrending('all', 1)
+        const items = trending?.results || []
+        
+        backdrops = items
+          .filter((item: any) => item.backdrop_path)
+          .map((item: any) => `https://image.tmdb.org/t/p/original${item.backdrop_path}`)
+          .slice(0, 15)
     }
   } catch (error) {
     console.error('[LoginPage] Error fetching backdrops:', error)
@@ -75,7 +89,7 @@ export default async function LoginPage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
             </div>
           }>
-            <LoginForm hasInstances={hasInstances} />
+            <LoginForm enabledProviders={enabledProviders} />
           </Suspense>
         </div>
         
@@ -86,4 +100,3 @@ export default async function LoginPage() {
     </div>
   )
 }
-

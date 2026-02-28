@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions, getSmbServiceForUser } from '@/lib/auth';
+import { defineAbilityFor } from '@/lib/ability';
 import { Readable } from 'stream';
 
 export async function GET(request: NextRequest) {
     const session = await getServerSession(authOptions);
     const user = session?.user as any
-    const permissions = user?.permissions || []
-    const isAdmin = user?.role === 'admin'
-    const canDownload = isAdmin || permissions.includes('downloads.view') || permissions.includes('downloads.manage')
-
-    if (!session || !canDownload) {
+    
+    if (!session || !user) {
         return new NextResponse('Unauthorized', { status: 401 });
+    }
+
+    const ability = defineAbilityFor(user);
+    const canReadExplorer = ability.can('read_explorer', 'Downloads');
+    const canManage = ability.can('manage', 'Downloads');
+    const isAdmin = user.role === 'admin';
+
+    if (!isAdmin && !canReadExplorer && !canManage) {
+        return new NextResponse('Forbidden', { status: 403 });
     }
 
     const searchParams = request.nextUrl.searchParams;

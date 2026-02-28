@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bell, Check, Trash2, ExternalLink, ArrowLeft } from 'lucide-react'
+import { Bell, Check, Trash2, ExternalLink, ArrowLeft, RefreshCw } from 'lucide-react'
 import { getNotifications, markAsRead, markAllAsRead, deleteNotification } from '@/app/actions/notifications'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -109,8 +109,15 @@ export default function NotificationsPage() {
                     />
                   </div>
                 ) : (
-                  <div className="flex-shrink-0 w-16 h-16 rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
-                    <Bell className="h-8 w-8" />
+                  <div className={clsx(
+                    "flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center",
+                    notif.type === 'system_update' ? "bg-orange-500/20 text-orange-400" : "bg-indigo-500/20 text-indigo-400"
+                  )}>
+                    {notif.type === 'system_update' ? (
+                       <RefreshCw className="h-8 w-8" />
+                    ) : (
+                       <Bell className="h-8 w-8" />
+                    )}
                   </div>
                 )}
 

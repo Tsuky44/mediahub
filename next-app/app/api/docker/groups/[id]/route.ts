@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { defineAbilityFor } from '@/lib/ability'
 
 export async function PUT(
   req: Request,
@@ -11,11 +12,9 @@ export async function PUT(
   const { id } = await params
   const session = await getServerSession(authOptions)
   const user = session?.user as any
-  const permissions = user?.permissions || []
-  const isAdmin = user?.role === 'admin'
-  const canManage = isAdmin || permissions.includes('docker.manage')
+  const ability = defineAbilityFor(user)
 
-  if (!session || !canManage) {
+  if (!session || !ability.can('manage_groups', 'Docker')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -30,27 +29,32 @@ export async function PUT(
     // We use a transaction to replace members
     const group = await prisma.$transaction(async (tx: any) => {
       // 1. Update name if provided
-      await tx.dockerGroup.update({
-        where: { id },
-        data: { name }
-      })
-
-      // 2. Delete existing members
-      await tx.dockerGroupMember.deleteMany({
-        where: { groupId: id }
-      })
-
-      // 3. Create new members
-      if (members && members.length > 0) {
-        await tx.dockerGroupMember.createMany({
-          data: members.map((containerName: string) => ({
-            groupId: id,
-            containerName
-          }))
+      if (name) {
+        await tx.dockerGroup.update({
+          where: { id },
+          data: { name }
         })
       }
 
-      // 4. Return updated group
+      // 2. Update members if provided (replace all)
+      if (members !== undefined) {
+        // Delete existing members
+        await tx.dockerGroupMember.deleteMany({
+          where: { groupId: id }
+        })
+
+        // Create new members
+        if (Array.isArray(members) && members.length > 0) {
+          await tx.dockerGroupMember.createMany({
+            data: members.map((containerName: string) => ({
+              groupId: id,
+              containerName
+            }))
+          })
+        }
+      }
+
+      // 3. Return updated group
       return tx.dockerGroup.findUnique({
         where: { id },
         include: { members: true }
@@ -71,11 +75,9 @@ export async function DELETE(
   const { id } = await params
   const session = await getServerSession(authOptions)
   const user = session?.user as any
-  const permissions = user?.permissions || []
-  const isAdmin = user?.role === 'admin'
-  const canManage = isAdmin || permissions.includes('docker.manage')
+  const ability = defineAbilityFor(user)
 
-  if (!session || !canManage) {
+  if (!session || !ability.can('manage_groups', 'Docker')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

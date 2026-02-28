@@ -1,13 +1,40 @@
 'use server'
 
-import { getQBittorrentServiceForUser, getProwlarrServiceForUser, getRadarrServiceForUser, getSonarrServiceForUser } from '@/lib/auth'
+import { getQBittorrentServiceForUser, getProwlarrServiceForUser, getRadarrServiceForUser, getSonarrServiceForUser, getCurrentUser } from '@/lib/auth'
 import { getTmdbServiceForUser } from '@/lib/auth'
+import { defineAbilityFor, Actions, Subjects } from '@/lib/ability'
 
-import { checkAccess } from '../../downloads/actions'
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
+async function checkPermission(action: Actions, subject: Subjects) {
+  const user = await getCurrentUser()
+  if (!user) throw new Error('Unauthorized')
+  
+  const ability = defineAbilityFor(user)
+  
+  // Special case for interactive search: allow if user has permission on either Media or Downloads
+  if (action === 'interactive_search') {
+      if (ability.can('interactive_search', 'Media') || 
+          ability.can('interactive_search', 'Downloads') || 
+          ability.can('manage', 'Media') || 
+          ability.can('manage', 'Downloads')) {
+          return
+      }
+  }
+
+  // Allow if specific permission is granted OR if user has full 'manage' access on Media or Downloads
+  if (!ability.can(action, subject) && !ability.can('manage', subject) && !ability.can('manage', 'Downloads')) {
+    throw new Error('Forbidden: Insufficient permissions')
+  }
+}
 
 export async function getSonarrEpisodes(tmdbId: number) {
     try {
-        await checkAccess('downloads.view')
+        await checkPermission('interactive_search', 'Media')
         const sonarr = await getSonarrServiceForUser()
         const tmdb = await getTmdbServiceForUser()
         
@@ -23,49 +50,49 @@ export async function getSonarrEpisodes(tmdbId: number) {
         const episodes = await sonarr.getEpisodes(series.id)
         return { episodes }
     } catch (error: any) {
-        console.error('Get Sonarr episodes error:', error)
+        error('Get Sonarr episodes error:', error)
         return { error: error.message }
     }
 }
 
 export async function searchProwlarr(query: string, indexerIds?: number[], categories?: number[], limit: number = 200, offset: number = 0) {
     try {
-        await checkAccess('downloads.view')
+        await checkPermission('interactive_search', 'Media')
         const prowlarrService = await getProwlarrServiceForUser()
         if (!prowlarrService) return { error: 'Prowlarr non configuré' }
 
         const results = await prowlarrService.search(query, indexerIds, categories, limit, offset)
         return { results }
     } catch (error: any) {
-        console.error('Search prowlarr error:', error)
+        error('Search prowlarr error:', error)
         return { error: error.message }
     }
 }
 
 export async function getProwlarrIndexers() {
     try {
-        await checkAccess('downloads.view')
+        await checkPermission('interactive_search', 'Media')
         const prowlarrService = await getProwlarrServiceForUser()
         if (!prowlarrService) return { error: 'Prowlarr non configuré' }
 
         const indexers = await prowlarrService.getIndexers()
         return { indexers }
     } catch (error: any) {
-        console.error('Get prowlarr indexers error:', error)
+        error('Get prowlarr indexers error:', error)
         return { error: error.message }
     }
 }
 
 export async function downloadTorrent(url: string) {
     try {
-        await checkAccess('downloads.manage')
+        await checkPermission('interactive_search', 'Media')
         const qbtService = await getQBittorrentServiceForUser()
         if (!qbtService) return { error: 'QBittorrent non configuré' }
 
         await qbtService.addTorrent(url, [])
         return { success: true }
     } catch (error: any) {
-        console.error('Download torrent error:', error)
+        error('Download torrent error:', error)
         return { error: error.message }
     }
 }
@@ -80,7 +107,7 @@ export async function searchMediaReleases(
     episodeNumber?: number
 ) {
     try {
-        await checkAccess('downloads.view')
+        await checkPermission('interactive_search', 'Media')
         const prowlarr = await getProwlarrServiceForUser()
         if (!prowlarr) return { error: 'Prowlarr non configuré' }
         
@@ -124,7 +151,7 @@ export async function searchMediaReleases(
             }
         }
 
-        console.log(`[SmartSearch] Searching Prowlarr directly with query: ${query}`)
+        log(`[SmartSearch] Searching Prowlarr directly with query: ${query}`)
         
         const results = await prowlarr.search(query, undefined, categories)
         
@@ -147,7 +174,7 @@ export async function searchMediaReleases(
             }))
         }
     } catch (error: any) {
-        console.error('Search media releases error:', error)
+        error('Search media releases error:', error)
         return { error: error.message }
     }
 }
@@ -171,7 +198,7 @@ export async function downloadMediaRelease(
     }
 ) {
     try {
-        await checkAccess('downloads.manage')
+        await checkPermission('interactive_search', 'Media')
 
         if (mediaType === 'movie') {
             const radarr = await getRadarrServiceForUser()
@@ -221,7 +248,7 @@ export async function downloadMediaRelease(
         
         return { error: 'Type de média non supporté' }
     } catch (error: any) {
-        console.error('Download media release error:', error)
+        error('Download media release error:', error)
         return { error: error.message }
     }
 }

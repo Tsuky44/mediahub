@@ -1,17 +1,17 @@
 import { useState } from 'react'
 import { Tv } from 'lucide-react'
-import { InputField, SectionHeader, TestButton, TestResult } from './SharedComponents'
+import { InputField, SectionHeader, TestButton, TestResult, CheckboxField } from './SharedComponents'
 import { SettingsFormData } from './types'
 import { testEmbyConnection, testPlexConnection, testJellyfinConnection } from '../../downloads/file-actions'
 import { importPlexHistoryAction } from '../actions'
 
 interface Props {
     formData: SettingsFormData
-    updateField: (field: keyof SettingsFormData, value: string) => void
-    instanceId: number
+    updateField: (field: keyof SettingsFormData, value: any) => void
+    readOnly?: boolean
 }
 
-export const MediaSettings = ({ formData, updateField, instanceId }: Props) => {
+export const MediaSettings = ({ formData, updateField, readOnly }: Props) => {
     // Emby States
     const [embyLoading, setEmbyLoading] = useState(false)
     const [embyResult, setEmbyResult] = useState<TestResult | null>(null)
@@ -62,7 +62,7 @@ export const MediaSettings = ({ formData, updateField, instanceId }: Props) => {
         setImportPlexLoading(true)
         setImportPlexResult(null)
         try {
-            const res = await importPlexHistoryAction(instanceId)
+            const res = await importPlexHistoryAction()
             setImportPlexResult({
                 success: res.success,
                 message: res.success ? 'Import réussi' : (res as any).error || 'Échec de l\'import'
@@ -99,6 +99,15 @@ export const MediaSettings = ({ formData, updateField, instanceId }: Props) => {
                     title="Emby" 
                     description="Configuration du serveur Emby principal" 
                 />
+                <div className="mb-6">
+                    <CheckboxField
+                        label="Activer l'authentification Emby"
+                        checked={formData.auth_emby_enabled}
+                        onChange={(v) => updateField('auth_emby_enabled', v)}
+                        description="Permettre aux utilisateurs de se connecter via ce serveur Emby"
+                        readOnly={readOnly}
+                    />
+                </div>
                 <div className="grid gap-6 md:grid-cols-2">
                     <InputField 
                         label="URL du serveur" 
@@ -127,6 +136,15 @@ export const MediaSettings = ({ formData, updateField, instanceId }: Props) => {
                     title="Plex" 
                     description="Configuration de l'intégration Plex" 
                 />
+                <div className="mb-6">
+                    <CheckboxField
+                        label="Activer l'authentification Plex"
+                        checked={formData.auth_plex_enabled}
+                        onChange={(v) => updateField('auth_plex_enabled', v)}
+                        description="Permettre aux utilisateurs de se connecter via ce serveur Plex"
+                        readOnly={readOnly}
+                    />
+                </div>
                 <div className="grid gap-6 md:grid-cols-2">
                     <InputField 
                         label="URL du serveur" 
@@ -163,6 +181,15 @@ export const MediaSettings = ({ formData, updateField, instanceId }: Props) => {
                     title="Jellyfin" 
                     description="Configuration alternative Jellyfin" 
                 />
+                <div className="mb-6">
+                    <CheckboxField
+                        label="Activer l'authentification Jellyfin"
+                        checked={formData.auth_jellyfin_enabled}
+                        onChange={(v) => updateField('auth_jellyfin_enabled', v)}
+                        description="Permettre aux utilisateurs de se connecter via ce serveur Jellyfin"
+                        readOnly={readOnly}
+                    />
+                </div>
                 <div className="grid gap-6 md:grid-cols-2">
                     <InputField 
                         label="URL du serveur" 

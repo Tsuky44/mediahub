@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
+import { defineAbilityFor } from '@/lib/ability'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,11 @@ export default async function SimilarPage({
 }) {
     const session = await getServerSession(authOptions)
     if (!session) redirect('/api/auth/signin')
+
+    const ability = defineAbilityFor(session.user)
+    if (ability.cannot('read', 'Media') && ability.cannot('read', 'Library')) {
+        redirect('/dashboard')
+    }
 
     const { id } = await params
     const { type } = await searchParams

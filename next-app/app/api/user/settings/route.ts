@@ -3,8 +3,13 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { setSetting } from '@/lib/settings'
 import { prisma } from '@/lib/prisma'
-import { PERMISSIONS } from '@/lib/permissions'
 import { logAction } from '@/lib/audit'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -14,33 +19,16 @@ export async function POST(request: NextRequest) {
   }
 
   const isSuperAdmin = (session.user as any).role === 'admin'
-  const userPermissions = (session.user as any).permissions || []
-  const hasAccess = isSuperAdmin || userPermissions.includes(PERMISSIONS.SETTINGS_MANAGE)
+  const hasAccess = isSuperAdmin
 
   if (!hasAccess) {
-    return NextResponse.json({ error: 'Forbidden. Permission settings.manage required.' }, { status: 403 })
+    return NextResponse.json({ error: 'Forbidden. Admin access required.' }, { status: 403 })
   }
 
   try {
     const body = await request.json()
-    console.log('[Settings API] Received body:', JSON.stringify(body, null, 2))
+    log('[Settings API] Received body:', JSON.stringify(body, null, 2))
     
-    const sessionInstanceId = parseInt((session.user as any).instanceId)
-    // Allow specifying an instanceId in the body, but fallback to session instanceId
-    const instanceId = body.instanceId ? parseInt(body.instanceId) : sessionInstanceId
-    
-    if (isNaN(instanceId)) {
-        return NextResponse.json({ error: 'Invalid instance' }, { status: 400 })
-    }
-
-    // Security check: only allow editing other instances if user is from the default instance
-    if (instanceId !== sessionInstanceId) {
-        const sessionInstance = await (prisma as any).instance.findUnique({ where: { id: sessionInstanceId } })
-        if (!sessionInstance?.isDefault) {
-            return NextResponse.json({ error: 'Unauthorized. Only main instance admins can manage other instances.' }, { status: 401 })
-        }
-    }
-
     const { 
         qbittorrent_url, 
         qbittorrent_username, 
@@ -62,107 +50,77 @@ export async function POST(request: NextRequest) {
         plex_token,
         jellyfin_url,
         jellyfin_api_key,
+        auth_emby_enabled,
+        auth_plex_enabled,
+        auth_jellyfin_enabled,
         unraid_url,
         unraid_api_key,
         docker_host,
         type
     } = body
 
-    console.log(`[Settings API] Updating instance ${instanceId} with type ${type}`)
-
-    // Update Instance core settings if provided
-    if (emby_url !== undefined || emby_api_key !== undefined || 
-        plex_url !== undefined || plex_token !== undefined ||
-        jellyfin_url !== undefined || jellyfin_api_key !== undefined ||
-        type !== undefined) {
-      
-      console.log('[Settings API] Core settings update detected')
-      if (!prisma) {
-        throw new Error("Prisma client non disponible");
-      }
-      
-      const updateData: any = {}
-      
-      const setField = (key: string, value: any) => {
-        if (value === undefined) return;
-        // Convert empty string to null for optional fields
-        updateData[key] = value === '' ? null : value;
-      }
-
-      setField('embyUrl', emby_url)
-      setField('embyApiKey', emby_api_key)
-      setField('plexUrl', plex_url)
-      setField('plexToken', plex_token)
-      setField('jellyfinUrl', jellyfin_url)
-      setField('jellyfinApiKey', jellyfin_api_key)
-      
-      // Handle type separately to avoid null
-      if (type) {
-        updateData['type'] = type
-      }
-      
-      console.log('[Settings API] updateData:', JSON.stringify(updateData, null, 2))
-      
-      try {
-        await (prisma as any).instance.upsert({
-          where: { id: instanceId },
-          update: updateData,
-          create: { 
-            id: instanceId,
-            name: `Instance ${instanceId}`,
-            slug: `instance-${instanceId}`,
-            type: type || 'emby',
-            ...updateData 
-          }
-        })
-        console.log('[Settings API] Instance core settings updated successfully')
-      } catch (prismaError: any) {
-        console.error('[Settings API] Prisma update error:', prismaError)
-        throw new Error(`Erreur Prisma: ${prismaError.message}`);
-      }
-    }
-
-    // Update Global Settings
-    const settingsToUpdate = [
-        { key: 'qbittorrent_url', value: qbittorrent_url },
-        { key: 'qbittorrent_username', value: qbittorrent_username },
-        { key: 'qbittorrent_password', value: qbittorrent_password },
-        { key: 'smb_host', value: smb_host },
-        { key: 'smb_username', value: smb_username },
-        { key: 'smb_password', value: smb_password },
-        { key: 'smb_share', value: smb_share },
-        { key: 'smb_path', value: smb_path },
-        { key: 'radarr_url', value: radarr_url },
-        { key: 'radarr_api_key', value: radarr_api_key },
-        { key: 'sonarr_url', value: sonarr_url },
-        { key: 'sonarr_api_key', value: sonarr_api_key },
-        { key: 'prowlarr_url', value: prowlarr_url },
-        { key: 'prowlarr_api_key', value: prowlarr_api_key },
-        { key: 'jellyseerr_url', value: body.jellyseerr_url },
-        { key: 'jellyseerr_api_key', value: body.jellyseerr_api_key },
-        { key: 'unraid_url', value: unraid_url },
-        { key: 'unraid_api_key', value: unraid_api_key },
-        { key: 'docker_host', value: docker_host },
-    ]
-
-    for (const setting of settingsToUpdate) {
-        if (setting.value !== undefined) {
-            await setSetting(setting.key, instanceId, setting.value)
+    // Update settings in DB
+    const updateSetting = async (key: string, value: any) => {
+        if (value !== undefined) {
+            // Convert boolean to string
+            if (typeof value === 'boolean') {
+                await setSetting(key, String(value))
+            } else {
+                await setSetting(key, value === '' ? null : value)
+            }
         }
     }
 
+    await updateSetting('qbittorrent_url', qbittorrent_url)
+    await updateSetting('qbittorrent_username', qbittorrent_username)
+    await updateSetting('qbittorrent_password', qbittorrent_password)
+    
+    await updateSetting('smb_host', smb_host)
+    await updateSetting('smb_username', smb_username)
+    await updateSetting('smb_password', smb_password)
+    await updateSetting('smb_share', smb_share)
+    await updateSetting('smb_path', smb_path)
+    
+    await updateSetting('radarr_url', radarr_url)
+    await updateSetting('radarr_api_key', radarr_api_key)
+    
+    await updateSetting('sonarr_url', sonarr_url)
+    await updateSetting('sonarr_api_key', sonarr_api_key)
+    
+    await updateSetting('prowlarr_url', prowlarr_url)
+    await updateSetting('prowlarr_api_key', prowlarr_api_key)
+    
+    await updateSetting('emby_url', emby_url)
+    await updateSetting('emby_api_key', emby_api_key)
+    
+    await updateSetting('plex_url', plex_url)
+    await updateSetting('plex_token', plex_token)
+    
+    await updateSetting('jellyfin_url', jellyfin_url)
+    await updateSetting('jellyfin_api_key', jellyfin_api_key)
+    
+    await updateSetting('auth_emby_enabled', auth_emby_enabled)
+    await updateSetting('auth_plex_enabled', auth_plex_enabled)
+    await updateSetting('auth_jellyfin_enabled', auth_jellyfin_enabled)
+
+    await updateSetting('unraid_url', unraid_url)
+    await updateSetting('unraid_api_key', unraid_api_key)
+    
+    await updateSetting('docker_host', docker_host)
+    
+    await updateSetting('type', type)
+
     await logAction(
-      parseInt((session.user as any).id),
-      'UPDATE',
-      'Instance',
-      instanceId.toString(),
-      { action: 'settings_update' }
+        parseInt((session.user as any).id),
+        'UPDATE_SETTINGS',
+        'SYSTEM',
+        'global',
+        { message: 'Updated system settings' }
     )
 
     return NextResponse.json({ success: true })
-
-  } catch (e: any) {
-    console.error('Failed to update settings:', e.message, e.stack)
-    return NextResponse.json({ error: e.message || 'Internal Server Error' }, { status: 500 })
+  } catch (e) {
+    error('[Settings API] Error:', e)
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }

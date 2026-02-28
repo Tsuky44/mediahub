@@ -21,10 +21,12 @@ export interface SettingsFormData {
     plex_token: string
     jellyfin_url: string
     jellyfin_api_key: string
+    auth_emby_enabled: boolean
+    auth_plex_enabled: boolean
+    auth_jellyfin_enabled: boolean
     unraid_url: string
     unraid_api_key: string
     docker_host: string
-    type: string
 }
 
 export type TabType = 'media' | 'downloads' | 'automation' | 'storage' | 'maintenance'

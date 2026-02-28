@@ -5,24 +5,23 @@ import { prisma } from '@/lib/prisma'
 export async function POST(req: NextRequest) {
     try {
         const user = await getCurrentUser()
-        if (!user || !user.email) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
+    if (!user || !user.email) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-        const instanceId = parseInt((user as any).instanceId)
-        const embyService = await getEmbyServiceForUser()
-        
-        if (!embyService) {
-            return NextResponse.json({ error: 'Emby service unavailable' }, { status: 503 })
-        }
+    const embyService = await getEmbyServiceForUser()
+    
+    if (!embyService) {
+        return NextResponse.json({ error: 'Emby service unavailable' }, { status: 503 })
+    }
 
-        const dbUser = await (prisma as any).user.findFirst({
-            where: { email: user.email, instanceId }
-        })
+    const dbUser = await (prisma as any).user.findUnique({
+        where: { email: user.email }
+    })
 
-        if (!dbUser || !dbUser.embyUserId) {
-            return NextResponse.json({ error: 'Emby user not connected' }, { status: 400 })
-        }
+    if (!dbUser || !dbUser.embyUserId) {
+        return NextResponse.json({ error: 'Emby user not connected' }, { status: 400 })
+    }
 
         const { embyItemId, isFavorite } = await req.json()
 

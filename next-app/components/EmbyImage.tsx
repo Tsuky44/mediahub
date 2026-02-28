@@ -7,18 +7,16 @@ interface EmbyImageProps {
   itemId: string
   alt: string
   itemName?: string
-  instanceId?: number
   tmdbId?: string
   mediaType?: 'tv' | 'movie'
   className?: string
 }
 
-export function EmbyImage({ itemId, alt, itemName, instanceId, tmdbId, mediaType, className = "h-full w-full object-cover" }: EmbyImageProps) {
+export function EmbyImage({ itemId, alt, itemName, tmdbId, mediaType, className = "h-full w-full object-cover" }: EmbyImageProps) {
   // Use the image proxy route which handles TMDB fallback
   const params = new URLSearchParams()
   if (tmdbId) params.append('tmdbId', tmdbId)
   if (mediaType) params.append('mediaType', mediaType)
-  if (instanceId) params.append('instanceId', instanceId.toString())
   if (itemName) params.append('itemName', itemName)
   
   const url = `/api/media/image/${itemId}${params.toString() ? `?${params.toString()}` : ''}`

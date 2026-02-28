@@ -1,24 +1,198 @@
 'use server'
 
 import { getCurrentUser, getTmdbServiceForUser, getRadarrServiceForUser, getSonarrServiceForUser } from '@/lib/auth'
+import { getRadarrService } from '@/lib/services/radarr'
+import { getSonarrService } from '@/lib/services/sonarr'
+import { getTmdbService } from '@/lib/services/tmdb'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { getMediaAvailability } from '@/lib/services/media-status'
+import { defineAbilityFor } from '@/lib/ability'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export async function forceSyncRequests() {
     try {
         const user = await getCurrentUser()
-        if (!user) return { success: false }
+        if (!user) return { success: false, error: 'Unauthorized' }
         
-        const instanceId = parseInt((user as any).instanceId)
+        const ability = defineAbilityFor(user)
+        if (!ability.can('sync', 'MediaRequest')) {
+             return { success: false, error: 'Forbidden' }
+        }
         
-        // Find all requests for this instance to clear their availability cache
-        const requests = await (prisma as any).mediaRequest.findMany({
-            where: { instanceId }
-        })
+        let importedCount = 0
         
+        // Import from Radarr
+        const radarr = await getRadarrService()
+        const tmdbService = await getTmdbService()
+
+        if (radarr && tmdbService) {
+            const movies = await radarr.getMovies()
+            // Filter: monitored AND (not available OR not hasFile)
+            const missingMovies = movies.filter(m => m.monitored && !m.hasFile)
+            
+            for (const movie of missingMovies) {
+                const existing = await (prisma as any).mediaRequest.findFirst({
+                    where: { 
+                        mediaType: 'movie',
+                        tmdbId: movie.tmdbId.toString()
+                    }
+                })
+                
+                // Get correct poster from TMDB if possible
+                let posterPath = movie.images?.find((i: any) => i.coverType === 'poster')?.url
+                try {
+                    const tmdbDetails = await tmdbService.getDetails(movie.tmdbId, 'movie')
+                    if (tmdbDetails && tmdbDetails.poster_path) {
+                        posterPath = tmdbDetails.poster_path
+                    }
+                } catch (e) {
+                    error('[Sync] Failed to fetch TMDB details for movie', movie.tmdbId)
+                }
+
+                if (!existing) {
+                    await (prisma as any).mediaRequest.create({
+                        data: {
+                            mediaType: 'movie',
+                            tmdbId: movie.tmdbId.toString(),
+                            title: movie.title,
+                            status: 1, // PENDING
+                            requesterName: 'Imported',
+                            requestedAt: new Date(movie.added),
+                            metadata: JSON.stringify({
+                                year: movie.year,
+                                overview: movie.overview,
+                                posterPath: posterPath
+                            })
+                        }
+                    })
+                    importedCount++
+                } else {
+                    // Update metadata if poster is missing or different (optional, but good for fixing broken images)
+                    const currentMeta = existing.metadata ? JSON.parse(existing.metadata) : {}
+                    if (!currentMeta.posterPath || (posterPath && posterPath.startsWith('/') && !currentMeta.posterPath.startsWith('/'))) {
+                         await (prisma as any).mediaRequest.update({
+                            where: { id: existing.id },
+                            data: {
+                                metadata: JSON.stringify({
+                                    ...currentMeta,
+                                    posterPath: posterPath
+                                })
+                            }
+                         })
+                    }
+                }
+            }
+        }
+        
+        // Import from Sonarr
+        const sonarr = await getSonarrService()
+        
+        if (sonarr && tmdbService) {
+            const seriesList = await sonarr.getSeries()
+            
+            // Filter series that have at least one season monitored and missing episodes
+            // The user specifically requested to check per season
+            const missingSeries = seriesList.filter(s => {
+                // Check if any season is monitored and not fully available
+                // We use percentOfEpisodes < 100 to ensure we only request what is missing
+                return s.seasons.some(season => 
+                    season.monitored && 
+                    season.statistics && 
+                    season.statistics.percentOfEpisodes < 100
+                )
+            })
+            
+            log(`[Sync] Found ${missingSeries.length} series with missing monitored seasons from Sonarr`)
+            
+            for (const series of missingSeries) {
+                 let tmdbId: string | null = null
+                 
+                 // Try to find by TVDB ID
+                 if (series.tvdbId) {
+                     const findResult = await tmdbService.findByExternalId(series.tvdbId, 'tvdb_id')
+                     if (findResult && findResult.tv_results && findResult.tv_results.length > 0) {
+                         tmdbId = findResult.tv_results[0].id.toString()
+                     }
+                 }
+                 
+                 // If not found, try IMDB ID
+                 if (!tmdbId && series.imdbId) {
+                     const findResult = await tmdbService.findByExternalId(series.imdbId, 'imdb_id')
+                     if (findResult && findResult.tv_results && findResult.tv_results.length > 0) {
+                         tmdbId = findResult.tv_results[0].id.toString()
+                     }
+                 }
+                 
+                 if (tmdbId) {
+                    const existing = await (prisma as any).mediaRequest.findFirst({
+                        where: { 
+                            mediaType: 'tv',
+                            tmdbId: tmdbId
+                        }
+                    })
+
+                    // Get correct poster from TMDB if possible
+                    let posterPath = series.images?.find((i: any) => i.coverType === 'poster')?.url
+                    try {
+                        const tmdbDetails = await tmdbService.getDetails(parseInt(tmdbId), 'tv')
+                        if (tmdbDetails && tmdbDetails.poster_path) {
+                            posterPath = tmdbDetails.poster_path
+                        }
+                    } catch (e) {
+                        error('[Sync] Failed to fetch TMDB details for series', tmdbId)
+                    }
+                    
+                    if (!existing) {
+                        // Identify which seasons are missing
+                        const missingSeasons = series.seasons
+                            .filter(s => s.monitored && s.statistics && s.statistics.percentOfEpisodes < 100)
+                            .map(s => s.seasonNumber)
+
+                        await (prisma as any).mediaRequest.create({
+                            data: {
+                                mediaType: 'tv',
+                                tmdbId: tmdbId,
+                                title: series.title,
+                                status: 1, // PENDING
+                                requesterName: 'Imported',
+                                requestedAt: new Date(series.added),
+                                metadata: JSON.stringify({
+                                    year: series.year,
+                                    overview: series.overview,
+                                    posterPath: posterPath,
+                                    seasons: missingSeasons
+                                })
+                            }
+                        })
+                        importedCount++
+                    } else {
+                         // Update metadata if poster is missing or different
+                         const currentMeta = existing.metadata ? JSON.parse(existing.metadata) : {}
+                         if (!currentMeta.posterPath || (posterPath && posterPath.startsWith('/') && !currentMeta.posterPath.startsWith('/'))) {
+                              await (prisma as any).mediaRequest.update({
+                                 where: { id: existing.id },
+                                 data: {
+                                     metadata: JSON.stringify({
+                                         ...currentMeta,
+                                         posterPath: posterPath
+                                     })
+                                 }
+                              })
+                         }
+                    }
+                 }
+            }
+        }
+        
+        // Clear cache
+        const requests = await (prisma as any).mediaRequest.findMany({})
         const { forget } = await import('@/lib/cache')
-        
         for (const req of requests) {
             forget(`media_availability_${req.mediaType}_${req.tmdbId}`)
         }
@@ -26,10 +200,11 @@ export async function forceSyncRequests() {
         revalidatePath('/dashboard/requests/list')
         return { 
             success: true, 
-            syncedCount: requests.length
+            syncedCount: requests.length,
+            importedCount
         }
     } catch (e) {
-        console.error('Failed to force sync requests:', e)
+        error('Failed to force sync requests:', e)
         return { success: false }
     }
 }
@@ -39,9 +214,8 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
     const user = await getCurrentUser()
     if (!user || !user.email) return { results: [], total: 0, totalPages: 0 }
 
-    const instanceId = parseInt((user as any).instanceId)
     const dbUser = await (prisma as any).user.findFirst({
-      where: { email: user.email, instanceId }
+      where: { email: user.email }
     })
     
     if (!dbUser) return { results: [], total: 0, totalPages: 0 }
@@ -49,22 +223,16 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
     const tmdbService = await getTmdbServiceForUser()
     const skip = (page - 1) * pageSize
     
-    // Tout le monde voit toutes les demandes de son instance
-    const whereClause = { instanceId }
-    
-    console.log(`[FetchRequests] User role: ${dbUser.role}, fetching all requests for instance ${instanceId}`)
+    log(`[FetchRequests] User role: ${dbUser.role}, fetching all requests`)
     
     // Read from local DB instead of Jellyseerr API
     const [requests, total] = await Promise.all([
         (prisma as any).mediaRequest.findMany({
-            where: whereClause,
             orderBy: { requestedAt: 'desc' },
             skip,
             take: pageSize
         }),
-        (prisma as any).mediaRequest.count({
-            where: whereClause
-        })
+        (prisma as any).mediaRequest.count()
     ])
 
     // Map DB format to the format expected by the UI
@@ -80,7 +248,7 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
         try {
             const tmdbIdNum = parseInt(req.tmdbId);
             if (isNaN(tmdbIdNum)) {
-                console.error(`[FetchRequests] Invalid TMDB ID for request ${req.id}: ${req.tmdbId}`);
+                error(`[FetchRequests] Invalid TMDB ID for request ${req.id}: ${req.tmdbId}`);
                 return {
                     id: req.id,
                     externalId: req.externalId,
@@ -109,100 +277,61 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
                 status = 5;
             } else if (availability.status === 'partial') {
                 status = 4;
-            } else if (availability.status === 'pending' || availability.status === 'processing') {
+            } else if (availability.status === 'processing') {
                 status = 3;
-            } else if (availability.status === 'unknown') {
-                status = 1;
             }
-
-            // Enrich metadata with poster if missing or broken
-            const isBrokenPoster = !metadata.posterPath || 
-                                 metadata.posterPath === "" || 
-                                 metadata.posterPath === "null" ||
-                                 metadata.posterPath === "undefined" ||
-                                 metadata.posterPath.startsWith('/api/v3/mediacover') ||
-                                 metadata.posterPath.startsWith('/api/mediacover');
-
-            if (isBrokenPoster) {
-                console.log(`[FetchRequests] Fixing broken poster for ${req.title} (ID: ${req.id}, TMDB: ${req.tmdbId})`);
-                
-                // Prioritize TMDB directly as it's more reliable for the frontend
-                if (tmdbService) {
-                    try {
-                        const poster = await tmdbService.getPosterPath(tmdbIdNum, req.mediaType as 'movie' | 'tv');
-                        if (poster) {
-                            console.log(`[FetchRequests] Found TMDB poster for ${req.title}: ${poster}`);
-                            metadata.posterPath = poster;
-                        } else {
-                            console.warn(`[FetchRequests] No TMDB poster found for ${req.title} (${req.tmdbId})`);
-                        }
-                    } catch (tmdbError) {
-                        console.error(`[FetchRequests] TMDB error for ${req.title}:`, tmdbError);
-                    }
+            
+            // If we have local metadata, use it, otherwise try to get from availability/TMDB if possible
+            // But usually metadata is stored on creation
+            
+            return {
+                id: req.id,
+                externalId: req.externalId,
+                type: req.mediaType,
+                status: status,
+                createdAt: req.requestedAt,
+                isOnEmby: req.isOnEmby,
+                embyItemId: req.embyItemId,
+                media: {
+                    tmdbId: req.tmdbId,
+                    title: req.title,
+                    ...metadata
+                },
+                requestedBy: {
+                    displayName: req.requesterName,
+                    email: req.requesterEmail
                 }
-
-                // Fallback to Sonarr/Radarr ONLY if it's a remote URL and we still don't have a poster
-                if ((!metadata.posterPath || metadata.posterPath.startsWith('/api')) && availability.details) {
-                    const details = availability.details as any;
-                    const remotePoster = details.remotePoster;
-                    if (remotePoster && remotePoster.startsWith('http')) {
-                        metadata.posterPath = remotePoster;
-                        console.log(`[FetchRequests] Found remote poster from service for ${req.title}: ${remotePoster}`);
-                    }
-                }
-
-                if (metadata.posterPath && !metadata.posterPath.startsWith('/api')) {
-                    // Update DB with enriched metadata
-                    try {
-                        await (prisma as any).mediaRequest.update({
-                            where: { id: req.id },
-                            data: { metadata: JSON.stringify(metadata) }
-                        });
-                        console.log(`[FetchRequests] Updated DB metadata for ${req.title}`);
-                    } catch (dbError) {
-                        console.error(`[FetchRequests] Failed to update DB metadata for ${req.id}:`, dbError);
-                    }
-                }
-            }
-
-            // Update DB if status changed
-            if (status !== req.status) {
-                (prisma as any).mediaRequest.update({
-                    where: { id: req.id },
-                    data: { status: status }
-                }).catch((e: any) => console.error('Failed to update status', e));
             }
         } catch (e) {
-            console.error(`Error checking availability for request ${req.id}:`, e);
-        }
-
-        return {
-            id: req.id,
-            externalId: req.externalId,
-            type: req.mediaType,
-            status: status,
-            createdAt: req.requestedAt,
-            isOnEmby: req.isOnEmby,
-            embyItemId: req.embyItemId,
-            media: {
-                tmdbId: req.tmdbId,
-                title: req.title,
-                ...metadata
-            },
-            requestedBy: {
-                displayName: req.requesterName,
-                email: req.requesterEmail
+            error(`[FetchRequests] Error processing request ${req.id}:`, e);
+            return {
+                id: req.id,
+                externalId: req.externalId,
+                type: req.mediaType,
+                status: req.status,
+                createdAt: req.requestedAt,
+                isOnEmby: req.isOnEmby,
+                embyItemId: req.embyItemId,
+                media: {
+                    tmdbId: req.tmdbId,
+                    title: req.title,
+                    ...metadata
+                },
+                requestedBy: {
+                    displayName: req.requesterName,
+                    email: req.requesterEmail
+                }
             }
         }
-    }));
+    }))
 
     return {
         results: enrichedRequests,
         total: total,
         totalPages: Math.ceil(total / pageSize)
     }
-  } catch (error) {
-    console.error('Error fetching user requests:', error)
+  } catch (e) {
+    error('Error fetching user requests:', e)
     return { results: [], total: 0, totalPages: 0 }
   }
 }

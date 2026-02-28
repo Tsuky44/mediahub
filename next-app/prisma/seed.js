@@ -1,32 +1,23 @@
+
 const { PrismaClient } = require('@prisma/client')
+
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log('🌱 Initialisation de l\'instance par défaut...')
-
-  const embyUrl = process.env.EMBY_URL
-  const embyApiKey = process.env.EMBY_API_KEY
-  const jellyseerrUrl = process.env.JELLYSEERR_URL
-  const jellyseerrApiKey = process.env.JELLYSEERR_API_KEY
-
-  if (!embyUrl || !embyApiKey) {
-    console.error('❌ Erreur: EMBY_URL et EMBY_API_KEY doivent être définis dans le .env pour le seed.')
-    return
+  console.log('🌱 Seeding database...')
+  
+  // Create default admin user if no users exist
+  const userCount = await prisma.user.count()
+  if (userCount === 0) {
+    console.log('Creating default admin user...')
+    // Note: In a real app, you'd want to prompt for credentials or use env vars
+    // For now, we assume users are created via the app or initial setup flow
+    console.log('No users found. Please use the application setup flow to create the first user.')
+  } else {
+    console.log('Users already exist, skipping initial user creation.')
   }
 
-  const defaultInstance = await prisma.instance.create({
-    data: {
-      name: 'Tsukyflix',
-      slug: 'main',
-      embyUrl: embyUrl,
-      embyApiKey: embyApiKey,
-      jellyseerrUrl: jellyseerrUrl,
-      jellyseerrApiKey: jellyseerrApiKey,
-      isDefault: true,
-    }
-  })
-
-  console.log('✅ Instance par défaut créée:', defaultInstance.name)
+  console.log('✅ Seeding completed')
 }
 
 main()

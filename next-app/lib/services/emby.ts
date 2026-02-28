@@ -1,6 +1,12 @@
 import axios from 'axios'
 import https from 'https'
 
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
 export class EmbyService {
   private baseUrl: string
   private apiKey: string
@@ -18,7 +24,7 @@ export class EmbyService {
     }
   }
 
-  private async getClient(timeout: number = 10000) {
+  async getClient(timeout: number = 10000) {
     return axios.create({
       baseURL: this.baseUrl,
       params: {
@@ -42,7 +48,7 @@ export class EmbyService {
       const response = await client.get('/Items/Counts')
       return response.data
     } catch (e) {
-      console.error('[EmbyService] getLibraryStats failed:', e)
+      error('[EmbyService] getLibraryStats failed:', e)
       return null
     }
   }
@@ -56,18 +62,17 @@ export class EmbyService {
       }
       return response.data
     } catch (e: any) {
-      console.error(`[EmbyService] getSystemInfo failed at ${this.baseUrl}:`, e.message)
+      error(`[EmbyService] getSystemInfo failed at ${this.baseUrl}:`, e.message)
       return null
     }
   }
 
-  async authenticate(username: string, pw: string) {
-    console.log(`[EmbyService] Authenticating user '${username}' against ${this.baseUrl}`)
-    try {
-        // Ensure username is trimmed
+    async authenticate(username: string, pw: string) {
+    log(`[EmbyService] Authenticating user '${username}' against ${this.baseUrl}`)
+    
+    const performAuth = async (url: string) => {
         const cleanUsername = username.trim();
-        
-        const response = await axios.post(`${this.baseUrl}/Users/AuthenticateByName`, {
+        return await axios.post(`${url}/Users/AuthenticateByName`, {
             Username: cleanUsername,
             Pw: pw
         }, {
@@ -77,35 +82,59 @@ export class EmbyService {
                 'Accept': 'application/json'
             },
             httpsAgent: this.httpsAgent,
-            timeout: 20000, // Increased timeout to 20s
+            timeout: 15000, // 15s timeout
             maxRedirects: 5
         })
-        console.log(`[EmbyService] Auth success for ${cleanUsername}`)
+    }
+
+    try {
+        const response = await performAuth(this.baseUrl);
+        log(`[EmbyService] Auth success for ${username}`)
         return response.data
     } catch (e: any) {
+        // Auto-retry with host.docker.internal if localhost fails (Docker on Windows/Mac fix)
+        if ((this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1')) && 
+            (e.code === 'ECONNREFUSED' || e.code === 'ETIMEDOUT' || e.code === 'EHOSTUNREACH')) {
+            
+            warn(`[EmbyService] Connection to ${this.baseUrl} failed (${e.code}). Retrying with host.docker.internal...`)
+            try {
+                const newUrl = this.baseUrl.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
+                const response = await performAuth(newUrl);
+                log(`[EmbyService] Auth success using host.docker.internal`)
+                return response.data
+            } catch (retryError: any) {
+                error(`[EmbyService] Retry failed:`, retryError.message)
+            }
+        }
+
         const errorStatus = e.response?.status
         const errorData = e.response?.data
-        console.error(`[EmbyService] Auth failed for ${username} (Status: ${errorStatus}):`, errorData || e.message)
+        error(`[EmbyService] Auth failed for ${username} (Status: ${errorStatus}):`, errorData || e.message)
         
         if (errorStatus === 401) {
             throw new Error("Identifiants incorrects sur Emby")
         }
-        throw new Error(`Erreur Emby (${errorStatus || 'Timeout'}): ${e.message}`)
+        throw new Error(`Erreur Emby (${errorStatus || e.code || 'Unknown'}): ${e.message}`)
     }
   }
 
   async getUsers() {
-    try {
-      const client = await this.getClient(10000)
-      const response = await client.get('/Users')
-      if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
-        throw new Error('Received HTML instead of JSON')
-      }
-      return response.data
-    } catch (e: any) {
-      console.error(`[EmbyService] getUsers failed at ${this.baseUrl}:`, e.message)
-      return []
+    const client = await this.getClient(10000)
+    const response = await client.get('/Users')
+    if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE html>')) {
+      throw new Error('Received HTML instead of JSON')
     }
+    
+    if (Array.isArray(response.data)) {
+      return response.data
+    }
+    
+    // Handle { Items: [...] } response format (possible in some versions)
+    if (response.data && Array.isArray(response.data.Items)) {
+      return response.data.Items
+    }
+
+    return []
   }
 
   async getSessions() {
@@ -117,7 +146,7 @@ export class EmbyService {
       }
       return response.data
     } catch (e: any) {
-      console.error(`[EmbyService] getSessions failed at ${this.baseUrl}:`, e.message)
+      error(`[EmbyService] getSessions failed at ${this.baseUrl}:`, e.message)
       return []
     }
   }
@@ -128,7 +157,7 @@ export class EmbyService {
       const response = await client.get('/Plugins')
       return response.data
     } catch (e) {
-      console.error('[EmbyService] getInstalledPlugins failed:', e)
+      error('[EmbyService] getInstalledPlugins failed:', e)
       return []
     }
   }
@@ -145,7 +174,7 @@ export class EmbyService {
       })
       return response.data.Items || []
     } catch (e) {
-      console.error('[EmbyService] getItemsDetails failed:', e)
+      error('[EmbyService] getItemsDetails failed:', e)
       return []
     }
   }
@@ -171,7 +200,7 @@ export class EmbyService {
       }
       return durations
     } catch (e) {
-      console.error('[EmbyService] getItemsDurations failed:', e)
+      error('[EmbyService] getItemsDurations failed:', e)
       return {}
     }
   }
@@ -194,11 +223,11 @@ export class EmbyService {
           })
           return response.data
         } catch (e2: any) {
-          console.error(`[EmbyService] getPlaybackReport ActivityLog fallback failed:`, e2.message)
+          error(`[EmbyService] getPlaybackReport ActivityLog fallback failed:`, e2.message)
           throw e2
         }
       }
-      console.error(`[EmbyService] getPlaybackReport failed:`, e.message)
+      error(`[EmbyService] getPlaybackReport failed:`, e.message)
       throw e
     }
   }
@@ -211,7 +240,7 @@ export class EmbyService {
       })
       return response.data
     } catch (e: any) {
-      console.error(`[EmbyService] getCustomQuery failed:`, e.message)
+      error(`[EmbyService] getCustomQuery failed:`, e.message)
       throw e
     }
   }
@@ -238,7 +267,7 @@ export class EmbyService {
       })
       return response.data.Items || []
     } catch (e) {
-      console.error('[EmbyService] getPublicItems failed:', e)
+      error('[EmbyService] getPublicItems failed:', e)
       return []
     }
   }
@@ -259,7 +288,7 @@ export class EmbyService {
         })
         return response.data
     } catch (e) {
-        console.error(`[EmbyService] Failed to get played items for user ${userId}:`, e)
+        error(`[EmbyService] Failed to get played items for user ${userId}:`, e)
         return { Items: [] }
     }
   }
@@ -275,7 +304,7 @@ export class EmbyService {
       })
       return response.data
     } catch (e) {
-      console.error('[EmbyService] getResumeItems failed:', e)
+      error('[EmbyService] getResumeItems failed:', e)
       return { Items: [] }
     }
   }
@@ -304,7 +333,7 @@ export class EmbyService {
       const response = await client.get(`/Users/${userId}/Items`, { params })
       return response.data
     } catch (e) {
-      console.error('[EmbyService] getUserItems failed:', e)
+      error('[EmbyService] getUserItems failed:', e)
       return { Items: [] }
     }
   }
@@ -320,7 +349,7 @@ export class EmbyService {
       })
       return response.data
     } catch (e) {
-      console.error('[EmbyService] getItemDetails failed:', e)
+      error('[EmbyService] getItemDetails failed:', e)
       return null
     }
   }
@@ -335,7 +364,7 @@ export class EmbyService {
           await client.delete(url)
       }
     } catch (e) {
-      console.error('[EmbyService] updateFavoriteStatus failed:', e)
+      error('[EmbyService] updateFavoriteStatus failed:', e)
     }
   }
 
@@ -365,7 +394,7 @@ export class EmbyService {
         })
         return response.data
       } catch (e) {
-        console.error('[EmbyService] toggleFavorite failed:', e)
+        error('[EmbyService] toggleFavorite failed:', e)
         return null
       }
   }
@@ -386,6 +415,305 @@ export class EmbyService {
       return items.Items || []
   }
 
+  async getStorageItems() {
+    try {
+      const client = await this.getClient(30000) // Long timeout for large libraries
+      // Fetch Movies and Episodes
+      // We need SeriesName and SeriesId for Episodes to group them
+      const response = await client.get('/Items', {
+        params: {
+          Recursive: true,
+          IncludeItemTypes: 'Movie,Episode,Series',
+          Fields: 'Path,MediaSources,ProviderIds,SeriesId,SeriesName,DateCreated,ParentId',
+          SortBy: 'DateCreated',
+          SortOrder: 'Descending',
+          IsVirtualItem: false // Exclude virtual items
+        }
+      })
+      
+      return response.data.Items || []
+    } catch (e) {
+      error('[EmbyService] getStorageItems failed:', e)
+      return []
+    }
+  }
+
+  async deleteItem(itemId: string) {
+    try {
+      const client = await this.getClient()
+      await client.delete(`/Items/${itemId}`)
+      return true
+    } catch (e: any) {
+      error(`[EmbyService] deleteItem failed for ${itemId}:`, e.message)
+      throw e
+    }
+  }
+
+  async refreshItem(itemId: string) {
+    try {
+      const client = await this.getClient()
+      await client.post(`/Items/${itemId}/Refresh`, null, {
+        params: {
+          Recursive: true,
+          ImageRefreshMode: 'Default',
+          MetadataRefreshMode: 'Default',
+          ReplaceAllImages: false,
+          ReplaceAllMetadata: false
+        }
+      })
+      return true
+    } catch (e: any) {
+      error(`[EmbyService] refreshItem failed for ${itemId}:`, e.message)
+      return false
+    }
+  }
+
+  async deleteEpisodesBySeasonNumber(seriesId: string, seasonNumber: number) {
+    try {
+      const client = await this.getClient()
+      const response = await client.get('/Items', {
+        params: {
+          ParentId: seriesId,
+          IncludeItemTypes: 'Episode',
+          Recursive: true,
+          Fields: 'ParentIndexNumber'
+        }
+      })
+      
+      const episodes = response.data.Items || []
+      // Filter strictly by season number
+      const targetEpisodes = episodes.filter((e: any) => e.ParentIndexNumber === seasonNumber)
+      
+      log(`[EmbyService] Deleting ${targetEpisodes.length} episodes for Season ${seasonNumber} of Series ${seriesId}`)
+      
+      // Delete in parallel chunks to speed up
+      const chunkSize = 5
+      for (let i = 0; i < targetEpisodes.length; i += chunkSize) {
+        const chunk = targetEpisodes.slice(i, i + chunkSize)
+        await Promise.all(chunk.map((ep: any) => this.deleteItem(ep.Id)))
+      }
+      
+      return true
+    } catch (e: any) {
+      error(`[EmbyService] deleteEpisodesBySeasonNumber failed:`, e.message)
+      return false
+    }
+  }
+
+  async getItemStateForAllUsers(itemId: string) {
+    try {
+      const users = await this.getUsers()
+      
+      // Run in parallel
+      const promises = users.map(async (user: any) => {
+        try {
+            const item = await this.getItemDetails(itemId, user.Id)
+            
+            if (!item) return null
+
+            let stat: any = null
+
+            if (item.Type === 'Series') {
+                // Fetch all episodes for this user to get accurate stats
+                const client = await this.getClient()
+                const episodesRes = await client.get(`/Users/${user.Id}/Items`, {
+                    params: {
+                        ParentId: itemId,
+                        Recursive: true,
+                        IncludeItemTypes: 'Episode',
+                        Fields: 'UserData,ParentIndexNumber,IndexNumber,RunTimeTicks'
+                    }
+                })
+                
+                const episodes = episodesRes.data.Items || []
+                if (episodes.length === 0) return null
+
+                let playedCount = 0
+                let totalDuration = 0
+                let playedDuration = 0
+                let lastPlayedDate: Date | null = null
+                
+                // Fallback to Series LastPlayedDate
+                if (item.UserData?.LastPlayedDate) {
+                     const d = new Date(item.UserData.LastPlayedDate)
+                     if (!isNaN(d.getTime())) {
+                         lastPlayedDate = d
+                     }
+                }
+
+                let lastPlayedEpisode: any = null
+                
+                const seasonStats = new Map<number, { total: number, played: number }>()
+
+                for (const ep of episodes) {
+                    // Season Stats
+                    const seasonNum = ep.ParentIndexNumber ?? 0
+                    if (!seasonStats.has(seasonNum)) {
+                        seasonStats.set(seasonNum, { total: 0, played: 0 })
+                    }
+                    const sStat = seasonStats.get(seasonNum)!
+                    sStat.total++
+
+                    // Global Stats
+                    if (ep.RunTimeTicks) totalDuration += ep.RunTimeTicks
+
+                    if (ep.UserData?.Played) {
+                        playedCount++
+                        sStat.played++
+                        if (ep.RunTimeTicks) playedDuration += ep.RunTimeTicks
+                    } else if (ep.UserData?.PlaybackPositionTicks) {
+                         if (ep.RunTimeTicks) playedDuration += ep.UserData.PlaybackPositionTicks
+                    }
+
+                    // Last Played
+                    if (ep.UserData?.LastPlayedDate) {
+                        const d = new Date(ep.UserData.LastPlayedDate)
+                        if (!isNaN(d.getTime())) {
+                            if (!lastPlayedDate || d >= lastPlayedDate) {
+                                lastPlayedDate = d
+                                lastPlayedEpisode = ep
+                            }
+                        }
+                    }
+                }
+
+                // If user hasn't watched anything, we might skip them or show 0%
+                // The user wants to know "si des personne sont entrain de regarder".
+                // So if playedCount > 0 or lastPlayedDate exists, we include them.
+                if (playedCount > 0 || lastPlayedDate) {
+                    const globalPercentage = episodes.length > 0 ? (playedCount / episodes.length) * 100 : 0
+                    
+                    const seasons = Array.from(seasonStats.entries()).map(([seasonNumber, stats]) => ({
+                        seasonNumber,
+                        total: stats.total,
+                        played: stats.played,
+                        percentage: stats.total > 0 ? (stats.played / stats.total) * 100 : 0
+                    })).sort((a, b) => a.seasonNumber - b.seasonNumber)
+
+                    stat = {
+                        userId: user.Id,
+                        userName: user.Name,
+                        played: playedCount === episodes.length,
+                        lastPlayedDate: lastPlayedDate ? lastPlayedDate.toISOString() : null,
+                        playbackPositionTicks: 0, // Not relevant for Series global
+                        totalDurationTicks: totalDuration,
+                        percentage: globalPercentage,
+                        episodeText: lastPlayedEpisode ? `Dernier : S${lastPlayedEpisode.ParentIndexNumber}E${lastPlayedEpisode.IndexNumber}` : `${playedCount}/${episodes.length} épisodes`,
+                        seasons: seasons,
+                        playedEpisodes: playedCount,
+                        totalEpisodes: episodes.length,
+                        episodeIds: episodes.map((e: any) => e.Id)
+                    }
+                }
+
+            } else {
+                // Movie or Episode
+                if (item.UserData && (item.UserData.Played || item.UserData.PlaybackPositionTicks > 0)) {
+                    stat = {
+                        userId: user.Id,
+                        userName: user.Name,
+                        played: item.UserData.Played,
+                        lastPlayedDate: item.UserData.LastPlayedDate,
+                        playbackPositionTicks: item.UserData.PlaybackPositionTicks,
+                        totalDurationTicks: item.RunTimeTicks,
+                        percentage: item.RunTimeTicks ? (item.UserData.PlaybackPositionTicks / item.RunTimeTicks) * 100 : 0,
+                        episodeText: ''
+                    }
+                }
+            }
+
+            return stat
+        } catch (e) {
+            return null
+        }
+      })
+
+      const results = await Promise.all(promises)
+      return results.filter(r => r !== null)
+
+    } catch (e: any) {
+      error(`[EmbyService] getItemStateForAllUsers failed for ${itemId}:`, e.message)
+      return []
+    }
+  }
+
+  async getSeasonDetails(seriesId: string) {
+    try {
+      const client = await this.getClient()
+      // Get seasons
+      const response = await client.get(`/Items`, {
+        params: {
+          ParentId: seriesId,
+          IncludeItemTypes: 'Season',
+          Fields: 'Path,ProviderIds,MediaSources'
+        }
+      })
+      
+      const seasons = response.data.Items || []
+      
+      // For each season, we might want size. But size is usually on Episodes.
+      // So we need to fetch episodes for each season or all episodes for series and group.
+      // Fetching all episodes is better.
+      const episodesResponse = await client.get(`/Items`, {
+        params: {
+            ParentId: seriesId,
+            IncludeItemTypes: 'Episode',
+            Recursive: true,
+            Fields: 'Path,MediaSources,ProviderIds,SeasonId,SeasonName,ParentIndexNumber'
+        }
+      })
+
+      const episodes = episodesResponse.data.Items || []
+      
+      // Group episodes by season
+      const seasonsMap = new Map<string, any>()
+      
+      // Initialize seasons from season items
+      seasons.forEach((s: any) => {
+          seasonsMap.set(s.Id, {
+              id: s.Id,
+              name: s.Name,
+              index: s.IndexNumber,
+              size: 0,
+              episodesCount: 0,
+              path: s.Path
+          })
+      })
+      
+      episodes.forEach((ep: any) => {
+          const seasonId = ep.SeasonId
+          let season = seasonsMap.get(seasonId)
+          
+          if (!season) {
+              // Create virtual season if not found (e.g. Specials sometimes)
+              season = {
+                  id: seasonId,
+                  name: ep.SeasonName || `Saison ${ep.ParentIndexNumber}`,
+                  index: ep.ParentIndexNumber,
+                  size: 0,
+                  episodesCount: 0,
+                  path: '' // Episode path might be different
+              }
+              seasonsMap.set(seasonId, season)
+          }
+          
+          let size = 0
+          if (ep.MediaSources && ep.MediaSources.length > 0) {
+              size = ep.MediaSources.reduce((acc: number, src: any) => acc + (src.Size || 0), 0)
+          }
+          
+          season.size += size
+          season.episodesCount += 1
+      })
+      
+      return Array.from(seasonsMap.values()).sort((a, b) => a.index - b.index)
+      
+    } catch (e: any) {
+       error(`[EmbyService] getSeasonDetails failed for ${seriesId}:`, e.message)
+       return []
+    }
+  }
+
   async getPlaybackReportingStats(days: number = 30) {
     const client = await this.getClient()
     try {
@@ -403,13 +731,13 @@ export class EmbyService {
             
             query += ` ORDER BY DateCreated DESC`
 
-            console.log(`[EmbyService] Executing custom query: ${query}`)
+            log(`[EmbyService] Executing custom query: ${query}`)
 
             const pbQueryResponse = await client.post('/user_usage_stats/submit_custom_query', {
                 CustomQueryString: query
             })
             if (pbQueryResponse.data && pbQueryResponse.data.results && pbQueryResponse.data.results.length > 0) {
-                console.log(`[EmbyService] Custom query returned ${pbQueryResponse.data.results.length} rows`)
+                log(`[EmbyService] Custom query returned ${pbQueryResponse.data.results.length} rows`)
                 return pbQueryResponse.data.results.map((item: any[]) => ({
                     Id: item[0],
                     DateCreated: item[1],
@@ -428,7 +756,7 @@ export class EmbyService {
             }
         } catch (e) {
             // Ignore custom query error and continue to official endpoints
-            console.warn('[EmbyService] Custom query failed, falling back to endpoints:', (e as any).message)
+            warn('[EmbyService] Custom query failed, falling back to endpoints:', (e as any).message)
         }
 
         // 1. Try the Report endpoint
@@ -460,7 +788,7 @@ export class EmbyService {
             // Plugin not installed, just return empty list
             return []
         }
-        console.warn('[EmbyService] Playback Reporting plugin error:', e.message)
+        warn('[EmbyService] Playback Reporting plugin error:', e.message)
         return []
     }
   }
@@ -517,7 +845,7 @@ export class EmbyService {
         if (e.response?.status === 404) {
             return []
         }
-        console.warn('[EmbyService] Statistics plugin error:', e.message)
+        warn('[EmbyService] Statistics plugin error:', e.message)
         return []
     }
   }
@@ -562,7 +890,7 @@ export class EmbyService {
             }
         }
       } catch (e) {
-        console.error(`Failed to fetch stats for user ${user.Id}`, e)
+        error(`Failed to fetch stats for user ${user.Id}`, e)
       }
     }
 

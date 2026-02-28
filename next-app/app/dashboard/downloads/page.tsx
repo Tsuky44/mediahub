@@ -3,29 +3,49 @@ import { authOptions, getQBittorrentServiceForUser, getSmbServiceForUser, getPro
 import { AlertCircle, Settings } from 'lucide-react'
 import Link from 'next/link'
 import DownloadsClient from './DownloadsClient'
+import { defineAbilityFor } from '@/lib/ability'
+
+const isDev = process.env.NODE_ENV === 'development';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export default async function DownloadsPage() {
   const session = await getServerSession(authOptions)
-  const userRole = (session?.user as any)?.role || 'user'
-  const userPermissions = (session?.user as any)?.permissions || []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = session?.user as any
+  const ability = defineAbilityFor(user)
 
-  if (userRole !== 'admin' && !userPermissions.includes('downloads.view') && !userPermissions.includes('downloads.manage')) {
+  if (!ability.can('read', 'Downloads')) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
-          <AlertCircle size={48} />
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 p-8">
+        <div className="p-6 rounded-3xl bg-red-500/10 text-red-500 border border-red-500/20 shadow-xl shadow-red-500/10 backdrop-blur-xl animate-in fade-in zoom-in duration-500">
+          <AlertCircle size={64} className="animate-pulse" />
         </div>
-        <h2 className="text-2xl font-bold text-white">Accès restreint</h2>
-        <p className="text-gray-400">Vous n'avez pas les permissions nécessaires pour accéder à la gestion des fichiers.</p>
-        <Link href="/dashboard" className="text-indigo-400 hover:text-indigo-300 transition-colors">
-          Retour au tableau de bord
+        <div className="text-center space-y-2 max-w-md">
+          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">
+            Accès restreint
+          </h2>
+          <p className="text-gray-400 text-lg leading-relaxed">
+            Vous n'avez pas les permissions nécessaires pour accéder à la gestion des téléchargements.
+          </p>
+        </div>
+        <Link 
+          href="/dashboard" 
+          className="group flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20 transition-all duration-300 hover:scale-105"
+        >
+          <span>Retour au tableau de bord</span>
+          <svg className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
         </Link>
       </div>
     )
   }
 
   // Check services
-  console.log('Debug Services:', {
+  log('Debug Services:', {
     hasQbt: typeof getQBittorrentServiceForUser,
     hasSmb: typeof getSmbServiceForUser,
     hasProwlarr: typeof getProwlarrServiceForUser
@@ -59,7 +79,15 @@ export default async function DownloadsPage() {
     )
   }
 
-  const canManage = userRole === 'admin' || userPermissions.includes('downloads.manage')
+  const permissions = {
+    canReadTorrents: ability.can('read', 'Downloads'),
+    canAddTorrent: ability.can('add_torrent', 'Downloads') || ability.can('manage', 'Downloads'),
+    canManageTorrents: ability.can('manage_torrents', 'Downloads') || ability.can('manage', 'Downloads'),
+    canReadExplorer: ability.can('read_explorer', 'Downloads') || ability.can('manage', 'Downloads'),
+    canShareFiles: ability.can('share_files', 'Downloads') || ability.can('manage', 'Downloads'),
+    canDeleteFiles: ability.can('delete_files', 'Downloads') || ability.can('manage', 'Downloads'),
+    canInteractiveSearch: ability.can('interactive_search', 'Downloads') || ability.can('manage', 'Downloads')
+  }
 
   return (
     <div className="w-full">
@@ -67,8 +95,8 @@ export default async function DownloadsPage() {
         hasQbit={!!qbtService} 
         hasSmb={!!smbService} 
         hasProwlarr={!!prowlarrService} 
-        canManage={canManage}
-        isAdmin={userRole === 'admin'}
+        permissions={permissions}
+        isAdmin={user.role === 'admin'}
       />
     </div>
   )

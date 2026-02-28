@@ -1,7 +1,8 @@
 'use client'
 
 import Image from 'next/image'
-import { Link, Film, Tv, Check, Clock, Heart } from 'lucide-react'
+import Link from 'next/link'
+import { Film, Tv, Check, Clock, Heart } from 'lucide-react'
 import { toggleFavorite } from '@/app/dashboard/media/actions'
 import { toggleWatchLater } from '@/app/dashboard/media/watch-later-actions'
 import { useState } from 'react'
@@ -88,107 +89,115 @@ export function MediaCard({ item, showFavoriteButton = false }: { item: MediaIte
       }
   }
 
-  const getStatusBadge = () => {
+  const getStatusIndicator = () => {
       if (!item.media_status || item.media_status.status === 'not_available' || item.media_status.status === 'unknown') return null
 
       const status = item.media_status.status
       let colorClass = ''
-      let Icon = Check
-
+      
       if (status === 'available') {
-          colorClass = 'bg-green-600'
+          colorClass = 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.6)]'
       } else if (status === 'partial') {
-          colorClass = 'bg-purple-600'
+          colorClass = 'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.6)]'
       } else if (status === 'pending' || status === 'processing') {
-          colorClass = 'bg-yellow-500'
-          Icon = status === 'processing' ? Clock : Check // User asked for check but clock might be better? User specifically said "coche jaune" (yellow check). So let's stick to Check for pending too, or maybe just Check for all as requested.
-          // "petit coche jaune pour dire que la demande est en pending" -> Yellow check.
+          colorClass = 'bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.6)]'
       } else {
           return null
       }
 
       return (
           <div 
-              className={`absolute top-2 left-2 rounded-full p-1.5 shadow-lg backdrop-blur-md ${colorClass} text-white z-10`}
+              className={`absolute top-2 right-2 h-3 w-3 rounded-full ${colorClass} z-20`}
               title={item.media_status.message}
-          >
-              <Icon className="h-4 w-4" strokeWidth={3} />
-          </div>
+          />
       )
   }
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow-sm hover:shadow-md transition-shadow">
-      <div className="aspect-[2/3] w-full overflow-hidden bg-gray-900 relative">
-        {item.poster_path ? (
-             <img
-             src={posterUrl}
-             alt={title}
-             className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
-             loading="lazy"
-           />
-        ) : (
-            <div className="flex h-full items-center justify-center bg-gray-800 text-gray-500">
-                No Image
+    <div className="group relative flex flex-col overflow-hidden rounded-2xl bg-gray-900 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,0,0,0.3)] hover:z-10 ring-1 ring-white/5 hover:ring-white/20">
+      <Link href={`/dashboard/media/${linkId}?type=${item.media_type || 'movie'}`} className="block h-full w-full">
+        <div className="aspect-[2/3] w-full overflow-hidden bg-gray-800 relative">
+            {posterUrl ? (
+                <img
+                    src={posterUrl}
+                    alt={title}
+                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    loading="lazy"
+                />
+            ) : (
+                <div className="flex h-full items-center justify-center bg-gray-800 text-gray-600">
+                    <Film className="h-12 w-12 opacity-20" />
+                </div>
+            )}
+            
+            {/* Status Indicator (Dot) */}
+            {getStatusIndicator()}
+
+            {/* Gradient Overlay on Hover */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 flex flex-col justify-end p-5">
+                <h3 className="text-white font-bold text-lg leading-tight line-clamp-2 drop-shadow-md transform translate-y-4 transition-transform duration-300 group-hover:translate-y-0">
+                    {title}
+                </h3>
+                
+                {/* Meta info row */}
+                <div className="flex items-center gap-2 mt-2 text-xs text-gray-300 transform translate-y-4 transition-transform duration-300 group-hover:translate-y-0 delay-75">
+                   {item.media_type === 'tv' ? (
+                        <span className="bg-white/10 backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-full uppercase tracking-wider font-medium text-[10px]">Série</span>
+                   ) : (
+                        <span className="bg-white/10 backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-full uppercase tracking-wider font-medium text-[10px]">Film</span>
+                   )}
+                   {/* We could add year or rating here if available in item props later */}
+                </div>
+
+                {/* Overview Preview */}
+                {item.overview && (
+                    <p className="mt-2 text-xs text-gray-300 line-clamp-3 transform translate-y-4 transition-transform duration-300 group-hover:translate-y-0 delay-100 opacity-80 leading-relaxed">
+                        {item.overview}
+                    </p>
+                )}
             </div>
-        )}
-        
-        {getStatusBadge()}
-        
-        {/* Favorite Button */}
+        </div>
+      </Link>
+
+      {/* Action Buttons (Floating on top right/left on hover, separate from Link to avoid navigation) */}
+      <div className="absolute top-3 left-3 flex flex-col gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100 z-30 pointer-events-none group-hover:pointer-events-auto">
+        {/* Watch Later */}
+        <button
+            onClick={handleToggleWatchLater}
+            disabled={isTogglingWatchLater}
+            className={`p-2.5 rounded-full backdrop-blur-md transition-all duration-300 hover:scale-110 border ${
+                isWatchLater 
+                    ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 hover:bg-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.2)]' 
+                    : 'bg-gray-900/60 border-white/10 text-gray-400 hover:bg-gray-800/80 hover:text-white hover:border-white/20'
+            }`}
+            title={isWatchLater ? "Retirer de la liste" : "À regarder plus tard"}
+        >
+            {isTogglingWatchLater ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+                <Tv className={`w-4 h-4 ${isWatchLater ? 'fill-current' : ''}`} />
+            )}
+        </button>
+
+        {/* Favorite */}
         {showFavoriteButton && (
             <button
                 onClick={handleToggleFavorite}
                 disabled={isTogglingFavorite}
-                className={`absolute bottom-2 right-2 p-1.5 rounded-full backdrop-blur-md transition-all duration-300 z-20 ${
+                className={`p-2.5 rounded-full backdrop-blur-md transition-all duration-300 hover:scale-110 border ${
                     isFavorite 
-                        ? 'bg-red-500 text-white shadow-lg scale-110' 
-                        : 'bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-black/60'
+                        ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.2)]' 
+                        : 'bg-gray-900/60 border-white/10 text-gray-400 hover:bg-gray-800/80 hover:text-white hover:border-white/20'
                 }`}
+                title={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
             >
-                <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+                {isTogglingFavorite ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                    <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+                )}
             </button>
         )}
-
-        <button
-            onClick={handleToggleWatchLater}
-            disabled={isTogglingWatchLater}
-            className={`absolute bottom-2 left-2 p-1.5 rounded-full backdrop-blur-md transition-all duration-300 z-20 ${
-                isWatchLater 
-                    ? 'bg-blue-500 text-white shadow-lg scale-110' 
-                    : 'bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-black/60'
-            }`}
-            title="À regarder plus tard"
-        >
-            <Tv className="w-4 h-4" />
-        </button>
-        
-        {/* Type Badge */}
-        {item.media_type && (
-            <div className="absolute top-2 right-2 rounded-full bg-black/60 px-2 py-1 text-xs font-medium text-white backdrop-blur-sm flex items-center gap-1">
-                {item.media_type === 'movie' ? (
-                    <>
-                        <Film className="h-3 w-3" />
-                        <span>Film</span>
-                    </>
-                ) : (
-                    <>
-                        <Tv className="h-3 w-3" />
-                        <span>Série</span>
-                    </>
-                )}
-            </div>
-        )}
-       
-      </div>
-      <div className="flex flex-1 flex-col p-4">
-        <h3 className="text-sm font-medium text-white">
-          <a href={`/dashboard/media/${linkId}?type=${item.media_type || 'movie'}`}>
-            <span aria-hidden="true" className="absolute inset-0" />
-            {title}
-          </a>
-        </h3>
-        <p className="mt-1 text-sm text-gray-400 line-clamp-2">{item.overview}</p>
       </div>
     </div>
   )

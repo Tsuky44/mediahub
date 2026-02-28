@@ -1,8 +1,9 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { CheckCircle2, Clock, Hourglass, ListPlus, Tv, Film } from 'lucide-react'
 import Link from 'next/link'
+import { getRecentRequests } from './dashboard-actions'
 
 interface MediaRequest {
   id: string
@@ -11,25 +12,90 @@ interface MediaRequest {
   media: {
     title: string
     posterPath?: string
+    tmdbId?: string
   }
   requestedBy: {
     displayName: string
   }
 }
 
-export function RecentRequests({ requests }: { requests: MediaRequest[] }) {
+const MediaPoster = ({ 
+  src, 
+  alt, 
+  fallbackSrc, 
+  placeholder 
+}: { 
+  src: string | null, 
+  alt: string, 
+  fallbackSrc?: string | null,
+  placeholder: React.ReactNode 
+}) => {
+  const [error, setError] = useState(false)
+  const [usingFallback, setUsingFallback] = useState(false)
+  const [imgSrc, setImgSrc] = useState<string | null>(src)
+
+  useEffect(() => {
+    setImgSrc(src)
+    setError(false)
+    setUsingFallback(false)
+  }, [src])
+
+  const handleError = () => {
+    if (!usingFallback && fallbackSrc && fallbackSrc !== src) {
+      setUsingFallback(true)
+      setImgSrc(fallbackSrc)
+    } else {
+      setError(true)
+    }
+  }
+
+  if (!imgSrc || error) {
+    return <>{placeholder}</>
+  }
+
+  return (
+    <img
+      src={imgSrc}
+      alt={alt}
+      onError={handleError}
+      className="h-full w-full object-cover"
+    />
+  )
+}
+
+export function RecentRequests({ requests: initialRequests }: { requests: MediaRequest[] }) {
+  const [requests, setRequests] = useState<MediaRequest[]>(initialRequests)
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const newRequests = await getRecentRequests()
+        // @ts-ignore
+        setRequests(newRequests)
+      } catch (error) {
+        console.error('Failed to update recent requests:', error)
+      }
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [])
+
   const getStatusIcon = (status: number) => {
     switch (status) {
       case 5: return <CheckCircle2 className="w-3 h-3 text-green-500" />
-      case 3: return <Clock className="w-3 h-3 text-blue-500" />
-      default: return <Hourglass className="w-3 h-3 text-yellow-500" />
+      case 4: return <CheckCircle2 className="w-3 h-3 text-purple-500" />
+      case 3: return <Hourglass className="w-3 h-3 text-blue-500" />
+      case 2: return <CheckCircle2 className="w-3 h-3 text-indigo-500" />
+      default: return <Clock className="w-3 h-3 text-yellow-500" />
     }
   }
 
   const getStatusText = (status: number) => {
     switch (status) {
       case 5: return 'Disponible'
+      case 4: return 'Partiel'
       case 3: return 'En cours'
+      case 2: return 'Approuvée'
       default: return 'En attente'
     }
   }
@@ -61,20 +127,46 @@ export function RecentRequests({ requests }: { requests: MediaRequest[] }) {
       ) : (
         <div className="flex-1 overflow-y-auto pr-2 min-h-0">
           <div className="space-y-3">
-            {requests.map((request) => (
+            {requests.map((request) => {
+              const mediaType = request.type === 'movie' ? 'movie' : 'tv'
+              const tmdbId = request.media.tmdbId
+
+              let posterPath = null
+              let fallbackPosterPath = null
+              const proxyUrl = tmdbId ? `/api/media/image/${tmdbId}?tmdbId=${tmdbId}&mediaType=${mediaType}` : null
+              
+              if (request.media.posterPath) {
+                  if (request.media.posterPath.startsWith('http')) {
+                      posterPath = request.media.posterPath
+                      fallbackPosterPath = proxyUrl
+                  } else if (request.media.posterPath.startsWith('/api/v3/mediacover') || 
+                            request.media.posterPath.startsWith('/api/mediacover') ||
+                            request.media.posterPath === "null" ||
+                            request.media.posterPath === "undefined" ||
+                            request.media.posterPath === "") {
+                      posterPath = proxyUrl
+                  } else {
+                      const cleanPath = request.media.posterPath.startsWith('/') ? request.media.posterPath : `/${request.media.posterPath}`
+                      posterPath = `https://image.tmdb.org/t/p/w92${cleanPath}`
+                      fallbackPosterPath = proxyUrl
+                  }
+              } else if (tmdbId) {
+                  posterPath = proxyUrl
+              }
+
+              return (
               <div key={request.id} className="flex items-center gap-4 p-3 rounded-xl bg-gray-800/30 border border-gray-700/30 hover:border-indigo-500/30 transition-all group">
                 <div className="relative h-12 w-8 flex-shrink-0 overflow-hidden rounded bg-gray-800">
-                  {request.media.posterPath ? (
-                    <img 
-                      src={`https://image.tmdb.org/t/p/w92${request.media.posterPath}`}
-                      alt={request.media.title}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      {request.type === 'movie' ? <Film className="w-4 h-4 text-gray-600" /> : <Tv className="w-4 h-4 text-gray-600" />}
-                    </div>
-                  )}
+                  <MediaPoster 
+                    src={posterPath}
+                    alt={request.media.title}
+                    fallbackSrc={fallbackPosterPath}
+                    placeholder={
+                      <div className="flex h-full w-full items-center justify-center bg-gray-800">
+                        {request.type === 'movie' ? <Film className="w-4 h-4 text-gray-600" /> : <Tv className="w-4 h-4 text-gray-600" />}
+                      </div>
+                    }
+                  />
                 </div>
                 
                 <div className="flex-1 min-w-0">
@@ -95,7 +187,7 @@ export function RecentRequests({ requests }: { requests: MediaRequest[] }) {
                   </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       )}

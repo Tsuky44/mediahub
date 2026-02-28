@@ -6,6 +6,7 @@ import { fetchUserRecommendations } from '../media/actions'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import { defineAbilityFor } from '@/lib/ability'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,16 +14,18 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
   const session = await getServerSession(authOptions)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const user = session?.user as any
-  const canView = user?.role === 'admin' || user?.permissions?.includes('requests.search.view')
-  const canInteractive = user?.role === 'admin' || user?.permissions?.includes('requests.interactive')
+  const ability = defineAbilityFor(user)
+
+  const canView = ability.can('read', 'Media')
+  const canInteractive = ability.can('create', 'MediaRequest')
   
   if (!canView) {
       redirect('/dashboard')
   }
 
   const { q: rawQuery, filter } = await searchParams
-  // Only allow query if interactive permission is present
-  const query = canInteractive ? rawQuery : undefined
+  // Only allow query if view permission is present
+  const query = canView ? rawQuery : undefined
 
   let recommendationData: { results: any[]; total_pages: number } = { results: [], total_pages: 0 }
   let results: any[] = []
@@ -72,7 +75,7 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
             </p>
         </div>
         
-        {canInteractive && (
+        {canView && (
             <Suspense fallback={<div className="h-10 w-full max-w-md bg-gray-800 rounded-full animate-pulse" />}>
                 <SearchInput />
             </Suspense>

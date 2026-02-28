@@ -21,17 +21,30 @@ export const metadata: Metadata = {
   },
 };
 
+import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Runtime environment variables injection
+  const trackerUrl = process.env.NEXT_PUBLIC_TRACKER_WS_URL || process.env.TRACKER_WS_URL || '';
+
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__ENV = { TRACKER_WS_URL: '${trackerUrl}' };`
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
+          <ImpersonationBanner />
           {children}
         </Providers>
       </body>

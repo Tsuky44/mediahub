@@ -6,33 +6,25 @@ declare module "next-auth" {
     user: {
       id: string
       role: string
-      permissions: string[]
       embyUserId: string | null
-      instanceId: string
-      instanceSlug: string
-      isDefaultInstance: boolean
+      plexUserId: string | null
+      jellyfinUserId: string | null
     } & DefaultSession["user"]
   }
 
   interface User extends DefaultUser {
     role: string
-    permissions: string[]
-    roleVersion: number
     embyUserId: string | null
-    instanceId: string
-    instanceSlug: string
-    isDefaultInstance: boolean
+    plexUserId: string | null
+    jellyfinUserId: string | null
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     role: string
-    permissions: string[]
-    roleVersion: number
     embyUserId: string | null
-    instanceId: string
-    instanceSlug: string
-    isDefaultInstance: boolean
+    plexUserId: string | null
+    jellyfinUserId: string | null
   }
 }

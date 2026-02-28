@@ -12,6 +12,7 @@ import { checkAccess } from './actions';
 
 export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[]> {
     try {
+        await checkAccess('downloads.read_explorer');
         const smbService = await getSmbServiceForUser();
         if (!smbService) return [];
         const files = await smbService.listFiles(remotePath);
@@ -24,19 +25,17 @@ export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[
 
 export async function createPublicShare(filePath: string, expiresDays?: number) {
     try {
-        await checkAccess('downloads.manage');
+        await checkAccess('downloads.share_files');
         const session = await getServerSession(authOptions);
-        if (!session?.user || !(session.user as any).instanceId) {
+        if (!session?.user) {
             return { success: false, error: 'Non autorisé' };
         }
         
-        const instanceId = parseInt((session.user as any).instanceId);
         const token = uuidv4();
         const expiresAt = expiresDays ? new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000) : null;
         
         const share = await (prisma as any).fileShare.create({
             data: {
-                instanceId,
                 filePath,
                 token,
                 expiresAt

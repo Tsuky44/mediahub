@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { ChevronDown, ChevronUp, PlayCircle, Check, Clock, Download } from 'lucide-react'
 import { getSeasonDetails, requestSeason } from '@/app/dashboard/media/[id]/actions'
 import { SearchActions } from '@/components/SearchActions'
@@ -50,10 +51,16 @@ interface SeasonListProps {
     seasons: Season[]
     seasonStatuses: SeasonStatus[]
     seasonProgress?: SeasonProgress[]
+    canTriggerSearch?: boolean
+    canInteractiveSearch?: boolean
+    canRequest?: boolean
 }
 
-export function SeasonList({ tvId, tvdbId, title, seasons, seasonStatuses, seasonProgress = [] }: SeasonListProps) {
+export function SeasonList({ tvId, tvdbId, title, seasons, seasonStatuses, seasonProgress = [], canTriggerSearch, canInteractiveSearch, canRequest }: SeasonListProps) {
     const sortedSeasons = [...seasons].sort((a, b) => a.season_number - b.season_number)
+    const searchParams = useSearchParams()
+    const requestedSeason = searchParams.get('season') ? parseInt(searchParams.get('season')!) : null
+    const requestedEpisode = searchParams.get('episode') ? parseInt(searchParams.get('episode')!) : null
 
     return (
         <div className="space-y-4">
@@ -62,6 +69,8 @@ export function SeasonList({ tvId, tvdbId, title, seasons, seasonStatuses, seaso
                 {sortedSeasons.map((season) => {
                     const status = seasonStatuses.find(s => s.seasonNumber === season.season_number)
                     const progress = seasonProgress.find(p => p.seasonNumber === season.season_number)
+                    const isRequested = requestedSeason === season.season_number
+
                     return (
                         <SeasonItem 
                             key={season.id} 
@@ -72,6 +81,11 @@ export function SeasonList({ tvId, tvdbId, title, seasons, seasonStatuses, seaso
                             title={title} 
                             progress={progress}
                             allSeasons={seasons}
+                            initiallyOpen={isRequested}
+                            highlightEpisode={isRequested ? requestedEpisode : null}
+                            canTriggerSearch={canTriggerSearch}
+                            canInteractiveSearch={canInteractiveSearch}
+                            canRequest={canRequest}
                         />
                     )
                 })}
@@ -80,35 +94,99 @@ export function SeasonList({ tvId, tvdbId, title, seasons, seasonStatuses, seaso
     )
 }
 
-function SeasonItem({ tvId, tvdbId, season, initialStatus, title, progress, allSeasons }: { tvId: number, tvdbId?: number, season: Season, initialStatus: string, title: string, progress?: SeasonProgress, allSeasons: Season[] }) {
-    const [isOpen, setIsOpen] = useState(false)
+function SeasonItem({ 
+    tvId, 
+    tvdbId, 
+    season, 
+    initialStatus, 
+    title, 
+    progress, 
+    allSeasons, 
+    initiallyOpen = false, 
+    highlightEpisode,
+    canTriggerSearch,
+    canInteractiveSearch,
+    canRequest = false
+}: { 
+    tvId: number, 
+    tvdbId?: number, 
+    season: Season, 
+    initialStatus: string, 
+    title: string, 
+    progress?: SeasonProgress, 
+    allSeasons: Season[], 
+    initiallyOpen?: boolean, 
+    highlightEpisode?: number | null,
+    canTriggerSearch?: boolean,
+    canInteractiveSearch?: boolean,
+    canRequest?: boolean
+}) {
+    const [isOpen, setIsOpen] = useState(initiallyOpen)
     const [episodes, setEpisodes] = useState<Episode[]>([])
     const [loading, setLoading] = useState(false)
     const [loaded, setLoaded] = useState(false)
     const [status, setStatus] = useState(initialStatus)
     const [requesting, setRequesting] = useState(false)
+    const [error, setError] = useState(false)
 
     // Sync status when props change (e.g. after parent re-render/revalidation)
     useEffect(() => {
         setStatus(initialStatus)
     }, [initialStatus])
 
+    // Load episodes if initially open
+    useEffect(() => {
+        if (initiallyOpen && !loaded && !loading) {
+            loadEpisodes()
+        }
+    }, [initiallyOpen, loaded, loading])
+
+    // Scroll to episode
+    useEffect(() => {
+        if (loaded && highlightEpisode) {
+            // Small delay to ensure rendering
+            setTimeout(() => {
+                const el = document.getElementById(`episode-${highlightEpisode}`)
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    // Add highlight class
+                    el.classList.add('bg-indigo-500/10', 'ring-1', 'ring-indigo-500/50')
+                    setTimeout(() => {
+                        el.classList.remove('bg-indigo-500/10', 'ring-1', 'ring-indigo-500/50')
+                    }, 3000)
+                }
+            }, 100)
+        }
+    }, [loaded, highlightEpisode])
+
+    const loadEpisodes = async () => {
+        setLoading(true)
+        setError(false)
+        try {
+            const data = await getSeasonDetails(tvId, season.season_number)
+            if (data && data.episodes) {
+                setEpisodes(data.episodes)
+                setLoaded(true)
+            } else {
+                setError(true)
+            }
+        } catch (error) {
+            console.error('Failed to load episodes', error)
+            setError(true)
+        } finally {
+            setLoading(false)
+        }
+    }
+
     const toggleOpen = async () => {
         if (isOpen) {
             setIsOpen(false)
             return
         }
-
+        
         setIsOpen(true)
-
-        if (!loaded && !loading) {
-            setLoading(true)
-            const data = await getSeasonDetails(tvId, season.season_number)
-            if (data && data.episodes) {
-                setEpisodes(data.episodes)
-                setLoaded(true)
-            }
-            setLoading(false)
+        if (!loaded) {
+            await loadEpisodes()
         }
     }
 
@@ -176,9 +254,9 @@ function SeasonItem({ tvId, tvdbId, season, initialStatus, title, progress, allS
                                 </span>
                             )}
                             {status === 'partial' && (
-                                <span className="flex items-center gap-1 rounded-full bg-green-900/50 px-2 py-0.5 text-xs font-medium text-green-400 border border-green-800">
+                                <span className="flex items-center gap-1 rounded-full bg-purple-900/50 px-2 py-0.5 text-xs font-medium text-purple-400 border border-purple-800">
                                     <Check className="h-3 w-3" />
-                                    <span className="hidden sm:inline">Disponible</span>
+                                    <span className="hidden sm:inline">Partiellement disponible</span>
                                 </span>
                             )}
                             {(status === 'pending' || status === 'processing') && (
@@ -189,18 +267,21 @@ function SeasonItem({ tvId, tvdbId, season, initialStatus, title, progress, allS
                             )}
                             
                             {/* Search Actions for Season */}
+                            {(canTriggerSearch || canInteractiveSearch) && (
                             <SearchActions 
                                 title={title}
-                                canManage={true}
+                                canTriggerSearch={canTriggerSearch}
+                                canInteractiveSearch={canInteractiveSearch}
                                 mediaType="tv"
                                 tmdbId={tvId}
                                 tvdbId={tvdbId}
                                 seasons={allSeasons}
                                 initialSeason={season.season_number}
                             />
+                            )}
 
                             {/* Request Button if not requested/available */}
-                            {status === 'unknown' && (
+                            {canRequest && status === 'unknown' && (
                                 <div
                                     role="button"
                                     onClick={handleRequest}
@@ -236,10 +317,14 @@ function SeasonItem({ tvId, tvdbId, season, initialStatus, title, progress, allS
                         <div className="flex justify-center py-8">
                             <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-indigo-500"></div>
                         </div>
+                    ) : error ? (
+                        <div className="flex justify-center py-8 text-red-400">
+                            Impossible de charger les épisodes (Saison introuvable sur TMDB).
+                        </div>
                     ) : (
                         <div className="space-y-4">
                             {episodes.map((episode) => (
-                                <div key={episode.id} className="flex flex-col gap-4 rounded-lg bg-gray-800 p-4 sm:flex-row">
+                                <div key={episode.id} id={`episode-${episode.episode_number}`} className="flex flex-col gap-4 rounded-lg bg-gray-800 p-4 sm:flex-row transition-all duration-500">
                                     {/* Episode Image */}
                                     <div className="relative h-32 w-full flex-shrink-0 overflow-hidden rounded-md sm:w-56 bg-gray-900">
                                         {episode.still_path ? (

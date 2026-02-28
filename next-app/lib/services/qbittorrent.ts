@@ -1,4 +1,20 @@
 import axios, { AxiosInstance } from 'axios'
+import { getSetting } from '../settings'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
+export async function getQBittorrentService() {
+  const url = await getSetting('qbittorrent_url')
+  const username = await getSetting('qbittorrent_username')
+  const password = await getSetting('qbittorrent_password')
+  
+  if (!url) return null
+  return new QBittorrentService(url, username, password)
+}
 
 export interface Torrent {
   hash: string
@@ -54,7 +70,7 @@ export class QBittorrentService {
     // Authenticate
     if (this.username && this.password) {
       try {
-        console.log('[qBittorrent] Attempting login...')
+        log('[qBittorrent] Attempting login...')
         const params = new URLSearchParams()
         params.append('username', this.username)
         params.append('password', this.password)
@@ -69,19 +85,63 @@ export class QBittorrentService {
         const setCookie = response.headers['set-cookie']
         if (setCookie) {
             const cookie = Array.isArray(setCookie) ? setCookie[0] : setCookie
-            client.defaults.headers.common['Cookie'] = cookie.split(';')[0]
+            // Some qBittorrent versions return cookie with HttpOnly; etc.
+            // We need the SID part.
+            const sid = cookie.split(';')[0]
+            if (sid) {
+                client.defaults.headers.common['Cookie'] = sid
+            }
+        } else if (response.data === "Ok.") {
+             // Some versions/configs might return Ok without cookie if already auth or local bypass
+             // But usually they return a cookie. 
+             // If no cookie, we continue, maybe it's using IP whitelist.
+             log('[qBittorrent] Login successful but no cookie received. Assuming IP whitelist.')
         }
       } catch (e) {
         if (axios.isAxiosError(e)) {
-            console.error('[qBittorrent] Authentication failed:', e.response?.status, e.response?.data || e.message)
+            error('[qBittorrent] Authentication failed:', e.response?.status, e.response?.data || e.message)
+             // If 404, maybe it's an old version using /login
+             if (e.response?.status === 404) {
+                 log('[qBittorrent] /api/v2/auth/login not found, trying legacy /login')
+                 try {
+                    const params = new URLSearchParams()
+                    params.append('username', this.username)
+                    params.append('password', this.password)
+                    const response = await client.post('/login', params.toString())
+                     const setCookie = response.headers['set-cookie']
+                     if (setCookie) {
+                         const cookie = Array.isArray(setCookie) ? setCookie[0] : setCookie
+                         client.defaults.headers.common['Cookie'] = cookie.split(';')[0]
+                     }
+                } catch (legacyError) {
+                    error('[qBittorrent] Legacy login also failed', legacyError)
+                    throw new Error('Authentication failed: Could not log in via v2 or legacy API. Check URL and credentials.')
+                }
+            } else {
+                throw e
+            }
         } else {
-            console.error('[qBittorrent] Authentication failed:', e instanceof Error ? e.message : e)
+            error('[qBittorrent] Authentication failed:', e instanceof Error ? e.message : e)
+            throw new Error(`Authentication failed: ${e instanceof Error ? e.message : 'Unknown error'}`)
         }
-        throw e
       }
     }
 
     this.client = client
+  }
+
+  async testConnection() {
+      try {
+          await this.init(true)
+          const version = await this.request<string>({
+              method: 'GET',
+              url: '/api/v2/app/version'
+          })
+          return { success: true, version }
+      } catch (e: any) {
+          error('[qBittorrent] Test connection failed:', e.message)
+          return { success: false, error: e.message }
+      }
   }
 
   private async request<T>(config: any, retry: boolean = true): Promise<T> {
@@ -92,7 +152,7 @@ export class QBittorrentService {
           return response.data
       } catch (error) {
           if (retry && axios.isAxiosError(error) && (error.response?.status === 403 || error.response?.status === 401)) {
-              console.log('[qBittorrent] Session expired or unauthorized, retrying...')
+              log('[qBittorrent] Session expired or unauthorized, retrying...')
               await this.init(true) // Force re-init
               return this.request(config, false) // Retry once
           }
@@ -133,6 +193,14 @@ export class QBittorrentService {
         url: '/api/v2/torrents/info',
         params: { filter }
     })
+  }
+
+  async getServerState() {
+    const data = await this.request<any>({
+        method: 'GET',
+        url: '/api/v2/sync/maindata'
+    })
+    return data?.server_state
   }
   
   async deleteTorrents(hashes: string[], deleteFiles: boolean = false) {

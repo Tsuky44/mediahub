@@ -14,8 +14,8 @@ services:
       - NEXTAUTH_URL=http://localhost:3008
       - NEXTAUTH_SECRET=fc6d0136203923971842095817349502934851029384
       # - DOCKER_HOST=unix:///var/run/docker.sock
-    env_file:
-      - ./next-app/.env
+    # env_file:
+    #   - ./next-app/.env
     volumes:
       - ./data:/data/db
       - /var/run/docker.sock:/var/run/docker.sock
@@ -29,14 +29,17 @@ services:
       dockerfile: Dockerfile
       target: tracker
     container_name: mediahub-tracker
+    ports:
+      - "3005:3005"
     environment:
       - DATABASE_URL=file:/data/db/dev.db
       - NODE_ENV=production
       - NEXTAUTH_URL=http://localhost:3008
       - NEXTAUTH_SECRET=fc6d0136203923971842095817349502934851029384
-    env_file:
-      - ./next-app/.env
+    # env_file:
+    #   - ./next-app/.env
     volumes:
       - ./data:/data/db
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     user: root

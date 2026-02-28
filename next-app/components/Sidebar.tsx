@@ -6,6 +6,8 @@ import { Home, Film, ListPlus, Settings, LogOut, BarChart2, CloudDownload, Conta
 import Image from 'next/image'
 import { signOut, useSession } from 'next-auth/react'
 import clsx from 'clsx'
+import { useAbility } from '@casl/react'
+import { AbilityContext } from '@/components/AbilityContext'
 
 const navigation = [
   { name: 'Tableau de bord', href: '/dashboard', icon: Home },
@@ -19,31 +21,23 @@ const navigation = [
 export function Sidebar() {
   const pathname = usePathname()
   const { data: session } = useSession()
-  const userRole = (session?.user as any)?.role || 'user'
+  const ability = useAbility(AbilityContext)
 
   const filteredNavigation = navigation.filter(item => {
     if (item.href === '/dashboard/downloads') {
-      return userRole === 'admin' || 
-             (session?.user as any)?.permissions?.includes('downloads.view')
+      return ability.can('read', 'Downloads')
     }
     if (item.href === '/dashboard/docker') {
-      return userRole === 'admin' || 
-             (session?.user as any)?.permissions?.includes('docker.view')
+      return ability.can('read', 'Docker')
     }
     if (item.href === '/dashboard/requests') {
-         // Liste des demandes (pour tout le monde qui a view)
-         // La création est une autre permission, mais l'accès à l'onglet dépend de view
-         return userRole === 'admin' || 
-                (session?.user as any)?.permissions?.includes('requests.search.view')
-     }
+       return ability.can('read', 'MediaRequest')
+    }
     if (item.href === '/dashboard/stats') {
-        return userRole === 'admin' || 
-               (session?.user as any)?.permissions?.includes('stats.view_global') || 
-               (session?.user as any)?.permissions?.includes('stats.view_self')
+        return ability.can('read', 'Stats')
     }
     if (item.href === '/dashboard/media') {
-        return userRole === 'admin' || 
-               (session?.user as any)?.permissions?.includes('media.view')
+        return ability.can('read', 'Media')
     }
     return true
   })
@@ -84,7 +78,7 @@ export function Sidebar() {
           )
         })}
 
-        {userRole === 'admin' && (
+        {session?.user && (session.user as any).role === 'admin' && (
           <Link
             href="/dashboard/settings"
             className={clsx(

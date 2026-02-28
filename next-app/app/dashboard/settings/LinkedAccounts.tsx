@@ -6,13 +6,8 @@ import { Plus, Trash2, Link as LinkIcon, Users, X } from 'lucide-react'
 interface UserGroupMember {
     id: number
     userGroupId: string
-    instanceId: number
     userId: string
     username?: string
-    instance: {
-        name: string
-        type: string
-    }
 }
 
 interface UserGroup {
@@ -25,11 +20,8 @@ interface UserGroup {
 }
 
 interface Candidate {
-    instanceId: number
     userId: string
     username: string
-    instanceName: string
-    instanceType: string
     source: 'logs' | 'db' | 'both'
 }
 
@@ -134,7 +126,6 @@ export default function LinkedAccounts() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     userGroupId: selectedGroup.id,
-                    instanceId: candidate.instanceId,
                     userId: candidate.userId,
                     username: candidate.username
                 })
@@ -145,7 +136,7 @@ export default function LinkedAccounts() {
                 await fetchGroups()
                 // Remove candidate from list locally to avoid double add
                 setCandidates(prev => prev.filter(c => 
-                    !(c.instanceId === candidate.instanceId && c.userId === candidate.userId)
+                    c.userId !== candidate.userId
                 ))
             } else if (res.status === 409) {
                 alert('Cet utilisateur est déjà dans un groupe.')
@@ -234,7 +225,6 @@ export default function LinkedAccounts() {
                                         <div className="flex items-center gap-2">
                                             <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                                             <span className="text-gray-300 font-medium">{member.username || member.userId}</span>
-                                            <span className="text-gray-500 text-xs">({member.instance.name})</span>
                                         </div>
                                         <button 
                                             onClick={() => handleRemoveMember(member.id)}
@@ -280,24 +270,16 @@ export default function LinkedAccounts() {
                                 <div className="space-y-2">
                                     {filteredCandidates.map(candidate => (
                                         <button
-                                            key={`${candidate.instanceId}-${candidate.userId}`}
+                                            key={candidate.userId}
                                             onClick={() => handleAddMember(candidate)}
                                             className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/10 transition-colors group text-left"
                                         >
                                             <div>
                                                 <div className="text-white font-medium flex items-center gap-2">
                                                     {candidate.username}
-                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border capitalize ${
-                                                        candidate.instanceType === 'emby' ? 'bg-green-500/20 text-green-300 border-green-500/30' :
-                                                        candidate.instanceType === 'plex' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' :
-                                                        candidate.instanceType === 'jellyfin' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' :
-                                                        'bg-gray-500/20 text-gray-300 border-gray-500/30'
-                                                    }`}>
-                                                        {candidate.instanceType}
-                                                    </span>
                                                 </div>
                                                 <div className="text-gray-500 text-xs mt-0.5">
-                                                    {candidate.instanceName} • {candidate.source === 'logs' ? 'Vu dans l\'historique' : 'Utilisateur enregistré'}
+                                                    {candidate.source === 'logs' ? 'Vu dans l\'historique' : 'Utilisateur enregistré'}
                                                 </div>
                                             </div>
                                             <Plus size={18} className="text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity" />

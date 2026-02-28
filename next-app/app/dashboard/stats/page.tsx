@@ -7,12 +7,14 @@ import { StatsCharts } from './StatsCharts'
 import { LiveSessions } from '../LiveSessions'
 import { SyncPluginButton } from './SyncPluginButton'
 import { RecentHistory } from './RecentHistory'
-import { SourceFilter } from './SourceFilter'
 import { UserStatsCard } from './UserStatsCard'
+import { SourceFilter } from './SourceFilter'
+import { StorageManager } from './StorageManager'
 import { TopItemsTabs } from '@/components/stats/TopItemsTabs'
 import { ChevronLeft, ChevronRight, Clock, Play, Activity, AlertCircle, Calendar } from 'lucide-react'
 import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { defineAbilityFor } from '@/lib/ability'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,67 +72,66 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   
   if (!session || !session.user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
-          <AlertCircle size={48} />
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 p-8">
+        <div className="p-6 rounded-3xl bg-red-500/10 text-red-500 border border-red-500/20 shadow-xl shadow-red-500/10 backdrop-blur-xl animate-in fade-in zoom-in duration-500">
+          <AlertCircle size={64} className="animate-pulse" />
         </div>
-        <h2 className="text-2xl font-bold text-white">Accès restreint</h2>
-        <p className="text-gray-400">Veuillez vous connecter pour voir les statistiques.</p>
-        <Link href="/api/auth/signin" className="text-indigo-400 hover:text-indigo-300 transition-colors">
-          Se connecter
+        <div className="text-center space-y-2 max-w-md">
+          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">
+            Accès restreint
+          </h2>
+          <p className="text-gray-400 text-lg leading-relaxed">
+            Veuillez vous connecter pour voir les statistiques.
+          </p>
+        </div>
+        <Link 
+          href="/api/auth/signin" 
+          className="group flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20 transition-all duration-300 hover:scale-105"
+        >
+          <span>Se connecter</span>
+          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
         </Link>
       </div>
     )
   }
 
   const user = session.user as any
-  const userRole = user.role
-  const userPermissions = user.permissions || []
-  const canManage = userRole === 'admin' || userPermissions.includes('stats.manage')
-
-  // Granular stats permissions
-  const hasGlobalView = userRole === 'admin' || userPermissions.includes('stats.view_global')
-  const hasSelfView = userRole === 'admin' || userPermissions.includes('stats.view_self')
+  const ability = defineAbilityFor(user)
+  
+  const hasGlobalView = ability.can('read_all', 'Stats')
+  const hasSelfView = ability.can('read', 'Stats')
+  const canImport = ability.can('import', 'Stats')
+  const canManageStorage = ability.can('manage_storage', 'Stats')
+  const canDeleteMedia = ability.can('delete_media', 'Stats')
+  const canManage = user.role === 'admin'
 
   if (!hasGlobalView && !hasSelfView) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <div className="p-4 rounded-full bg-red-500/10 text-red-500">
-          <AlertCircle size={48} />
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 p-8">
+        <div className="p-6 rounded-3xl bg-red-500/10 text-red-500 border border-red-500/20 shadow-xl shadow-red-500/10 backdrop-blur-xl animate-in fade-in zoom-in duration-500">
+          <AlertCircle size={64} className="animate-pulse" />
         </div>
-        <h2 className="text-2xl font-bold text-white">Accès restreint</h2>
-        <p className="text-gray-400">Vous n'avez pas la permission de voir les statistiques.</p>
-        <Link href="/dashboard" className="text-indigo-400 hover:text-indigo-300 transition-colors">
-          Retour au tableau de bord
+        <div className="text-center space-y-2 max-w-md">
+          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400">
+            Accès restreint
+          </h2>
+          <p className="text-gray-400 text-lg leading-relaxed">
+            Vous n'avez pas la permission de voir les statistiques.
+          </p>
+        </div>
+        <Link 
+          href="/dashboard" 
+          className="group flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20 transition-all duration-300 hover:scale-105"
+        >
+          <span>Retour au tableau de bord</span>
+          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
         </Link>
       </div>
     )
   }
 
-  const userInstanceId = user.instanceId ? parseInt(user.instanceId) : NaN
-  
   const params = await searchParams
   const sourceFilter = params.source || 'all'
-
-  // Fetch all instances
-  const allInstances = await (prisma as any).instance.findMany();
-  const instanceTypeMap = new Map<number, string>();
-  allInstances.forEach((i: any) => instanceTypeMap.set(i.id, i.type || 'emby'));
-
-  const instanceTypes = Object.fromEntries(instanceTypeMap);
-
-  // Determine target instances based on filter and user restriction
-  let targetInstanceIds: number[] | undefined = undefined;
-  
-  const filteredInstances = allInstances.filter((inst: any) => {
-    // If user is restricted to an instance, only include that one
-    if (!isNaN(userInstanceId) && inst.id !== userInstanceId) return false;
-    return true;
-  });
-
-  if (sourceFilter !== 'all' || !isNaN(userInstanceId)) {
-    targetInstanceIds = filteredInstances.map((i: any) => i.id);
-  }
 
    const period = params.period || 'week' // Default to week view
    const now = new Date()
@@ -198,32 +199,42 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const userGroups = await (prisma as any).userGroup.findMany({
     include: { members: true }
   });
-  const userGroupMap = new Map<string, any>(); // key: "instanceId:userId", value: group
+  const userGroupMap = new Map<string, any>(); // key: "userId", value: group
   userGroups.forEach((group: any) => {
     group.members.forEach((member: any) => {
-        userGroupMap.set(`${member.instanceId}:${member.userId}`, group);
+        userGroupMap.set(`${member.userId}`, group);
     });
   });
 
+  // Fetch local users for ID mapping
+  const localUsers = await prisma.user.findMany({
+    select: { id: true, name: true, embyUserId: true, plexUserId: true, jellyfinUserId: true }
+  });
+  
+  const providerIdToLocalUserMap = new Map<string, string>(); // ProviderID -> LocalUserName
+  localUsers.forEach(u => {
+    if (u.embyUserId) providerIdToLocalUserMap.set(u.embyUserId, u.name);
+    if (u.plexUserId) providerIdToLocalUserMap.set(u.plexUserId, u.name);
+    if (u.jellyfinUserId) providerIdToLocalUserMap.set(u.jellyfinUserId, u.name);
+  });
+
+  // Apply filters
   const activityWhere: any = {
-     instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
-     source: sourceFilter !== 'all' ? sourceFilter : undefined,
-     startTime: {
-       gte: startDate,
-       lte: endDate
-     }
+    startTime: {
+      gte: startDate,
+      lte: endDate
+    }
   }
 
-  const liveWhere: any = {
-     instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
-     source: sourceFilter !== 'all' ? sourceFilter : undefined,
-  }
+  const liveWhere: any = {}
 
   // Apply self-only filter if user doesn't have global view
   if (!hasGlobalView && hasSelfView) {
-      if (user.embyUserId) {
-        activityWhere.embyUserId = user.embyUserId
-        liveWhere.userId = user.embyUserId
+      const userIds = [user.embyUserId, user.plexUserId, user.jellyfinUserId].filter(Boolean);
+      
+      if (userIds.length > 0) {
+        activityWhere.embyUserId = { in: userIds }
+        liveWhere.userId = { in: userIds }
       } else {
         // Fallback by name if ID is missing
         activityWhere.userName = user.name
@@ -246,7 +257,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   // Sanitize sessions for client component (convert BigInt to Number)
   const embySessions = embySessionsRaw.map((s: any) => ({
     ...s,
-    source: s.source || instanceTypeMap.get(s.instanceId) || 'emby',
+    source: 'emby',
     runTimeTicks: s.runTimeTicks ? Number(s.runTimeTicks) : null,
     playbackPosition: s.playbackPosition ? Number(s.playbackPosition) : null,
     accumulatedDuration: s.accumulatedDuration || 0
@@ -266,12 +277,13 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       UserId: log.embyUserId,
       UserName: log.userName,
       Name: log.itemName,
-      SeriesName: mediaInfo.seriesName,
-      SeriesId: mediaInfo.seriesId,
+      SeriesName: mediaInfo.seriesName || mediaInfo.SeriesName,
+      SeriesId: mediaInfo.seriesId || mediaInfo.SeriesId,
       TmdbId: mediaInfo.tmdbId,
-      SeasonName: mediaInfo.seasonName,
-      IndexNumber: mediaInfo.episodeIndex,
-      ParentIndexNumber: mediaInfo.seasonIndex,
+      SeasonName: mediaInfo.seasonName || mediaInfo.SeasonName,
+      IndexNumber: mediaInfo.episodeIndex ?? mediaInfo.IndexNumber,
+      ParentIndexNumber: mediaInfo.seasonIndex ?? mediaInfo.ParentIndexNumber,
+      mediaInfo: log.mediaInfo,
       Type: log.itemType,
       Client: log.client,
       DeviceName: log.device,
@@ -279,8 +291,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       DateCreated: log.startTime.toISOString(),
       PlaybackDuration: log.playDuration, // Already accurate from tracker
       RunTimeTicks: Number(log.totalDuration || 0),
-      source: log.source || instanceTypeMap.get(log.instanceId) || 'emby',
-      instanceId: log.instanceId,
+      source: 'emby',
     }
   })
 
@@ -299,6 +310,23 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     if (item.SeriesName && (item.SeriesId || item.imageItemId)) {
       if (item.SeriesId) seriesInfoMap.set(String(item.SeriesId), { name: item.SeriesName, id: item.SeriesId });
       if (item.imageItemId) seriesInfoMap.set(String(item.imageItemId), { name: item.SeriesName, id: item.SeriesId });
+    }
+  });
+
+  // Backfill missing SeriesName in historyArray
+  historyArray.forEach((item: any) => {
+    if (!item.SeriesName && item.SeriesId) {
+        const info = seriesInfoMap.get(String(item.SeriesId));
+        if (info) {
+            item.SeriesName = info.name;
+        }
+    }
+    // Also try via imageItemId which often points to series
+    if (!item.SeriesName && item.imageItemId) {
+        const info = seriesInfoMap.get(String(item.imageItemId));
+        if (info) {
+             item.SeriesName = info.name;
+        }
     }
   });
 
@@ -328,7 +356,17 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
         const parts = displayName.split(' : ');
         seriesName = parts[0];
       } 
-      // 2. Try lookup from our seriesInfoMap using imageItemId
+      // 2. Try extraction from "Series - sXXeYY" format
+      else if (displayName?.includes(' - s')) {
+        const parts = displayName.split(' - s');
+        seriesName = parts[0];
+      }
+      // 3. Try extraction from "Series - Episode" format
+      else if (displayName?.includes(' - ')) {
+        const parts = displayName.split(' - ');
+        seriesName = parts[0];
+      }
+      // 4. Try lookup from our seriesInfoMap using imageItemId
       else if (item.imageItemId && seriesInfoMap.has(String(item.imageItemId))) {
         const info = seriesInfoMap.get(String(item.imageItemId))!;
         seriesName = info.name;
@@ -456,7 +494,6 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const liveItems = embySessions.map((s: any) => ({
     id: `live-${s.sessionId}`,
     sessionId: s.sessionId,
-    instanceId: s.instanceId,
     itemId: s.itemId,
     itemName: s.itemName,
     itemType: s.itemType,
@@ -550,13 +587,24 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     // User aggregation
     const rawUserKey = item.UserId || item.UserName;
     
-    // Check if user is part of a group
-    // We need instanceId for the key. item.instanceId should be available
-    const groupKey = `${item.instanceId}:${rawUserKey}`;
+    // Check if this ID belongs to a local user
+    const localUserName = providerIdToLocalUserMap.get(rawUserKey);
+    
+    // Check if user is part of a group (Group overrides individual)
+    const groupKey = `${rawUserKey}`;
     const group = userGroupMap.get(groupKey);
     
-    const userKey = group ? `group-${group.id}` : rawUserKey;
-    const userName = group ? group.name : (item.UserName || 'Inconnu');
+    // Logic: Group > LocalUser > RawID
+    let userKey = rawUserKey;
+    let userName = item.UserName || 'Inconnu';
+    
+    if (group) {
+        userKey = `group-${group.id}`;
+        userName = group.name;
+    } else if (localUserName) {
+        userKey = `local-${localUserName}`; // Use name as key to aggregate different IDs of same user
+        userName = localUserName;
+    }
 
     if (userKey) {
       const existing = userStatsMap.get(userKey) || { name: userName, duration: 0, plays: 0 };
@@ -589,41 +637,41 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const statsHeader = (
     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-bold text-white tracking-tight">Vos Statistiques</h1>
+        <h1 className="text-3xl font-black text-white tracking-tight">Vos Statistiques</h1>
         <div className="flex items-center gap-2 text-gray-400">
-          <span className="text-sm font-medium px-2 py-0.5 bg-gray-800 rounded text-blue-400 border border-gray-700">
+          <span className="text-sm font-bold px-4 py-1.5 bg-white/5 rounded-xl text-indigo-300 border border-white/10 backdrop-blur-md shadow-sm">
             {periodTitle}
           </span>
           {hasRealData && (
             <>
               <span className="text-gray-600">•</span>
-              <span className="text-sm">{totalHours}h de visionnage</span>
+              <span className="text-sm font-medium">{totalHours}h de visionnage</span>
             </>
           )}
         </div>
       </div>
       
-      <div className="flex flex-col items-end gap-4">
-        <div className="flex flex-col sm:flex-row items-center gap-4">
+      <div className="flex flex-col items-start md:items-end gap-4 w-full md:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
           <SourceFilter />
-          <div className="flex items-center gap-2">
-            <SyncPluginButton canManage={canManage} />
+          <div className="flex items-center justify-between sm:justify-end gap-2">
+            <SyncPluginButton source={sourceFilter} canManage={canImport} />
             {period !== 'all' && (
               <div className="flex items-center gap-2">
                 <a 
                   href="/dashboard/stats" 
-                  className="px-3 py-1.5 bg-gray-800/50 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs font-medium text-gray-300 hover:text-white transition-all flex items-center gap-1.5"
+                  className="px-4 py-2 bg-black/20 hover:bg-white/5 border border-white/5 rounded-xl text-xs font-bold text-gray-400 hover:text-white transition-all flex items-center gap-2 whitespace-nowrap backdrop-blur-md shadow-lg"
                 >
                   <Calendar className="h-3.5 w-3.5" />
-                  Aujourd'hui
+                  <span className="hidden sm:inline">Aujourd'hui</span>
                 </a>
 
-                <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700">
-                  <a href={prevHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
+                <div className="flex items-center gap-1 bg-black/20 p-1 rounded-xl border border-white/5 backdrop-blur-md shadow-lg">
+                  <a href={prevHref} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors">
                     <ChevronLeft className="h-5 w-5" />
                   </a>
-                  <div className="h-4 w-px bg-gray-700 mx-1" />
-                  <a href={nextHref} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
+                  <div className="h-4 w-px bg-white/10 mx-1" />
+                  <a href={nextHref} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors">
                     <ChevronRight className="h-5 w-5" />
                   </a>
                 </div>
@@ -640,7 +688,6 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     const oldestLog = await (prisma as any).embyActivityLog.findFirst({
       where: {
         source: sourceFilter !== 'all' ? sourceFilter : undefined,
-        instanceId: targetInstanceIds ? { in: targetInstanceIds } : undefined,
       },
       orderBy: { startTime: 'asc' },
       select: { startTime: true }
@@ -705,12 +752,20 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       {statsHeader}
       
       {/* Period Selectors */}
-      <div className="flex justify-end">
-        <div className="flex items-center gap-1 bg-gray-800/50 p-1 rounded-xl border border-gray-700 w-fit">
-          <PeriodButton active={period === 'week'} href="?period=week" label="Semaine" />
-          <PeriodButton active={period === 'month'} href="?period=month" label="Mois" />
-          <PeriodButton active={period === 'year'} href="?period=year" label="Année" />
-          <PeriodButton active={period === 'all'} href="?period=all" label="Tout" />
+      <div className="flex justify-center md:justify-end">
+        <div className="flex items-center gap-1 bg-black/20 backdrop-blur-md p-1.5 rounded-2xl border border-white/5 shadow-lg w-full md:w-fit overflow-x-auto no-scrollbar">
+          <div className="flex-1 md:flex-none">
+            <PeriodButton active={period === 'week'} href="?period=week" label="Semaine" />
+          </div>
+          <div className="flex-1 md:flex-none">
+            <PeriodButton active={period === 'month'} href="?period=month" label="Mois" />
+          </div>
+          <div className="flex-1 md:flex-none">
+            <PeriodButton active={period === 'year'} href="?period=year" label="Année" />
+          </div>
+          <div className="flex-1 md:flex-none">
+            <PeriodButton active={period === 'all'} href="?period=all" label="Tout" />
+          </div>
         </div>
       </div>
 
@@ -744,8 +799,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       {/* Live Sessions */}
       <LiveSessions 
         sessions={embySessions} 
-        instanceId={userInstanceId} 
-        filteredInstanceIds={targetInstanceIds}
+        canManage={canManage}
       />
 
       {/* Charts */}
@@ -760,7 +814,6 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
         <TopItemsTabs 
           movies={mostViewedMovies} 
           series={mostViewedSeries} 
-          instanceId={userInstanceId} 
         />
       </div>
 
@@ -768,24 +821,31 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       <div>
         <RecentHistory 
           initialHistory={aggregatedHistory} 
-          instanceId={userInstanceId} 
-          filteredInstanceIds={targetInstanceIds}
-          instanceTypes={instanceTypes}
         />
       </div>
+
+      {/* Storage Management - Only for admins */}
+      {canManageStorage && (
+        <div className="mt-12 border-t border-white/10 pt-8">
+          <StorageManager canDelete={canDeleteMedia} />
+        </div>
+      )}
     </div>
   )
 }
 
 function StatCard({ title, value, subValue, icon }: { title: string, value: string, subValue: string, icon: React.ReactNode }) {
   return (
-    <div className="rounded-xl bg-gray-800 p-6 shadow-sm border border-gray-700 hover:border-gray-600 transition-colors">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-gray-400">{title}</span>
-        {icon}
+    <div className="rounded-3xl bg-black/20 backdrop-blur-md p-6 shadow-xl border border-white/5 hover:bg-white/[0.03] hover:border-white/10 hover:shadow-2xl transition-all duration-300 group relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+      <div className="flex items-center justify-between mb-4 relative z-10">
+        <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">{title}</span>
+        <div className="p-2 bg-white/5 rounded-xl border border-white/5 shadow-inner group-hover:scale-110 transition-transform duration-300">
+            {icon}
+        </div>
       </div>
-      <div className="text-2xl font-bold text-white">{value}</div>
-      <p className="text-xs text-gray-500 mt-1">{subValue}</p>
+      <div className="text-3xl font-black text-white tracking-tight mb-1 relative z-10 group-hover:text-indigo-100 transition-colors">{value}</div>
+      <p className="text-xs font-medium text-gray-500 relative z-10">{subValue}</p>
     </div>
   )
 }
@@ -794,10 +854,10 @@ function PeriodButton({ active, href, label }: { active: boolean, href: string, 
   return (
     <a
       href={href}
-      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+      className={`px-6 py-2.5 rounded-2xl text-sm font-bold transition-all duration-300 block text-center whitespace-nowrap ${
         active 
-          ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20' 
-          : 'bg-transparent text-gray-400 hover:text-white hover:bg-gray-700/50'
+          ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-500/25 ring-1 ring-white/20 scale-105' 
+          : 'bg-transparent text-gray-500 hover:text-white hover:bg-white/5 hover:scale-105'
       }`}
     >
       {label}

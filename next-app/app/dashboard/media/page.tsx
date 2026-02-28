@@ -3,10 +3,23 @@ import { InfiniteEmbyList } from './InfiniteEmbyList'
 import { SearchInput } from '@/components/SearchInput'
 import { Suspense } from 'react'
 import { RecentlyWatched } from './RecentlyWatched'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { defineAbilityFor } from '@/lib/ability'
+import { redirect } from 'next/navigation'
+
+import { Heart, Clock, Search } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
 export default async function MediaPage({ searchParams }: { searchParams: Promise<any> }) {
+  const session = await getServerSession(authOptions)
+  const ability = defineAbilityFor(session?.user)
+
+  if (!ability.can('read', 'Library')) {
+    redirect('/dashboard')
+  }
+
   const { q: query, type = 'all', favorites = 'false', watchLater = 'false' } = await searchParams
   const currentType = (type === 'tv' || type === 'movie' || type === 'all') ? type : 'all'
   const isFavoritesOnly = favorites === 'true'
@@ -38,73 +51,78 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
   }
 
   return (
-      <div className="space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <h2 className="text-2xl font-bold text-white">Ma médiathèque</h2>
+      <div className="space-y-8">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+            <div>
+              <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 drop-shadow-sm">Ma médiathèque</h2>
+              <p className="text-gray-400 text-sm mt-1">Explorez votre collection de films et séries</p>
+            </div>
             
-            <div className="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto">
+            <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
               {/* Filtres rapides */}
               <div className="flex items-center gap-3 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
                 <a
                   href={`?type=${currentType}${query ? `&q=${query}` : ''}&favorites=${!isFavoritesOnly}${isWatchLaterOnly ? '&watchLater=true' : ''}`}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap border ${
+                  className={`group flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 border backdrop-blur-md whitespace-nowrap ${
                     isFavoritesOnly 
-                      ? 'bg-red-500/10 border-red-500 text-red-500 shadow-lg shadow-red-500/10' 
-                      : 'bg-gray-800/40 border-gray-700/50 text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                      ? 'bg-red-500/20 border-red-500/50 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.2)] hover:bg-red-500/30' 
+                      : 'bg-gray-900/40 border-white/10 text-gray-400 hover:bg-gray-800/60 hover:text-white hover:border-white/20'
                   }`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={isFavoritesOnly ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l8.72-8.72 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                  </svg>
-                  Favoris
+                  <Heart className={`w-4 h-4 transition-transform duration-300 ${isFavoritesOnly ? 'fill-current scale-110' : 'group-hover:scale-110'}`} />
+                  <span>Favoris</span>
                 </a>
 
                 <a
                   href={`?type=${currentType}${query ? `&q=${query}` : ''}&watchLater=${!isWatchLaterOnly}${isFavoritesOnly ? '&favorites=true' : ''}`}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap border ${
+                  className={`group flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 border backdrop-blur-md whitespace-nowrap ${
                     isWatchLaterOnly 
-                      ? 'bg-blue-500/10 border-blue-500 text-blue-500 shadow-lg shadow-blue-500/10' 
-                      : 'bg-gray-800/40 border-gray-700/50 text-gray-400 hover:bg-gray-800 hover:text-gray-300'
+                      ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.2)] hover:bg-blue-500/30' 
+                      : 'bg-gray-900/40 border-white/10 text-gray-400 hover:bg-gray-800/60 hover:text-white hover:border-white/20'
                   }`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={isWatchLaterOnly ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                  </svg>
-                  À regarder
+                  <Clock className={`w-4 h-4 transition-transform duration-300 ${isWatchLaterOnly ? 'fill-current scale-110' : 'group-hover:scale-110'}`} />
+                  <span>À regarder</span>
                 </a>
               </div>
 
               {/* Barre de recherche */}
-              <div className="w-full sm:w-64 lg:w-80">
-                <Suspense fallback={<div className="h-10 w-full bg-gray-800/50 rounded-xl animate-pulse" />}>
+              <div className="w-full sm:w-72 lg:w-96">
+                <Suspense fallback={<div className="h-11 w-full bg-gray-800/50 rounded-full animate-pulse" />}>
                   <SearchInput />
                 </Suspense>
               </div>
             </div>
           </div>
           
-          <div className="flex justify-center border-b border-gray-700">
-            <div className="flex space-x-8">
+          <div className="flex justify-center mb-8">
+            <div className="inline-flex bg-gray-900/50 p-1.5 rounded-full border border-gray-800/50 backdrop-blur-md shadow-inner">
               <a 
                 href={`?type=all${query ? `&q=${query}` : ''}${isFavoritesOnly ? '&favorites=true' : ''}${isWatchLaterOnly ? '&watchLater=true' : ''}`}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all border-b-2 ${
-                  currentType === 'all' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-300'
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 ${
+                  currentType === 'all' 
+                    ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.3)] scale-105' 
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
                 }`}
               >
                 Tout
               </a>
               <a 
                 href={`?type=movie${query ? `&q=${query}` : ''}${isFavoritesOnly ? '&favorites=true' : ''}${isWatchLaterOnly ? '&watchLater=true' : ''}`}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all border-b-2 ${
-                  currentType === 'movie' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-300'
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 ${
+                  currentType === 'movie' 
+                    ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.3)] scale-105' 
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
                 }`}
               >
                 Films
               </a>
               <a 
                 href={`?type=tv${query ? `&q=${query}` : ''}${isFavoritesOnly ? '&favorites=true' : ''}${isWatchLaterOnly ? '&watchLater=true' : ''}`}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all border-b-2 ${
-                  currentType === 'tv' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-gray-400 hover:text-gray-300'
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 ${
+                  currentType === 'tv' 
+                    ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.3)] scale-105' 
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
                 }`}
               >
                 Séries

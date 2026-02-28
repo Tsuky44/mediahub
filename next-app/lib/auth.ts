@@ -2,186 +2,158 @@ import { NextAuthOptions, getServerSession } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { PrismaAdapter } from "@next-auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
+import { cookies } from "next/headers"
 import { EmbyService } from "@/lib/services/emby"
-import { RadarrService } from "@/lib/services/radarr"
-import { SonarrService } from "@/lib/services/sonarr"
-import { ProwlarrService } from '@/lib/services/prowlarr'
-import { QBittorrentService } from '@/lib/services/qbittorrent'
-import { SmbService } from "@/lib/services/smb"
-import { TmdbService } from "@/lib/services/tmdb"
-import { getSetting } from "@/lib/settings"
+import { PlexService } from "@/lib/services/plex"
+import { JellyfinService } from "@/lib/services/jellyfin"
+import { getTmdbService } from "@/lib/services/tmdb"
+import { getRadarrService } from "@/lib/services/radarr"
+import { getSonarrService } from "@/lib/services/sonarr"
+import { getQBittorrentService } from "@/lib/services/qbittorrent"
+import { getSmbService } from "@/lib/services/smb"
+import { getProwlarrService } from "@/lib/services/prowlarr"
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
+      id: "emby",
       name: "Emby",
       credentials: {
         username: { label: "Username", type: "text" },
-        password: { label: "Password", type: "password" },
-        instance: { label: "Instance Slug", type: "text" }, // 'main' par défaut ou le slug de l'instance du pote
-        isSwitch: { label: "Is Switch", type: "text" }
+        password: { label: "Password", type: "password" }
       },
       async authorize(credentials, req) {
-        if (!prisma || !(prisma as any).instance) {
-          console.error("[Auth] Prisma client or Instance model is not available")
+        if (!prisma) {
+          error("[Auth] Prisma client is not available")
           throw new Error("Erreur technique: Base de données non prête")
         }
-        const instanceSlug = credentials?.instance || 'main'
-        
-        // 1. Gérer le switch rapide (si déjà connecté)
-        if (credentials?.isSwitch === 'true' && credentials?.username) {
-          const session = await getServerSession(authOptions)
-          if (session?.user && (session.user.name === credentials.username || session.user.email === credentials.username)) {
-            // L'utilisateur est déjà authentifié, on cherche son compte sur l'instance cible
-            const instance = await (prisma as any).instance.findUnique({
-              where: { slug: instanceSlug }
-            })
 
-            if (instance) {
-              const emailPrefix = session.user.email?.includes('@') ? session.user.email.split('@')[0] : session.user.email;
-              
-              const user = await (prisma as any).user.findFirst({
-                where: { 
-                  instanceId: instance.id,
-                  OR: [
-                    { name: { contains: session.user.name || '' } },
-                    { email: { contains: session.user.email || '' } },
-                    { email: { startsWith: `${emailPrefix}@` } }
-                  ]
-                },
-                include: {
-                  userRole: { include: { permissions: true } },
-                  permissions: true
-                }
-              })
-
-              if (user) {
-                const permissions = Array.from(new Set([
-                  ...(user.userRole?.permissions.map((p: any) => p.name) || []),
-                  ...(user.permissions?.map((p: any) => p.name) || [])
-                ]))
-
-                return {
-                  id: user.id.toString(),
-                  email: user.email,
-                  name: user.name,
-                  image: user.image,
-                  embyUserId: user.embyUserId,
-                  instanceId: instance.id.toString(),
-                  instanceSlug: instance.slug,
-                  isDefaultInstance: instance.isDefault,
-                  role: user.role,
-                  permissions,
-                  // @ts-ignore
-                  roleVersion: user.roleVersion
-                }
-              }
+        // Check if Emby auth is enabled
+        const settings = await prisma.setting.findMany({
+          where: {
+            key: {
+              in: ['auth_emby_enabled', 'default_role_id']
             }
           }
+        })
+        const enabledSetting = settings.find(s => s.key === 'auth_emby_enabled')
+        const defaultRoleId = settings.find(s => s.key === 'default_role_id')?.value
+        
+        // Fetch admin role for first user or admin users
+        const adminRole = await prisma.role.findFirst({ where: { name: 'admin' } })
+        const adminRoleId = adminRole?.id
+
+        const isEnabled = enabledSetting ? enabledSetting.value === 'true' : true // Default to true for backward compatibility
+        
+        if (!isEnabled) {
+          throw new Error("L'authentification via Emby est désactivée")
         }
 
         if (!credentials?.username || !credentials?.password) {
+          warn("[Auth] Missing credentials")
           return null
         }
         
-        // 1. Trouver l'instance
-        const instance = await (prisma as any).instance.findUnique({
-          where: { slug: instanceSlug }
-        })
-
-        if (!instance) {
-          console.error(`[Auth] Instance non trouvée: ${instanceSlug}`)
-          throw new Error("Serveur non trouvé")
-        }
-
-        console.log(`[Auth] Tentative de connexion sur l'instance ${instance.name} (${instanceSlug})`)
-
-        // 2. Initialiser le service Emby pour cette instance
-        const embyService = new EmbyService(instance.embyUrl, instance.embyApiKey)
-
-        // 3. Authentifier avec Emby
         try {
+          log("[Auth] Fetching Emby configuration from DB...")
+          // Fetch global settings
+          const urlSetting = await prisma.setting.findFirst({ where: { key: 'emby_url' } })
+          const keySetting = await prisma.setting.findFirst({ where: { key: 'emby_api_key' } })
+          
+          const embyUrl = urlSetting?.value || process.env.EMBY_URL
+          const embyApiKey = keySetting?.value || process.env.EMBY_API_KEY
+
+          log(`[Auth] Configuration status: URL=${!!embyUrl}, Key=${!!embyApiKey}`)
+
+          if (!embyUrl || !embyApiKey) {
+            error("[Auth] Emby configuration missing in settings and environment")
+            throw new Error("Configuration serveur manquante")
+          }
+
+          // Initialiser le service Emby
+          const embyService = new EmbyService(embyUrl, embyApiKey)
+
+          // Authentifier avec Emby
+          log(`[Auth] Authenticating user '${credentials.username}' with Emby at ${embyUrl}...`)
           const embyUser = await embyService.authenticate(credentials.username, credentials.password)
+          log(`[Auth] Emby auth successful. User ID: ${embyUser?.User?.Id}`)
           
           if (!embyUser || !embyUser.User) {
+            error(`[Auth] Emby returned invalid user data`)
             return null
           }
 
-          // 4. Gérer l'utilisateur localement
-          // On vérifie d'abord si l'instance a déjà des utilisateurs
-          const userCount = await (prisma as any).user.count({
-            where: { instanceId: instance.id }
-          })
-          
-          // Le premier utilisateur d'une instance devient admin automatiquement
+          // Gérer l'utilisateur localement
+          const userCount = await prisma.user.count()
           const isFirstUser = userCount === 0
           
-          let user = await (prisma as any).user.findFirst({
-            where: { 
-              embyUserId: embyUser.User.Id,
-              instanceId: instance.id
-            }
+          let user = await prisma.user.findFirst({
+            where: { embyUserId: embyUser.User.Id }
           })
 
-          const email = embyUser.User.Email || `${embyUser.User.Name.toLowerCase()}@${instanceSlug}.local`
+          const email = embyUser.User.Email || `${embyUser.User.Name.toLowerCase()}@local`
+
+          if (!user) {
+            user = await prisma.user.findUnique({ where: { email } })
+            if (user) {
+              log(`[Auth] User found by email '${email}' (ID mismatch). Updating Emby ID linkage.`)
+            }
+          }
           
-          // Déterminer le rôle à attribuer
           const shouldBeAdmin = isFirstUser || embyUser.User.Policy?.IsAdministrator
-          let roleId = undefined
+          let targetRoleName = user?.role || (shouldBeAdmin ? 'admin' : 'user')
           
           if (shouldBeAdmin) {
-            const adminRole = await (prisma as any).role.findUnique({ where: { name: 'admin' } })
-            if (adminRole) roleId = adminRole.id
+            targetRoleName = 'admin'
+          } else if (user?.role === 'admin') {
+             targetRoleName = 'user'
           }
 
           if (!user) {
-            user = await (prisma as any).user.create({
+            log(`[Auth] Creating new user: ${embyUser.User.Name} (${email}) with role ${targetRoleName}`)
+            user = await prisma.user.create({
               data: {
-                instanceId: instance.id,
                 email,
                 name: embyUser.User.Name,
                 embyUserId: embyUser.User.Id,
                 image: embyUser.User.PrimaryImageTag ? embyService.getItemImageUrl(embyUser.User.Id) : null,
-                role: shouldBeAdmin ? 'admin' : 'user',
-                roleId: roleId // Peut être undefined (donc null) pour les users normaux
+                role: targetRoleName,
+                roleId: shouldBeAdmin ? adminRoleId : defaultRoleId || undefined,
               },
-              include: {
-                userRole: { include: { permissions: true } },
-                permissions: true
-              }
+              include: { roleRef: true }
             })
           } else {
-            // Mettre à jour les infos si nécessaire
-            const newRole = user.role === 'admin' || shouldBeAdmin ? 'admin' : 'user'
-            
-            // Si l'utilisateur devient admin ou l'était déjà, on s'assure qu'il a le roleId
-            let newRoleId = user.roleId
-            if (newRole === 'admin' && (!user.roleId || user.role !== 'admin')) {
-               const adminRole = await (prisma as any).role.findUnique({ where: { name: 'admin' } })
-               if (adminRole) newRoleId = adminRole.id
+            log(`[Auth] Updating existing user: ${user.name} (${user.id})`)
+            const updateData: any = {
+                name: embyUser.User.Name,
+                embyUserId: embyUser.User.Id,
+                image: embyUser.User.PrimaryImageTag ? embyService.getItemImageUrl(embyUser.User.Id) : user.image,
+                role: targetRoleName,
+            }
+            // If user becomes admin, clear roleId. If user loses admin, assign default role? 
+            // Only clear roleId if becoming admin. Don't force default role on existing users unless they were admin.
+            if (shouldBeAdmin) {
+                updateData.roleId = adminRoleId || null
+            } else if (user.role === 'admin' && targetRoleName === 'user') {
+                updateData.roleId = defaultRoleId || null
             }
 
-            user = await (prisma as any).user.update({
+            user = await prisma.user.update({
               where: { id: user.id },
-              data: {
-                name: embyUser.User.Name,
-                image: embyUser.User.PrimaryImageTag ? embyService.getItemImageUrl(embyUser.User.Id) : user.image,
-                role: newRole,
-                roleId: newRoleId
-              },
-              include: {
-                userRole: { include: { permissions: true } },
-                permissions: true
-              }
+              data: updateData,
+              include: { roleRef: true }
             })
           }
 
-          const permissions = Array.from(new Set([
-            ...(user.userRole?.permissions.map((p: any) => p.name) || []),
-            ...(user.permissions?.map((p: any) => p.name) || [])
-          ]))
+          const effectiveRole = (user as any).roleRef ? (user as any).roleRef.name : user.role
 
           return {
             id: user.id.toString(),
@@ -189,17 +161,278 @@ export const authOptions: NextAuthOptions = {
             name: user.name,
             image: user.image,
             embyUserId: user.embyUserId,
-            instanceId: instance.id.toString(),
-            instanceSlug: instance.slug,
-            isDefaultInstance: instance.isDefault,
-            role: user.role,
-            permissions,
-            // @ts-ignore
-            roleVersion: user.roleVersion
+            role: effectiveRole,
+            plexUserId: user.plexUserId,
+            jellyfinUserId: user.jellyfinUserId,
           }
         } catch (error: any) {
-          console.error("[Auth] Authorize error:", error.message)
-          return null
+          error("[Auth] Authorize error:", error)
+          if (error.message.includes("fetch")) throw new Error(`Erreur de connexion à Emby: ${error.message}`)
+          if (error.code === 'P2002') throw new Error("Erreur de base de données (conflit unique)")
+          throw new Error(error.message || "Erreur d'authentification inconnue")
+        }
+      }
+    }),
+    CredentialsProvider({
+      id: "plex",
+      name: "Plex",
+      credentials: {
+        username: { label: "Username", type: "text" },
+        password: { label: "Password", type: "password" },
+        token: { label: "Token", type: "text" }
+      },
+      async authorize(credentials, req) {
+        if (!prisma) throw new Error("Erreur technique: Base de données non prête")
+
+        // Check if Plex auth is enabled
+        const settings = await prisma.setting.findMany({
+          where: {
+            key: {
+              in: ['auth_plex_enabled', 'default_role_id']
+            }
+          }
+        })
+        const enabledSetting = settings.find(s => s.key === 'auth_plex_enabled')
+        const defaultRoleId = settings.find(s => s.key === 'default_role_id')?.value
+
+        // Fetch admin role for first user or admin users
+        const adminRole = await prisma.role.findFirst({ where: { name: 'admin' } })
+        const adminRoleId = adminRole?.id
+
+        if (enabledSetting?.value !== 'true') {
+          throw new Error("L'authentification via Plex est désactivée")
+        }
+        
+        try {
+          const urlSetting = await prisma.setting.findFirst({ where: { key: 'plex_url' } })
+          const tokenSetting = await prisma.setting.findFirst({ where: { key: 'plex_token' } })
+          
+          const plexUrl = urlSetting?.value || ''
+          const plexToken = tokenSetting?.value || ''
+
+          // Authentifier avec Plex.tv
+          const plexService = new PlexService(plexUrl, plexToken)
+          let plexAuth;
+
+          if (credentials?.token) {
+             log(`[Auth] Authenticating via Plex Token...`)
+             plexAuth = await plexService.validateToken(credentials.token)
+          } else {
+             if (!credentials?.username || !credentials?.password) return null
+             log(`[Auth] Authenticating user '${credentials.username}' with Plex...`)
+             plexAuth = await plexService.authenticate(credentials.username, credentials.password)
+          }
+
+          const plexUser = plexAuth.User
+          
+          if (!plexUser || !plexUser.Id) {
+            error(`[Auth] Plex returned invalid user data`)
+            return null
+          }
+
+          // Gérer l'utilisateur localement
+          const userCount = await prisma.user.count()
+          const isFirstUser = userCount === 0
+          
+          let user = await prisma.user.findFirst({
+            where: { plexUserId: plexUser.Id }
+          })
+
+          const email = plexUser.Email || `${plexUser.Name.toLowerCase()}@plex.local`
+
+          if (!user) {
+            user = await prisma.user.findUnique({ where: { email } })
+            if (user) {
+              log(`[Auth] User found by email '${email}' (ID mismatch). Updating Plex ID linkage.`)
+            }
+          }
+          
+          // Plex doesn't have a simple "admin" flag in the user object like Emby
+          // We rely on first user or existing role
+          let targetRoleName = user?.role || (isFirstUser ? 'admin' : 'user')
+          
+          if (isFirstUser) targetRoleName = 'admin'
+
+          if (!user) {
+            log(`[Auth] Creating new user: ${plexUser.Name} (${email})`)
+            user = await prisma.user.create({
+              data: {
+                email,
+                name: plexUser.Name,
+                plexUserId: plexUser.Id,
+                image: plexUser.PrimaryImageTag || null, // Plex returns URL
+                role: targetRoleName,
+                roleId: isFirstUser ? adminRoleId : defaultRoleId || undefined,
+              },
+              include: { roleRef: true }
+            })
+          } else {
+            log(`[Auth] Updating existing user: ${user.name} (${user.id})`)
+            
+            const updateData: any = {
+                name: plexUser.Name,
+                plexUserId: plexUser.Id,
+                image: plexUser.PrimaryImageTag || user.image,
+                role: targetRoleName,
+            }
+            // For Plex, we don't sync admin status as reliably, but isFirstUser check is already done.
+            // If we are admin (role='admin'), keep it?
+            // If user role was admin and now becomes user? (Logic above handles targetRoleName)
+            if (targetRoleName === 'admin') {
+                updateData.roleId = adminRoleId || null
+            } else if (user.role === 'admin' && targetRoleName === 'user') {
+                updateData.roleId = defaultRoleId || null
+            }
+
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: updateData,
+              include: { roleRef: true }
+            })
+          }
+
+          const effectiveRole = (user as any).roleRef ? (user as any).roleRef.name : user.role
+
+          return {
+            id: user.id.toString(),
+            email: user.email,
+            name: user.name,
+            image: user.image,
+            role: effectiveRole,
+            plexUserId: user.plexUserId,
+            embyUserId: user.embyUserId,
+            jellyfinUserId: user.jellyfinUserId,
+          }
+        } catch (error: any) {
+          error("[Auth] Plex Authorize error:", error)
+          throw new Error(error.message || "Erreur d'authentification Plex")
+        }
+      }
+    }),
+    CredentialsProvider({
+      id: "jellyfin",
+      name: "Jellyfin",
+      credentials: {
+        username: { label: "Username", type: "text" },
+        password: { label: "Password", type: "password" }
+      },
+      async authorize(credentials, req) {
+        if (!prisma) throw new Error("Erreur technique: Base de données non prête")
+
+        // Check if Jellyfin auth is enabled
+        const settings = await prisma.setting.findMany({
+          where: {
+            key: {
+              in: ['auth_jellyfin_enabled', 'default_role_id']
+            }
+          }
+        })
+        const enabledSetting = settings.find(s => s.key === 'auth_jellyfin_enabled')
+        const defaultRoleId = settings.find(s => s.key === 'default_role_id')?.value
+
+        // Fetch admin role for first user or admin users
+        const adminRole = await prisma.role.findFirst({ where: { name: 'admin' } })
+        const adminRoleId = adminRole?.id
+
+        if (enabledSetting?.value !== 'true') {
+          throw new Error("L'authentification via Jellyfin est désactivée")
+        }
+
+        if (!credentials?.username || !credentials?.password) return null
+        
+        try {
+          const urlSetting = await prisma.setting.findFirst({ where: { key: 'jellyfin_url' } })
+          const keySetting = await prisma.setting.findFirst({ where: { key: 'jellyfin_api_key' } })
+          
+          const jellyfinUrl = urlSetting?.value || ''
+          const jellyfinApiKey = keySetting?.value || ''
+
+          if (!jellyfinUrl) throw new Error("URL Jellyfin non configurée")
+
+          const jellyfinService = new JellyfinService(jellyfinUrl, jellyfinApiKey)
+
+          log(`[Auth] Authenticating user '${credentials.username}' with Jellyfin at ${jellyfinUrl}...`)
+          const jellyfinAuth = await jellyfinService.authenticate(credentials.username, credentials.password)
+          const jellyfinUser = jellyfinAuth.User
+
+          if (!jellyfinUser || !jellyfinUser.Id) {
+            error(`[Auth] Jellyfin returned invalid user data`)
+            return null
+          }
+
+          // Gérer l'utilisateur localement
+          const userCount = await prisma.user.count()
+          const isFirstUser = userCount === 0
+          
+          let user = await prisma.user.findFirst({
+            where: { jellyfinUserId: jellyfinUser.Id }
+          })
+
+          const email = `${jellyfinUser.Name.toLowerCase()}@jellyfin.local` // Jellyfin might not return email
+
+          if (!user) {
+            user = await prisma.user.findUnique({ where: { email } })
+            if (user) {
+              log(`[Auth] User found by email '${email}' (ID mismatch). Updating Jellyfin ID linkage.`)
+            }
+          }
+          
+          const shouldBeAdmin = isFirstUser || jellyfinUser.Policy?.IsAdministrator
+          let targetRoleName = user?.role || (shouldBeAdmin ? 'admin' : 'user')
+          
+          if (shouldBeAdmin) targetRoleName = 'admin'
+          else if (user?.role === 'admin') targetRoleName = 'user'
+
+          if (!user) {
+            log(`[Auth] Creating new user: ${jellyfinUser.Name} (${email})`)
+            user = await prisma.user.create({
+              data: {
+                email,
+                name: jellyfinUser.Name,
+                jellyfinUserId: jellyfinUser.Id,
+                image: jellyfinUser.PrimaryImageTag ? jellyfinService.getItemImageUrl(jellyfinUser.Id) : null,
+                role: targetRoleName,
+                roleId: shouldBeAdmin ? adminRoleId : defaultRoleId || undefined,
+              },
+              include: { roleRef: true }
+            })
+          } else {
+            log(`[Auth] Updating existing user: ${user.name} (${user.id})`)
+            const updateData: any = {
+                name: jellyfinUser.Name,
+                jellyfinUserId: jellyfinUser.Id,
+                image: jellyfinUser.PrimaryImageTag ? jellyfinService.getItemImageUrl(jellyfinUser.Id) : user.image,
+                role: targetRoleName,
+            }
+            
+            if (shouldBeAdmin) {
+                updateData.roleId = adminRoleId || null
+            } else if (user.role === 'admin' && targetRoleName === 'user') {
+                updateData.roleId = defaultRoleId || null
+            }
+
+            user = await prisma.user.update({
+              where: { id: user.id },
+              data: updateData,
+              include: { roleRef: true }
+            })
+          }
+
+          const effectiveRole = (user as any).roleRef ? (user as any).roleRef.name : user.role
+
+          return {
+            id: user.id.toString(),
+            email: user.email,
+            name: user.name,
+            image: user.image,
+            role: effectiveRole,
+            jellyfinUserId: user.jellyfinUserId,
+            embyUserId: user.embyUserId,
+            plexUserId: user.plexUserId,
+          }
+        } catch (error: any) {
+          error("[Auth] Jellyfin Authorize error:", error)
+          throw new Error(error.message || "Erreur d'authentification Jellyfin")
         }
       }
     })
@@ -216,17 +449,11 @@ export const authOptions: NextAuthOptions = {
         // @ts-ignore
         token.embyUserId = user.embyUserId
         // @ts-ignore
+        token.plexUserId = user.plexUserId
+        // @ts-ignore
+        token.jellyfinUserId = user.jellyfinUserId
+        // @ts-ignore
         token.role = user.role
-        // @ts-ignore
-        token.permissions = user.permissions
-        // @ts-ignore
-        token.roleVersion = user.roleVersion
-        // @ts-ignore
-        token.instanceId = user.instanceId
-        // @ts-ignore
-        token.instanceSlug = user.instanceSlug
-        // @ts-ignore
-        token.isDefaultInstance = user.isDefaultInstance
       }
       return token
     },
@@ -237,15 +464,63 @@ export const authOptions: NextAuthOptions = {
         // @ts-ignore
         session.user.embyUserId = token.embyUserId
         // @ts-ignore
-        session.user.role = token.role
+        session.user.plexUserId = token.plexUserId
         // @ts-ignore
-        session.user.permissions = token.permissions
-        // @ts-ignore
-        session.user.instanceId = token.instanceId
-        // @ts-ignore
-        session.user.instanceSlug = token.instanceSlug
-        // @ts-ignore
-        session.user.isDefaultInstance = token.isDefaultInstance
+        session.user.jellyfinUserId = token.jellyfinUserId
+        
+        // Force refresh user from DB to get latest role and permissions
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: parseInt(token.sub as string) },
+            include: { roleRef: { include: { permissions: true } } }
+          })
+
+          if (dbUser) {
+            const effectiveRole = dbUser.roleRef ? dbUser.roleRef.name : dbUser.role
+            // @ts-ignore
+            session.user.role = effectiveRole
+            // @ts-ignore
+            session.user.permissions = dbUser.roleRef ? dbUser.roleRef.permissions : []
+            // @ts-ignore
+            session.user.image = dbUser.image
+            // @ts-ignore
+            session.user.embyUserId = dbUser.embyUserId
+            // @ts-ignore
+            session.user.plexUserId = dbUser.plexUserId
+            // @ts-ignore
+            session.user.jellyfinUserId = dbUser.jellyfinUserId
+            
+            // Impersonation logic
+            if (effectiveRole === 'admin') {
+              try {
+                const cookieStore = await cookies()
+                const impersonateId = cookieStore.get('mediahub_impersonate')?.value
+                
+                if (impersonateId) {
+                  const role = await prisma.role.findUnique({
+                    where: { id: impersonateId },
+                    include: { permissions: true }
+                  })
+
+                  if (role) {
+                    // Override user role and permissions
+                    (session.user as any).role = role.name;
+                    (session.user as any).permissions = role.permissions;
+                    (session.user as any).isImpersonated = true;
+                    (session.user as any).originalRole = 'admin';
+                  }
+                }
+              } catch (e) {
+                // Ignore errors (e.g. if cookies() is not available)
+              }
+            }
+          }
+        } catch (e) {
+          error("Failed to refresh session user", e)
+          // Fallback to token if DB fails
+          // @ts-ignore
+          session.user.role = token.role
+        }
       }
       return session
     }
@@ -257,258 +532,109 @@ export async function getCurrentUser() {
   return session?.user
 }
 
+export async function getRealUser() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return null
+
+  // If impersonated, refetch the real user from DB
+  if ((session.user as any).isImpersonated) {
+    try {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: parseInt((session.user as any).id) },
+        include: { roleRef: { include: { permissions: true } } }
+      })
+      if (dbUser) {
+        // Construct user object
+        const realUser = {
+          ...session.user,
+          role: dbUser.roleRef ? dbUser.roleRef.name : dbUser.role,
+          permissions: dbUser.roleRef ? dbUser.roleRef.permissions : [],
+          isImpersonated: false
+        }
+        return realUser
+      }
+    } catch (e) {
+      error("Failed to fetch real user", e)
+    }
+  }
+
+  return session.user
+}
+
 /**
  * Récupère le service Emby pour l'utilisateur actuel
  */
 export async function getEmbyServiceForUser() {
-  const user = await getCurrentUser()
-  if (!user || !(user as any).instanceId) return null
-
-  const instanceId = parseInt((user as any).instanceId)
-  if (isNaN(instanceId)) return null
+  const urlSetting = await prisma.setting.findFirst({ where: { key: 'emby_url' } })
+  const keySetting = await prisma.setting.findFirst({ where: { key: 'emby_api_key' } })
   
-  try {
-    if (!prisma || !(prisma as any).instance) return null
-    const instance = await (prisma as any).instance.findUnique({
-      where: { id: instanceId }
-    })
+  const embyUrl = urlSetting?.value || process.env.EMBY_URL
+  const embyApiKey = keySetting?.value || process.env.EMBY_API_KEY
 
-    console.debug(`[getEmbyServiceForUser] InstanceId: ${instanceId}, Instance found: ${instance ? instance.name : 'null'}`)
-
-    if (!instance) {
-      console.error(`[getEmbyServiceForUser] Instance ${instanceId} non trouvée`)
-      return null
-    }
-
-    if (!instance.embyUrl || !instance.embyApiKey) {
-      console.error(`[getEmbyServiceForUser] Configuration Emby manquante pour l'instance ${instance.name}`)
-      return null
-    }
-
-    return new EmbyService(instance.embyUrl, instance.embyApiKey)
-  } catch (error) {
-    console.error(`[getEmbyServiceForUser] Erreur lors de la récupération de l'instance:`, error)
+  if (!embyUrl || !embyApiKey) {
+    error(`[getEmbyServiceForUser] Configuration Emby manquante`)
     return null
   }
+
+  return new EmbyService(embyUrl, embyApiKey)
 }
 
+/**
+ * Récupère le service Plex pour l'utilisateur actuel
+ */
+export async function getPlexServiceForUser() {
+  const urlSetting = await prisma.setting.findFirst({ where: { key: 'plex_url' } })
+  const tokenSetting = await prisma.setting.findFirst({ where: { key: 'plex_token' } })
+  
+  const plexUrl = urlSetting?.value || ''
+  const plexToken = tokenSetting?.value || ''
 
+  if (!plexUrl || !plexToken) {
+    error(`[getPlexServiceForUser] Configuration Plex manquante`)
+    return null
+  }
+
+  return new PlexService(plexUrl, plexToken)
+}
 
 /**
- * Récupère le service Radarr pour l'utilisateur actuel
+ * Récupère le service Jellyfin pour l'utilisateur actuel
  */
+export async function getJellyfinServiceForUser() {
+  const urlSetting = await prisma.setting.findFirst({ where: { key: 'jellyfin_url' } })
+  const keySetting = await prisma.setting.findFirst({ where: { key: 'jellyfin_api_key' } })
+  
+  const jellyfinUrl = urlSetting?.value || ''
+  const jellyfinApiKey = keySetting?.value || ''
+
+  if (!jellyfinUrl) {
+    error(`[getJellyfinServiceForUser] Configuration Jellyfin manquante`)
+    return null
+  }
+
+  return new JellyfinService(jellyfinUrl, jellyfinApiKey)
+}
+
+export async function getTmdbServiceForUser() {
+  return await getTmdbService()
+}
+
 export async function getRadarrServiceForUser() {
-  const user = await getCurrentUser()
-  if (!user || !(user as any).instanceId) return null
-
-  const instanceId = parseInt((user as any).instanceId)
-  if (isNaN(instanceId)) return null
-  
-  try {
-    const radarrUrl = await getSetting('radarr_url', instanceId)
-    const radarrApiKey = await getSetting('radarr_api_key', instanceId)
-
-    if (!radarrUrl || !radarrApiKey) return null
-
-    return new RadarrService(radarrUrl, radarrApiKey)
-  } catch (error) {
-    console.error(`[getRadarrServiceForUser] Erreur:`, error)
-    return null
-  }
+  return await getRadarrService()
 }
 
-/**
- * Récupère le service Sonarr pour l'utilisateur actuel
- */
 export async function getSonarrServiceForUser() {
-  const user = await getCurrentUser()
-  if (!user || !(user as any).instanceId) return null
-
-  const instanceId = parseInt((user as any).instanceId)
-  if (isNaN(instanceId)) return null
-  
-  try {
-    const sonarrUrl = await getSetting('sonarr_url', instanceId)
-    const sonarrApiKey = await getSetting('sonarr_api_key', instanceId)
-
-    if (!sonarrUrl || !sonarrApiKey) return null
-
-    return new SonarrService(sonarrUrl, sonarrApiKey)
-  } catch (error) {
-    console.error(`[getSonarrServiceForUser] Erreur:`, error)
-    return null
-  }
+  return await getSonarrService()
 }
 
-/**
- * Récupère le service Prowlarr pour l'utilisateur actuel ou pour une instance spécifique
- */
-export async function getProwlarrServiceForUser(instanceId?: number) {
-  let targetInstanceId = instanceId
-
-  if (!targetInstanceId) {
-    const user = await getCurrentUser()
-    if (!user || !(user as any).instanceId) return null
-    targetInstanceId = parseInt((user as any).instanceId)
-  }
-
-  if (!targetInstanceId || isNaN(targetInstanceId)) return null
-  
-  try {
-    const prowlarrUrl = await getSetting('prowlarr_url', targetInstanceId)
-    const prowlarrApiKey = await getSetting('prowlarr_api_key', targetInstanceId)
-
-    if (!prowlarrUrl || !prowlarrApiKey) return null
-
-    return new ProwlarrService(prowlarrUrl, prowlarrApiKey)
-  } catch (error) {
-    console.error(`[getProwlarrServiceForUser] Erreur:`, error)
-    return null
-  }
-}
-
-/**
- * Récupère le service QBittorrent pour l'utilisateur actuel
- */
 export async function getQBittorrentServiceForUser() {
-  const user = await getCurrentUser()
-  if (!user || !(user as any).instanceId) return null
-
-  const instanceId = parseInt((user as any).instanceId)
-  if (isNaN(instanceId)) return null
-  
-  try {
-    const qbtUrl = await getSetting('qbittorrent_url', instanceId)
-    const qbtUsername = await getSetting('qbittorrent_username', instanceId)
-    const qbtPassword = await getSetting('qbittorrent_password', instanceId)
-
-    if (!qbtUrl) return null
-
-    return new QBittorrentService(qbtUrl, qbtUsername, qbtPassword)
-  } catch (error) {
-    console.error(`[getQBittorrentServiceForUser] Erreur:`, error)
-    return null
-  }
+  return await getQBittorrentService()
 }
 
-/**
- * Récupère le service SMB pour l'utilisateur actuel
- */
 export async function getSmbServiceForUser() {
-  const user = await getCurrentUser()
-  if (!user || !(user as any).instanceId) return null
-
-  const instanceId = parseInt((user as any).instanceId)
-  if (isNaN(instanceId)) return null
-  
-  try {
-    const smbHost = await getSetting('smb_host', instanceId)
-    const smbShare = await getSetting('smb_share', instanceId)
-    const smbUsername = await getSetting('smb_username', instanceId)
-    const smbPassword = await getSetting('smb_password', instanceId)
-    const smbPath = await getSetting('smb_path', instanceId) || ''
-
-    if (!smbHost || !smbShare) return null
-
-    return new SmbService(smbHost, smbShare, smbUsername, smbPassword, smbPath)
-  } catch (error) {
-    console.error(`[getSmbServiceForUser] Erreur:`, error)
-    return null
-  }
+  return await getSmbService()
 }
 
-/**
- * Récupère le service SMB pour une instance spécifique
- */
-export async function getSmbServiceByInstanceId(instanceId: number) {
-  try {
-    const smbHost = await getSetting('smb_host', instanceId)
-    const smbShare = await getSetting('smb_share', instanceId)
-    const smbUsername = await getSetting('smb_username', instanceId)
-    const smbPassword = await getSetting('smb_password', instanceId)
-    const smbPath = await getSetting('smb_path', instanceId) || ''
-
-    if (!smbHost || !smbShare) return null
-
-    return new SmbService(smbHost, smbShare, smbUsername, smbPassword, smbPath)
-  } catch (error) {
-    console.error(`[getSmbServiceByInstanceId] Erreur:`, error)
-    return null
-  }
+export async function getProwlarrServiceForUser() {
+  return await getProwlarrService()
 }
-
-/**
- * Récupère le service TMDB pour l'utilisateur actuel ou pour une instance spécifique
- */
-export async function getTmdbServiceForUser(instanceId?: number) {
-  // FORCE USE OF HARDCODED API KEY AS REQUESTED BY USER - GLOBAL OVERRIDE
-  try {
-    const tmdbApiKey = '7f43cb4adbc635ccad5c04412b284d34'
-    console.debug(`[getTmdbServiceForUser] Service initialized with HARDCODED API Key (prefix: ${tmdbApiKey.substring(0, 4)}...)`)
-    return new TmdbService(tmdbApiKey)
-  } catch (error) {
-    console.error(`[getTmdbServiceForUser] Error initializing service:`, error)
-    return null
-  }
-
-  /*
-  let targetInstanceId = instanceId
-
-  if (!targetInstanceId) {
-    const user = await getCurrentUser()
-    if (!user || !(user as any).instanceId) {
-      // Fallback: use default instance if no user and no instanceId provided
-      try {
-        if (!prisma || !(prisma as any).instance) {
-          console.error(`[getTmdbServiceForUser] Prisma client or Instance model is not available`)
-          return null
-        }
-        const defaultInstance = await (prisma as any).instance.findFirst({ where: { isDefault: true } })
-        if (!defaultInstance) return null
-        targetInstanceId = defaultInstance.id
-      } catch (error) {
-        console.error(`[getTmdbServiceForUser] Error fetching default instance:`, error)
-        return null
-      }
-    } else {
-      targetInstanceId = parseInt((user as any).instanceId)
-    }
-  }
-  
-  if (!targetInstanceId || isNaN(targetInstanceId)) return null
-  
-  try {
-    // FORCE USE OF HARDCODED API KEY AS REQUESTED BY USER
-    const tmdbApiKey = '7f43cb4adbc635ccad5c04412b284d34'
-    console.debug(`[getTmdbServiceForUser] Service initialized with HARDCODED API Key (prefix: ${tmdbApiKey.substring(0, 4)}...)`)
-    return new TmdbService(tmdbApiKey)
-
-    /*
-    if (!prisma || !(prisma as any).setting) return null
-    let tmdbApiKey = await getSetting('tmdb_api_key', targetInstanceId)
-    
-    // Si la clé n'est pas trouvée sur l'instance actuelle, on cherche sur l'instance par défaut
-    if (!tmdbApiKey) {
-      console.warn(`[getTmdbServiceForUser] TMDB API Key not found for instance ${targetInstanceId}, trying default instance`)
-      const defaultInstance = await (prisma as any).instance.findFirst({ where: { isDefault: true } })
-      if (defaultInstance && defaultInstance.id !== targetInstanceId) {
-        tmdbApiKey = await getSetting('tmdb_api_key', defaultInstance.id)
-      }
-    }
-
-    // Fallback: Use hardcoded API Key if available
-    if (!tmdbApiKey) {
-      console.warn(`[getTmdbServiceForUser] Using fallback TMDB API Key`)
-      tmdbApiKey = '7f43cb4adbc635ccad5c04412b284d34'
-    }
-
-    if (!tmdbApiKey) {
-      console.error(`[getTmdbServiceForUser] No TMDB API Key found for instance ${targetInstanceId} or default instance`)
-      return null
-    }
-
-    console.debug(`[getTmdbServiceForUser] Service initialized with API Key (prefix: ${tmdbApiKey.substring(0, 4)}...)`)
-    return new TmdbService(tmdbApiKey)
-    */
-}
-

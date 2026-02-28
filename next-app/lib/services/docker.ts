@@ -1,6 +1,12 @@
 import Docker from 'dockerode';
 import { prisma } from '@/lib/prisma';
 
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
 export class DockerService {
     private static instance: Docker | null = null;
 
@@ -12,37 +18,44 @@ export class DockerService {
         });
 
         const dockerHost = dockerHostSetting?.value || process.env.DOCKER_HOST;
+        log(`[DockerService] Init - Env DOCKER_HOST: ${process.env.DOCKER_HOST}, DB Setting: ${dockerHostSetting?.value}`);
 
         if (dockerHost) {
             if (dockerHost.startsWith('tcp://')) {
                 const url = new URL(dockerHost.replace('tcp://', 'http://'));
                 options.host = url.hostname;
                 options.port = url.port;
-                console.log(`[DockerService] Initialized with TCP: ${options.host}:${options.port}`);
+                log(`[DockerService] Initialized with TCP: ${options.host}:${options.port}`);
             } else {
                 options.socketPath = dockerHost;
-                console.log(`[DockerService] Initialized with socket: ${options.socketPath}`);
+                log(`[DockerService] Initialized with socket: ${options.socketPath}`);
             }
         } else {
             options.socketPath = '/var/run/docker.sock';
-            console.log(`[DockerService] Initialized with default socket: ${options.socketPath}`);
+            log(`[DockerService] Initialized with default socket: ${options.socketPath}`);
         }
 
         this.instance = new Docker(options);
         return this.instance;
     }
 
-    static async containerAction(containerId: string, action: 'start' | 'stop' | 'restart'): Promise<boolean> {
+    static async containerAction(containerId: string, action: 'start' | 'stop' | 'restart'): Promise<{ success: boolean; error?: string }> {
         try {
             const id = String(containerId).trim();
             const docker = await this.init();
             const container = docker.getContainer(id);
             
-            console.log(`[DockerService] Performing ${action} on container "${id}"`);
+            log(`[DockerService] Performing ${action} on container "${id}"`);
             
             if (action === 'start') {
                 try {
                     await container.start();
+                    // Verify it's actually running
+                     const info = await container.inspect();
+                     if (!info.State.Running) {
+                         const errorMsg = info.State.Error || `ExitCode: ${info.State.ExitCode}`;
+                         throw new Error(`Container started but immediately exited (${errorMsg}). Check container logs.`);
+                     }
                 } catch (err: any) {
                     if (err.statusCode !== 304) throw err;
                 }
@@ -54,20 +67,44 @@ export class DockerService {
                     if (err.statusCode !== 304) throw err;
                 }
             } else if (action === 'restart') {
-                await container.restart();
+                try {
+                    await container.restart();
+                    // Verify it's actually running
+                    const info = await container.inspect();
+                    if (!info.State.Running) {
+                        throw new Error(`Container restarted but immediately exited (ExitCode: ${info.State.ExitCode})`);
+                    }
+                } catch (err: any) {
+                    // Sometimes restart fails if container is paused or in weird state
+                    // Try force stop then start
+                    warn(`[DockerService] Restart failed, trying stop-then-start: ${err.message}`);
+                    try {
+                        await container.stop();
+                    } catch (e: any) { 
+                        if (e.statusCode !== 304 && e.statusCode !== 404) warn('Stop failed during restart fallback:', e.message); 
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await container.start();
+                    
+                    // Verify it's actually running after fallback
+                    const info = await container.inspect();
+                    if (!info.State.Running) {
+                        throw new Error(`Container started (fallback) but immediately exited (ExitCode: ${info.State.ExitCode})`);
+                    }
+                }
             }
             
-            return true;
+            return { success: true };
         } catch (error: any) {
-            console.error(`[DockerService] Error performing ${action} on ${containerId}:`, error.message);
+            error(`[DockerService] Error performing ${action} on ${containerId}:`, error.message);
             
             // Retry with leading slash if it was missing and error is 404
             if (error.statusCode === 404 && !containerId.startsWith('/')) {
-                console.log(`[DockerService] Retrying ${action} with leading slash for ${containerId}`);
+                log(`[DockerService] Retrying ${action} with leading slash for ${containerId}`);
                 return this.containerAction('/' + containerId, action);
             }
             
-            return false;
+            return { success: false, error: error.message || `Failed to ${action} container` };
         }
     }
 
@@ -113,7 +150,7 @@ export class DockerService {
                 pids: stats.pids_stats?.current || 0
             };
         } catch (error: any) {
-            console.error(`[DockerService] Error getting stats for ${containerId}:`, error.message);
+            error(`[DockerService] Error getting stats for ${containerId}:`, error.message);
             return null;
         }
     }
@@ -124,7 +161,7 @@ export class DockerService {
                 throw new Error('Container ID is required');
             }
             const id = String(containerId).trim();
-            console.log(`[DockerService] Fetching details for containerId: "${id}"`);
+            log(`[DockerService] Fetching details for containerId: "${id}"`);
             const docker = await this.init();
             const container = docker.getContainer(id);
             
@@ -162,11 +199,11 @@ export class DockerService {
             
             // Detailed logging for proxy troubleshooting
             if (statusCode === 403) {
-                console.error(`[DockerService] ACCESS FORBIDDEN (403): The Docker proxy is blocking the inspection of container "${containerId}". Please ensure "CONTAINERS=1" (or "AUTH=1") is set in your proxy configuration.`);
+                error(`[DockerService] ACCESS FORBIDDEN (403): The Docker proxy is blocking the inspection of container "${containerId}". Please ensure "CONTAINERS=1" (or "AUTH=1") is set in your proxy configuration.`);
             } else if (statusCode === 404) {
-                console.error(`[DockerService] NOT FOUND (404): Container "${containerId}" was not found. If using a proxy, ensure it has permission to see this container.`);
+                error(`[DockerService] NOT FOUND (404): Container "${containerId}" was not found. If using a proxy, ensure it has permission to see this container.`);
             } else {
-                console.error(`[DockerService] Error ${statusCode} getting details for "${containerId}":`, msg);
+                error(`[DockerService] Error ${statusCode} getting details for "${containerId}":`, msg);
             }
             
             throw error;
@@ -204,7 +241,7 @@ export class DockerService {
                 };
             });
         } catch (error: any) {
-            console.error('[DockerService] Error listing containers:', error.message);
+            error('[DockerService] Error listing containers:', error.message);
             return null;
         }
     }

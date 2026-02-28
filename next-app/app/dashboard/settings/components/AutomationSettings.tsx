@@ -7,10 +7,10 @@ import { testJellyseerrConnectionAction, importJellyseerrRequestsAction, fixMiss
 interface Props {
     formData: SettingsFormData
     updateField: (field: keyof SettingsFormData, value: string) => void
-    instanceId: number
+    readOnly?: boolean
 }
 
-export const AutomationSettings = ({ formData, updateField, instanceId }: Props) => {
+export const AutomationSettings = ({ formData, updateField, readOnly }: Props) => {
     // Jellyseerr States
     const [jellyseerrLoading, setJellyseerrLoading] = useState(false)
     const [jellyseerrResult, setJellyseerrResult] = useState<TestResult | null>(null)
@@ -40,7 +40,7 @@ export const AutomationSettings = ({ formData, updateField, instanceId }: Props)
         setImportRequestsLoading(true)
         setImportRequestsResult(null)
         try {
-            const res = await importJellyseerrRequestsAction(instanceId)
+            const res = await importJellyseerrRequestsAction()
             setImportRequestsResult({
                 success: res.success,
                 message: res.message || (res.success ? 'Import réussi' : 'Échec de l\'import')
@@ -56,7 +56,7 @@ export const AutomationSettings = ({ formData, updateField, instanceId }: Props)
         setFixTitlesLoading(true)
         setFixTitlesResult(null)
         try {
-            const res = await fixMissingTitlesAction(instanceId)
+            const res = await fixMissingTitlesAction()
             setFixTitlesResult({
                 success: res.success,
                 message: res.message || (res.success ? 'Correction terminée' : 'Échec de la correction')

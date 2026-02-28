@@ -2,7 +2,6 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { NextResponse } from 'next/server'
-import { PERMISSIONS } from '@/lib/permissions'
 import { logAction } from '@/lib/audit'
 
 export async function GET() {
@@ -12,9 +11,7 @@ export async function GET() {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const userPermissions = (session.user as any).permissions || []
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const canManage = (session.user as any).role === 'admin' || userPermissions.includes(PERMISSIONS.SETTINGS_MANAGE)
+    const canManage = (session.user as any).role === 'admin'
 
     if (!canManage) {
         return new NextResponse('Forbidden', { status: 403 })
@@ -24,16 +21,7 @@ export async function GET() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const groups = await (prisma as any).userGroup.findMany({
             include: {
-                members: {
-                    include: {
-                        instance: {
-                            select: {
-                                name: true,
-                                type: true
-                            }
-                        }
-                    }
-                }
+                members: true
             },
             orderBy: {
                 name: 'asc'
@@ -54,9 +42,7 @@ export async function POST(req: Request) {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const userPermissions = (session.user as any).permissions || []
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const canManage = (session.user as any).role === 'admin' || userPermissions.includes(PERMISSIONS.SETTINGS_MANAGE)
+    const canManage = (session.user as any).role === 'admin'
 
     if (!canManage) {
         return new NextResponse('Forbidden', { status: 403 })

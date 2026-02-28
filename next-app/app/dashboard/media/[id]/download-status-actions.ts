@@ -2,7 +2,13 @@
 
 import { getRadarrServiceForUser, getSonarrServiceForUser, getQBittorrentServiceForUser } from '@/lib/auth'
 import { RadarrQueueItem } from '@/lib/services/radarr'
-import { SonarrQueueItem } from '@/lib/services/sonarr'
+import { SonarrQueueItem, SonarrSeries, SonarrSeason } from '@/lib/services/sonarr'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export interface SeasonInfo {
     seasonNumber: number
@@ -67,37 +73,59 @@ export async function checkDownloadStatus(
     mediaTitle?: string // Added title parameter
 ): Promise<DownloadStatus | null> {
     try {
-        // console.log(`Checking download status for ${mediaType} TMDB:${tmdbId} TVDB:${tvdbId} Title:${mediaTitle}`)
+        log(`Checking download status for ${mediaType} TMDB:${tmdbId} TVDB:${tvdbId} Title:${mediaTitle}`)
         if (mediaType === 'movie') {
             const radarr = await getRadarrServiceForUser()
             if (!radarr) {
-                console.log('No Radarr service found')
+                log('No Radarr service found')
                 return null
             }
 
+            // Get internal Radarr ID for the movie
+            const radarrMovie = await radarr.getMovieByTmdbId(tmdbId)
+            
             const queue = await radarr.getQueue()
-            // console.log(`Radarr queue length: ${queue.length}`)
+            log(`Radarr queue length: ${queue.length}`)
             
             // Normalize title for comparison
             const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '')
             const targetTitle = mediaTitle ? normalize(mediaTitle) : ''
+            
+            // Find queue item matching internal ID
+            let item: RadarrQueueItem | undefined
+            
+            if (radarrMovie && radarrMovie.id) {
+                item = queue.find((q: RadarrQueueItem) => q.movieId === radarrMovie.id)
+            }
 
-            // Find queue item matching tmdbId
-            const item = queue.find((q: RadarrQueueItem) => {
-                return q.movie?.tmdbId === tmdbId
-            })
+            // Fallback: Match by title if ID match fails (unlikely if movie found)
+            if (!item && targetTitle) {
+                item = queue.find((q: RadarrQueueItem) => {
+                    if (q.title) {
+                        const qTitle = normalize(q.title) // This is release title usually, but worth checking
+                        // Also check if movie title is inside release title
+                        if (qTitle.includes(targetTitle)) return true
+                    }
+                    return false
+                })
+            }
 
             if (item) {
+                log('Found item in Radarr queue:', item.id, item.title)
                 // Check if we can get better stats from qBittorrent
                 let qbitStats = null
-                if (item.downloadId) {
-                    try {
-                        const qbit = await getQBittorrentServiceForUser()
-                        if (qbit) {
-                            const torrents = await qbit.getTorrents()
+                
+                try {
+                    const qbit = await getQBittorrentServiceForUser()
+                    if (qbit) {
+                        const torrents = await qbit.getTorrents()
+                        
+                        // 1. Try match by hash (downloadId)
+                        if (item.downloadId) {
                             const downloadId = item.downloadId
                             const torrent = torrents.find(t => t.hash.toLowerCase() === downloadId.toLowerCase())
                             if (torrent) {
+                                log('Matched qBit torrent by hash:', torrent.name)
                                 qbitStats = {
                                     progress: torrent.progress * 100,
                                     timeleft: torrent.eta > 0 ? formatTime(torrent.eta) : '∞',
@@ -110,12 +138,39 @@ export async function checkDownloadStatus(
                                 }
                             }
                         }
-                    } catch (e) {
-                        console.error('Failed to fetch qbit stats:', e)
+
+                        // 2. Fallback: Match by Title
+                        if (!qbitStats && item.title) {
+                            // item.title might be Movie Title or Release Name
+                            // qBit torrent.name is Release Name
+                            // We check if torrent name contains the item title, or is equal to it
+                            const titleToMatch = normalize(item.title)
+                            
+                            const torrent = torrents.find(t => {
+                                const tName = normalize(t.name)
+                                return tName.includes(titleToMatch) || titleToMatch.includes(tName)
+                            })
+                            
+                            if (torrent) {
+                                log('Matched qBit torrent by name (loose):', torrent.name)
+                                qbitStats = {
+                                    progress: torrent.progress * 100,
+                                    timeleft: torrent.eta > 0 ? formatTime(torrent.eta) : '∞',
+                                    speed: formatSpeed(torrent.dlspeed),
+                                    seeds: torrent.num_seeds,
+                                    peers: torrent.num_leechs,
+                                    state: torrent.state,
+                                    size: torrent.size,
+                                    downloaded: torrent.downloaded
+                                }
+                            }
+                        }
                     }
+                } catch (e) {
+                    error('Failed to fetch qbit stats:', e)
                 }
 
-                // console.log('Found matching download:', item.title)
+                // log('Found matching download:', item.title)
                 const totalSize = qbitStats?.size || item.size
                 const sizeLeft = qbitStats ? (qbitStats.size - qbitStats.downloaded) : item.sizeleft
                 const progress = qbitStats?.progress ?? (totalSize > 0 ? ((totalSize - sizeLeft) / totalSize) * 100 : 0)
@@ -165,12 +220,34 @@ export async function checkDownloadStatus(
             // Map queue items to seasons
             const downloadingSeasons = new Map<number, SonarrQueueItem>()
             
+            const sonarrSeries = await sonarr.getSeriesByTvdbId(tvdbId)
+
             // Find queue item matching tvdbId
             // Note: A queue item might be a season pack or an episode
             // We'll filter relevant items first
-            const relevantQueueItems = queue.filter((q: SonarrQueueItem) => {
-                return q.series?.tvdbId === tvdbId
-            })
+            let relevantQueueItems: SonarrQueueItem[] = []
+
+            if (sonarrSeries && sonarrSeries.id) {
+                relevantQueueItems = queue.filter((q: SonarrQueueItem) => q.seriesId === sonarrSeries.id)
+            }
+
+            if (relevantQueueItems.length === 0) {
+                relevantQueueItems = queue.filter((q: SonarrQueueItem) => {
+                    // Try to match by TVDB ID first (legacy check if seriesId missing)
+                    if (q.series?.tvdbId && (q.series.tvdbId === tvdbId || q.series.tvdbId == tvdbId)) {
+                        return true
+                    }
+
+                    // Fallback: Match by title
+                    if (targetTitle && q.series?.title) {
+                        const qTitle = normalize(q.series.title)
+                        if (qTitle === targetTitle) return true
+                        if (qTitle.includes(targetTitle) || targetTitle.includes(qTitle)) return true
+                    }
+
+                    return false
+                })
+            }
 
             // Populate downloadingSeasons map
             relevantQueueItems.forEach(item => {
@@ -183,7 +260,7 @@ export async function checkDownloadStatus(
             })
 
             // Check if series exists and has files
-            const series = await sonarr.getSeriesByTvdbId(tvdbId)
+            const series = await sonarr.getSeriesByTvdbId(tvdbId) as SonarrSeries | null
             let seasons: SeasonInfo[] = []
             
             if (series) {
@@ -207,7 +284,7 @@ export async function checkDownloadStatus(
                              qbitTorrents = await qbit.getTorrents()
                          }
                      } catch (e) {
-                         console.error('Failed to fetch qbit stats for TV:', e)
+                         error('Failed to fetch qbit stats for TV:', e)
                      }
                 }
 
@@ -232,6 +309,25 @@ export async function checkDownloadStatus(
                             if (downloadingItem.downloadId) {
                                 const downloadId = downloadingItem.downloadId
                                 const torrent = qbitTorrents.find((t: any) => t.hash.toLowerCase() === downloadId.toLowerCase())
+                                if (torrent) {
+                                    qbitStats = {
+                                        progress: torrent.progress * 100,
+                                        timeleft: torrent.eta > 0 ? formatTime(torrent.eta) : '∞',
+                                        speed: formatSpeed(torrent.dlspeed),
+                                        size: torrent.size,
+                                        downloaded: torrent.downloaded
+                                    }
+                                }
+                            }
+
+                            // Fallback: Match by title
+                            if (!qbitStats && downloadingItem.title) {
+                                const titleToMatch = normalize(downloadingItem.title)
+                                const torrent = qbitTorrents.find((t: any) => {
+                                    const tName = normalize(t.name)
+                                    return tName.includes(titleToMatch) || titleToMatch.includes(tName)
+                                })
+                                
                                 if (torrent) {
                                     qbitStats = {
                                         progress: torrent.progress * 100,
@@ -336,7 +432,7 @@ export async function checkDownloadStatus(
             }
         }
     } catch (e) {
-        console.error('Error checking download status:', e)
+        error('Error checking download status:', e)
         return null
     }
 

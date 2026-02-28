@@ -1,12 +1,15 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Bell, Check, Trash2, ExternalLink, X } from 'lucide-react'
+import { Bell, Check, Trash2, ExternalLink, X, RefreshCw } from 'lucide-react'
 import { getNotifications, getUnreadCount, markAsRead, markAllAsRead, deleteNotification } from '@/app/actions/notifications'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import clsx from 'clsx'
 import Link from 'next/link'
+import { useSession } from 'next-auth/react'
+import { toast } from 'react-hot-toast'
+import { io } from 'socket.io-client'
 
 interface Notification {
   id: number
@@ -22,6 +25,7 @@ interface Notification {
 }
 
 export function NotificationBell() {
+  const { data: session } = useSession()
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -36,10 +40,89 @@ export function NotificationBell() {
 
   useEffect(() => {
     fetchNotifications()
-    // Poll every 60 seconds
+    // Poll every 60 seconds as fallback
     const interval = setInterval(fetchNotifications, 60000)
     return () => clearInterval(interval)
   }, [])
+
+  // Socket.IO Connection for Real-time Notifications
+  useEffect(() => {
+    if (!session?.user?.id) return
+
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    let wsUrl = process.env.NEXT_PUBLIC_TRACKER_WS_URL;
+    
+    if (!wsUrl) {
+        if (process.env.NODE_ENV === 'development') {
+            wsUrl = `${protocol === 'wss' ? 'https' : 'http'}://${window.location.hostname}:3005`;
+        } else {
+            // Production: Use relative path to leverage Next.js rewrites
+            wsUrl = undefined;
+        }
+    }
+
+    const socket = io(wsUrl || undefined, {
+        path: '/socket.io',
+        transports: ['websocket', 'polling'],
+        query: {
+            userId: session.user.id
+        }
+    })
+
+    socket.on('notification', (notif: Notification) => {
+        // Play notification sound if desired
+        // const audio = new Audio('/notification.mp3');
+        // audio.play().catch(e => console.error(e));
+
+        toast.custom((t) => (
+            <div
+                className={`${
+                t.visible ? 'animate-enter' : 'animate-leave'
+                } max-w-md w-full bg-gray-900 border border-gray-700 shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+            >
+                <div className="flex-1 w-0 p-4">
+                <div className="flex items-start">
+                    <div className="flex-shrink-0 pt-0.5">
+                        {notif.posterPath ? (
+                            <img
+                                className="h-10 w-10 rounded-md object-cover"
+                                src={`https://image.tmdb.org/t/p/w92${notif.posterPath}`}
+                                alt=""
+                            />
+                        ) : (
+                            <div className="h-10 w-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                                <Bell size={20} />
+                            </div>
+                        )}
+                    </div>
+                    <div className="ml-3 flex-1">
+                    <p className="text-sm font-medium text-white">
+                        {notif.title}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-400">
+                        {notif.message}
+                    </p>
+                    </div>
+                </div>
+                </div>
+                <div className="flex border-l border-gray-700">
+                <button
+                    onClick={() => toast.dismiss(t.id)}
+                    className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-indigo-400 hover:text-indigo-300 focus:outline-none"
+                >
+                    Fermer
+                </button>
+                </div>
+            </div>
+        ), { duration: 5000 });
+        
+        fetchNotifications()
+    })
+
+    return () => {
+        socket.disconnect()
+    }
+  }, [session?.user?.id])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -51,13 +134,21 @@ export function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    if (isOpen) {
+      // Mark as read when opening
+      if (unreadCount > 0) {
+        markAllAsRead()
+        setUnreadCount(0)
+      }
+    } else {
+      // Refresh notifications when closing to clean up read ones
+      fetchNotifications()
+    }
+  }, [isOpen])
+
   const handleMarkAsRead = async (id: number) => {
     await markAsRead(id)
-    fetchNotifications()
-  }
-
-  const handleMarkAllAsRead = async () => {
-    await markAllAsRead()
     fetchNotifications()
   }
 
@@ -65,6 +156,8 @@ export function NotificationBell() {
     await deleteNotification(id)
     fetchNotifications()
   }
+
+  const displayedNotifications = notifications.filter(n => !n.isRead)
 
   return (
     <div className="relative" ref={menuRef}>
@@ -90,14 +183,6 @@ export function NotificationBell() {
               )}
             </h3>
             <div className="flex items-center gap-2">
-              {unreadCount > 0 && (
-                <button
-                  onClick={handleMarkAllAsRead}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                >
-                  Tout lire
-                </button>
-              )}
               <button
                 onClick={() => setIsOpen(false)}
                 className="text-gray-400 hover:text-white"
@@ -108,16 +193,16 @@ export function NotificationBell() {
           </div>
 
           <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
-            {!Array.isArray(notifications) || notifications.length === 0 ? (
+            {!Array.isArray(displayedNotifications) || displayedNotifications.length === 0 ? (
               <div className="p-8 text-center">
                 <div className="bg-gray-800 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
                   <Bell className="h-6 w-6 text-gray-500" />
                 </div>
-                <p className="text-gray-400 text-sm">Aucune notification pour le moment</p>
+                <p className="text-gray-400 text-sm">Aucune nouvelle notification</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-800/50">
-                {notifications.map((notif) => (
+                {displayedNotifications.map((notif) => (
                   <div
                     key={notif.id}
                     className={clsx(
@@ -134,8 +219,15 @@ export function NotificationBell() {
                         />
                       </div>
                     ) : (
-                      <div className="flex-shrink-0 w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
-                        <Bell className="h-5 w-5" />
+                      <div className={clsx(
+                        "flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center",
+                        notif.type === 'system_update' ? "bg-orange-500/20 text-orange-400" : "bg-indigo-500/20 text-indigo-400"
+                      )}>
+                        {notif.type === 'system_update' ? (
+                           <RefreshCw className="h-5 w-5" />
+                        ) : (
+                           <Bell className="h-5 w-5" />
+                        )}
                       </div>
                     )}
                     
@@ -193,17 +285,15 @@ export function NotificationBell() {
             )}
           </div>
           
-          {notifications.length > 0 && (
-            <div className="p-3 bg-gray-800/30 border-t border-gray-800 text-center">
-              <Link
-                href="/dashboard/notifications"
-                className="text-xs text-gray-400 hover:text-white transition-colors"
-                onClick={() => setIsOpen(false)}
-              >
-                Voir toutes les notifications
-              </Link>
-            </div>
-          )}
+          <div className="p-3 bg-gray-800/30 border-t border-gray-800 text-center">
+            <Link
+              href="/dashboard/notifications"
+              className="text-xs text-gray-400 hover:text-white transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              Voir toutes les notifications
+            </Link>
+          </div>
         </div>
       )}
     </div>

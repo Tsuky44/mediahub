@@ -12,9 +12,10 @@ interface RequestButtonProps {
     initialStatus: string
     seasons?: any[]
     seasonStatuses?: any[]
+    canRequest?: boolean
 }
 
-export default function RequestButton({ tmdbId, mediaType, title, initialStatus, seasons, seasonStatuses }: RequestButtonProps) {
+export default function RequestButton({ tmdbId, mediaType, title, initialStatus, seasons, seasonStatuses, canRequest = false }: RequestButtonProps) {
     const [status, setStatus] = useState(initialStatus)
     const [loading, setLoading] = useState(false)
     const [showSeasonModal, setShowSeasonModal] = useState(false)
@@ -84,14 +85,14 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
         return (
             <>
                 <div className="flex gap-2">
-                    <button disabled className="flex items-center gap-2 rounded-md bg-purple-600/20 px-6 py-3 font-semibold text-purple-500 border border-purple-600/30 cursor-default">
+                    <button disabled className="flex items-center gap-2 rounded-full bg-purple-600/20 px-6 py-3 font-semibold text-purple-400 border border-purple-500/30 cursor-default backdrop-blur-sm">
                         <Check className="h-5 w-5" />
                         Partiellement disponible
                     </button>
-                    {mediaType === 'tv' && (
+                    {canRequest && mediaType === 'tv' && (
                         <button 
                             onClick={() => setShowSeasonModal(true)}
-                            className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
+                            className="flex items-center gap-2 rounded-full bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-500 transition-all shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:scale-105 active:scale-95"
                         >
                             <Plus className="h-5 w-5" />
                             Compléter
@@ -121,14 +122,14 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
         return (
             <>
                 <div className="flex gap-2">
-                    <button disabled className="flex items-center gap-2 rounded-md bg-green-600/20 px-6 py-3 font-semibold text-green-500 border border-green-600/30 cursor-default">
+                    <button disabled className="flex items-center gap-2 rounded-full bg-green-600/20 px-6 py-3 font-semibold text-green-400 border border-green-500/30 cursor-default backdrop-blur-sm">
                         <Check className="h-5 w-5" />
                         Disponible sur Emby
                     </button>
-                    {hasUnrequestedSeasons && (
+                    {canRequest && hasUnrequestedSeasons && (
                         <button 
                             onClick={() => setShowSeasonModal(true)}
-                            className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
+                            className="flex items-center gap-2 rounded-full bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-500 transition-all shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:scale-105 active:scale-95"
                         >
                             <Plus className="h-5 w-5" />
                             Demander plus
@@ -156,14 +157,14 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
          return (
             <>
                 <div className="flex gap-2">
-                    <button disabled className="flex items-center gap-2 rounded-md bg-yellow-600/20 px-6 py-3 font-semibold text-yellow-500 border border-yellow-600/30 cursor-default">
+                    <button disabled className="flex items-center gap-2 rounded-full bg-yellow-600/20 px-6 py-3 font-semibold text-yellow-400 border border-yellow-500/30 cursor-default backdrop-blur-sm">
                         <Loader2 className="h-5 w-5 animate-spin" />
                         En cours de traitement...
                     </button>
-                    {mediaType === 'tv' && seasons && seasonStatuses && (
+                    {canRequest && mediaType === 'tv' && seasons && seasonStatuses && (
                         <button 
                             onClick={() => setShowSeasonModal(true)}
-                            className="flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20"
+                            className="flex items-center gap-2 rounded-full bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-500 transition-all shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:scale-105 active:scale-95"
                         >
                             <Plus className="h-5 w-5" />
                             Demander plus
@@ -187,12 +188,16 @@ export default function RequestButton({ tmdbId, mediaType, title, initialStatus,
         )
     }
 
+    if (!canRequest) {
+        return null
+    }
+
     return (
         <>
             <button 
                 onClick={handleRequest}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-md bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-2 rounded-full bg-indigo-600 px-8 py-3 font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 transition-all shadow-[0_0_25px_rgba(79,70,229,0.4)] hover:shadow-[0_0_35px_rgba(79,70,229,0.6)] hover:scale-105 active:scale-95"
             >
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
                 {loading ? 'Envoi de la demande...' : 'Demander'}

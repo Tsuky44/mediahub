@@ -40,17 +40,17 @@ export function SearchInput({ placeholder }: { placeholder?: string }) {
   }, [query, router, searchParams, pathname])
 
   return (
-    <div className="relative w-full max-w-md">
+    <div className="relative w-full max-w-md group">
       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
         {isPending ? (
           <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
         ) : (
-          <Search className="h-5 w-5 text-gray-400" aria-hidden="true" />
+          <Search className="h-5 w-5 text-gray-500 group-focus-within:text-indigo-400 transition-colors duration-300" aria-hidden="true" />
         )}
       </div>
       <input
         type="text"
-        className="block w-full rounded-full border-0 bg-gray-800 py-2 pl-10 pr-4 text-white placeholder-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+        className="block w-full rounded-full border border-white/5 bg-gray-900/50 py-2.5 pl-10 pr-4 text-white placeholder-gray-500 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 focus:bg-gray-900 transition-all duration-300 shadow-inner group-hover:bg-gray-800/50 group-hover:border-white/10 backdrop-blur-sm sm:text-sm sm:leading-6"
         placeholder={placeholder || "Rechercher..."}
         value={text}
         onChange={(e) => setText(e.target.value)}

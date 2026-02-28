@@ -1,4 +1,19 @@
 import axios from 'axios'
+import { getSetting } from '../settings'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
+export async function getProwlarrService() {
+  const url = await getSetting('prowlarr_url')
+  const apiKey = await getSetting('prowlarr_api_key')
+  
+  if (!url || !apiKey) return null
+  return new ProwlarrService(url, apiKey)
+}
 
 export interface ProwlarrIndexer {
   id: number
@@ -60,7 +75,7 @@ export class ProwlarrService {
       const response = await client.get('/indexer')
       return response.data as ProwlarrIndexer[]
     } catch (e: any) {
-      console.error('[Prowlarr] Failed to fetch indexers:', e.message)
+      error('[Prowlarr] Failed to fetch indexers:', e.message)
       return []
     }
   }
@@ -101,7 +116,7 @@ export class ProwlarrService {
         })
       }
 
-      console.log(`[Prowlarr] Search: type=${searchType}, query="${query}", categories=${categories?.join(',')}`)
+      log(`[Prowlarr] Search: type=${searchType}, query="${query}", categories=${categories?.join(',')}`)
       
       const response = await client.get('/search', { params })
       const results = response.data as ProwlarrSearchResult[]
@@ -117,7 +132,7 @@ export class ProwlarrService {
         return new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime()
       })
     } catch (e: any) {
-      console.error(`[Prowlarr] Search failed:`, e.response?.data || e.message)
+      error(`[Prowlarr] Search failed:`, e.response?.data || e.message)
       return []
     }
   }

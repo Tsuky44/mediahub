@@ -1,373 +1,375 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Loader2, Server, CheckCircle2, Ticket, ArrowLeft } from 'lucide-react'
-import { createInstanceWithInvite } from '@/app/actions/instances'
+import { Loader2, Server, Tv, MonitorPlay, ExternalLink } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import clsx from 'clsx'
+import { getPlexAuthPin, checkPlexAuthPin } from './actions'
 
-interface Instance {
-  id: number;
-  name: string;
-  slug: string;
-  embyUrl: string;
+const isDev = process.env.NODE_ENV === 'development';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
+interface LoginFormProps {
+  enabledProviders?: {
+    emby: boolean
+    plex: boolean
+    jellyfin: boolean
+  }
 }
 
-export default function LoginForm({ hasInstances = true }: { hasInstances?: boolean }) {
+export default function LoginForm({ enabledProviders = { emby: true, plex: false, jellyfin: false } }: LoginFormProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
-  const initialInstanceSlug = searchParams.get('instance') || 'main'
   
+  // Determine default provider
+  const getDefaultProvider = () => {
+    if (enabledProviders.emby) return 'emby'
+    if (enabledProviders.plex) return 'plex'
+    if (enabledProviders.jellyfin) return 'jellyfin'
+    return 'emby' // Fallback
+  }
+
+  const [provider, setProvider] = useState(getDefaultProvider())
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [discoveredInstances, setDiscoveredInstances] = useState<Instance[]>([])
-  const [showInstanceModal, setShowInstanceModal] = useState(false)
-  const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null)
-  const [showCreateInstance, setShowCreateInstance] = useState(!hasInstances)
-  const [inviteFormData, setInviteFormData] = useState({
-    name: 'Main Server',
-    slug: 'main',
-    embyUrl: '',
-    embyApiKey: '',
-    inviteCode: ''
-  })
+  const [loginError, setLoginError] = useState('')
 
-  // Force show create instance if no instances exist
+  // Plex OAuth State
+  const [isPlexAuthLoading, setIsPlexAuthLoading] = useState(false)
+  const [plexAuthStatus, setPlexAuthStatus] = useState<string>('')
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Count enabled providers
+  const enabledCount = Object.values(enabledProviders).filter(Boolean).length
+
+  // Cleanup polling on unmount
   useEffect(() => {
-    if (!hasInstances) {
-      setShowCreateInstance(true)
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current)
     }
-  }, [hasInstances])
+  }, [])
 
-  const handleCreateWithInvite = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+  const performSignIn = async () => {
+    log(`[LoginForm] Starting performSignIn with username: ${username} via ${provider}`)
     try {
-      const res = await createInstanceWithInvite(inviteFormData)
-      if (res.success) {
-        toast.success('Instance créée ! Connectez-vous maintenant.')
-        setShowCreateInstance(false)
-        setInviteFormData({ name: '', slug: '', embyUrl: '', embyApiKey: '', inviteCode: '' })
-        // On redirige vers la même page mais avec le slug de la nouvelle instance
-        router.push(`/login?instance=${res.instance.slug}`)
-      }
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const performSignIn = async (slug: string) => {
-    try {
-      const result = await signIn('credentials', {
+      const result = await signIn(provider, {
         redirect: false,
         username,
-        password,
-        instance: slug
+        password
       })
+
+      log(`[LoginForm] signIn result:`, result)
 
       if (result?.error) {
         const errorMessage = result.error === 'CredentialsSignin' 
           ? 'Nom d\'utilisateur ou mot de passe incorrect'
           : result.error.replace('Error: ', '')
         
-        setError(errorMessage)
+        error(`[LoginForm] Login error: ${errorMessage}`)
+        setLoginError(errorMessage)
       } else {
+        log(`[LoginForm] Login success, redirecting to: ${callbackUrl}`)
         router.push(callbackUrl)
         router.refresh()
       }
-    } catch (error) {
-      setError('Une erreur est survenue')
+    } catch (e: any) {
+      error(`[LoginForm] Unexpected error:`, e)
+      setLoginError('Une erreur est survenue: ' + e.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handlePlexOAuth = async () => {
+    setIsPlexAuthLoading(true)
+    setLoginError('')
+    setPlexAuthStatus('Préparation de la connexion...')
+
+    // Open popup immediately to avoid blocker
+    const width = 600
+    const height = 700
+    const left = window.screen.width / 2 - width / 2
+    const top = window.screen.height / 2 - height / 2
+    
+    const popup = window.open(
+      'about:blank', 
+      'plex_oauth', 
+      `width=${width},height=${height},left=${left},top=${top},resizable,scrollbars=yes,status=1`
+    )
+
+    if (!popup) {
+      setLoginError('Veuillez autoriser les popups pour vous connecter avec Plex')
+      setIsPlexAuthLoading(false)
+      return
+    }
+
+    try {
+      const pinData = await getPlexAuthPin()
+      
+      if (!pinData || !pinData.authUrl) {
+        throw new Error('Impossible d\'obtenir le lien d\'authentification Plex')
+      }
+
+      popup.location.href = pinData.authUrl
+      setPlexAuthStatus('En attente de validation sur Plex.tv...')
+
+      // Start polling
+      const pollInterval = 2000 // 2 seconds
+      const maxAttempts = 60 // 2 minutes timeout
+      let attempts = 0
+
+      pollingRef.current = setInterval(async () => {
+        attempts++
+        
+        // Check if popup closed manually
+        if (popup.closed) {
+          if (pollingRef.current) clearInterval(pollingRef.current)
+          setIsPlexAuthLoading(false)
+          setPlexAuthStatus('')
+          return
+        }
+
+        if (attempts > maxAttempts) {
+          if (pollingRef.current) clearInterval(pollingRef.current)
+          popup.close()
+          setIsPlexAuthLoading(false)
+          setLoginError('Délai d\'attente dépassé. Veuillez réessayer.')
+          return
+        }
+
+        const checkResult = await checkPlexAuthPin(pinData.id, pinData.clientIdentifier)
+        
+        if (checkResult.authorized && checkResult.authToken) {
+          if (pollingRef.current) clearInterval(pollingRef.current)
+          popup.close()
+          setPlexAuthStatus('Connexion réussie ! Redirection...')
+          
+          // Sign in with the token
+          await signIn('plex', {
+            redirect: false,
+            token: checkResult.authToken
+          }).then((result) => {
+            if (result?.error) {
+              setLoginError(result.error)
+              setIsPlexAuthLoading(false)
+            } else {
+              router.push(callbackUrl)
+              router.refresh()
+            }
+          })
+        }
+      }, pollInterval)
+
+    } catch (e: any) {
+      error('[LoginForm] Plex OAuth error:', e)
+      setLoginError(e.message || 'Erreur lors de l\'initialisation Plex')
+      setIsPlexAuthLoading(false)
+      if (popup) popup.close()
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setError('')
+    setLoginError('')
+    await performSignIn();
+  }
 
-    // Discovery logic only if on main or if no specific instance is provided in URL
-    if (initialInstanceSlug === 'main' || !searchParams.get('instance')) {
-      try {
-        const response = await fetch('/api/auth/discover', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username })
-        });
-
-        const data = await response.json();
-        
-        if (data.instances && data.instances.length > 1) {
-          setDiscoveredInstances(data.instances);
-          setShowInstanceModal(true);
-          setLoading(false);
-          return;
-        } else if (data.instances && data.instances.length === 1) {
-          await performSignIn(data.instances[0].slug);
-          return;
-        }
-      } catch (err) {
-        console.error('Discovery error:', err);
-      }
+  const getProviderIcon = (p: string) => {
+    switch (p) {
+      case 'emby': return <Server className="w-5 h-5" />
+      case 'plex': return <Tv className="w-5 h-5" />
+      case 'jellyfin': return <MonitorPlay className="w-5 h-5" />
+      default: return <Server className="w-5 h-5" />
     }
-
-    // Fallback to initial instance or main
-    await performSignIn(initialInstanceSlug);
   }
 
-  const handleInstanceSelect = async (instance: Instance) => {
-    setSelectedInstance(instance);
-    setShowInstanceModal(false);
-    setLoading(true);
-    await performSignIn(instance.slug);
+  const getProviderLabel = (p: string) => {
+    switch (p) {
+      case 'emby': return 'Emby'
+      case 'plex': return 'Plex'
+      case 'jellyfin': return 'Jellyfin'
+      default: return 'Serveur'
+    }
   }
 
-  if (showCreateInstance) {
-    return (
-      <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-        <div className="flex items-center gap-2 mb-4">
-          {hasInstances && (
-            <button 
-              onClick={() => setShowCreateInstance(false)}
-              className="p-2 -ml-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-white/5"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          )}
-          <h2 className="text-xl font-bold text-white">
-            {hasInstances ? 'Créer une instance' : 'Configuration initiale'}
-          </h2>
-        </div>
-
-        {error && (
-          <div className="rounded-md bg-red-900/50 p-4 border border-red-900">
-            <div className="flex">
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-200">{error}</h3>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <form onSubmit={handleCreateWithInvite} className="space-y-4">
-          {hasInstances && (
-            <div>
-              <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Code d'invitation</label>
-              <input
-                type="text"
-                required
-                placeholder="XXXX-XXXX"
-                value={inviteFormData.inviteCode}
-                onChange={e => setInviteFormData({ ...inviteFormData, inviteCode: e.target.value.toUpperCase() })}
-                className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm px-4 py-3 transition-all duration-300 font-mono tracking-wider"
-              />
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Nom de votre instance</label>
-            <input
-              type="text"
-              required
-              placeholder="Mon Serveur"
-              value={inviteFormData.name}
-              onChange={e => setInviteFormData({ ...inviteFormData, name: e.target.value })}
-              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
-            />
-          </div>
-
-          <div className={hasInstances ? "block" : "hidden"}>
-            <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Identifiant URL (Slug)</label>
-            <input
-              type="text"
-              required={hasInstances}
-              placeholder="mon-serveur"
-              value={inviteFormData.slug}
-              onChange={e => setInviteFormData({ ...inviteFormData, slug: e.target.value })}
-              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
-            />
-          </div>
-
-          <div className="pt-2 border-t border-white/5">
-            <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">URL Emby</label>
-            <input
-              type="url"
-              required
-              placeholder="https://votre-emby.com"
-              value={inviteFormData.embyUrl}
-              onChange={e => setInviteFormData({ ...inviteFormData, embyUrl: e.target.value })}
-              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">Clé API Emby</label>
-            <input
-              type="password"
-              required
-              placeholder="Votre clé API"
-              value={inviteFormData.embyApiKey}
-              onChange={e => setInviteFormData({ ...inviteFormData, embyApiKey: e.target.value })}
-              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full justify-center rounded-2xl border border-transparent bg-amber-500 px-4 py-3 text-sm font-bold text-black shadow-xl shadow-amber-500/20 hover:bg-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 active:scale-[0.98] mt-6"
-          >
-            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : (hasInstances ? 'Créer mon instance' : 'Configurer le serveur')}
-          </button>
-        </form>
-      </div>
-    )
+  const getProviderColor = (p: string, isSelected: boolean) => {
+    if (!isSelected) return 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+    switch (p) {
+      case 'emby': return 'bg-green-600 text-white shadow-lg shadow-green-500/20'
+      case 'plex': return 'bg-amber-600 text-white shadow-lg shadow-amber-500/20'
+      case 'jellyfin': return 'bg-purple-600 text-white shadow-lg shadow-purple-500/20'
+      default: return 'bg-indigo-600 text-white'
+    }
   }
 
   return (
     <>
-      <form className="space-y-6" onSubmit={handleSubmit}>
-        {(initialInstanceSlug !== 'main' || selectedInstance) && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full w-fit mx-auto mb-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-            <span className="text-xs font-medium text-indigo-300">
-              Instance : {selectedInstance?.name || initialInstanceSlug}
-            </span>
-          </div>
-        )}
-        {error && (
-          <div className="rounded-md bg-red-900/50 p-4 border border-red-900">
-            <div className="flex">
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-200">{error}</h3>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-300 ml-1 mb-2">
-            Nom d'utilisateur Emby
-          </label>
-          <div className="mt-1">
-            <input
-              id="username"
-              name="username"
-              type="text"
-              required
-              placeholder="Votre identifiant"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-300 ml-1 mb-2">
-            Mot de passe
-          </label>
-          <div className="mt-1">
-            <input
-              id="password"
-              name="password"
-              type="password"
-              placeholder="••••••••"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
-            />
-          </div>
-        </div>
-
-        <div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full justify-center rounded-2xl border border-transparent bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-xl shadow-indigo-500/20 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 active:scale-[0.98]"
-          >
-            {loading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              'Se connecter'
-            )}
-          </button>
-        </div>
-
-        <div className="relative py-4">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-white/10"></div>
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-transparent px-2 text-gray-500 backdrop-blur-xl">Ou</span>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowCreateInstance(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white hover:bg-white/10 transition-all duration-300 active:scale-[0.98]"
-        >
-          <Ticket className="w-4 h-4 text-amber-400" />
-          Créer une instance
-        </button>
-      </form>
-
-      {/* Instance Selection Modal */}
-      {showInstanceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-gray-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
-            <div className="p-6 border-b border-white/10">
-              <h3 className="text-xl font-bold text-white">Choisir un serveur</h3>
-              <p className="text-sm text-gray-400 mt-1">
-                Plusieurs instances ont été trouvées pour cet utilisateur.
-              </p>
-            </div>
-            <div className="p-4 max-h-[60vh] overflow-y-auto">
-              <div className="space-y-2">
-                {discoveredInstances.map((instance) => (
-                  <button
-                    key={instance.id}
-                    onClick={() => handleInstanceSelect(instance)}
-                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-indigo-500/50 transition-all group"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-                        <Server className="w-5 h-5" />
-                      </div>
-                      <div className="text-left">
-                        <div className="font-bold text-white">{instance.name}</div>
-                        <div className="text-xs text-gray-500 truncate max-w-[200px]">
-                          {instance.embyUrl}
-                        </div>
-                      </div>
-                    </div>
-                    <CheckCircle2 className="w-5 h-5 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="p-4 bg-white/5 flex justify-end">
+      <div className="space-y-6">
+        {enabledCount > 1 && (
+          <div className={clsx("grid gap-2 mb-6", {
+            'grid-cols-2': enabledCount === 2,
+            'grid-cols-3': enabledCount >= 3
+          })}>
+            {enabledProviders.emby && (
               <button
-                onClick={() => setShowInstanceModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+                type="button"
+                onClick={() => setProvider('emby')}
+                className={clsx(
+                  "flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-300",
+                  getProviderColor('emby', provider === 'emby')
+                )}
               >
-                Annuler
+                <Server className="w-6 h-6 mb-1" />
+                <span className="text-xs font-medium">Emby</span>
+              </button>
+            )}
+            {enabledProviders.plex && (
+              <button
+                type="button"
+                onClick={() => setProvider('plex')}
+                className={clsx(
+                  "flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-300",
+                  getProviderColor('plex', provider === 'plex')
+                )}
+              >
+                <Tv className="w-6 h-6 mb-1" />
+                <span className="text-xs font-medium">Plex</span>
+              </button>
+            )}
+            {enabledProviders.jellyfin && (
+              <button
+                type="button"
+                onClick={() => setProvider('jellyfin')}
+                className={clsx(
+                  "flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-300",
+                  getProviderColor('jellyfin', provider === 'jellyfin')
+                )}
+              >
+                <MonitorPlay className="w-6 h-6 mb-1" />
+                <span className="text-xs font-medium">Jellyfin</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        <form className="space-y-6" onSubmit={handleSubmit}>
+          {loginError && (
+            <div className="rounded-md bg-red-900/50 p-4 border border-red-900 animate-in fade-in slide-in-from-top-2">
+              <div className="flex">
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-200">{loginError}</h3>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {provider !== 'plex' && (
+            <>
+              <div>
+                <label htmlFor="username" className="block text-sm font-medium text-gray-300 ml-1 mb-2">
+                  Nom d'utilisateur {getProviderLabel(provider)}
+                </label>
+                <div className="mt-1 relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                    {getProviderIcon(provider)}
+                  </div>
+                  <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    required
+                    placeholder={`Votre identifiant ${getProviderLabel(provider)}`}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm pl-10 pr-4 py-3 transition-all duration-300"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-300 ml-1 mb-2">
+                  Mot de passe
+                </label>
+                <div className="mt-1">
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {provider === 'plex' && (
+            <div className="pt-2">
+              <p className="text-gray-400 text-sm text-center mb-6">
+                Connectez-vous via votre compte Plex.tv pour accéder à votre serveur.
+              </p>
+
+              <button
+                type="button"
+                onClick={handlePlexOAuth}
+                disabled={isPlexAuthLoading || loading}
+                className="flex w-full justify-center items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-bold text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/50 transition-all duration-300 active:scale-[0.98]"
+              >
+                {isPlexAuthLoading ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span>{plexAuthStatus || 'Connexion...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="h-5 w-5" />
+                    <span>Connexion avec Plex.tv</span>
+                  </>
+                )}
+              </button>
+              {isPlexAuthLoading && (
+                <p className="text-xs text-center text-gray-500 mt-2 animate-pulse">
+                  Une fenêtre s'est ouverte pour vous connecter...
+                </p>
+              )}
+            </div>
+          )}
+
+          {provider !== 'plex' && (
+            <div>
+              <button
+                type="submit"
+                disabled={loading || isPlexAuthLoading}
+                className={clsx(
+                  "flex w-full justify-center rounded-2xl border border-transparent px-4 py-3 text-sm font-bold text-white shadow-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 active:scale-[0.98]",
+                  provider === 'emby' ? "bg-green-600 hover:bg-green-500 shadow-green-500/20 focus:ring-green-500" :
+                  provider === 'plex' ? "bg-amber-600 hover:bg-amber-500 shadow-amber-500/20 focus:ring-amber-500" :
+                  provider === 'jellyfin' ? "bg-purple-600 hover:bg-purple-500 shadow-purple-500/20 focus:ring-purple-500" :
+                  "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/20 focus:ring-indigo-500"
+                )}
+              >
+                {loading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  `Se connecter avec ${getProviderLabel(provider)}`
+                )}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </form>
+      </div>
     </>
   )
 }

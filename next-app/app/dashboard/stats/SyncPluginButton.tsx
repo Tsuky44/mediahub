@@ -19,7 +19,7 @@ export function SyncPluginButton({ source, canManage }: { source?: string, canMa
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ source })
+        body: JSON.stringify({ source: source || 'all' })
       })
       const data = await response.json()
       
@@ -47,25 +47,25 @@ export function SyncPluginButton({ source, canManage }: { source?: string, canMa
       <button
         onClick={handleSync}
         disabled={loading}
-        className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-medium ${
+        className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl border transition-all duration-300 text-sm font-bold shadow-lg ${
           loading 
-            ? 'bg-gray-800 border-gray-700 text-gray-500 cursor-not-allowed' 
-            : 'bg-indigo-600/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-600/20 hover:border-indigo-500/50'
+            ? 'bg-white/5 border-white/5 text-gray-500 cursor-not-allowed' 
+            : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300 hover:bg-indigo-500/20 hover:border-indigo-500/40 hover:shadow-indigo-500/10 hover:-translate-y-0.5'
         }`}
       >
         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-        {loading ? 'Synchronisation...' : 'Importer depuis Playback Reporting'}
+        {loading ? 'Synchronisation...' : 'Importer toutes les stats (Plex/Emby/Jellyfin)'}
       </button>
       
       {status === 'success' && (
-        <div className="flex items-center gap-1.5 text-xs text-green-400 bg-green-400/10 px-2 py-1 rounded-lg border border-green-400/20">
+        <div className="flex items-center gap-1.5 text-xs text-green-400 bg-green-400/10 px-3 py-1.5 rounded-xl border border-green-400/20 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
           <Check className="h-3 w-3" />
           {message}
         </div>
       )}
       
       {status === 'error' && (
-        <div className="flex items-center gap-1.5 text-xs text-red-400 bg-red-400/10 px-2 py-1 rounded-lg border border-red-400/20">
+        <div className="flex items-center gap-1.5 text-xs text-red-400 bg-red-400/10 px-3 py-1.5 rounded-xl border border-red-400/20 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
           <AlertCircle className="h-3 w-3" />
           {message}
         </div>

@@ -3,6 +3,7 @@ import { InfiniteRequestList } from './InfiniteRequestList'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import { defineAbilityFor } from '@/lib/ability'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,8 +11,11 @@ export default async function RequestsListPage() {
   const session = await getServerSession(authOptions)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const user = session?.user as any
-  const canView = user?.role === 'admin' || user?.permissions?.includes('requests.list.view')
-  const canManage = user?.role === 'admin' || user?.permissions?.includes('requests.list.manage')
+  const ability = defineAbilityFor(user)
+
+  const canView = ability.can('read', 'MediaRequest')
+  const canSync = ability.can('sync', 'MediaRequest')
+  const canDelete = ability.can('delete', 'MediaRequest')
 
   if (!canView) {
       redirect('/dashboard')
@@ -28,7 +32,7 @@ export default async function RequestsListPage() {
         </div>
       </div>
 
-      <InfiniteRequestList initialData={initialData} canManage={canManage} />
+      <InfiniteRequestList initialData={initialData} canSync={canSync} canDelete={canDelete} />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSmbServiceByInstanceId } from '@/lib/auth';
+import { getSmbService } from '@/lib/services/smb';
 import { Readable } from 'stream';
 
 export async function GET(request: NextRequest) {
@@ -25,9 +25,9 @@ export async function GET(request: NextRequest) {
             return new NextResponse('Link expired', { status: 410 });
         }
 
-        const smbService = await getSmbServiceByInstanceId((share as any).instanceId);
+        const smbService = await getSmbService();
         if (!smbService) {
-            return new NextResponse('SMB service not configured for this instance', { status: 500 });
+            return new NextResponse('SMB service not configured', { status: 500 });
         }
 
         const stats = await smbService.getStat(share.filePath);

@@ -120,7 +120,7 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                 <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Configuration des filtres</h4>
                 <button 
                     onClick={resetFilters}
-                    className="text-xs flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-400/10 px-3 py-1.5 rounded-full"
+                    className="text-xs flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-400/10 px-3 py-1.5 rounded-full hover:bg-indigo-400/20"
                 >
                     <RotateCcw className="h-3.5 w-3.5" />
                     Réinitialiser tout
@@ -131,7 +131,7 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                 {/* Column 1: Sort & Dates & Language */}
                 <div className="space-y-8">
                     {/* Sort */}
-                    <div className="bg-gray-800/40 p-5 rounded-2xl border border-gray-700/50 shadow-sm">
+                    <div className="bg-gray-800/40 p-6 rounded-3xl border border-gray-700/50 shadow-sm backdrop-blur-sm">
                         <div className="flex items-center gap-2 mb-4 text-indigo-400">
                             <SortDesc className="h-4 w-4" />
                             <h4 className="font-bold text-white">Trier par</h4>
@@ -149,7 +149,7 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                                     key={opt.value}
                                     onClick={() => handleChange('sort_by', opt.value)}
                                     className={clsx(
-                                        "text-left px-4 py-2.5 rounded-xl text-sm transition-all border",
+                                        "text-left px-4 py-2.5 rounded-2xl text-sm transition-all border",
                                         filters.sort_by === opt.value
                                             ? "bg-indigo-500/10 border-indigo-500/50 text-indigo-400 font-semibold shadow-sm"
                                             : "bg-transparent border-transparent text-gray-400 hover:bg-gray-700/50 hover:text-gray-200"
@@ -162,7 +162,7 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                     </div>
 
                     {/* Dates */}
-                    <div className="bg-gray-800/40 p-5 rounded-2xl border border-gray-700/50 shadow-sm">
+                    <div className="bg-gray-800/40 p-6 rounded-3xl border border-gray-700/50 shadow-sm backdrop-blur-sm">
                         <div className="flex items-center gap-2 mb-4 text-indigo-400">
                             <Calendar className="h-4 w-4" />
                             <h4 className="font-bold text-white">Période</h4>
@@ -174,7 +174,7 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                                     type="date" 
                                     value={filters.start_date}
                                     onChange={(e) => handleChange('start_date', e.target.value)}
-                                    className="w-full bg-gray-900 border-gray-700 rounded-xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all"
+                                    className="w-full bg-gray-900 border-gray-700 rounded-2xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all"
                                 />
                             </div>
                             <div className="space-y-1.5">
@@ -183,14 +183,14 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                                     type="date" 
                                     value={filters.end_date}
                                     onChange={(e) => handleChange('end_date', e.target.value)}
-                                    className="w-full bg-gray-900 border-gray-700 rounded-xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all"
+                                    className="w-full bg-gray-900 border-gray-700 rounded-2xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all"
                                 />
                             </div>
                         </div>
                     </div>
 
                     {/* Language */}
-                    <div className="bg-gray-800/40 p-5 rounded-2xl border border-gray-700/50 shadow-sm">
+                    <div className="bg-gray-800/40 p-6 rounded-3xl border border-gray-700/50 shadow-sm backdrop-blur-sm">
                         <div className="flex items-center gap-2 mb-4 text-indigo-400">
                             <Globe className="h-4 w-4" />
                             <h4 className="font-bold text-white">Langue</h4>
@@ -198,7 +198,7 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                         <select 
                             value={filters.language}
                             onChange={(e) => handleChange('language', e.target.value)}
-                            className="w-full bg-gray-900 border-gray-700 rounded-xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all appearance-none"
+                            className="w-full bg-gray-900 border-gray-700 rounded-2xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all appearance-none"
                         >
                             <option value="all">Toutes les langues</option>
                             {LANGUAGES.map(lang => (
@@ -219,23 +219,21 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                             {filters.genres.length} sélectionné{filters.genres.length > 1 ? 's' : ''}
                         </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 bg-gray-800/20 p-2 rounded-2xl border border-gray-800/50">
+                    <div className="flex flex-wrap gap-2 bg-gray-800/20 p-4 rounded-3xl border border-gray-800/50 max-h-[500px] overflow-y-auto custom-scrollbar">
                         {genres.map(genre => (
                             <button 
                                 key={genre.id} 
                                 onClick={() => toggleGenre(genre.id)}
                                 className={clsx(
-                                    "flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-all border group",
+                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-all border group",
                                     filters.genres.includes(genre.id)
                                         ? "bg-indigo-500 border-indigo-400 text-white font-semibold shadow-md shadow-indigo-500/20"
-                                        : "bg-gray-800/50 border-gray-700/50 text-gray-400 hover:border-gray-600 hover:text-gray-200"
+                                        : "bg-gray-800/50 border-gray-700/50 text-gray-400 hover:border-gray-500 hover:text-gray-200 hover:bg-gray-700/50"
                                 )}
                             >
-                                <span className="truncate">{genre.name}</span>
-                                {filters.genres.includes(genre.id) ? (
-                                    <Check className="h-3.5 w-3.5 shrink-0 ml-1" />
-                                ) : (
-                                    <div className="h-3.5 w-3.5 rounded-full border border-gray-600 group-hover:border-gray-500" />
+                                <span>{genre.name}</span>
+                                {filters.genres.includes(genre.id) && (
+                                    <Check className="h-3 w-3 shrink-0" />
                                 )}
                             </button>
                         ))}
@@ -248,13 +246,13 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
                         <Monitor className="h-4 w-4" />
                         <h4 className="font-bold text-white">Streaming</h4>
                     </div>
-                    <div className="bg-gray-800/40 p-5 rounded-2xl border border-gray-700/50 shadow-sm space-y-5">
+                    <div className="bg-gray-800/40 p-6 rounded-3xl border border-gray-700/50 shadow-sm space-y-5 backdrop-blur-sm">
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Région</label>
                             <select 
                                 value={filters.watch_region}
                                 onChange={(e) => handleChange('watch_region', e.target.value)}
-                                className="w-full bg-gray-900 border-gray-700 rounded-xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                                className="w-full bg-gray-900 border-gray-700 rounded-2xl text-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
                             >
                                 {REGIONS.map(region => (
                                     <option key={region.value} value={region.value}>{region.label}</option>

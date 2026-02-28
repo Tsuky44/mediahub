@@ -4,6 +4,13 @@ import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { getMediaAvailability } from '@/lib/services/media-status'
 import { forget } from '@/lib/cache'
+import { defineAbilityFor } from '@/lib/ability'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -15,16 +22,20 @@ export async function POST(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const ability = defineAbilityFor(user)
+  if (!ability.can('manage', 'Media') && !ability.can('manage_settings', 'Media')) {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 })
+  }
+
   const { id: tmdbIdStr } = await params
   const { searchParams } = new URL(request.url)
   const action = searchParams.get('action')
-  const instanceId = parseInt((user as any).instanceId)
 
   try {
     if (action === 'status') {
       // Force status to "Available" (5) in local DB
       await (prisma as any).mediaRequest.updateMany({
-        where: { tmdbId: tmdbIdStr, instanceId },
+        where: { tmdbId: tmdbIdStr },
         data: { status: 5 }
       })
       
@@ -37,7 +48,7 @@ export async function POST(
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (error: any) {
-    console.error('[API Manage] POST Error:', error)
+    error('[API Manage] POST Error:', error)
     return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 })
   }
 }
@@ -53,6 +64,11 @@ export async function GET(
   const { searchParams } = new URL(request.url)
   const mediaType = searchParams.get('type') as 'movie' | 'tv'
   const refresh = searchParams.get('refresh') === 'true'
+
+  const ability = defineAbilityFor(user)
+  if (!ability.can('manage', 'Media') && !ability.can('manage_settings', 'Media')) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 })
+  }
 
   if (!mediaType) {
     return NextResponse.json({ error: 'Missing type' }, { status: 400 })
@@ -71,9 +87,8 @@ export async function GET(
     }
     
     // Get local requests
-    const instanceId = parseInt((user as any).instanceId)
     const requests = await (prisma as any).mediaRequest.findMany({
-        where: { tmdbId: tmdbIdStr, instanceId },
+        where: { tmdbId: tmdbIdStr },
         orderBy: { requestedAt: 'desc' }
     })
 
@@ -82,18 +97,18 @@ export async function GET(
     if (availability && availability.details && availability.details.id) {
         try {
             if (mediaType === 'movie') {
-                const radarrUrl = await (prisma as any).setting.findFirst({ where: { key: 'radarr_url', instanceId } })
+                const radarrUrl = await (prisma as any).setting.findFirst({ where: { key: 'radarr_url' } })
                 if (radarrUrl?.value) {
                     externalServiceUrl = `${radarrUrl.value.replace(/\/$/, '')}/movie/${availability.details.id}`
                 }
             } else {
-                const sonarrUrl = await (prisma as any).setting.findFirst({ where: { key: 'sonarr_url', instanceId } })
+                const sonarrUrl = await (prisma as any).setting.findFirst({ where: { key: 'sonarr_url' } })
                 if (sonarrUrl?.value) {
                     externalServiceUrl = `${sonarrUrl.value.replace(/\/$/, '')}/series/${availability.details.id}`
                 }
             }
         } catch (e) {
-            console.warn('[API Manage] Failed to build service URL:', e)
+            warn('[API Manage] Failed to build service URL:', e)
         }
     }
     
@@ -107,7 +122,7 @@ export async function GET(
                     seasons = meta.seasons || []
                 }
             } catch (e) {
-                console.warn(`[API Manage] Failed to parse metadata for request ${req.id}:`, e)
+                warn(`[API Manage] Failed to parse metadata for request ${req.id}:`, e)
             }
 
             return {
@@ -124,7 +139,7 @@ export async function GET(
         externalServiceUrl
     })
   } catch (error: any) {
-    console.error('[API Manage] Error:', error)
+    error('[API Manage] Error:', error)
     return NextResponse.json({ error: `Failed to fetch media info: ${error.message || 'Unknown error'}` }, { status: 500 })
   }
 }
@@ -136,17 +151,28 @@ export async function DELETE(
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const radarrService = await getRadarrServiceForUser()
-  const sonarrService = await getSonarrServiceForUser()
-  const tmdbService = await getTmdbServiceForUser()
+  const ability = defineAbilityFor(user)
+  const canManageMedia = ability.can('manage', 'Media') || ability.can('manage_settings', 'Media')
+  const canDeleteRequest = ability.can('delete', 'MediaRequest')
 
-  const instanceId = parseInt((user as any).instanceId)
   const { id: tmdbIdStr } = await params
   const { searchParams } = new URL(request.url)
   const action = searchParams.get('action') // 'media' or 'request'
   const targetId = searchParams.get('targetId') // Can be comma separated IDs
   const mediaType = searchParams.get('type') as 'movie' | 'tv'
   const deleteFiles = searchParams.get('deleteFiles') === 'true'
+
+  if (action === 'media' && !canManageMedia) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 })
+  }
+
+  if (action === 'request' && !canManageMedia && !canDeleteRequest) {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 })
+  }
+
+  const radarrService = await getRadarrServiceForUser()
+  const sonarrService = await getSonarrServiceForUser()
+  const tmdbService = await getTmdbServiceForUser()
 
   try {
     const tmdbId = parseInt(tmdbIdStr)
@@ -182,7 +208,7 @@ export async function DELETE(
         if (result.success) {
              // Delete local request
              await (prisma as any).mediaRequest.deleteMany({
-                 where: { tmdbId: tmdbIdStr, instanceId }
+                 where: { tmdbId: tmdbIdStr }
              })
         }
     } else if (action === 'request') {
@@ -194,7 +220,7 @@ export async function DELETE(
         for (const currentTargetId of targetIds) {
             // Find the request to know what to unmonitor
             const mediaRequest = await (prisma as any).mediaRequest.findFirst({
-                where: { id: currentTargetId, instanceId }
+                where: { id: currentTargetId }
             })
 
             if (!mediaRequest) continue;
@@ -208,7 +234,6 @@ export async function DELETE(
                     const otherRequests = await (prisma as any).mediaRequest.findMany({
                         where: { 
                             tmdbId: tmdbIdStr, 
-                            instanceId,
                             id: { notIn: targetIds }
                         }
                     })
@@ -236,7 +261,7 @@ export async function DELETE(
                                     const hasFiles = series.statistics?.episodeFileCount > 0
                                     
                                     if (!isAnySeasonMonitored && !hasFiles && series.id) {
-                                        console.log(`[API Manage] Auto-deleting series ${series.id} from Sonarr (no monitored seasons and no files)`)
+                                        log(`[API Manage] Auto-deleting series ${series.id} from Sonarr (no monitored seasons and no files)`)
                                         await sonarrService.deleteSeries(series.id, false)
                                     }
                                 }
@@ -248,13 +273,13 @@ export async function DELETE(
                                     const hasFiles = series.statistics?.episodeFileCount > 0
                                     
                                     if (!isAnySeasonMonitored && !hasFiles) {
-                                        console.log(`[API Manage] Auto-deleting empty series ${series.id} from Sonarr`)
+                                        log(`[API Manage] Auto-deleting empty series ${series.id} from Sonarr`)
                                         await sonarrService.deleteSeries(series.id, false)
                                     }
                                 }
                             }
                         } catch (e) {
-                            console.warn('[API Manage] Sonarr cleanup failed (series might already be gone):', e)
+                            warn('[API Manage] Sonarr cleanup failed (series might already be gone):', e)
                         }
                     }
                 }
@@ -264,7 +289,7 @@ export async function DELETE(
                     if (unmonitorResult.success && unmonitorResult.movie) {
                         const movie = unmonitorResult.movie
                         if (!movie.monitored && !movie.hasFile && movie.id) {
-                            console.log(`[API Manage] Auto-deleting movie ${movie.id} from Radarr (not monitored and no files)`)
+                            log(`[API Manage] Auto-deleting movie ${movie.id} from Radarr (not monitored and no files)`)
                             await radarrService.deleteMovie(movie.id, false)
                         }
                     }
@@ -291,7 +316,7 @@ export async function DELETE(
     }
 
   } catch (error: any) {
-    console.error('[API Manage] Delete Error:', error)
+    error('[API Manage] Delete Error:', error)
     return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 })
   }
 }

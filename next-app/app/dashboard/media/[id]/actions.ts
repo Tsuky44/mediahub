@@ -6,6 +6,13 @@ import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { forget } from '@/lib/cache'
 import { getSetting } from '@/lib/settings'
+import { defineAbilityFor } from '@/lib/ability'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export async function getSeasonDetails(tvId: number, seasonNumber: number) {
   try {
@@ -17,15 +24,13 @@ export async function getSeasonDetails(tvId: number, seasonNumber: number) {
 
     // Fetch user info for filtering
     const user = await getCurrentUser()
-    const instanceId = parseInt((user as any)?.instanceId || '0')
     const embyService = await getEmbyServiceForUser()
 
     let embyUserId: string | undefined = undefined
     if (user && user.email) {
         const dbUser = await (prisma as any).user.findFirst({ 
           where: { 
-            email: user.email,
-            instanceId
+            email: user.email
           } 
         })
         if (dbUser && dbUser.embyUserId) {
@@ -58,8 +63,8 @@ export async function getSeasonDetails(tvId: number, seasonNumber: number) {
     }
 
     return tmdbData
-  } catch (error) {
-    console.error('Error fetching season details:', error)
+  } catch (e) {
+    error('Error fetching season details:', e)
     return null
   }
 }
@@ -67,6 +72,11 @@ export async function getSeasonDetails(tvId: number, seasonNumber: number) {
 export async function requestSeason(tvId: number, seasonNumber: number, title: string) {
     try {
         const user = await getCurrentUser()
+        const ability = defineAbilityFor(user)
+        if (!ability.can('create', 'MediaRequest')) {
+            return { success: false, message: 'Forbidden' }
+        }
+
         const sonarrService = await getSonarrServiceForUser()
         const tmdbService = await getTmdbServiceForUser()
         
@@ -93,11 +103,9 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
         const lookup = await sonarrService.getSeriesByTvdbId(tvdbId)
         
         // Get all seasons already requested across ALL active requests to maintain monitoring
-        const instanceId = parseInt((user as any).instanceId)
         const activeRequests = await (prisma as any).mediaRequest.findMany({
             where: { 
-                tmdbId: tvId.toString(),
-                instanceId
+                tmdbId: tvId.toString()
             }
         })
         
@@ -132,9 +140,8 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
         
         // Update local DB to ensure it appears in "Mes demandes"
         try {
-            const instanceId = parseInt((user as any).instanceId)
             const dbUser = await (prisma as any).user.findFirst({ 
-                where: { email: user?.email || '', instanceId } 
+                where: { email: user?.email || '' } 
             })
 
             let externalId: string | undefined
@@ -146,7 +153,6 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
             const existingSeasonRequest = await (prisma as any).mediaRequest.findFirst({
                 where: {
                     tmdbId: tvId.toString(),
-                    instanceId,
                     mediaType: 'tv',
                     metadata: {
                         contains: `"seasons":[${seasonNumber}]`
@@ -155,14 +161,13 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
             })
 
             if (existingSeasonRequest) {
-                console.log(`[Request Season] Season ${seasonNumber} already requested, skipping duplicate entry creation`)
+                log(`[Request Season] Season ${seasonNumber} already requested, skipping duplicate entry creation`)
                 return result
             }
 
             // ALWAYS create a new request instead of merging
             await (prisma as any).mediaRequest.create({
                 data: {
-                    instanceId,
                     externalId: externalId || `pending_${tvId}_${Date.now()}`,
                     tmdbId: tvId.toString(),
                     mediaType: 'tv',
@@ -179,7 +184,7 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
                 }
             })
         } catch (dbError) {
-            console.error('[Request Season] Failed to update local DB:', dbError)
+            error('[Request Season] Failed to update local DB:', dbError)
         }
         
         // Invalidate Next.js cache
@@ -187,8 +192,8 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
         revalidatePath('/dashboard/requests/list')
         
         return result
-    } catch (error: any) {
-        console.error('Error requesting season:', error)
-        return { success: false, message: error.message || 'Erreur serveur' }
+    } catch (e: any) {
+        error('Error requesting season:', e)
+        return { success: false, message: e.message || 'Erreur serveur' }
     }
 }

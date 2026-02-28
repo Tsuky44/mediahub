@@ -38,7 +38,6 @@ pm2 start "npx tsx scripts/emby-tracker.ts" --name emby-tracker
 
 ## Structure des données
 
-Les logs d'activité sont stockés dans la table `EmbyActivityLog` avec les champs suivants :
-- `instanceId` : ID de l'instance Emby.
+Les logs d'activité sont stockés dans la table `WatchEvent` (anciennement `EmbyActivityLog`) avec les champs suivants :
 - `playDuration` : Durée réelle de lecture en secondes.
 - `mediaInfo` : JSON contenant les détails (saison, épisode, série, etc.).

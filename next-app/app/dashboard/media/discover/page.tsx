@@ -1,9 +1,19 @@
-import { getTmdbServiceForUser } from '@/lib/auth'
+import { getTmdbServiceForUser, getCurrentUser } from '@/lib/auth'
 import { InfiniteDiscoverList } from './InfiniteDiscoverList'
 import { AlertCircle, Settings } from 'lucide-react'
 import Link from 'next/link'
+import { defineAbilityFor } from '@/lib/ability'
+import { redirect } from 'next/navigation'
 
 export default async function DiscoverPage({ searchParams }: { searchParams: Promise<{ keyword?: string, name?: string }> }) {
+  const user = await getCurrentUser()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ability = defineAbilityFor(user as any)
+
+  if (ability.cannot('read', 'Media')) {
+    redirect('/dashboard')
+  }
+
   const { keyword, name } = await searchParams
   
   const tmdbService = await getTmdbServiceForUser()

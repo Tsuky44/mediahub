@@ -1,5 +1,11 @@
 import { PrismaClient } from '@prisma/client'
 
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
 // FIX: Global BigInt serialization for JSON
 // This prevents crashes when sending objects containing BigInt (like EmbyActivityLog) in API responses
 if (!(BigInt.prototype as any).toJSON) {
@@ -9,7 +15,7 @@ if (!(BigInt.prototype as any).toJSON) {
 }
 
 const prismaClientSingleton = () => {
-  console.log('[Prisma] Creating new PrismaClient instance')
+  log('[Prisma] Creating new PrismaClient instance')
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   })
@@ -28,7 +34,7 @@ export function getPrisma() {
   // Check if critical models are missing and force recreation if so
   const p = globalThis.prisma as any
   if (p && !p.dockerGroup) {
-    console.log('[Prisma] dockerGroup model missing from singleton, recreating client...')
+    log('[Prisma] dockerGroup model missing from singleton, recreating client...')
     globalThis.prisma = prismaClientSingleton()
   }
   

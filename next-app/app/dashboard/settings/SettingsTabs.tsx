@@ -1,58 +1,84 @@
 'use client'
 
-import React, { useState } from 'react'
-import { Users, Link as LinkIcon, Server, Shield } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Users, Link as LinkIcon, Server, Database, Shield, UsersRound } from 'lucide-react'
+import { useAbility } from '@casl/react'
+import { AbilityContext } from '@/components/AbilityContext'
+import { useSearchParams } from 'next/navigation'
 import UserManagement from './UserManagement'
-import RoleManagement from './RoleManagement'
 import SettingsForm from './SettingsForm'
 import LinkedAccounts from './LinkedAccounts'
+import BackupManagement from './BackupManagement'
+import RoleManagement from './RoleManagement'
+import UserGroupManagement from './UserGroupManagement'
 
 interface SettingsTabsProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     dbUsers: any[]
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    instancesWithSettings: any[]
-    currentInstanceId: number
+    settings: any
     userRole: string
-    userPermissions: string[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    roles: any[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    userGroups: any[]
 }
 
 export default function SettingsTabs({ 
     dbUsers, 
-    instancesWithSettings, 
-    currentInstanceId,
+    settings,
     userRole,
-    userPermissions
+    roles,
+    userGroups
 }: SettingsTabsProps) {
-    const isAdmin = userRole === 'admin'
+    const searchParams = useSearchParams()
+    const tabParam = searchParams.get('tab')
+
+    const ability = useAbility(AbilityContext)
+    // Use userRole from server to avoid hydration flicker, combined with CASL ability
+    const isAdmin = userRole === 'admin' || ability.can('manage', 'all')
+    
     // User requested strict restriction: "tout se qui est dans l'onglet paramètre laisse le pour les administrateur"
     // So we remove granular checks for settings and force admin only.
     const hasSettingsView = isAdmin
     const hasUsersView = isAdmin
-    const hasRolesView = isAdmin
+    const hasGroupsView = isAdmin
     const hasLinkingView = isAdmin
+    const hasBackupView = isAdmin
+    const hasRolesView = isAdmin
 
     const canManageSettings = isAdmin
     const canManageUsers = isAdmin
-    const canManageRoles = isAdmin
 
     // Determine initial active tab based on permissions
     const getInitialTab = () => {
+        if (tabParam && ['services', 'users', 'groups', 'roles', 'linking', 'backup'].includes(tabParam)) {
+            return tabParam as any
+        }
         if (hasSettingsView) return 'services'
         if (hasUsersView) return 'users'
+        if (hasGroupsView) return 'groups'
         if (hasRolesView) return 'roles'
         if (hasLinkingView) return 'linking'
+        if (hasBackupView) return 'backup'
         return 'services' // Fallback
     }
 
-    const [activeTab, setActiveTab] = useState<'services' | 'users' | 'linking' | 'roles'>(getInitialTab())
+    const [activeTab, setActiveTab] = useState<'services' | 'users' | 'groups' | 'linking' | 'backup' | 'roles'>(getInitialTab())
+
+    // Update tab if URL param changes (optional, but good for back/forward navigation)
+    useEffect(() => {
+        if (tabParam && ['services', 'users', 'groups', 'roles', 'linking', 'backup'].includes(tabParam)) {
+            setActiveTab(tabParam as any)
+        }
+    }, [tabParam])
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className="w-full mx-auto space-y-8 px-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <h2 className="text-3xl font-black text-white tracking-tight">Paramètres</h2>
                 
-                <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+                <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 flex-wrap">
                     {hasSettingsView && (
                         <button
                             onClick={() => setActiveTab('services')}
@@ -79,6 +105,19 @@ export default function SettingsTabs({
                             Utilisateurs
                         </button>
                     )}
+                    {hasGroupsView && (
+                        <button
+                            onClick={() => setActiveTab('groups')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === 'groups' 
+                                    ? 'bg-indigo-600 text-white shadow-lg' 
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <UsersRound size={16} />
+                            Groupes
+                        </button>
+                    )}
                     {hasRolesView && (
                         <button
                             onClick={() => setActiveTab('roles')}
@@ -102,45 +141,54 @@ export default function SettingsTabs({
                             }`}
                         >
                             <LinkIcon size={16} />
-                            Comptes Liés
+                            Lier
+                        </button>
+                    )}
+                    {hasBackupView && (
+                        <button
+                            onClick={() => setActiveTab('backup')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === 'backup' 
+                                    ? 'bg-indigo-600 text-white shadow-lg' 
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <Database size={16} />
+                            Sauvegarde
                         </button>
                     )}
                 </div>
             </div>
 
-            <div className="min-h-[60vh]">
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
                 {activeTab === 'services' && hasSettingsView && (
-                    <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 animate-fade-in">
-                        <h3 className="text-xl font-bold text-white mb-6">Configuration des services</h3>
-                        <SettingsForm 
-                            instances={instancesWithSettings}
-                            currentInstanceId={currentInstanceId}
-                            readOnly={!canManageSettings}
-                        />
-                    </div>
+                    <SettingsForm 
+                        settings={settings}
+                        readOnly={!canManageSettings}
+                    />
                 )}
-
                 {activeTab === 'users' && hasUsersView && (
-                    <div className="animate-fade-in">
-                        <UserManagement 
-                            initialUsers={dbUsers} 
-                            readOnly={!canManageUsers}
-                        />
-                    </div>
+                    <UserManagement
+                        initialUsers={dbUsers}
+                        roles={roles}
+                        readOnly={!canManageUsers}
+                    />
                 )}
-
+                {activeTab === 'groups' && hasGroupsView && (
+                    <UserGroupManagement
+                        initialGroups={userGroups}
+                        users={dbUsers}
+                        roles={roles}
+                    />
+                )}
                 {activeTab === 'roles' && hasRolesView && (
-                    <div className="animate-fade-in">
-                        <RoleManagement 
-                            readOnly={!canManageRoles}
-                        />
-                    </div>
+                    <RoleManagement defaultRoleId={settings.default_role_id} />
                 )}
-
                 {activeTab === 'linking' && hasLinkingView && (
-                    <div className="animate-fade-in">
-                        <LinkedAccounts />
-                    </div>
+                    <LinkedAccounts />
+                )}
+                {activeTab === 'backup' && hasBackupView && (
+                    <BackupManagement />
                 )}
             </div>
         </div>

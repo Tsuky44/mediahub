@@ -7,10 +7,9 @@ import { EmbyImage } from '../EmbyImage'
 interface TopItemCardProps {
   item: any
   rank: number
-  instanceId: number
 }
 
-function TopItemCard({ item, rank, instanceId }: TopItemCardProps) {
+function TopItemCard({ item, rank }: TopItemCardProps) {
   const isSeries = item.Type === 'Episode' || !!item.SeriesName || item.ItemType === 'Episode'
   const name = item.Name || item.ItemName || item.NowPlayingItemName || 'Inconnu'
   const itemId = item.imageItemId || item.NowPlayingItemId || item.ItemId || item.Id || item.id
@@ -25,7 +24,6 @@ function TopItemCard({ item, rank, instanceId }: TopItemCardProps) {
             itemId={itemId} 
             alt={name} 
             itemName={name}
-            instanceId={instanceId} 
             tmdbId={item.tmdbId}
             mediaType={item.mediaType}
           />
@@ -36,7 +34,7 @@ function TopItemCard({ item, rank, instanceId }: TopItemCardProps) {
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-white truncate group-hover:text-blue-400 transition-colors">
+        <div className="text-sm font-semibold text-white line-clamp-2 leading-tight group-hover:text-blue-400 transition-colors">
           {name}
         </div>
         <div className="flex items-center gap-2 mt-1">
@@ -55,11 +53,10 @@ function TopItemCard({ item, rank, instanceId }: TopItemCardProps) {
 interface TopItemsTabsProps {
   movies: any[]
   series: any[]
-  instanceId: number
   title?: string
 }
 
-export function TopItemsTabs({ movies, series, instanceId, title = "Contenus les plus vus" }: TopItemsTabsProps) {
+export function TopItemsTabs({ movies, series, title = "Contenus les plus vus" }: TopItemsTabsProps) {
   const [activeTab, setActiveTab] = useState<'movies' | 'series'>(movies.length >= series.length ? 'movies' : 'series')
 
   const currentItems = activeTab === 'movies' ? movies : series
@@ -98,21 +95,14 @@ export function TopItemsTabs({ movies, series, instanceId, title = "Contenus les
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {currentItems.length > 0 ? (
-          currentItems.slice(0, 4).map((item, idx) => (
-            <TopItemCard 
-              key={item.Id || idx} 
-              item={item} 
-              rank={idx + 1} 
-              instanceId={instanceId} 
-            />
-          ))
-        ) : (
-          <div className="col-span-full flex flex-col items-center justify-center py-20 text-gray-500 italic border border-dashed border-gray-800 rounded-xl bg-gray-900/20">
-            <p>Aucune donnée disponible pour cette catégorie</p>
-          </div>
-        )}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {currentItems.map((item, index) => (
+          <TopItemCard 
+            key={item.Id || item.ItemId || index} 
+            item={item} 
+            rank={index + 1} 
+          />
+        ))}
       </div>
     </div>
   )

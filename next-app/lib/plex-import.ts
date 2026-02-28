@@ -1,18 +1,24 @@
 import { PrismaClient } from '@prisma/client';
 import { PlexService } from './services/plex';
+import { getSetting } from './settings';
 
-export async function importPlexHistory(prisma: PrismaClient, instanceId: number, progressCallback?: (data: { imported: number, skipped: number, total: number, status: string }) => void) {
-  console.log('--- Robust Plex History Import ---');
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
-  const instance = await (prisma as any).instance.findUnique({
-    where: { id: instanceId },
-  });
 
-  if (!instance || !instance.plexUrl || !instance.plexToken) {
-    throw new Error('Instance not found or missing Plex credentials.');
+export async function importPlexHistory(prisma: PrismaClient, progressCallback?: (data: { imported: number, skipped: number, total: number, status: string }) => void) {
+  log('--- Robust Plex History Import ---');
+
+  const plexUrl = await getSetting('PLEX_URL');
+  const plexToken = await getSetting('PLEX_TOKEN');
+
+  if (!plexUrl || !plexToken) {
+    throw new Error('Plex credentials not found in settings (PLEX_URL, PLEX_TOKEN).');
   }
 
-  const plexService = new PlexService(instance.plexUrl, instance.plexToken);
+  const plexService = new PlexService(plexUrl, plexToken);
   
   let offset = 0;
   const limit = 2000; // Smaller batches for better progress reporting
@@ -24,11 +30,11 @@ export async function importPlexHistory(prisma: PrismaClient, instanceId: number
   progressCallback?.({ imported: 0, skipped: 0, total: 0, status: 'Starting import...' });
 
   while (true) {
-    console.log(`Fetching history (offset: ${offset}, limit: ${limit})...`);
+    log(`Fetching history (offset: ${offset}, limit: ${limit})...`);
     const history = await plexService.getHistory(limit, offset);
 
     if (!history || history.length === 0) {
-      console.log('No more history to fetch from Plex.');
+      log('No more history to fetch from Plex.');
       break;
     }
 
@@ -44,7 +50,6 @@ export async function importPlexHistory(prisma: PrismaClient, instanceId: number
         // Check if already exists in EmbyActivityLog
         const existingLog = await (prisma as any).embyActivityLog.findFirst({
           where: {
-            instanceId: instance.id,
             embyUserId: userId,
             itemId: itemId,
             startTime: playedAt,
@@ -67,7 +72,6 @@ export async function importPlexHistory(prisma: PrismaClient, instanceId: number
           // Normalize to EmbyActivityLog
           await (prisma as any).embyActivityLog.create({
             data: {
-              instanceId: instance.id,
               source: 'plex',
               embyUserId: userId,
               userName: item.userTitle || item.User?.title || 'Plex User',
@@ -104,7 +108,6 @@ export async function importPlexHistory(prisma: PrismaClient, instanceId: number
               },
               update: {},
               create: {
-                instanceId: instance.id,
                 embyUserId: userId,
                 userName: item.userTitle || item.User?.title || 'Plex User',
                 itemId: itemId,
@@ -131,7 +134,7 @@ export async function importPlexHistory(prisma: PrismaClient, instanceId: number
           consecutiveDuplicates++;
         }
       } catch (err) {
-        console.error(`Failed to import item ${item.ratingKey}:`, err);
+        error(`Failed to import item ${item.ratingKey}:`, err);
       }
     }
 
@@ -143,7 +146,7 @@ export async function importPlexHistory(prisma: PrismaClient, instanceId: number
     });
 
     if (consecutiveDuplicates >= MAX_CONSECUTIVE_DUPLICATES) {
-      console.log(`Reached ${MAX_CONSECUTIVE_DUPLICATES} consecutive duplicates. Assuming we've reached already imported data.`);
+      log(`Reached ${MAX_CONSECUTIVE_DUPLICATES} consecutive duplicates. Assuming we've reached already imported data.`);
       break;
     }
 

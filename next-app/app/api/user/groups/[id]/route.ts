@@ -2,8 +2,13 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { NextResponse } from 'next/server'
-import { PERMISSIONS } from '@/lib/permissions'
 import { logAction } from '@/lib/audit'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const session = await getServerSession(authOptions)
@@ -12,9 +17,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const userPermissions = (session.user as any).permissions || []
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const canManage = (session.user as any).role === 'admin' || userPermissions.includes(PERMISSIONS.SETTINGS_MANAGE)
+    const canManage = (session.user as any).role === 'admin'
 
     if (!canManage) {
         return new NextResponse('Forbidden', { status: 403 })
@@ -22,7 +25,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
     try {
         const { id } = await params
-        console.log(`[UserGroups] Attempting to delete group ${id}`)
+        log(`[UserGroups] Attempting to delete group ${id}`)
 
         // Use a transaction to ensure both operations succeed or fail together
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,7 +36,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
                     userGroupId: id
                 }
             })
-            console.log(`[UserGroups] Deleted ${membersDeleted.count} members for group ${id}`)
+            log(`[UserGroups] Deleted ${membersDeleted.count} members for group ${id}`)
 
             // 2. Delete the group itself
             await tx.userGroup.delete({
@@ -41,7 +44,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
                     id
                 }
             })
-            console.log(`[UserGroups] Deleted group ${id}`)
+            log(`[UserGroups] Deleted group ${id}`)
         })
 
         await logAction(
@@ -56,7 +59,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         return new NextResponse('Deleted', { status: 200 })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
-        console.error('[UserGroups] Error deleting group:', error)
+        error('[UserGroups] Error deleting group:', error)
         return new NextResponse(JSON.stringify({ 
             error: 'Internal Server Error', 
             details: error.message 

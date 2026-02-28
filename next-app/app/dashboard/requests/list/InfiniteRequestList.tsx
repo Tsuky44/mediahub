@@ -7,6 +7,12 @@ import { fetchUserRequests, forceSyncRequests } from './actions'
 import { Loader2, RefreshCw, CheckCircle2, Clock, Hourglass, User as UserIcon, Tv, Film, Info, Trash2, ImageOff, CheckSquare, Square, X } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
+const isDev = process.env.NODE_ENV === 'development';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+
 const MediaPoster = ({ 
     src, 
     alt, 
@@ -58,10 +64,11 @@ interface InfiniteRequestListProps {
         total: number
         totalPages: number
     }
-    canManage?: boolean
+    canSync?: boolean
+    canDelete?: boolean
 }
 
-export function InfiniteRequestList({ initialData, canManage = false }: InfiniteRequestListProps) {
+export function InfiniteRequestList({ initialData, canSync = false, canDelete = false }: InfiniteRequestListProps) {
     const [items, setItems] = useState(initialData.results)
     const [page, setPage] = useState(1)
     const [hasMore, setHasMore] = useState(initialData.totalPages > 1)
@@ -73,7 +80,7 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
     const { ref, inView } = useInView()
 
     const toggleSelection = (requestId: number) => {
-        if (!canManage) return
+        if (!canDelete) return
         setSelectedIds(prev => 
             prev.includes(requestId) 
                 ? prev.filter(id => id !== requestId) 
@@ -82,7 +89,7 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
     }
 
     const toggleSelectAll = () => {
-        if (!canManage) return
+        if (!canDelete) return
         if (selectedIds.length === items.length) {
             setSelectedIds([])
         } else {
@@ -142,8 +149,8 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
             if (errorOccurred) {
                 toast.error('Certaines demandes n\'ont pas pu être supprimées')
             }
-        } catch (error) {
-            console.error('[InfiniteRequestList] Bulk delete error:', error)
+        } catch (e) {
+            error('[InfiniteRequestList] Bulk delete error:', e)
             toast.error('Une erreur est survenue lors de la suppression groupée')
         } finally {
             setIsBulkDeleting(false)
@@ -154,7 +161,7 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
         e.preventDefault()
         e.stopPropagation()
 
-        console.log('[InfiniteRequestList] handleDelete called for:', requestId, title, tmdbId, mediaType)
+        log('[InfiniteRequestList] handleDelete called for:', requestId, title, tmdbId, mediaType)
 
         if (!window.confirm(`Voulez-vous vraiment supprimer la demande pour "${title}" ?`)) return
 
@@ -171,8 +178,8 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
                 const data = await res.json()
                 toast.error(data.error || 'Erreur lors de la suppression')
             }
-        } catch (error) {
-            console.error('[InfiniteRequestList] Delete error:', error)
+        } catch (e) {
+            error('[InfiniteRequestList] Delete error:', e)
             toast.error('Une erreur est survenue')
         } finally {
             setDeletingId(null)
@@ -185,6 +192,25 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
     //        handleSync()
     //    }
     // }, [])
+
+    const handleSync = () => {
+        startSync(async () => {
+            const result = await forceSyncRequests()
+            if (result.success) {
+                if (result.importedCount && result.importedCount > 0) {
+                     toast.success(`${result.importedCount} demandes importées`)
+                } else {
+                     toast.success('Synchronisation terminée')
+                }
+                const newData = await fetchUserRequests(1)
+                setItems(newData.results)
+                setPage(1)
+                setHasMore(newData.totalPages > 1)
+            } else {
+                toast.error('Erreur lors de la synchronisation')
+            }
+        })
+    }
 
     const handleRefresh = () => {
         startSync(async () => {
@@ -240,7 +266,7 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    {canManage && selectedIds.length > 0 && (
+                    {canDelete && selectedIds.length > 0 && (
                         <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-4 duration-300">
                             <button
                                 onClick={handleBulkDelete}
@@ -265,8 +291,8 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
                     )}
                 </div>
 
-                <div className="flex items-center gap-3">
-                    {canManage && (
+                <div className="flex flex-wrap items-center gap-3">
+                    {canDelete && (
                         <button 
                             onClick={toggleSelectAll}
                             className="flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white hover:bg-zinc-800/50 transition-all text-sm font-medium"
@@ -277,6 +303,17 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
                                 <Square className="w-4 h-4" />
                             )}
                             Tout sélectionner
+                        </button>
+                    )}
+
+                    {canSync && (
+                        <button 
+                            onClick={handleSync}
+                            disabled={isSyncing}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition-all text-sm font-bold shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                            Synchroniser
                         </button>
                     )}
 
@@ -348,17 +385,19 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
                             }`}
                         >
                             {/* Selection Checkbox */}
-                            <div className={`absolute top-4 left-4 z-20 transition-all duration-300 ${
-                                isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'
-                            }`}>
-                                <div className={`w-6 h-6 rounded-lg flex items-center justify-center border transition-all ${
-                                    isSelected 
-                                        ? 'bg-indigo-500 border-indigo-500 text-white shadow-lg shadow-indigo-500/40' 
-                                        : 'bg-zinc-900/80 border-zinc-700 text-zinc-500'
+                            {canDelete && (
+                                <div className={`absolute top-4 left-4 z-20 transition-all duration-300 ${
+                                    isSelected ? 'opacity-100 scale-100' : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'
                                 }`}>
-                                    {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center border transition-all ${
+                                        isSelected 
+                                            ? 'bg-indigo-500 border-indigo-500 text-white shadow-lg shadow-indigo-500/40' 
+                                            : 'bg-zinc-900/80 border-zinc-700 text-zinc-500'
+                                    }`}>
+                                        {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             <div className="flex flex-col md:flex-row">
                                 {/* Poster Section */}
@@ -402,7 +441,7 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
                                             </Link>
                                             
                                             <div className="flex items-center gap-3 self-start">
-                                                {canManage && (
+                                                {canDelete && (
                                                 <button
                                                     onClick={(e) => handleDelete(e, request.id, media.title || 'Sans titre', media.tmdbId, mediaType)}
                                                     disabled={deletingId === request.id}
@@ -428,13 +467,13 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
 
                                             {/* Seasons Info for TV */}
                                             {request.type === 'tv' && request.media?.seasons && request.media.seasons.length > 0 && (
-                                                <div className="flex items-center gap-3 bg-indigo-500/5 px-3 py-1.5 rounded-xl border border-indigo-500/20">
-                                                    <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                                                <div className="flex items-center gap-3 bg-indigo-500/5 px-3 py-1.5 rounded-xl border border-indigo-500/20 max-w-full">
+                                                    <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 flex-shrink-0">
                                                         <Tv className="w-4 h-4" />
                                                     </div>
-                                                    <div>
+                                                    <div className="min-w-0">
                                                         <p className="text-[10px] text-indigo-400/60 uppercase font-bold leading-none">Saisons demandées</p>
-                                                        <p className="text-sm font-bold text-indigo-300">
+                                                        <p className="text-sm font-bold text-indigo-300 break-words line-clamp-2">
                                                             {request.media.seasons.join(', ')}
                                                         </p>
                                                     </div>
@@ -442,21 +481,21 @@ export function InfiniteRequestList({ initialData, canManage = false }: Infinite
                                             )}
 
                                             {/* Requester Info */}
-                                            <div className="flex items-center gap-3 bg-zinc-800/30 px-3 py-1.5 rounded-xl border border-zinc-700/30">
-                                                <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                                            <div className="flex items-center gap-3 bg-zinc-800/30 px-3 py-1.5 rounded-xl border border-zinc-700/30 max-w-full">
+                                                <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 flex-shrink-0">
                                                     <UserIcon className="w-4 h-4" />
                                                 </div>
-                                                <div>
+                                                <div className="min-w-0">
                                                     <p className="text-[10px] text-zinc-500 uppercase font-bold leading-none">Demandé par</p>
-                                                    <p className="text-sm font-medium text-zinc-200">{requesterName}</p>
+                                                    <p className="text-sm font-medium text-zinc-200 truncate max-w-[150px]">{requesterName}</p>
                                                 </div>
                                             </div>
 
                                         </div>
                                     </div>
 
-                                    <div className="mt-6 flex items-center justify-between pt-4 border-t border-zinc-800/50 text-[11px] text-zinc-500 font-medium">
-                                        <div className="flex items-center gap-2">
+                                    <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-4 border-t border-zinc-800/50 text-[11px] text-zinc-500 font-medium">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <span>ID: {request.id}</span>
                                             {tmdbId && <span>| TMDB: {tmdbId}</span>}
                                             {mediaType && <span>| Type: {mediaType}</span>}

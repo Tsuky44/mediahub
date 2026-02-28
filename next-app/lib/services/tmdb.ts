@@ -1,6 +1,22 @@
 import axios from 'axios'
 import { getSetting } from '@/lib/settings'
 
+export async function getTmdbService() {
+  // 1. Primary Hardcoded Key
+  let apiKey = "7f43cb4adbc635ccad5c04412b284d34"
+
+  // 2. Allow override via Env or Settings if specifically needed (optional)
+  if (process.env.TMDB_API_KEY) {
+    apiKey = process.env.TMDB_API_KEY
+  } else {
+    const settingKey = await getSetting('tmdb_api_key')
+    if (settingKey) apiKey = settingKey
+  }
+
+  if (!apiKey) return null
+  return new TmdbService(apiKey)
+}
+
 export class TmdbService {
   private apiKey: string
   private static posterPathCache = new Map<string, string>()
@@ -35,6 +51,21 @@ export class TmdbService {
     }
   }
 
+  async findByExternalId(externalId: string | number, source: 'imdb_id' | 'tvdb_id') {
+    const client = await this.getClient()
+    if (!client) return null
+    
+    try {
+        const response = await client.get(`/find/${externalId}`, {
+            params: { external_source: source }
+        })
+        return response.data
+    } catch (e) {
+        console.error(`[TMDB] Failed to find by external ID ${externalId}`, e)
+        return null
+    }
+  }
+
   async searchMulti(query: string, page = 1) {
     const client = await this.getClient()
     if (!client) return { results: [] }
@@ -59,10 +90,15 @@ export class TmdbService {
       const client = await this.getClient()
       if (!client) return { results: [] }
       
-      const response = await client.get(`/trending/${type}/week`, {
-          params: { page }
-      })
-      return response.data
+      try {
+        const response = await client.get(`/trending/${type}/week`, {
+            params: { page }
+        })
+        return response.data
+      } catch (error: any) {
+        console.error(`[TMDB] getTrending failed: ${error.message}`, error.response?.data)
+        return { results: [] }
+      }
   }
 
   async discover(type: 'movie' | 'tv', params: any = {}) {
@@ -220,6 +256,7 @@ export class TmdbService {
     try {
         const response = await client.get(`/${type}/${id}`, {
             params: {
+                language: 'fr-FR',
                 append_to_response: `videos,${type === 'tv' ? 'aggregate_credits' : 'credits'},watch/providers,keywords,external_ids,recommendations,similar`
             }
         })
@@ -235,7 +272,11 @@ export class TmdbService {
       if (!client) return null
 
       try {
-          const response = await client.get(`/tv/${tvId}/season/${seasonNumber}`)
+          const response = await client.get(`/tv/${tvId}/season/${seasonNumber}`, {
+              params: {
+                  language: 'fr-FR'
+              }
+          })
           return response.data
       } catch (e) {
           console.error(`Failed to fetch season ${seasonNumber} for tv ${tvId}`, e)

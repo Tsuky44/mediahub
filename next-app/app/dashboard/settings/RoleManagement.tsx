@@ -1,467 +1,254 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
+import { Plus, Shield, Trash2, Edit2, Users, Eye } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { X, Edit2, Trash2, Plus, Shield, Loader2, Layout, Server, Download, Settings, Film, MessageSquare, BarChart3, Users } from 'lucide-react'
-import clsx from 'clsx'
-
-interface Permission {
-    id: string
-    name: string
-    description: string
-    category: string
-}
-
-const CATEGORY_CONFIG: Record<string, { label: string, icon: any }> = {
-    'Paramètres': { label: 'Paramètres & Admin', icon: Settings },
-    'Docker': { label: 'Infrastructure Docker', icon: Server },
-    'Téléchargements': { label: 'Téléchargements', icon: Download },
-    'Ma médiathèque': { label: 'Ma médiathèque', icon: Film },
-    'Demandes': { label: 'Demandes', icon: MessageSquare },
-    'Statistiques': { label: 'Statistiques', icon: BarChart3 },
-}
-
-const getTabCategory = (rawCategory: string): string => {
-    // La catégorie vient directement de la DB
-    if (CATEGORY_CONFIG[rawCategory]) return rawCategory
-    // Fallback mapping si besoin
-    if (rawCategory === 'Système' || rawCategory === 'Utilisateurs') return 'Paramètres'
-    if (rawCategory === 'Infrastructure') return 'Docker'
-    if (rawCategory === 'Médias') return 'Ma médiathèque'
-    if (rawCategory === 'Demander' || rawCategory === 'Mes demandes') return 'Demandes'
-    return 'Paramètres'
-}
-
-// Plus besoin de getPermissionLabel car la description vient de la DB
+import { useRouter } from 'next/navigation'
+import RoleEditor from './RoleEditor'
+import { startImpersonation } from '@/app/actions/impersonate'
 
 interface Role {
-    id: string
-    name: string
-    displayName: string
-    description: string
-    isSystem: boolean
-    priority: number
-    permissions: Permission[]
-    _count?: {
-        users: number
-    }
+  id: string
+  name: string
+  description: string | null
+  isSystem: boolean
+  _count: {
+    users: number
+  }
 }
 
-export default function RoleManagement({ readOnly = false }: { readOnly?: boolean }) {
-    const [roles, setRoles] = useState<Role[]>([])
-    const [permissions, setPermissions] = useState<Permission[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [isEditing, setIsEditing] = useState(false)
-    const [editingRole, setEditingRole] = useState<Partial<Role>>({})
-    const [saving, setSaving] = useState(false)
-    const [selectedCategory, setSelectedCategory] = useState<string>('ADMIN')
+export default function RoleManagement({ defaultRoleId }: { defaultRoleId?: string }) {
+  const [roles, setRoles] = useState<Role[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isEditing, setIsEditing] = useState(false)
+  const [selectedRole, setSelectedRole] = useState<Role | undefined>(undefined)
+  const [currentDefaultRoleId, setCurrentDefaultRoleId] = useState<string | undefined>(defaultRoleId)
+  const [savingDefault, setSavingDefault] = useState(false)
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [rolesRes, permsRes] = await Promise.all([
-                    fetch('/api/admin/roles'),
-                    fetch('/api/admin/permissions')
-                ])
-                
-                if (rolesRes.ok && permsRes.ok) {
-                    const rolesData = await rolesRes.json()
-                    const permsData = await permsRes.json()
-                    setRoles(rolesData)
-                    setPermissions(permsData)
-                    
-                    // Select first available category based on order
-                    if (permsData.length > 0) {
-                        const tabs = new Set(permsData.map((p: Permission) => getTabCategory(p.category)))
-                        const order = ['Demandes', 'Ma médiathèque', 'Téléchargements', 'Statistiques', 'Docker', 'Paramètres']
-                        const firstTab = order.find(t => tabs.has(t)) || Array.from(tabs)[0] as string
-                        setSelectedCategory(firstTab)
-                    }
-                } else {
-                    toast.error('Erreur lors du chargement des données')
-                }
-            } catch (error) {
-                console.error(error)
-                toast.error('Erreur de connexion')
-            } finally {
-                setIsLoading(false)
-            }
-        }
-        fetchData()
-    }, [])
+  useEffect(() => {
+    fetchRoles()
+    // Fetch default role ID if not provided? 
+    // Wait, the parent component passes it. But if it changes, we should update local state.
+    if (defaultRoleId) setCurrentDefaultRoleId(defaultRoleId)
+  }, [defaultRoleId])
 
-    const handleEdit = (role: Role) => {
-        setEditingRole({ ...role, permissions: role.permissions.map(p => ({ ...p })) })
-        setIsEditing(true)
+  const fetchRoles = async () => {
+    try {
+      const response = await fetch('/api/admin/roles')
+      if (!response.ok) throw new Error('Failed to fetch roles')
+      const data = await response.json()
+      setRoles(data)
+    } catch (error) {
+      toast.error('Erreur lors du chargement des rôles')
+      console.error(error)
+    } finally {
+      setIsLoading(false)
     }
+  }
 
-    const handleCreate = () => {
-        setEditingRole({
-            name: '',
-            displayName: '',
-            description: '',
-            priority: 0,
-            permissions: []
-        })
-        setIsEditing(true)
+  const handleSetDefaultRole = async (roleId: string) => {
+    if (savingDefault) return
+    if (currentDefaultRoleId && roleId === currentDefaultRoleId) return
+
+    if (!confirm('Attention : En changeant le rôle par défaut, tous les utilisateurs ayant actuellement l\'ancien rôle par défaut seront migrés vers le nouveau. Voulez-vous continuer ?')) return
+
+    setSavingDefault(true)
+    try {
+      const response = await fetch('/api/admin/roles/default', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roleId })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to set default role')
+      }
+
+      const result = await response.json()
+      setCurrentDefaultRoleId(roleId)
+      toast.success(result.message || 'Rôle par défaut mis à jour')
+      
+      // Refresh roles to update counts?
+      fetchRoles()
+    } catch (error: any) {
+      toast.error(error.message)
+    } finally {
+      setSavingDefault(false)
     }
+  }
 
-    const handleDelete = async (role: Role) => {
-        if (!confirm(`Êtes-vous sûr de vouloir supprimer le rôle "${role.displayName}" ?`)) return
+  const handleDelete = async (roleId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce rôle ?')) return
 
-        try {
-            const res = await fetch(`/api/admin/roles/${role.id}`, {
-                method: 'DELETE'
-            })
+    try {
+      const response = await fetch(`/api/admin/roles/${roleId}`, {
+        method: 'DELETE'
+      })
+      
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to delete role')
+      }
 
-            if (res.ok) {
-                setRoles(roles.filter(r => r.id !== role.id))
-                toast.success('Rôle supprimé')
-            } else {
-                const data = await res.json()
-                toast.error(data.message || 'Erreur lors de la suppression')
-            }
-        } catch {
-            toast.error('Erreur lors de la suppression')
-        }
+      setRoles(roles.filter(r => r.id !== roleId))
+      toast.success('Rôle supprimé')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erreur lors de la suppression')
     }
+  }
 
-    const handleSave = async () => {
-        setSaving(true)
-        try {
-            const isNew = !editingRole.id
-            const url = isNew ? '/api/admin/roles' : `/api/admin/roles/${editingRole.id}`
-            const method = isNew ? 'POST' : 'PUT'
-
-            const payload = {
-                ...editingRole,
-                permissions: editingRole.permissions?.map(p => p.name) || []
-            }
-
-            const res = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-
-            if (res.ok) {
-                const savedRole = await res.json()
-                if (isNew) {
-                    setRoles([...roles, savedRole])
-                } else {
-                    setRoles(roles.map(r => r.id === savedRole.id ? savedRole : r))
-                }
-                setIsEditing(false)
-                toast.success(isNew ? 'Rôle créé' : 'Rôle mis à jour')
-            } else {
-                const text = await res.text()
-                toast.error(text || 'Erreur lors de la sauvegarde')
-            }
-        } catch (error) {
-            console.error(error)
-            toast.error('Erreur lors de la sauvegarde')
-        } finally {
-            setSaving(false)
-        }
+  const handleImpersonate = async (roleId: string) => {
+    try {
+      await startImpersonation(roleId)
+      toast.success('Mode aperçu activé dans un nouvel onglet')
+      window.open('/', '_blank')
+    } catch (error) {
+      console.error('Failed to start impersonation:', error)
+      toast.error("Erreur lors de l'activation du mode aperçu")
     }
+  }
 
-    const togglePermission = (permName: string) => {
-        const currentPerms = editingRole.permissions || []
-        const hasPerm = currentPerms.some(p => p.name === permName)
-        
-        if (hasPerm) {
-            setEditingRole({
-                ...editingRole,
-                permissions: currentPerms.filter(p => p.name !== permName)
-            })
-        } else {
-            const permObj = permissions.find(p => p.name === permName)
-            if (permObj) {
-                setEditingRole({
-                    ...editingRole,
-                    permissions: [...currentPerms, permObj]
-                })
-            }
-        }
+  const handleSaveRole = async (roleData: any) => {
+    try {
+      const url = roleData.id ? `/api/admin/roles/${roleData.id}` : '/api/admin/roles'
+      const method = roleData.id ? 'PUT' : 'POST'
+      
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(roleData)
+      })
+
+      if (!response.ok) throw new Error('Failed to save role')
+      
+      await fetchRoles()
+      setIsEditing(false)
+      setSelectedRole(undefined)
+      toast.success('Rôle enregistré')
+    } catch (error) {
+      throw error
     }
+  }
 
-    // Group permissions by category
-    const groupedPermissions = permissions.reduce((acc, perm) => {
-        const tab = getTabCategory(perm.category)
-        if (!acc[tab]) acc[tab] = []
-        acc[tab].push(perm)
-        return acc
-    }, {} as Record<string, Permission[]>)
-
-    if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
-
-    if (isEditing) {
-        return (
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl font-bold text-white">
-                        {editingRole.id ? 'Modifier le rôle' : 'Créer un rôle'}
-                    </h3>
-                    <button onClick={() => setIsEditing(false)} className="text-gray-400 hover:text-white">
-                        <X />
-                    </button>
-                </div>
-
-                <div className="space-y-6">
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">Nom technique (unique)</label>
-                            <input
-                                type="text"
-                                value={editingRole.name}
-                                onChange={e => setEditingRole({ ...editingRole, name: e.target.value })}
-                                disabled={!!editingRole.id || readOnly}
-                                className="w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:ring-indigo-500"
-                                placeholder="ex: moderator"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">Nom d&apos;affichage</label>
-                            <input
-                                type="text"
-                                value={editingRole.displayName || ''}
-                                onChange={e => setEditingRole({ ...editingRole, displayName: e.target.value })}
-                                disabled={readOnly}
-                                className="w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:ring-indigo-500"
-                                placeholder="ex: Modérateur"
-                            />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
-                        <input
-                            type="text"
-                            value={editingRole.description || ''}
-                            onChange={e => setEditingRole({ ...editingRole, description: e.target.value })}
-                            disabled={readOnly}
-                            className="w-full rounded-md border-gray-600 bg-gray-700 py-2 px-3 text-white focus:ring-indigo-500"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-4">Permissions</label>
-                        
-                        <div className="flex flex-col lg:flex-row gap-6">
-                            {/* Tabs Navigation */}
-                            <div className="lg:w-64 flex-shrink-0">
-                                <div className="flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 custom-scrollbar">
-                                    {Object.keys(groupedPermissions)
-                                        .sort((a, b) => {
-                                            const order = ['Demander', 'Mes demandes', 'Ma médiathèque', 'Téléchargements', 'Statistiques', 'Docker', 'Paramètres']
-                                            return order.indexOf(a) - order.indexOf(b)
-                                        })
-                                        .map((category) => {
-                                        const config = CATEGORY_CONFIG[category] || { label: category, icon: Shield }
-                                        const Icon = config.icon
-                                        const isActive = selectedCategory === category
-                                        const activeCount = groupedPermissions[category]?.filter(p => 
-                                            editingRole.permissions?.some(rp => rp.name === p.name)
-                                        ).length || 0
-                                        const totalCount = groupedPermissions[category]?.length || 0
-
-                                        return (
-                                            <button
-                                                key={category}
-                                                onClick={() => setSelectedCategory(category)}
-                                                className={clsx(
-                                                    "flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium whitespace-nowrap",
-                                                    isActive 
-                                                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/20" 
-                                                        : "bg-gray-800/50 text-gray-400 hover:bg-gray-800 hover:text-white"
-                                                )}
-                                            >
-                                                <Icon className={clsx("w-5 h-5", isActive ? "text-white" : "text-gray-500")} />
-                                                <span className="flex-1 text-left">{config.label}</span>
-                                                {activeCount > 0 && (
-                                                    <span className={clsx(
-                                                        "text-[10px] px-2 py-0.5 rounded-full font-bold",
-                                                        isActive ? "bg-white/20 text-white" : "bg-indigo-500/20 text-indigo-400"
-                                                    )}>
-                                                        {activeCount}/{totalCount}
-                                                    </span>
-                                                )}
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Tab Content */}
-                            <div className="flex-1 bg-gray-800/30 rounded-2xl p-6 border border-white/5 min-h-[300px]">
-                                {selectedCategory && groupedPermissions[selectedCategory] ? (
-                                    <div className="space-y-6">
-                                        <div className="flex items-center justify-between pb-4 border-b border-white/5">
-                                            <h4 className="text-lg font-bold text-white flex items-center gap-2">
-                                                {CATEGORY_CONFIG[selectedCategory]?.icon && (
-                                                    <div className="p-2 bg-indigo-500/10 rounded-lg">
-                                                        {(() => {
-                                                            const Icon = CATEGORY_CONFIG[selectedCategory].icon
-                                                            return <Icon className="w-5 h-5 text-indigo-400" />
-                                                        })()}
-                                                    </div>
-                                                )}
-                                                {CATEGORY_CONFIG[selectedCategory]?.label || selectedCategory}
-                                            </h4>
-                                            <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">
-                                                {groupedPermissions[selectedCategory].length} options
-                                            </span>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 gap-4">
-                                            {groupedPermissions[selectedCategory].map(perm => {
-                                                const isSelected = editingRole.permissions?.some(p => p.name === perm.name)
-                                                return (
-                                                    <label 
-                                                        key={perm.id} 
-                                                        className={clsx(
-                                                            "flex items-start gap-4 p-4 rounded-xl border transition-all cursor-pointer group",
-                                                            isSelected 
-                                                                ? "bg-indigo-500/10 border-indigo-500/50 shadow-[0_0_15px_-5px_rgba(99,102,241,0.3)]" 
-                                                                : "bg-gray-800/40 border-transparent hover:bg-gray-800/60 hover:border-gray-700"
-                                                        )}
-                                                    >
-                                                        <div className="relative flex items-center justify-center mt-1">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={isSelected}
-                                                                onChange={() => togglePermission(perm.name)}
-                                                                disabled={readOnly}
-                                                                className="peer sr-only"
-                                                            />
-                                                            <div className={clsx(
-                                                                "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
-                                                                isSelected 
-                                                                    ? "bg-indigo-600 border-indigo-600" 
-                                                                    : "border-gray-600 group-hover:border-gray-500"
-                                                            )}>
-                                                                {isSelected && <Plus className="w-3 h-3 text-white rotate-45" style={{ transform: 'rotate(0deg)' }} />} 
-                                                                {/* Using Plus icon rotated as check or just Plus? Actually Check icon is better but let's stick to simple CSS or reuse an icon */}
-                                                                <svg className={clsx("w-3 h-3 text-white transition-transform", isSelected ? "scale-100" : "scale-0")} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                                </svg>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex-1">
-                                                            <div className={clsx("font-bold transition-colors", isSelected ? "text-indigo-400" : "text-gray-300")}>
-                                                                {perm.description || perm.name}
-                                                            </div>
-                                                            <div className="text-sm text-gray-500 mt-1 leading-relaxed">
-                                                                {perm.description}
-                                                            </div>
-                                                        </div>
-                                                    </label>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                                        <Shield className="w-12 h-12 mb-4 opacity-20" />
-                                        <p>Sélectionnez une catégorie</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
-                        <button
-                            onClick={() => setIsEditing(false)}
-                            className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white"
-                        >
-                            Annuler
-                        </button>
-                        <button
-                            onClick={handleSave}
-                            disabled={saving || readOnly}
-                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
-                        >
-                            {saving && <Loader2 className="animate-spin mr-2 h-4 w-4" />}
-                            Sauvegarder
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )
-    }
-
+  if (isEditing) {
     return (
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
-            <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-white">Gestion des Rôles</h3>
-                {!readOnly && (
-                    <button
-                        onClick={handleCreate}
-                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-                    >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Nouveau rôle
-                    </button>
-                )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {roles.map(role => (
-                    <div key={role.id} className="bg-white/5 border border-white/5 rounded-xl p-4 hover:border-indigo-500/50 transition-colors">
-                        <div className="flex items-start justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className={`p-2 rounded-lg ${role.isSystem ? 'bg-indigo-500/20 text-indigo-400' : 'bg-gray-700/50 text-gray-400'}`}>
-                                    <Shield className="h-5 w-5" />
-                                </div>
-                                <div>
-                                    <h4 className="text-white font-medium">{role.displayName}</h4>
-                                    <p className="text-xs text-gray-500">{role.description}</p>
-                                </div>
-                            </div>
-                            {!readOnly && (
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => handleEdit(role)}
-                                        className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                                    >
-                                        <Edit2 className="h-4 w-4" />
-                                    </button>
-                                    {!role.isSystem && (
-                                        <button
-                                            onClick={() => handleDelete(role)}
-                                            className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                        <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center text-xs text-gray-500">
-                            <span>{role.permissions.length} permissions</span>
-                            <span>{role._count?.users || 0} utilisateurs</span>
-                        </div>
-                    </div>
-                ))}
-            </div>
-            
-            <style jsx global>{`
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 6px;
-                    height: 6px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: rgba(255, 255, 255, 0.1);
-                    border-radius: 10px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                    background: rgba(255, 255, 255, 0.2);
-                }
-            `}</style>
-        </div>
+      <RoleEditor
+        role={selectedRole}
+        onSave={handleSaveRole}
+        onCancel={() => {
+          setIsEditing(false)
+          setSelectedRole(undefined)
+        }}
+      />
     )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+        <h3 className="text-xl font-bold text-white mb-4">Rôle par défaut</h3>
+        <p className="text-gray-400 mb-4">
+          Le rôle par défaut est attribué aux nouveaux utilisateurs. 
+          En changeant ce rôle, <strong>tous les utilisateurs ayant l'ancien rôle par défaut seront automatiquement migrés vers le nouveau.</strong>
+        </p>
+        
+        <div className="flex items-center gap-4">
+            <select
+                value={currentDefaultRoleId || ''}
+                onChange={(e) => handleSetDefaultRole(e.target.value)}
+                disabled={savingDefault}
+                className="bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+            >
+                <option value="">Aucun rôle par défaut</option>
+                {roles.map(role => (
+                    <option key={role.id} value={role.id}>
+                        {role.name}
+                    </option>
+                ))}
+            </select>
+            {savingDefault && <div className="text-indigo-400 text-sm animate-pulse">Mise à jour en cours...</div>}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <Shield className="w-5 h-5 text-indigo-400" />
+            Gestion des rôles
+            </h3>
+            <p className="text-gray-400 text-sm mt-1">Créez et gérez les rôles utilisateurs et leurs permissions</p>
+        </div>
+        <button
+          onClick={() => {
+            setSelectedRole(undefined)
+            setIsEditing(true)
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-500/20"
+        >
+          <Plus size={16} />
+          Nouveau rôle
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="w-8 h-8 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {roles.map((role) => (
+            <div key={role.id} className="group bg-white/5 border border-white/10 rounded-2xl p-5 hover:bg-white/10 transition-all relative overflow-hidden">
+              <div className="flex items-start justify-between mb-4 relative z-10">
+                <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400 group-hover:text-indigo-300 transition-colors">
+                  <Shield size={20} />
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleImpersonate(role.id)}
+                    className="p-2 text-gray-400 hover:text-indigo-400 transition-colors rounded-lg hover:bg-indigo-500/10"
+                    title="Voir en tant que ce rôle"
+                  >
+                    <Eye size={16} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedRole(role)
+                      setIsEditing(true)
+                    }}
+                    className="p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/10"
+                    title="Modifier"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  {!role.isSystem && (
+                    <button
+                      onClick={() => handleDelete(role.id)}
+                      className="p-2 text-gray-500 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+                      title="Supprimer"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <h4 className="text-lg font-bold text-white mb-1 relative z-10">{role.name}</h4>
+              <p className="text-sm text-gray-400 mb-4 line-clamp-2 h-10 relative z-10">
+                {role.description || 'Aucune description'}
+              </p>
+
+              <div className="flex items-center gap-2 text-xs font-medium text-gray-500 bg-black/20 py-2 px-3 rounded-lg w-fit relative z-10">
+                <Users size={14} />
+                {role._count?.users || 0} utilisateurs
+              </div>
+              
+              {/* Background Decoration */}
+              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-indigo-500/10 transition-colors" />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }

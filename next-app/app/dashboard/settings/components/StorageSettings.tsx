@@ -8,10 +8,10 @@ import { testUnraidDebugAction } from '../actions'
 interface Props {
     formData: SettingsFormData
     updateField: (field: keyof SettingsFormData, value: string) => void
-    instanceId: number
+    readOnly?: boolean
 }
 
-export const StorageSettings = ({ formData, updateField, instanceId }: Props) => {
+export const StorageSettings = ({ formData, updateField, readOnly }: Props) => {
     // SMB States
     const [smbLoading, setSmbLoading] = useState(false)
     const [smbResult, setSmbResult] = useState<TestResult | null>(null)
@@ -54,7 +54,7 @@ export const StorageSettings = ({ formData, updateField, instanceId }: Props) =>
                 })
             } else {
                 // Fallback to debug action if direct test fails (sometimes due to server-side constraints)
-                const debugRes = await testUnraidDebugAction(instanceId)
+                const debugRes = await testUnraidDebugAction()
                 setUnraidResult({
                     success: debugRes.success,
                     message: debugRes.message || (debugRes.success ? 'Connexion réussie' : 'Échec de la connexion')

@@ -5,17 +5,21 @@ import { authOptions } from '@/lib/auth'
 import { UnraidService } from '@/lib/services/unraid'
 import { DockerService } from '@/lib/services/docker'
 import { prisma } from '@/lib/prisma'
+import { defineAbilityFor } from '@/lib/ability'
+
+const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
 
 export async function GET() {
   const session = await getServerSession(authOptions)
   
-  // Only allow admin or users with docker.view permission
   const user = session?.user as any
-  const permissions = user?.permissions || []
-  const isAdmin = user?.role === 'admin'
-  const canView = isAdmin || permissions.includes('docker.view') || permissions.includes('docker.manage')
+  const ability = defineAbilityFor(user)
 
-  if (!session || !canView) {
+  if (!session || !ability.can('read', 'Docker')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -27,7 +31,7 @@ export async function GET() {
     }
 
     // Fallback to UnraidService
-    console.log('[API] DockerService list failed, falling back to UnraidService');
+    log('[API] DockerService list failed, falling back to UnraidService');
     const unraidUrlSetting = await prisma.setting.findFirst({ where: { key: 'unraid_url' } })
     const unraidApiKeySetting = await prisma.setting.findFirst({ where: { key: 'unraid_api_key' } })
 
@@ -40,7 +44,7 @@ export async function GET() {
 
     return NextResponse.json({ containers })
   } catch (error: any) {
-    console.error('[API] Error fetching docker containers:', error)
+    error('[API] Error fetching docker containers:', error)
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }

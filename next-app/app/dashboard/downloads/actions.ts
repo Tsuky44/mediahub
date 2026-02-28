@@ -5,17 +5,47 @@ import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions, getQBittorrentServiceForUser, getSmbServiceForUser } from '@/lib/auth'
 
-export async function checkAccess(permission: 'downloads.view' | 'downloads.manage') {
+import { defineAbilityFor } from '@/lib/ability'
+
+export async function checkAccess(permission?: string) {
   const session = await getServerSession(authOptions)
   const user = session?.user as any
-  const permissions = user?.permissions || []
-  const isAdmin = user?.role === 'admin'
   
-  // Manage permission implies View permission
-  const hasPermission = isAdmin || permissions.includes(permission) || (permission === 'downloads.view' && permissions.includes('downloads.manage'))
-  
-  if (!session || !hasPermission) {
+  if (!user) {
     throw new Error('Unauthorized')
+  }
+
+  const ability = defineAbilityFor(user)
+
+  if (permission === 'downloads.manage') {
+    if (ability.cannot('manage', 'Downloads')) {
+      throw new Error('Forbidden')
+    }
+  } else if (permission === 'downloads.add') {
+    if (ability.cannot('add_torrent', 'Downloads') && ability.cannot('manage', 'Downloads')) {
+      throw new Error('Forbidden')
+    }
+  } else if (permission === 'downloads.manage_torrents') {
+    if (ability.cannot('manage_torrents', 'Downloads') && ability.cannot('manage', 'Downloads')) {
+      throw new Error('Forbidden')
+    }
+  } else if (permission === 'downloads.delete_files') {
+    if (ability.cannot('delete_files', 'Downloads') && ability.cannot('manage', 'Downloads')) {
+      throw new Error('Forbidden')
+    }
+  } else if (permission === 'downloads.read_explorer') {
+    if (ability.cannot('read_explorer', 'Downloads') && ability.cannot('manage', 'Downloads')) {
+      throw new Error('Forbidden')
+    }
+  } else if (permission === 'downloads.share_files') {
+    if (ability.cannot('share_files', 'Downloads') && ability.cannot('manage', 'Downloads')) {
+      throw new Error('Forbidden')
+    }
+  } else {
+    // Default to read check for 'downloads.view' or undefined
+    if (ability.cannot('read', 'Downloads')) {
+      throw new Error('Forbidden')
+    }
   }
 }
 
@@ -32,9 +62,21 @@ export async function getTorrents(filter: string = 'all'): Promise<Torrent[]> {
   }
 }
 
+export async function getGlobalStats() {
+  try {
+    await checkAccess('downloads.view')
+    const qbtService = await getQBittorrentServiceForUser()
+    if (!qbtService) return null
+    return await qbtService.getServerState()
+  } catch (e) {
+    console.error('Failed to get global stats', e)
+    return null
+  }
+}
+
 export async function addTorrent(formData: FormData) {
   try {
-    await checkAccess('downloads.manage')
+    await checkAccess('downloads.add')
     const qbtService = await getQBittorrentServiceForUser()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
     
@@ -52,15 +94,15 @@ export async function addTorrent(formData: FormData) {
     await qbtService.addTorrent(urls || '', validFiles)
     revalidatePath('/dashboard/downloads')
     return { success: true }
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to add torrent', e)
-    return { success: false, error: 'Failed to add torrent' }
+    return { success: false, error: e.message || 'Failed to add torrent' }
   }
 }
 
 export async function deleteTorrents(hashes: string[], deleteFiles: boolean) {
   try {
-    await checkAccess('downloads.manage')
+    await checkAccess('downloads.manage_torrents')
     const qbtService = await getQBittorrentServiceForUser()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
 
@@ -75,7 +117,7 @@ export async function deleteTorrents(hashes: string[], deleteFiles: boolean) {
 
 export async function pauseTorrents(hashes: string[]) {
   try {
-    await checkAccess('downloads.manage')
+    await checkAccess('downloads.manage_torrents')
     const qbtService = await getQBittorrentServiceForUser()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
 
@@ -90,7 +132,7 @@ export async function pauseTorrents(hashes: string[]) {
 
 export async function resumeTorrents(hashes: string[]) {
   try {
-    await checkAccess('downloads.manage')
+    await checkAccess('downloads.manage_torrents')
     const qbtService = await getQBittorrentServiceForUser()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
 
@@ -129,7 +171,7 @@ export async function getTags() {
 
 export async function deleteSmbPath(path: string) {
   try {
-    await checkAccess('downloads.manage')
+    await checkAccess('downloads.delete_files')
     const smbService = await getSmbServiceForUser()
     if (!smbService) return { success: false, error: 'Service SMB non configuré' }
     
