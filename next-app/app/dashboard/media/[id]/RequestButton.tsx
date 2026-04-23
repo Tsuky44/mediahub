@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Check, Download, Loader2, Plus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { SeasonSelectorModal } from '@/components/SeasonSelectorModal'
+import { SeasonSelectorModal } from './_components/SeasonSelectorModal'
 
 interface RequestButtonProps {
     tmdbId: number
