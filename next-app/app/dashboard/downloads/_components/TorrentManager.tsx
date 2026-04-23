@@ -7,6 +7,8 @@ import clsx from 'clsx'
 import { formatSpeed, formatSize, formatDate, formatDateTime, formatEta, getTrackerName } from '../_utils/torrent-formatters'
 import { useVisibleColumns } from '../_hooks/useVisibleColumns'
 import { useTorrents } from '../_hooks/useTorrents'
+import { useTorrentFilters } from '../_hooks/useTorrentFilters'
+import { useTorrentSelection } from '../_hooks/useTorrentSelection'
 import { AddTorrentModal } from './torrent/AddTorrentModal'
 import { DeleteTorrentModal } from './torrent/DeleteTorrentModal'
 import { FilterModal } from './torrent/FilterModal'
@@ -16,20 +18,13 @@ import { ShareLimitModal } from './torrent/ShareLimitModal'
 
 export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boolean, canManage: boolean, canSearch: boolean }) {
     const [filter, setFilter] = useState('all')
-    const [selectedTags, setSelectedTags] = useState<string[]>([])
-    const [selectedTrackers, setSelectedTrackers] = useState<string[]>([])
-    const [searchQuery, setSearchQuery] = useState('')
     const [isAddModalOpen, setIsAddModalOpen] = useState(false)
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false)
-    const [dateFrom, setDateFrom] = useState('')
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [torrentToDelete, setTorrentToDelete] = useState<{hash: string, name: string} | null>(null)
     const [addMode, setAddMode] = useState<'url' | 'file'>('url')
     const [newTorrentUrl, setNewTorrentUrl] = useState('')
     const [torrentFiles, setTorrentFiles] = useState<FileList | null>(null)
-    const [selectedTorrents, setSelectedTorrents] = useState<string[]>([])
-    const [sortBy, setSortBy] = useState<'name' | 'ratio' | 'upspeed' | 'dlspeed' | 'global_speed' | 'added_on' | 'progress' | 'uploaded' | 'size' | 'amount_left' | 'eta' | 'num_seeds' | 'num_leechs' | 'last_activity' | 'completion_on' | 'availability' | 'downloaded' | 'category'>('added_on')
-    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
     const [isSortOpen, setIsSortOpen] = useState(false)
     // Prowlarr Search State
     const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -57,7 +52,26 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
         setShareLimits,
     } = useTorrents(filter)
 
-    const trackers = Array.from(new Set(torrents.map(t => getTrackerName(t.tracker)))).sort()
+    // Filters / sort (search, tags, trackers, date, sortBy, sortOrder) + derived list
+    const {
+        searchQuery, setSearchQuery,
+        selectedTags, setSelectedTags,
+        selectedTrackers, setSelectedTrackers,
+        dateFrom, setDateFrom,
+        sortBy, setSortBy,
+        sortOrder, setSortOrder,
+        trackers,
+        filteredTorrents,
+        resetFilters,
+    } = useTorrentFilters(torrents)
+
+    // Multi-selection (toggle individuel + select all + clear)
+    const {
+        selectedTorrents,
+        toggleSelect: handleSelect,
+        toggleSelectAll: handleSelectAll,
+        clearSelection,
+    } = useTorrentSelection(filteredTorrents)
 
     const _getProgressBarColor = (state: string) => {
         const s = state.toLowerCase()
@@ -117,29 +131,13 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
         await resumeTorrents([hash])
     }
 
-    const handleSelect = (hash: string) => {
-        if (selectedTorrents.includes(hash)) {
-            setSelectedTorrents(selectedTorrents.filter(h => h !== hash))
-        } else {
-            setSelectedTorrents([...selectedTorrents, hash])
-        }
-    }
-
-    const handleSelectAll = () => {
-        if (selectedTorrents.length === filteredTorrents.length) {
-            setSelectedTorrents([])
-        } else {
-            setSelectedTorrents(filteredTorrents.map(t => t.hash))
-        }
-    }
-
     const handleBatchAction = async (action: 'resume' | 'pause' | 'delete' | 'top' | 'up' | 'down' | 'bottom' | 'reannounce') => {
         if (selectedTorrents.length === 0) return
 
         if (action === 'delete') {
             if (confirm(`Voulez-vous vraiment supprimer ${selectedTorrents.length} torrents ?`)) {
                 await deleteTorrents(selectedTorrents, true)
-                setSelectedTorrents([])
+                clearSelection()
             }
             return
         }
@@ -149,7 +147,7 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
         else if (action === 'reannounce') await reannounceTorrents(selectedTorrents)
         else await setPriority(selectedTorrents, action)
         
-        setSelectedTorrents([])
+        clearSelection()
     }
 
     const handleShareLimit = async () => {
@@ -183,43 +181,8 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
         await setShareLimits(selectedTorrents, ratio, minutes, inactive)
         
         setIsShareLimitModalOpen(false)
-        setSelectedTorrents([])
+        clearSelection()
     }
-
-    const filteredTorrents = Array.isArray(torrents) 
-        ? torrents
-            .filter(t => {
-                const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase())
-                const matchesTags = selectedTags.length === 0 || 
-                    (t.tags && selectedTags.every(tag => t.tags.split(',').map(st => st.trim()).includes(tag)))
-                const matchesTrackers = selectedTrackers.length === 0 || selectedTrackers.includes(getTrackerName(t.tracker))
-                const matchesDate = !dateFrom || (t.added_on * 1000 >= new Date(dateFrom).getTime())
-                return matchesSearch && matchesTags && matchesTrackers && matchesDate
-            })
-            .sort((a, b) => {
-                let comparison = 0
-                if (sortBy === 'name') comparison = a.name.localeCompare(b.name)
-                else if (sortBy === 'ratio') comparison = a.ratio - b.ratio
-                else if (sortBy === 'upspeed') comparison = a.upspeed - b.upspeed
-                else if (sortBy === 'dlspeed') comparison = a.dlspeed - b.dlspeed
-                else if (sortBy === 'global_speed') comparison = (a.upspeed + a.dlspeed) - (b.upspeed + b.dlspeed)
-                else if (sortBy === 'added_on') comparison = a.added_on - b.added_on
-                else if (sortBy === 'progress') comparison = a.progress - b.progress
-                else if (sortBy === 'uploaded') comparison = a.uploaded - b.uploaded
-                else if (sortBy === 'size') comparison = a.size - b.size
-                else if (sortBy === 'amount_left') comparison = (a.size - a.downloaded) - (b.size - b.downloaded)
-                else if (sortBy === 'eta') comparison = a.eta - b.eta
-                else if (sortBy === 'num_seeds') comparison = a.num_seeds - b.num_seeds
-                else if (sortBy === 'num_leechs') comparison = a.num_leechs - b.num_leechs
-                else if (sortBy === 'last_activity') comparison = a.last_activity - b.last_activity
-                else if (sortBy === 'completion_on') comparison = a.completion_on - b.completion_on
-                else if (sortBy === 'availability') comparison = a.availability - b.availability
-                else if (sortBy === 'downloaded') comparison = a.downloaded - b.downloaded
-                else if (sortBy === 'category') comparison = (a.category || '').localeCompare(b.category || '')
-                
-                return sortOrder === 'asc' ? comparison : -comparison
-            })
-        : []
 
     const filters = [
         { id: 'all', label: 'Tous', icon: HardDrive },
@@ -759,12 +722,7 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
                 onSelectedTagsChange={setSelectedTags}
                 dateFrom={dateFrom}
                 onDateFromChange={setDateFrom}
-                onReset={() => {
-                    setSelectedTags([])
-                    setSelectedTrackers([])
-                    setDateFrom('')
-                    setSortBy('added_on')
-                }}
+                onReset={resetFilters}
             />
             {/* Search Modal */}
             <SearchModal
@@ -776,7 +734,7 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
                 selectedCount={selectedTorrents.length}
                 onBatchAction={handleBatchAction}
                 onShareLimitClick={() => setIsShareLimitModalOpen(true)}
-                onClearSelection={() => setSelectedTorrents([])}
+                onClearSelection={clearSelection}
             />
         </div>
             {/* Share Limit Modal */}
