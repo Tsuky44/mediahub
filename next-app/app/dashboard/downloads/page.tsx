@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions, getQBittorrentServiceForUser, getSmbServiceForUser, getProwlarrServiceForUser } from '@/lib/auth'
 import { AlertCircle, Settings } from 'lucide-react'
 import Link from 'next/link'
-import DownloadsClient from './DownloadsClient'
+import DownloadsClient from './_components/DownloadsClient'
 import { defineAbilityFor } from '@/lib/ability'
 
 const isDev = process.env.NODE_ENV === 'development';

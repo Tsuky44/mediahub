@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { FileInfo } from '@/lib/services/smb'
-import { getRemoteFiles, createPublicShare } from './file-actions'
-import { deleteSmbPath } from './actions'
+import { getRemoteFiles, createPublicShare } from '../file-actions'
+import { deleteSmbPath } from '../actions'
 import { 
     FolderIcon, 
     DocumentIcon, 

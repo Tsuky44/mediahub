@@ -6,7 +6,7 @@ import { TorrentManager } from './TorrentManager'
 import { TorrentStats } from './TorrentStats'
 import FileManager from './FileManager'
 import { ProwlarrSearch } from '@/components/ProwlarrSearch'
-import { TrackerStatsCardLazy } from '@/components/TrackerStatsCardLazy'
+import { TrackerStatsCardLazy } from './TrackerStatsCardLazy'
 import { CloudArrowDownIcon, FolderIcon } from '@heroicons/react/24/outline'
 import { Search } from 'lucide-react'
 

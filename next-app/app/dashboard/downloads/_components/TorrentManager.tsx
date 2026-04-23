@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { getTorrents, addTorrent, deleteTorrents, pauseTorrents, resumeTorrents, getTags, setPriority, reannounceTorrents, setShareLimits } from './actions'
+import { getTorrents, addTorrent, deleteTorrents, pauseTorrents, resumeTorrents, getTags, setPriority, reannounceTorrents, setShareLimits } from '../actions'
 import { Torrent } from '@/lib/services/qbittorrent'
 import { Plus, Trash2, Pause, Play, Download, Upload, FileDown, HardDrive, Search, Users, ArrowUpDown, Tag, X, CheckCircle, Activity, Filter, RotateCcw, Calendar, ChevronRight, SlidersHorizontal, ChevronsUp, ChevronUp, ChevronDown, ChevronsDown, Signal, Clock, LayoutTemplate, Info } from 'lucide-react'
 import Link from 'next/link'

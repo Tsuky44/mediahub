@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getGlobalStats, getSessionTrackerStats, getTrackerHistory } from './actions'
+import { getGlobalStats, getSessionTrackerStats, getTrackerHistory } from '../actions'
 import { ArrowDown, ArrowUp, Activity, Clock, Users, Globe, HardDrive, X, ExternalLink, BarChart3, Calendar, History } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
