@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { CheckCircle2, Clock, Hourglass, ListPlus, Tv, Film } from 'lucide-react'
 import Link from 'next/link'
-import { getRecentRequests } from './dashboard-actions'
+import { getRecentRequests } from '../dashboard-actions'
 
 interface MediaRequest {
   id: string

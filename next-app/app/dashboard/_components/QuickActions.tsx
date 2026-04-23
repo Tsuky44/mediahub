@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, Download, Activity, ArrowRight, Globe, Database, HardDrive, ArrowUp, Film, Tv, LayoutGrid, Server } from 'lucide-react'
 import Link from 'next/link'
-import { getTorrents } from './downloads/actions'
-import { checkServicesHealth, liveSearch, getDashboardStats } from './dashboard-actions'
+import { getTorrents } from '../downloads/actions'
+import { checkServicesHealth, liveSearch, getDashboardStats } from '../dashboard-actions'
 import { useAbility } from '@casl/react'
 import { AbilityContext } from '@/components/AbilityContext'
 

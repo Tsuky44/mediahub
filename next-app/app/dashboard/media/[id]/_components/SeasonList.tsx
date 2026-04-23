@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ChevronDown, ChevronUp, PlayCircle, Check, Clock, Download } from 'lucide-react'
 import { getSeasonDetails, requestSeason } from '@/app/dashboard/media/[id]/actions'
-import { SearchActions } from '@/components/SearchActions'
+import { SearchActions } from './SearchActions'
 import clsx from 'clsx'
 
 interface Season {
