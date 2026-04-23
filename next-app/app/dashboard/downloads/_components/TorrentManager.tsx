@@ -70,16 +70,6 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
         clearSelection,
     } = useTorrentSelection(filteredTorrents)
 
-    const _getProgressBarColor = (state: string) => {
-        const s = state.toLowerCase()
-        if (s.includes('error')) return 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)]'
-        if (s.includes('pause')) return 'bg-gray-600'
-        if (s.includes('upload') || s.includes('stalledup')) return 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
-        if (s.includes('download') || s.includes('stalleddl')) return 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.4)]'
-        if (s.includes('meta')) return 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
-        return 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.4)]'
-    }
-
     const handleAddTorrent = async (e: React.FormEvent) => {
         e.preventDefault()
         
@@ -231,9 +221,9 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
                                 />
                             ))}
                         </div>
-                )}
+                    )}
+                </div>
             </div>
-        </div>
 
             {/* Add Torrent Modal */}
             <AddTorrentModal
@@ -289,6 +279,7 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
                 onClearSelection={clearSelection}
             />
         </div>
+
             {/* Share Limit Modal */}
             <ShareLimitModal
                 isOpen={isShareLimitModalOpen}
