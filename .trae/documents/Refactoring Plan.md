@@ -77,26 +77,46 @@ downloads/
 └── page.tsx                         (94)
 ```
 
-## 3. Cibles restantes (Phase 5.2+)
+### Phase 5.2 — `stats/`
+
+| Phase | Commit | Extraction | Taille |
+|-------|--------|------------|--------|
+| 5.2.a | `b6155dc` | `git mv` des 6 composants (`RecentHistory`, `SourceFilter`, `StatsCharts`, `StorageManager`, `SyncPluginButton`, `UserStatsCard`) vers `_components/` | — |
+| 5.2.b | `06b6ec9` | `RecentHistory` → `_hooks/useHistorySocket`, `_utils/history-formatters`, `_components/HistoryItem` | 651 → **60** (−91 %) |
+| 5.2.c | `390c4ab` | `StorageManager` → `_types/storage`, `_utils/storage-formatters`, `_hooks/useStorageItems`, `_components/storage/{StorageTable, StorageDetailsModal, DeleteStorageModal}` | 594 → **145** (−76 %) |
+
+### Phase 5.3 — `docker/`
+
+| Phase | Commit | Extraction | Taille |
+|-------|--------|------------|--------|
+| 5.3.a | `3051565` | `_types/docker.ts` + 4 hooks (`useDockerContainers`, `useDockerGroups`, `useDragAutoScroll`, `useDockerViewPreferences`) | — |
+| 5.3.b-d | `bfe2f0f` | `_components/container/ContainerCard` (grid+list), `_components/{DockerStatsGrid, DockerSearchBar, DockerGroupSection}` | 942 → **275** (−71 %) |
+
+## 3. Cibles restantes
 
 ### Pages / composants volumineux à décomposer
 
-| Cible | État | Objectif |
-|-------|------|----------|
-| `stats/RecentHistory.tsx` | à faire | extraire filtres, tableau, hooks de fetch |
-| `stats/page.tsx` | à faire | dispatcher en `_components/` |
-| `docker/page.tsx` | à faire | extraire `_components/` + hooks container |
-| `components/global/ProwlarrSearch.tsx` | à faire | scinder requête / résultats / détails |
-| `media/[id]/page.tsx` | à faire | page détail média à modulariser |
-| `settings/_components/*` | à faire | plusieurs composants > 400 lignes |
+| Cible | Lignes | État |
+|-------|--------|------|
+| `stats/page.tsx` | 809 | à faire |
+| `settings/_components/UserManagement.tsx` | 630 | à faire |
+| `settings/_components/ExternalNotifications.tsx` | 614 | à faire |
+| `stats/me/page.tsx` | 523 | à faire |
+| `settings/_components/RoleEditor.tsx` | 522 | à faire |
+| `requests/list/InfiniteRequestList.tsx` | 488 | à faire |
+| `settings/_components/TrackerStatsManagement.tsx` | 451 | à faire |
+| `settings/_components/UserGroupManagement.tsx` | 444 | à faire |
+| `docker/_components/ContainerDetails.tsx` | 441 | à faire |
+| `components/global/ProwlarrSearch.tsx` | ? | à faire |
+| `media/[id]/page.tsx` | ? | à faire |
 
 ### Priorisation suggérée
 
-1. **`stats/RecentHistory.tsx`** — similaire à `TorrentManager` (liste + filtres + polling) : ROI élevé avec un pattern déjà connu.
-2. **`global/ProwlarrSearch.tsx`** — utilisé dans plusieurs endroits, sa modularisation profite à tout le dashboard.
-3. **`media/[id]/page.tsx`** — page complexe mais très scoped.
-4. **`docker/page.tsx`** et **`stats/page.tsx`** — pages dashboard à aligner sur les autres.
-5. **`settings/_components/*`** — moins critique, à traiter en fin.
+1. **`stats/page.tsx`** — server component principal, sûrement surtout de la data fetching à isoler.
+2. **`settings/_components/UserManagement.tsx`** et **`ExternalNotifications.tsx`** — gros composants avec CRUD similaires, pattern reproductible.
+3. **`global/ProwlarrSearch.tsx`** — utilisé dans plusieurs pages, ROI de la modularisation partagé.
+4. **`media/[id]/page.tsx`** — page complexe mais très scoped.
+5. **Autres settings** — à traiter après.
 
 ## 4. Règles de validation
 
