@@ -1,33 +1,50 @@
 'use client'
 
 import { useRef } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { MediaCard } from './MediaCard'
 import Link from 'next/link'
+import { ChevronRight } from 'lucide-react'
+import { MediaCard } from './MediaCard'
 
-interface MediaSliderProps {
-    title: string
+type MediaListVariant = 'grid' | 'slider'
+
+interface MediaListProps {
     items: any[]
+    variant?: MediaListVariant
+    // Grid-specific
+    showFavoriteButton?: boolean
+    // Slider-specific
+    title?: string
     mediaType?: 'movie' | 'tv'
     viewAllLink?: string
 }
 
-export function MediaSlider({ title, items, mediaType, viewAllLink }: MediaSliderProps) {
+export function MediaList({
+    items,
+    variant = 'grid',
+    showFavoriteButton = false,
+    title,
+    mediaType,
+    viewAllLink,
+}: MediaListProps) {
     const scrollRef = useRef<HTMLDivElement>(null)
 
     if (!items || items.length === 0) return null
 
-    const scroll = (direction: 'left' | 'right') => {
-        if (scrollRef.current) {
-            const { scrollLeft, clientWidth } = scrollRef.current
-            const scrollTo = direction === 'left' 
-                ? scrollLeft - clientWidth * 0.8 
-                : scrollLeft + clientWidth * 0.8
-            
-            scrollRef.current.scrollTo({ left: scrollTo, behavior: 'smooth' })
-        }
+    if (variant === 'grid') {
+        return (
+            <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                {items.map((item) => (
+                    <MediaCard
+                        key={item.id}
+                        item={item}
+                        showFavoriteButton={showFavoriteButton}
+                    />
+                ))}
+            </div>
+        )
     }
 
+    // Slider variant
     return (
         <section className="space-y-6">
             <div className="flex items-center justify-between">
@@ -47,17 +64,17 @@ export function MediaSlider({ title, items, mediaType, viewAllLink }: MediaSlide
                 </div>
             </div>
 
-            <div 
+            <div
                 ref={scrollRef}
                 className="flex overflow-x-auto gap-4 pb-4 scroll-smooth"
             >
                 {items.map((item) => (
                     <div key={item.id} className="flex-shrink-0 w-[180px] sm:w-[200px]">
-                        <MediaCard 
+                        <MediaCard
                             item={{
                                 ...item,
                                 media_type: item.media_type || mediaType
-                            }} 
+                            }}
                         />
                     </div>
                 ))}

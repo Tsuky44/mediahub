@@ -12,7 +12,7 @@ import { CastList } from './_components/CastList'
 import FullCreditsButton from './FullCreditsButton'
 import { TrailerButton } from './_components/TrailerButton'
 import { ChevronRight, Clock } from 'lucide-react'
-import { MediaSlider } from '@/components/global/MediaSlider'
+import { MediaList } from '@/components/global/MediaList'
 import FavoriteButton from './FavoriteButton'
 import WatchLaterButton from './WatchLaterButton'
 import { ManageMediaButton } from './ManageMediaButton'
@@ -763,7 +763,8 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                 {/* Recommendations & Similar - FULL WIDTH */}
                 <div className="space-y-16">
                     {recommendations.length > 0 && (
-                        <MediaSlider 
+                        <MediaList 
+                            variant="slider"
                             title="Recommandations" 
                             items={recommendations} 
                             mediaType={mediaType}
@@ -772,7 +773,8 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                     )}
 
                     {similar.length > 0 && (
-                        <MediaSlider 
+                        <MediaList 
+                            variant="slider"
                             title="Titres similaires" 
                             items={similar} 
                             mediaType={mediaType}

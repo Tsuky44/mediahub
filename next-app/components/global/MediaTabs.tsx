@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { MediaGrid } from './MediaGrid'
+import { MediaList } from './MediaList'
 import { Clapperboard, Tv, Search } from 'lucide-react'
 
 interface MediaTabsProps {
@@ -87,7 +87,7 @@ export function MediaTabs({ movies, series }: MediaTabsProps) {
             <div className="min-h-[200px]">
                 {activeTab === 'movies' && (
                     filteredMovies.length > 0 ? (
-                        <MediaGrid items={filteredMovies} />
+                        <MediaList variant="grid" items={filteredMovies} showFavoriteButton />
                     ) : (
                         <div className="text-center text-gray-400 py-12">
                             {searchQuery ? 'Aucun film ne correspond à votre recherche.' : 'Aucun film trouvé.'}
@@ -97,7 +97,7 @@ export function MediaTabs({ movies, series }: MediaTabsProps) {
 
                 {activeTab === 'series' && (
                     filteredSeries.length > 0 ? (
-                        <MediaGrid items={filteredSeries} />
+                        <MediaList variant="grid" items={filteredSeries} showFavoriteButton />
                     ) : (
                         <div className="text-center text-gray-400 py-12">
                             {searchQuery ? 'Aucune série ne correspond à votre recherche.' : 'Aucune série trouvée.'}
