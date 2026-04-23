@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getWebhooks, saveWebhooks, testWebhook } from './webhook-actions'
+import { getWebhooks, saveWebhooks, testWebhook } from '../webhook-actions'
 import { Plus, Trash2, Save, BellRing, Webhook, MessageSquare, Send, CheckCircle2, XCircle, Info } from 'lucide-react'
 
 export default function ExternalNotifications() {

@@ -6,7 +6,7 @@ import {
   saveNotificationsV2Config,
   testNotificationsV2,
   getUsersForNotifications,
-} from './notifications-v2-actions'
+} from '../notifications-v2-actions'
 import type { NotificationsV2Config, NotificationEvent } from '@/lib/notifications-v2'
 
 interface UserOption {

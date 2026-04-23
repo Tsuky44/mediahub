@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Check, X, Loader2, UserPlus, Clock, Trash2 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { approveAccountRequestAction, rejectAccountRequestAction, deleteAccountRequestAction } from './actions'
+import { approveAccountRequestAction, rejectAccountRequestAction, deleteAccountRequestAction } from '../actions'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 

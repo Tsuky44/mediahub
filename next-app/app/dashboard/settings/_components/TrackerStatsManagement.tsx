@@ -11,7 +11,7 @@ import {
   getAllTrackerStats,
   importTrackersFromProwlarr,
   debugProwlarrData 
-} from './tracker-stats-actions'
+} from '../tracker-stats-actions'
 
 interface TrackerFormData {
   name: string

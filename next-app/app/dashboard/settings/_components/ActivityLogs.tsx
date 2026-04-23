@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getActivityLogs, getLogUsers, importPastRequestsIntoLogs } from './activity-actions'
+import { getActivityLogs, getLogUsers, importPastRequestsIntoLogs } from '../activity-actions'
 import { Search, Filter, Loader2, ChevronLeft, ChevronRight, User as UserIcon, Activity, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'

@@ -24,7 +24,7 @@ import {
     addUsersToGroup,
     removeUserFromGroup,
     getUserGroups
-} from './group-actions'
+} from '../group-actions'
 
 const isDev = process.env.NODE_ENV === 'development';
 const error = (...args: any[]) => { if (isDev) console.error(...args); };

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { getRealUser } from '@/lib/auth'
-import SettingsTabs from './SettingsTabs'
+import SettingsTabs from './_components/SettingsTabs'
 import { getSetting } from '@/lib/settings'
 import { AbilityProvider } from '@/components/AbilityProvider'
 
