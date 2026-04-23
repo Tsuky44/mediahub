@@ -46,19 +46,32 @@ function initDocker(host?: string) {
 // Initial placeholder init
 initDocker();
 
-// FIX: Global BigInt serialization for JSON
-// This prevents crashes when sending BigInt values over Socket.IO
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(BigInt.prototype as any).toJSON = function () {
-  return Number(this);
-};
+// Patch 14: Pas de prototype patch ici — les valeurs BigInt sont converties en Number
+// explicitement avant tout emit Socket.io ou stockage dans l'interface SessionState.
 
 // Socket.io Server Setup
 const isFullSync = process.argv.includes('--full-sync');
 const server = http.createServer();
+
+// Restreindre l'origine CORS au domaine de l'app si disponible.
+// Priorité: NEXTAUTH_URL > TRACKER_CORS_ORIGIN > '*' (fallback permissif)
+const CORS_ORIGIN: string | string[] = (() => {
+  const nextAuthUrl = process.env.NEXTAUTH_URL
+  const customOrigin = process.env.TRACKER_CORS_ORIGIN
+  if (nextAuthUrl) {
+    try {
+      // On extrait juste l'origine (scheme + host + port) sans le path
+      const { origin } = new URL(nextAuthUrl)
+      return origin
+    } catch { /* URL invalide, on continue */ }
+  }
+  if (customOrigin) return customOrigin
+  return '*'
+})()
+
 const io = new Server(server, {
   cors: {
-    origin: "*", // Adjust this in production
+    origin: CORS_ORIGIN,
     methods: ["GET", "POST"]
   }
 });
@@ -348,7 +361,7 @@ interface SessionState {
   itemId: string;
   itemName: string;
   itemType: string;
-  runTimeTicks: bigint | null;
+  runTimeTicks: number | null;
   startedAt: Date;
   lastUpdate: number; // timestamp in ms
   lastHistoryEmit?: number; // timestamp in ms
@@ -356,8 +369,8 @@ interface SessionState {
   accumulatedDuration: number; // in seconds
   lastAuthAccumulated: number; // The confirmed accumulated duration from the last Emby update
   isPaused: boolean;
-  lastPositionTicks: bigint | null;
-  lastAuthTicks: bigint | null; // The position ticks from the last Emby update
+  lastPositionTicks: number | null;
+  lastAuthTicks: number | null; // The position ticks from the last Emby update
   lastAuthTime: number; // Timestamp of the last Emby update
   markedForCleanup: number | null; // Timestamp when session was first marked as missing
   client: string;
@@ -429,7 +442,9 @@ async function startTracker() {
     try {
         const p = getPrisma() as any;
 
-        if (p.embyLiveSession) {
+        if ((p as any).embyLiveSession) {
+            // DISABLED: embyLiveSession model removed
+            /*
             const existing = await p.embyLiveSession.findMany();
             log(`[Tracker] Loading ${existing.length} existing live sessions from DB...`);
             for (const s of existing) {
@@ -461,6 +476,7 @@ async function startTracker() {
                     mediaInfo: {} // Will be updated on first message
                 });
             }
+            */
         }
     } catch (e) { error(`[Tracker] Error loading existing sessions: ${e}`); }
   };
@@ -477,13 +493,15 @@ async function startTracker() {
     for (const [key, session] of activeSessions.entries()) {
       // Interpolate time only if playing and not paused
       if (!session.isPaused) {
-        // Add 1 second to accumulated duration
-        session.accumulatedDuration += 1;
+        // Calculate projected duration based on last authoritative update + time elapsed
+        // This prevents double counting errors from incremental addition
+        const timeSinceLastAuth = (now - session.lastAuthTime) / 1000;
+        session.accumulatedDuration = session.lastAuthAccumulated + timeSinceLastAuth;
         
-        // Add 1 second (in ticks) to position
+        // Add 1 second (in ticks) to position for display purposes
         // 1 second = 10,000,000 ticks
         if (session.lastPositionTicks !== null) {
-          session.lastPositionTicks = BigInt(session.lastPositionTicks) + BigInt(10000000);
+          session.lastPositionTicks = session.lastPositionTicks + 10000000;
         }
         
         hasChanges = true;
@@ -512,7 +530,10 @@ async function startTracker() {
                 deviceId: session.deviceId,
                 mediaInfo: session.mediaInfo,
                 source: session.source,
-                isLive: true
+                isLive: true,
+                tmdbId: session.mediaInfo?.ProviderIds?.Tmdb ? String(session.mediaInfo.ProviderIds.Tmdb) : null,
+                seasonIndex: session.seasonIndex,
+                episodeIndex: session.episodeIndex
              }
          });
       }
@@ -636,9 +657,26 @@ async function handleSessionsUpdate(sessions: any[]) {
         const existing = activeSessions.get(sessionKey);
         
         const isPaused = s.PlayState?.IsPaused || false;
-        const currentTicks = s.PlayState?.PositionTicks ? BigInt(s.PlayState.PositionTicks) : BigInt(0);
+        const currentTicks = s.PlayState?.PositionTicks ? Number(s.PlayState.PositionTicks) : 0;
         
         if (existing) {
+            // Check if item changed (e.g. playlist, or manual switch)
+            if (existing.itemId !== s.NowPlayingItem.Id) {
+                log(`[Tracker] Item changed for session ${sessionKey}: ${existing.itemName} -> ${s.NowPlayingItem.Name}`);
+                
+                // Save stats for previous item
+                await saveWatchEvent(existing);
+                
+                // Reset session for new item
+                existing.itemId = s.NowPlayingItem.Id;
+                existing.itemName = s.NowPlayingItem.Name;
+                existing.mediaInfo = s.NowPlayingItem; // Update mediaInfo!
+                existing.accumulatedDuration = 0;
+                existing.lastAuthAccumulated = 0;
+                existing.startedAt = new Date();
+                existing.runTimeTicks = s.NowPlayingItem.RunTimeTicks ? Number(s.NowPlayingItem.RunTimeTicks) : null;
+            }
+
             // Update existing session
             existing.lastSeen = now;
             existing.markedForCleanup = null; // Clear cleanup flag
@@ -718,8 +756,11 @@ async function handleSessionsUpdate(sessions: any[]) {
                     // We shouldn't reduce accumulated duration.
                     
                     if (validContentSeconds > 0) {
-                        existing.accumulatedDuration += validContentSeconds;
+                        existing.lastAuthAccumulated += validContentSeconds;
                     }
+                    // Sync accumulatedDuration to the authoritative accumulated value
+                    // This corrects any drift or incorrect speculative additions from the interval loop
+                    existing.accumulatedDuration = existing.lastAuthAccumulated;
                 }
             } else if (wasPaused && !isPaused) {
                  // Just resumed. No duration to add from the paused period.
@@ -759,7 +800,7 @@ async function handleSessionsUpdate(sessions: any[]) {
                 episodeIndex: s.NowPlayingItem.IndexNumber,
                 seasonIndex: s.NowPlayingItem.ParentIndexNumber,
                 itemType: s.NowPlayingItem.Type,
-                runTimeTicks: s.NowPlayingItem.RunTimeTicks ? BigInt(s.NowPlayingItem.RunTimeTicks) : null,
+                runTimeTicks: s.NowPlayingItem.RunTimeTicks ? Number(s.NowPlayingItem.RunTimeTicks) : null,
                 startedAt: new Date(),
                 lastUpdate: now,
                 lastHistoryEmit: now,
@@ -781,6 +822,8 @@ async function handleSessionsUpdate(sessions: any[]) {
             
             // Create in DB
             try {
+                // DISABLED: embyLiveSession model removed
+                /*
                 const p = getPrisma() as any;
                 await p.embyLiveSession.upsert({
                     where: { sessionId: s.Id },
@@ -810,6 +853,7 @@ async function handleSessionsUpdate(sessions: any[]) {
                         lastActivity: new Date()
                     }
                 });
+                */
             } catch (e) { error('[Tracker] Error creating live session in DB:', e); }
         }
     }
@@ -846,45 +890,99 @@ async function cleanupOrphanedSessions() {
     }
 }
 
+async function saveWatchEvent(session: SessionState) {
+    if (session.accumulatedDuration <= 10) return null; // Only save if played > 10s
+
+    try {
+        const p = getPrisma() as any;
+
+        // Find internal user to link
+        const user = await p.user.findUnique({
+            where: { embyUserId: session.userId }
+        });
+
+        // Extract TmdbId from mediaInfo if available
+        let tmdbId = session.mediaInfo?.ProviderIds?.Tmdb || null;
+        if (tmdbId) tmdbId = String(tmdbId);
+
+        const event = await p.watchEvent.create({
+            data: {
+                embyUserId: session.userId,
+                user: user ? { connect: { id: user.id } } : undefined,
+                userName: session.userName,
+                itemId: session.itemId,
+                itemName: session.itemName,
+                itemType: session.itemType,
+                seriesName: session.seriesName,
+                seasonName: session.seasonName,
+                seasonNumber: session.seasonIndex,
+                episodeNumber: session.episodeIndex,
+                durationMinutes: Math.round(session.accumulatedDuration / 60),
+                playedAt: new Date(),
+                client: session.client,
+                device: session.device,
+                sessionId: session.sessionId,
+                plays: 1,
+                tmdbId: tmdbId
+            }
+        });
+        
+        log(`[Tracker] Saved WatchEvent for ${session.userName}: ${session.itemName} (Duration: ${Math.round(session.accumulatedDuration)}s)`);
+        return event;
+
+    } catch (e) {
+        error('[Tracker] Error saving WatchEvent:', e);
+        return null;
+    }
+}
+
 async function finalizeSession(sessionId: string) {
     const session = activeSessions.get(sessionId);
     if (!session) return;
 
     log(`[Tracker] Finalizing session: ${session.userName} - ${session.itemName} (${session.accumulatedDuration}s)`);
 
-    // 1. Save to History (ActivityLog)
-    if (session.accumulatedDuration > 10) { // Only save if played > 10s
-        try {
-            const p = getPrisma() as any;
-            await p.embyActivityLog.create({
-                data: {
-                    source: session.source,
-                    embyUserId: session.userId,
-                    userName: session.userName,
-                    itemId: session.itemId,
-                    itemName: session.itemName,
-                    itemType: session.itemType,
-                    startTime: session.startedAt,
-                    endTime: new Date(),
-                    playDuration: Math.round(session.accumulatedDuration),
-                    totalDuration: session.runTimeTicks ? BigInt(session.runTimeTicks) : null,
-                    client: session.client,
-                    device: session.device,
-                    deviceId: session.deviceId,
-                    mediaInfo: JSON.stringify(session.mediaInfo)
-                }
-            });
-        } catch (e) {
-            error('[Tracker] Error saving history log:', e);
-        }
+    // 1. Save to History (WatchEvent)
+    const savedEvent = await saveWatchEvent(session);
+
+    if (savedEvent) {
+        // Emit final history update to frontend
+        io.emit('history_update', {
+            log: {
+                id: savedEvent.id,
+                sessionId: sessionId,
+                embyUserId: savedEvent.embyUserId,
+                userName: savedEvent.userName,
+                itemId: savedEvent.itemId,
+                itemName: savedEvent.itemName,
+                itemType: savedEvent.itemType,
+                startTime: savedEvent.playedAt,
+                endTime: new Date(),
+                playDuration: savedEvent.durationMinutes * 60, // Convert back to seconds for consistency
+                accumulatedDuration: savedEvent.durationMinutes * 60,
+                totalDuration: session.runTimeTicks ? Number(session.runTimeTicks) : null,
+                client: savedEvent.client,
+                device: savedEvent.device,
+                mediaInfo: session.mediaInfo,
+                source: 'emby',
+                isLive: false,
+                tmdbId: savedEvent.tmdbId,
+                seasonIndex: savedEvent.seasonNumber,
+                episodeIndex: savedEvent.episodeNumber,
+                seriesName: savedEvent.seriesName
+            }
+        });
     }
 
     // 2. Remove from LiveSession DB
     try {
+        // DISABLED: embyLiveSession model removed
+        /*
         const p = getPrisma() as any;
         await p.embyLiveSession.delete({
             where: { sessionId: sessionId }
         });
+        */
     } catch (e) { 
         // Ignore if already deleted
     }

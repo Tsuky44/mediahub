@@ -49,6 +49,16 @@ export default function SettingsForm({
         qbittorrent_password: '',
         prowlarr_url: '',
         prowlarr_api_key: '',
+        // Storage settings (SMB/FTP)
+        storage_protocol: 'smb',
+        storage_host: '',
+        storage_port: '',
+        storage_username: '',
+        storage_password: '',
+        storage_share: '',
+        storage_root_path: '',
+        storage_secure: 'false',
+        // Legacy SMB fields (for backward compatibility)
         smb_host: '',
         smb_username: '',
         smb_password: '',
@@ -69,6 +79,7 @@ export default function SettingsForm({
         auth_emby_enabled: true,
         auth_plex_enabled: false,
         auth_jellyfin_enabled: false,
+        auth_local_enabled: true,
         unraid_url: '',
         unraid_api_key: '',
         docker_host: '',
@@ -79,9 +90,25 @@ export default function SettingsForm({
     // Load settings
     useEffect(() => {
         if (settings) {
+            const safeSettings = { ...settings } as any
+            
+            // Convert boolean strings to booleans
+            const booleanFields = [
+                'auth_emby_enabled', 
+                'auth_plex_enabled', 
+                'auth_jellyfin_enabled', 
+                'auth_local_enabled'
+            ]
+
+            booleanFields.forEach(field => {
+                if (typeof safeSettings[field] === 'string') {
+                    safeSettings[field] = safeSettings[field] === 'true'
+                }
+            })
+
             setFormData(prev => ({
                 ...initialFormData,
-                ...settings
+                ...safeSettings
             } as SettingsFormData))
         }
         setStatusMessage(null)

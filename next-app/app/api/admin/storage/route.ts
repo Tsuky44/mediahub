@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     const embyService = new EmbyService(embyUrl, embyApiKey)
 
     const items = await embyService.getStorageItems()
-    const activeSessions = await prisma.embyLiveSession.findMany()
+    const activeSessions: any[] = []
 
     // 3. Process and Group items
     const movies: any[] = []

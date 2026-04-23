@@ -243,10 +243,27 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
         } catch (e) {}
 
         let status = req.status;
+        
+        // Fix posterPath - same logic as dashboard
+        let posterPath = metadata.posterPath;
+        const tmdbIdNum = parseInt(req.tmdbId);
+        
+        // If posterPath is missing or looks like a local Sonarr/Radarr path, try to get from TMDB
+        if ((!posterPath || posterPath.includes('MediaCover') || posterPath === 'null' || posterPath === 'undefined') && !isNaN(tmdbIdNum) && tmdbService) {
+            try {
+                const details = await tmdbService.getDetails(tmdbIdNum, req.mediaType as 'movie' | 'tv');
+                if (details && details.poster_path) {
+                    posterPath = details.poster_path;
+                    // Update metadata with the correct poster
+                    metadata.posterPath = posterPath;
+                }
+            } catch (e) {
+                // Silent fail - keep existing posterPath if any
+            }
+        }
 
         // Check availability and enrich metadata if poster is missing
         try {
-            const tmdbIdNum = parseInt(req.tmdbId);
             if (isNaN(tmdbIdNum)) {
                 error(`[FetchRequests] Invalid TMDB ID for request ${req.id}: ${req.tmdbId}`);
                 return {
@@ -279,6 +296,36 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
                 status = 4;
             } else if (availability.status === 'processing') {
                 status = 3;
+            }
+
+            // Update DB if status changed
+            if (status !== req.status) {
+                await prisma.mediaRequest.update({
+                    where: { id: req.id },
+                    data: { status }
+                });
+                // Send notification when media first becomes available
+                if (status === 5) {
+                    try {
+                        const { ExternalNotificationService } = await import('@/lib/services/external-notification-service');
+                        await ExternalNotificationService.send('media_available', {
+                            title: req.title,
+                            message: `${req.title} est maintenant disponible sur le serveur.`,
+                            data: {
+                                tmdbId: req.tmdbId,
+                                mediaType: req.mediaType,
+                                title: req.title,
+                                year: metadata.year || '',
+                                overview: metadata.overview || '',
+                                posterPath: metadata.posterPath || '',
+                                genres: metadata.genres || '',
+                                user: req.requesterName || ''
+                            }
+                        }, req.userId ?? undefined);
+                    } catch (notifErr) {
+                        error(`[FetchRequests] Failed to send media_available notification for ${req.title}:`, notifErr);
+                    }
+                }
             }
             
             // If we have local metadata, use it, otherwise try to get from availability/TMDB if possible

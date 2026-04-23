@@ -64,7 +64,6 @@ export function SeasonList({ tvId, tvdbId, title, seasons, seasonStatuses, seaso
 
     return (
         <div className="space-y-4">
-            <h3 className="text-xl font-bold text-white mb-4">Saisons</h3>
             <div className="space-y-2">
                 {sortedSeasons.map((season) => {
                     const status = seasonStatuses.find(s => s.seasonNumber === season.season_number)

@@ -10,14 +10,17 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 export class EmbyService {
   private baseUrl: string
   private apiKey: string
-  private httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-  })
+  private httpsAgent: https.Agent
 
-  constructor(baseUrl: string, apiKey: string) {
+  /**
+   * @param skipSslVerify - Si true (défaut), ignore les erreurs de certificat SSL (comportement historique).
+   *                        Passer false pour activer la vérification stricte SSL.
+   */
+  constructor(baseUrl: string, apiKey: string, skipSslVerify: boolean = true) {
     // Remove trailing slash and /web/... if present
     this.baseUrl = baseUrl.split('/web/')[0].replace(/\/$/, '')
     this.apiKey = apiKey
+    this.httpsAgent = new https.Agent({ rejectUnauthorized: !skipSslVerify })
     
     if (!this.baseUrl || !this.apiKey) {
       throw new Error('Emby configuration missing: URL or API Key is null')
@@ -245,8 +248,91 @@ export class EmbyService {
     }
   }
 
-  getItemImageUrl(itemId: string, type: string = 'Primary') {
-    return `${this.baseUrl}/Items/${itemId}/Images/${type}?api_key=${this.apiKey}`
+  async createUser(name: string, connectUserName?: string) {
+    try {
+        const client = await this.getClient(10000)
+        const payload: any = { Name: name }
+        // Some Emby versions might accept this on creation
+        if (connectUserName) {
+            payload.ConnectUserName = connectUserName
+        }
+        const response = await client.post('/Users/New', payload)
+        return response.data
+    } catch (e: any) {
+        const errorDetails = e.response?.data ? JSON.stringify(e.response.data) : e.message
+        error(`[EmbyService] Failed to create user ${name}:`, errorDetails)
+        throw new Error(`${e.message} ${errorDetails !== e.message ? `(${errorDetails})` : ''}`)
+    }
+  }
+
+  async getUser(id: string) {
+    try {
+        const client = await this.getClient(5000)
+        const response = await client.get(`/Users/${id}`)
+        return response.data
+    } catch (e: any) {
+        error(`[EmbyService] Failed to get user ${id}:`, e.message)
+        throw new Error(`Erreur lors de la récupération de l'utilisateur Emby: ${e.message}`)
+    }
+  }
+
+  async linkUserToConnect(id: string, connectUsername: string) {
+    try {
+        const client = await this.getClient(5000)
+        // Try sending with empty body object instead of null
+        // And ensure param is passed correctly
+        await client.post(`/Users/${id}/Connect/Link`, {}, {
+            params: {
+                ConnectUsername: connectUsername
+            }
+        })
+    } catch (e: any) {
+        // Fallback: Try sending in body if query param failed (some versions differ)
+        try {
+            const client = await this.getClient(5000)
+            await client.post(`/Users/${id}/Connect/Link`, {
+                ConnectUsername: connectUsername
+            })
+        } catch (retryError) {
+            error(`[EmbyService] Failed to link user ${id} to Connect:`, e.message)
+            throw new Error(`Erreur lors de la liaison Emby Connect: ${e.message}`)
+        }
+    }
+  }
+
+  async updateUserPolicy(id: string, policy: any) {
+    try {
+        const client = await this.getClient(5000)
+        await client.post(`/Users/${id}/Policy`, policy)
+    } catch (e: any) {
+        error(`[EmbyService] Failed to update policy for user ${id}:`, e.message)
+        throw new Error(`Erreur lors de la mise à jour des droits Emby: ${e.message}`)
+    }
+  }
+
+  async updateUserConfiguration(id: string, config: any) {
+    try {
+        const client = await this.getClient(5000)
+        await client.post(`/Users/${id}/Configuration`, config)
+    } catch (e: any) {
+        error(`[EmbyService] Failed to update configuration for user ${id}:`, e.message)
+        throw new Error(`Erreur lors de la mise à jour de la configuration Emby: ${e.message}`)
+    }
+  }
+  
+  async updateUser(user: any) {
+    try {
+        const client = await this.getClient(5000)
+        // Emby updates user details via POST /Users/{Id}
+        await client.post(`/Users/${user.Id}`, user)
+    } catch (e: any) {
+        error(`[EmbyService] Failed to update user ${user.Id}:`, e.message)
+        throw new Error(`Erreur lors de la mise à jour de l'utilisateur Emby: ${e.message}`)
+    }
+  }
+
+  getItemImageUrl(itemId: string, width: number = 400) {
+    return `${this.baseUrl}/Items/${itemId}/Images/Primary?width=${width}&quality=90`
   }
 
   async getPublicItems(limit: number = 20) {

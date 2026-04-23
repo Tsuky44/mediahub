@@ -166,7 +166,7 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
             }
 
             // ALWAYS create a new request instead of merging
-            await (prisma as any).mediaRequest.create({
+            const newRequest = await (prisma as any).mediaRequest.create({
                 data: {
                     externalId: externalId || `pending_${tvId}_${Date.now()}`,
                     tmdbId: tvId.toString(),
@@ -183,6 +183,9 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
                     requestedAt: new Date()
                 }
             })
+
+            const { logAction } = await import('@/lib/audit')
+            await logAction(dbUser?.id || null, 'MEDIA_REQUEST', 'MediaRequest', newRequest.id, { tmdbId: tvId, mediaType: 'tv', title, season: seasonNumber })
         } catch (dbError) {
             error('[Request Season] Failed to update local DB:', dbError)
         }

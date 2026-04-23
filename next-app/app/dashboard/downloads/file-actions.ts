@@ -1,24 +1,28 @@
 'use server'
 
 import { FileInfo, SmbService } from '@/lib/services/smb';
+import { FtpService } from '@/lib/services/ftp';
 import { UnraidService } from '@/lib/services/unraid';
 import { prisma } from '@/lib/prisma';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import https from 'https';
-import { getSmbServiceForUser, authOptions } from '@/lib/auth';
+import { getStorageServiceForUser, authOptions } from '@/lib/auth';
 import { getServerSession } from 'next-auth';
 import { checkAccess } from './actions';
 
 export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[]> {
     try {
         await checkAccess('downloads.read_explorer');
-        const smbService = await getSmbServiceForUser();
-        if (!smbService) return [];
-        const files = await smbService.listFiles(remotePath);
+        console.log('[getRemoteFiles] Fetching files for path:', remotePath);
+        const storageService = await getStorageServiceForUser();
+        console.log('[getRemoteFiles] Got storage service:', storageService?.constructor?.name || 'null');
+        if (!storageService) return [];
+        const files = await storageService.listFiles(remotePath);
+        console.log('[getRemoteFiles] Returned', files?.length || 0, 'files');
         return Array.isArray(files) ? files : [];
     } catch (e) {
-        console.error('Failed to list SMB files', e);
+        console.error('[getRemoteFiles] Failed to list storage files:', e);
         return [];
     }
 }
@@ -32,9 +36,9 @@ export async function createPublicShare(filePath: string, expiresDays?: number) 
         }
         
         const token = uuidv4();
-        const expiresAt = expiresDays ? new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000) : null;
+        const expiresAt = expiresDays ? new Date(Date.now() + Number(expiresDays) * 24 * 60 * 60 * 1000) : null;
         
-        const share = await (prisma as any).fileShare.create({
+        const share = await prisma.fileShare.create({
             data: {
                 filePath,
                 token,
@@ -56,6 +60,50 @@ export async function testSmbConnection(config: { host: string, user: string, pa
         return { success: true };
     } catch (e) {
         console.error('SMB connection test failed:', e);
+        return { success: false, error: e instanceof Error ? e.message : 'Échec de la connexion' };
+    }
+}
+
+export async function testStorageConnection(config: { 
+    protocol: 'smb' | 'ftp',
+    host: string, 
+    port?: string,
+    user: string, 
+    pass: string, 
+    share: string,
+    rootPath?: string,
+    secure?: boolean
+}) {
+    try {
+        if (config.protocol === 'ftp') {
+            const ftpService = new FtpService(
+                config.host, 
+                config.port ? parseInt(config.port) : 21, 
+                config.user, 
+                config.pass,
+                config.rootPath || '',
+                config.secure || false
+            );
+            await ftpService.testConnection({
+                host: config.host,
+                port: config.port ? parseInt(config.port) : 21,
+                user: config.user,
+                pass: config.pass,
+                rootPath: config.rootPath,
+                secure: config.secure || false
+            });
+        } else {
+            const smbService = new SmbService(config.host, config.share, config.user, config.pass, config.rootPath);
+            await smbService.testConnection({
+                host: config.host,
+                share: config.share,
+                user: config.user,
+                pass: config.pass
+            });
+        }
+        return { success: true };
+    } catch (e) {
+        console.error('Storage connection test failed:', e);
         return { success: false, error: e instanceof Error ? e.message : 'Échec de la connexion' };
     }
 }

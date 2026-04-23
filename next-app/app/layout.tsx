@@ -22,6 +22,11 @@ export const metadata: Metadata = {
 };
 
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+import { startStatsScheduler } from "@/lib/services/stats-scheduler";
+
+if (process.env.NEXT_RUNTIME === 'nodejs') {
+  startStatsScheduler();
+}
 
 export default function RootLayout({
   children,

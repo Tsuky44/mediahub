@@ -8,6 +8,46 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model AccountRequest {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  firstName String   @map("first_name")
+  inviter   String?
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("account_requests")
+}
+
+model DailyTrackerStat {
+  id              Int      @id @default(autoincrement())
+  date            DateTime @map("date") // Date only (00:00:00)
+  tracker         String
+  totalUploaded   BigInt   @default(0) @map("total_uploaded")
+  totalDownloaded BigInt   @default(0) @map("total_downloaded")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([date, tracker])
+  @@index([date])
+  @@map("daily_tracker_stats")
+}
+
+model TrackerStatsLog {
+  id              Int      @id @default(autoincrement())
+  tracker         String
+  totalUploaded   BigInt   @map("total_uploaded")
+  totalDownloaded BigInt   @map("total_downloaded")
+  uploadedDiff    BigInt   @default(0) @map("uploaded_diff")
+  downloadedDiff  BigInt   @default(0) @map("downloaded_diff")
+  timestamp       DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([tracker, timestamp])
+  @@map("tracker_stats_logs")
+}
+
 model UserCalendarEvent {
   id        String   @id @default(uuid())
   userId    Int      @map("user_id")
@@ -38,6 +78,12 @@ model User {
   roleId           String?        @map("role_id")
   roleRef          Role?          @relation(fields: [roleId], references: [id])
   hasSeenWelcome   Boolean        @default(false) @map("has_seen_welcome")
+  lastSeenSystemMessageVersion String? @map("last_seen_system_message_version")
+  telegramChatId   String?        @map("telegram_chat_id")
+  discordUserId    String?        @map("discord_user_id")
+  discordWebhook   String?        @map("discord_webhook")
+  customWebhook    String?        @map("custom_webhook")
+  whatsappNumber   String?        @map("whatsapp_number")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
   accounts         Account[]
@@ -173,8 +219,10 @@ model WatchEvent {
   ipAddress       String?  @map("ip_address")
   playMethod      String?  @map("play_method")
   seasonName      String?  @map("season_name")
+  seasonNumber    Int?     @map("season_number")
   sessionId       String?  @map("session_id")
   userName        String?  @map("user_name")
+  tmdbId          String?  @map("tmdb_id")
   user            User?    @relation(fields: [userId], references: [id])
 
   @@unique([embyUserId, itemId, playedAt])
@@ -185,36 +233,60 @@ model Setting {
   id         Int      @id @default(autoincrement())
   key        String   @unique
   value      String?
-  type       String   @default("string")
-  group      String   @default("general")
+  category   String   @default("general")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@map("settings")
 }
 
-model MediaAvailabilityIndex {
-  id               Int      @id @default(autoincrement())
-  tmdbId           String   @map("tmdb_id")
-  mediaType        String   @map("media_type")
-  isAvailable      Boolean  @default(false) @map("is_available")
-  availabilityData String?  @map("availability_data")
-  jellyseerrStatus Int?     @map("jellyseerr_status")
-  lastCheckedAt    DateTime @default(now()) @map("last_checked_at")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  action    String
+  entity    String?
+  entityId  String?  @map("entity_id")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  details   String?
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User?    @relation(fields: [userId], references: [id])
 
-  @@unique([tmdbId, mediaType])
-  @@index([mediaType, isAvailable])
-  @@map("media_availability_index")
+  @@map("audit_logs")
+}
+
+model Role {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  permissions Permission[]
+  isSystem    Boolean      @default(false) @map("is_system")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  users       User[]
+  groups      UserGroup[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id         String  @id @default(uuid())
+  action     String
+  subject    String
+  conditions String? // JSON string
+  roleId     String  @map("role_id")
+  role       Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@map("permissions")
 }
 
 model MediaSubscription {
   id        Int      @id @default(autoincrement())
   userId    Int      @map("user_id")
   tmdbId    String   @map("tmdb_id")
-  mediaType String   @map("media_type")
+  mediaType String   @map("media_type") // 'movie' or 'tv'
   title     String
+  posterPath String? @map("poster_path")
   createdAt DateTime @default(now()) @map("created_at")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -222,140 +294,37 @@ model MediaSubscription {
   @@map("media_subscriptions")
 }
 
-model FileShare {
-  id         String    @id @default(uuid())
-  filePath   String    @map("file_path")
-  token      String    @unique
-  expiresAt  DateTime? @map("expires_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-
-  @@map("file_shares")
-}
-
-model EmbyLiveSession {
-  id                  String   @id @default(uuid())
-  sessionId           String   @unique @map("session_id")
-  source              String   @default("emby")
-  userId              String   @map("user_id")
-  userName            String   @map("user_name")
-  client              String?
-  device              String?
-  deviceId            String?  @map("device_id")
-  applicationVersion  String?  @map("app_version")
-  itemId              String?  @map("item_id")
-  itemName            String?  @map("item_name")
-  itemType            String?  @map("item_type")
-  runTimeTicks        BigInt?  @map("runtime_ticks")
-  isPaused            Boolean  @default(false) @map("is_paused")
-  lastActivity        DateTime @default(now()) @map("last_activity")
-  startedAt           DateTime @default(now()) @map("started_at")
-  playbackPosition    BigInt?  @map("playback_position")
-  accumulatedDuration Int      @default(0) @map("accumulated_duration")
-
-  @@map("emby_live_sessions")
-}
-
 model UserGroup {
-  id        String            @id @default(uuid())
-  name      String
-  roleId    String?           @map("role_id")
-  role      Role?             @relation(fields: [roleId], references: [id])
-  createdAt DateTime          @default(now()) @map("created_at")
-  updatedAt DateTime          @updatedAt @map("updated_at")
-  members   UserGroupMember[]
+  id          String            @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  members     UserGroupMember[]
+  roleId      String?           @map("role_id")
+  role        Role?             @relation(fields: [roleId], references: [id])
 
   @@map("user_groups")
 }
 
 model UserGroupMember {
-  id          Int       @id @default(autoincrement())
-  userGroupId String    @map("user_group_id")
+  id          String    @id @default(uuid())
   userId      Int       @map("user_id")
-  username    String?
-  userGroup   UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  userGroupId String    @map("user_group_id")
+  joinedAt    DateTime  @default(now()) @map("joined_at")
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group       UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
 
-  @@unique([userGroupId, userId])
+  @@unique([userId, userGroupId])
   @@map("user_group_members")
 }
 
-model EmbyActivityLog {
-  id            String    @id @default(uuid())
-  source        String    @default("emby")
-  embyUserId    String    @map("emby_user_id")
-  userName      String    @map("user_name")
-  itemId        String    @map("item_id")
-  itemName      String    @map("item_name")
-  itemType      String    @map("item_type")
-  startTime     DateTime  @default(now()) @map("start_time")
-  endTime       DateTime? @map("end_time")
-  playDuration  Int       @default(0) @map("play_duration")
-  totalDuration BigInt?   @map("total_duration")
-  client        String?
-  device        String?
-  deviceId      String?   @map("device_id")
-  ipAddress     String?   @map("ip_address")
-  mediaInfo     String?   @map("media_info")
+model FileShare {
+  id        String    @id @default(uuid())
+  filePath  String    @map("file_path")
+  token     String    @unique
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
-  @@index([embyUserId])
-  @@index([startTime])
-  @@map("emby_activity_logs")
-}
-
-model DockerGroup {
-  id        String              @id @default(cuid())
-  name      String
-  createdAt DateTime            @default(now()) @map("created_at")
-  updatedAt DateTime            @updatedAt @map("updated_at")
-  members   DockerGroupMember[]
-
-  @@map("docker_groups")
-}
-
-model DockerGroupMember {
-  id            String      @id @default(cuid())
-  groupId       String      @map("group_id")
-  containerName String      @map("container_name")
-  group         DockerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  @@unique([groupId, containerName])
-  @@map("docker_group_members")
-}
-
-model AuditLog {
-  id        String   @id @default(cuid())
-  userId    Int      @map("user_id")
-  action    String
-  entity    String
-  entityId  String   @map("entity_id")
-  details   String?
-  createdAt DateTime @default(now()) @map("created_at")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("audit_logs")
-}
-
-model Role {
-  id          String       @id @default(cuid())
-  name        String       @unique
-  description String?
-  isSystem    Boolean      @default(false) @map("is_system")
-  permissions Permission[]
-  users       User[]
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
-  userGroups  UserGroup[]
-
-  @@map("roles")
-}
-
-model Permission {
-  id          String   @id @default(cuid())
-  action      String   
-  subject     String   
-  conditions  String?  
-  roleId      String   @map("role_id")
-  role        Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-
-  @@map("permissions")
+  @@map("file_shares")
 }

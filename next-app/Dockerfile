@@ -26,6 +26,7 @@ COPY . .
 RUN npx prisma generate
 
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS="--max_old_space_size=3072"
 
 RUN \
   if [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build; \
@@ -38,8 +39,22 @@ RUN \
 FROM base AS runner
 WORKDIR /app
 
-# Install OpenSSL for Prisma and global prisma CLI
-RUN apk add --no-cache openssl
+# Install OpenSSL for Prisma, global prisma CLI, and Playwright dependencies
+RUN apk add --no-cache \
+  openssl \
+  chromium \
+  nss \
+  freetype \
+  harfbuzz \
+  ca-certificates \
+  ttf-freefont \
+  font-noto \
+  font-noto-cjk \
+  font-noto-emoji
+
+# Tell Playwright to use system Chromium
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
 RUN npm install -g prisma@5.22.0
 
 ENV NODE_ENV=production

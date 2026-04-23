@@ -43,12 +43,17 @@ export default async function DashboardPage() {
       id: userId
     }
   })
-  // @ts-ignore
-  const showWelcome = dbUser ? !dbUser.hasSeenWelcome : true
-
   const settings = await prisma.setting.findMany({
-    where: { key: { in: ['emby_url', 'qbittorrent_url', 'smb_host', 'docker_host', 'unraid_url'] } }
+    where: { key: { in: ['emby_url', 'qbittorrent_url', 'smb_host', 'docker_host', 'unraid_url', 'welcome_message_enabled'] } },
+    select: { key: true, value: true }
   })
+
+  const welcomeEnabled = settings.find(s => s.key === 'welcome_message_enabled') 
+    ? settings.find(s => s.key === 'welcome_message_enabled')?.value === 'true' 
+    : true
+
+  // @ts-ignore
+  const showWelcome = welcomeEnabled && (dbUser ? !dbUser.hasSeenWelcome : true)
 
   const embyUrl = settings.find(s => s.key === 'emby_url')?.value
   const hasQbit = !!settings.find(s => s.key === 'qbittorrent_url' && s.value)

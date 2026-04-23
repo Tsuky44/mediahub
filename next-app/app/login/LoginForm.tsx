@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Loader2, Server, Tv, MonitorPlay, ExternalLink } from 'lucide-react'
+import { Loader2, Server, Tv, MonitorPlay, ExternalLink, UserCircle, Info, X, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import clsx from 'clsx'
 import { getPlexAuthPin, checkPlexAuthPin } from './actions'
@@ -19,25 +20,28 @@ interface LoginFormProps {
     emby: boolean
     plex: boolean
     jellyfin: boolean
+    local: boolean
   }
 }
 
-export default function LoginForm({ enabledProviders = { emby: true, plex: false, jellyfin: false } }: LoginFormProps) {
+export default function LoginForm({ enabledProviders = { emby: true, plex: false, jellyfin: false, local: true } }: LoginFormProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
   
   // Determine default provider
   const getDefaultProvider = () => {
+    if (enabledProviders.local) return 'local'
     if (enabledProviders.emby) return 'emby'
     if (enabledProviders.plex) return 'plex'
     if (enabledProviders.jellyfin) return 'jellyfin'
-    return 'emby' // Fallback
+    return 'local' // Fallback
   }
 
   const [provider, setProvider] = useState(getDefaultProvider())
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loginError, setLoginError] = useState('')
 
@@ -46,7 +50,10 @@ export default function LoginForm({ enabledProviders = { emby: true, plex: false
   const [plexAuthStatus, setPlexAuthStatus] = useState<string>('')
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Count enabled providers
+  // System Message State
+  const [systemMessage, setSystemMessage] = useState<{ content: string, version: string, speed: number } | null>(null)
+
+  // Count enabled providers (local is always enabled for now if passed)
   const enabledCount = Object.values(enabledProviders).filter(Boolean).length
 
   // Cleanup polling on unmount
@@ -55,6 +62,45 @@ export default function LoginForm({ enabledProviders = { emby: true, plex: false
       if (pollingRef.current) clearInterval(pollingRef.current)
     }
   }, [])
+
+  const [mounted, setMounted] = useState(false)
+  
+  // Banner scrolling logic
+  const bannerRef = useRef<HTMLDivElement>(null)
+  const textMeasureRef = useRef<HTMLSpanElement>(null)
+  const [isScrollable, setIsScrollable] = useState(false)
+
+  // Fetch System Message (Banner)
+  useEffect(() => {
+    setMounted(true)
+    fetch('/api/user/system-message?type=banner')
+      .then(res => res.json())
+      .then(data => {
+        if (data.show) {
+          setSystemMessage({ content: data.content, version: '', speed: data.speed || 20 }) // Version not needed for banner
+        }
+      })
+      .catch(err => error('Failed to fetch system message', err))
+  }, [])
+
+  // Check scroll on message change or resize
+  useEffect(() => {
+    const checkScroll = () => {
+      if (bannerRef.current && textMeasureRef.current) {
+        setIsScrollable(textMeasureRef.current.offsetWidth > bannerRef.current.clientWidth)
+      }
+    }
+    
+    // Check immediately and after a short delay for layout stability
+    checkScroll()
+    const timer = setTimeout(checkScroll, 100)
+    
+    window.addEventListener('resize', checkScroll)
+    return () => {
+      window.removeEventListener('resize', checkScroll)
+      clearTimeout(timer)
+    }
+  }, [systemMessage, mounted])
 
   const performSignIn = async () => {
     log(`[LoginForm] Starting performSignIn with username: ${username} via ${provider}`)
@@ -68,6 +114,23 @@ export default function LoginForm({ enabledProviders = { emby: true, plex: false
       log(`[LoginForm] signIn result:`, result)
 
       if (result?.error) {
+        // Check if there is a pending request for this email/username
+        if (provider !== 'plex' && username) {
+           try {
+             // Assuming username is email for Emby Connect or we can try to guess
+             const res = await fetch(`/api/public/request-access?email=${encodeURIComponent(username)}`)
+             const data = await res.json()
+             
+             if (data.exists && data.status === 'PENDING') {
+                setLoginError('Votre demande de compte est en attente de validation.')
+                setLoading(false)
+                return
+             }
+           } catch (e) {
+             // Ignore error, fallback to standard message
+           }
+        }
+
         const errorMessage = result.error === 'CredentialsSignin' 
           ? 'Nom d\'utilisateur ou mot de passe incorrect'
           : result.error.replace('Error: ', '')
@@ -175,19 +238,14 @@ export default function LoginForm({ enabledProviders = { emby: true, plex: false
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setLoginError('')
-    await performSignIn();
-  }
-
-  const getProviderIcon = (p: string) => {
+  // Helper to get provider color
+  const getProviderColor = (p: string, active: boolean) => {
     switch (p) {
-      case 'emby': return <Server className="w-5 h-5" />
-      case 'plex': return <Tv className="w-5 h-5" />
-      case 'jellyfin': return <MonitorPlay className="w-5 h-5" />
-      default: return <Server className="w-5 h-5" />
+      case 'emby': return active ? 'bg-green-600 text-white' : 'bg-green-600/10 text-green-500 hover:bg-green-600/20'
+      case 'plex': return active ? 'bg-amber-500 text-white' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
+      case 'jellyfin': return active ? 'bg-purple-600 text-white' : 'bg-purple-600/10 text-purple-500 hover:bg-purple-600/20'
+      case 'local': return active ? 'bg-indigo-600 text-white' : 'bg-indigo-600/10 text-indigo-500 hover:bg-indigo-600/20'
+      default: return 'bg-gray-600'
     }
   }
 
@@ -196,28 +254,85 @@ export default function LoginForm({ enabledProviders = { emby: true, plex: false
       case 'emby': return 'Emby'
       case 'plex': return 'Plex'
       case 'jellyfin': return 'Jellyfin'
-      default: return 'Serveur'
+      case 'local': return 'Local'
+      default: return ''
     }
   }
 
-  const getProviderColor = (p: string, isSelected: boolean) => {
-    if (!isSelected) return 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+  const getProviderIcon = (p: string) => {
     switch (p) {
-      case 'emby': return 'bg-green-600 text-white shadow-lg shadow-green-500/20'
-      case 'plex': return 'bg-amber-600 text-white shadow-lg shadow-amber-500/20'
-      case 'jellyfin': return 'bg-purple-600 text-white shadow-lg shadow-purple-500/20'
-      default: return 'bg-indigo-600 text-white'
+      case 'emby': return <Server className="h-5 w-5 text-gray-400" />
+      case 'plex': return <Tv className="h-5 w-5 text-gray-400" />
+      case 'jellyfin': return <MonitorPlay className="h-5 w-5 text-gray-400" />
+      case 'local': return <UserCircle className="h-5 w-5 text-gray-400" />
+      default: return null
     }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setLoginError('')
+    await performSignIn()
   }
 
   return (
     <>
-      <div className="space-y-6">
+      <style>{`
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-100%); }
+        }
+        .animate-marquee {
+          display: inline-block;
+          animation: marquee ${systemMessage?.speed || 20}s linear infinite;
+        }
+        /* Pause on hover for readability */
+        .animate-marquee:hover {
+          animation-play-state: paused;
+        }
+      `}</style>
+      {systemMessage && mounted && createPortal(
+        <div className="fixed top-0 left-0 w-full z-[100] bg-indigo-600/95 backdrop-blur-md border-b border-white/10 shadow-2xl animate-in slide-in-from-top duration-500">
+          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3 overflow-hidden h-12">
+             <Info className="text-white shrink-0 z-10" size={20} />
+             
+             <div ref={bannerRef} className="flex-1 overflow-hidden relative h-full flex items-center">
+               <div 
+                 className={clsx(
+                   "whitespace-nowrap transition-all duration-300",
+                   isScrollable ? "animate-marquee pl-[100%]" : "w-full text-center flex justify-center"
+                 )}
+               >
+                 <span ref={textMeasureRef} className="text-sm font-medium text-white leading-tight inline-block">
+                   {systemMessage.content}
+                 </span>
+               </div>
+             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      <div className="w-full max-w-md mx-auto space-y-8">
+      {/* ... Header ... */}
+      
+
+        {/* Provider Selection */}
         {enabledCount > 1 && (
-          <div className={clsx("grid gap-2 mb-6", {
-            'grid-cols-2': enabledCount === 2,
-            'grid-cols-3': enabledCount >= 3
-          })}>
+          <div className="grid grid-cols-4 gap-2 mb-8 p-1 bg-black/20 rounded-2xl">
+             {enabledProviders.local && (
+              <button
+                type="button"
+                onClick={() => setProvider('local')}
+                className={clsx(
+                  "flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-300",
+                  getProviderColor('local', provider === 'local')
+                )}
+              >
+                <UserCircle className="w-6 h-6 mb-1" />
+                <span className="text-xs font-medium">Local</span>
+              </button>
+            )}
             {enabledProviders.emby && (
               <button
                 type="button"
@@ -298,18 +413,26 @@ export default function LoginForm({ enabledProviders = { emby: true, plex: false
                 <label htmlFor="password" className="block text-sm font-medium text-gray-300 ml-1 mb-2">
                   Mot de passe
                 </label>
-                <div className="mt-1">
+                <div className="mt-1 relative">
                   <input
                     id="password"
                     name="password"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
                     autoComplete="current-password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 transition-all duration-300"
+                    className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 pr-10 transition-all duration-300"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
                 </div>
               </div>
             </>
@@ -366,6 +489,12 @@ export default function LoginForm({ enabledProviders = { emby: true, plex: false
                   `Se connecter avec ${getProviderLabel(provider)}`
                 )}
               </button>
+              
+              <div className="mt-4 text-center">
+                <a href="/request-access" className="text-sm text-gray-400 hover:text-white transition-colors">
+                  Pas encore de compte ? <span className="text-indigo-400">Faire une demande</span>
+                </a>
+              </div>
             </div>
           )}
         </form>

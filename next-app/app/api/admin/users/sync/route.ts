@@ -41,7 +41,8 @@ export async function POST(req: Request) {
         key: {
           in: ['auth_emby_enabled', 'auth_plex_enabled', 'auth_jellyfin_enabled', 'default_role_id']
         }
-      }
+      },
+      select: { key: true, value: true }
     })
     
     const isEmbyEnabled = settings.find(s => s.key === 'auth_emby_enabled')?.value === 'true'
@@ -135,6 +136,22 @@ export async function POST(req: Request) {
                       image: u.PrimaryImageTag ? embyService.getItemImageUrl(u.Id) : null
                     }
                   })
+                  
+                  await logAction(parseInt((session.user as any).id), 'CREATE', 'User', newUser.id.toString(), {
+                    provider: 'Emby',
+                    userName: newUser.name,
+                    userEmail: newUser.email
+                  })
+                  
+                  try {
+                      const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
+                      await ExternalNotificationService.send('user_created', {
+                          title: 'Nouvel utilisateur',
+                          message: `L'utilisateur ${newUser.name} a été créé (via synchronisation Emby).`,
+                          data: { name: newUser.name, email: newUser.email, provider: 'Emby' }
+                      })
+                  } catch (e) {}
+
                   activeUserIds.add(newUser.id.toString())
                   createdCount++
                 }
@@ -202,6 +219,22 @@ export async function POST(req: Request) {
                                     image: u.Thumb ? (u.Thumb.startsWith('http') ? u.Thumb : plexService.getItemImageUrl(u.Thumb)) : null
                                 }
                             })
+                            
+                                await logAction(parseInt((session.user as any).id), 'CREATE', 'User', newUser.id.toString(), {
+                                  provider: 'Plex',
+                                  userName: newUser.name,
+                                  userEmail: newUser.email
+                                })
+                                
+                                try {
+                                    const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
+                                    await ExternalNotificationService.send('user_created', {
+                                        title: 'Nouvel utilisateur',
+                                        message: `L'utilisateur ${newUser.name} a été créé (via synchronisation Plex).`,
+                                        data: { name: newUser.name, email: newUser.email, provider: 'Plex' }
+                                    })
+                                } catch (e) {}
+
                                 activeUserIds.add(newUser.id.toString())
                                 createdCount++
                             }
@@ -263,6 +296,22 @@ export async function POST(req: Request) {
                                     image: u.PrimaryImageTag ? jellyfinService.getItemImageUrl(u.Id) : null
                                 }
                             })
+                            
+                            await logAction(parseInt((session.user as any).id), 'CREATE', 'User', newUser.id.toString(), {
+                              provider: 'Jellyfin',
+                              userName: newUser.name,
+                              userEmail: newUser.email
+                            })
+                            
+                            try {
+                                const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
+                                await ExternalNotificationService.send('user_created', {
+                                    title: 'Nouvel utilisateur',
+                                    message: `L'utilisateur ${newUser.name} a été créé (via synchronisation Jellyfin).`,
+                                    data: { name: newUser.name, email: newUser.email, provider: 'Jellyfin' }
+                                })
+                            } catch (e) {}
+
                             activeUserIds.add(newUser.id.toString())
                             createdCount++
                         }
@@ -373,6 +422,20 @@ export async function POST(req: Request) {
             // User has no valid links remaining.
             // Delete them.
             log(`[SyncUsers] Deleting user ${user.name} (ID: ${user.id}) - No longer found on any enabled service`)
+            
+            // Log individual deletion before deleting the user so we have the user context
+            await logAction(
+              parseInt(currentUserId),
+              'DELETE',
+              'User',
+              user.id.toString(),
+              { 
+                reason: 'Removed during sync (no longer on any active provider)',
+                userName: user.name,
+                userEmail: user.email
+              }
+            )
+            
             await prisma.user.delete({ where: { id: user.id } })
             deletedCount++
         }

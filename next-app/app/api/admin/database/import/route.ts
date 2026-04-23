@@ -46,7 +46,6 @@ export async function POST(request: Request) {
       // Delete most dependent first
       // Explicit deletion is safer than relying on cascade
       await tx.userGroupMember.deleteMany()
-      await tx.dockerGroupMember.deleteMany()
       await tx.mediaRequest.deleteMany()
       await tx.notification.deleteMany()
       await tx.watchLater.deleteMany()
@@ -54,28 +53,20 @@ export async function POST(request: Request) {
       await tx.session.deleteMany()
       await tx.auditLog.deleteMany()
       await tx.watchEvent.deleteMany()
-      await tx.embyLiveSession.deleteMany()
       
       // Delete Users
       await tx.user.deleteMany()
 
       // Delete Groups
       await tx.userGroup.deleteMany()
-      await tx.dockerGroup.deleteMany()
 
       // Delete Independent tables
       await tx.setting.deleteMany()
-      await tx.mediaAvailabilityIndex.deleteMany()
-      await tx.fileShare.deleteMany()
-      await tx.embyActivityLog.deleteMany()
 
       // 2. RESTORE DATA (Order: Parent -> Child)
       
       // Independent
       if (dbData.settings?.length) await tx.setting.createMany({ data: dbData.settings })
-      if (dbData.mediaAvailability?.length) await tx.mediaAvailabilityIndex.createMany({ data: dbData.mediaAvailability })
-      if (dbData.fileShares?.length) await tx.fileShare.createMany({ data: dbData.fileShares })
-      if (dbData.embyActivityLogs?.length) await tx.embyActivityLog.createMany({ data: dbData.embyActivityLogs })
 
       // Users
       if (dbData.users?.length) {
@@ -99,11 +90,9 @@ export async function POST(request: Request) {
       }
 
       // Groups
-      if (dbData.dockerGroups?.length) await tx.dockerGroup.createMany({ data: dbData.dockerGroups })
       if (dbData.userGroups?.length) await tx.userGroup.createMany({ data: dbData.userGroups })
 
       // Dependent Data
-      if (dbData.dockerGroupMembers?.length) await tx.dockerGroupMember.createMany({ data: dbData.dockerGroupMembers })
       if (dbData.userGroupMembers?.length) await tx.userGroupMember.createMany({ data: dbData.userGroupMembers })
       
       if (dbData.accounts?.length) await tx.account.createMany({ data: dbData.accounts })

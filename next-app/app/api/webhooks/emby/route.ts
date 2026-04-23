@@ -157,6 +157,35 @@ export async function POST(req: NextRequest) {
       // Infos média supplémentaires
       const seasonName = item.SeasonName
       const episodeNumber = item.IndexNumber
+      const seasonNumber = item.ParentIndexNumber
+      const seriesName = item.SeriesName
+      let tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.tmdb || item.ProviderIds?.TMDB || null;
+
+      // Si pas de tmdbId, on essaie de le récupérer via imdb ou tvdb
+      if (!tmdbId && item.ProviderIds) {
+        const imdbId = item.ProviderIds.Imdb || item.ProviderIds.imdb || item.ProviderIds.IMDB;
+        const tvdbId = item.ProviderIds.Tvdb || item.ProviderIds.tvdb || item.ProviderIds.TVDB;
+        
+        if (imdbId || tvdbId) {
+          try {
+            const tmdbService = await getTmdbService();
+            if (tmdbService) {
+              if (imdbId) {
+                const findResult = await tmdbService.findByExternalId(imdbId, 'imdb_id');
+                const foundItem = findResult?.movie_results?.[0] || findResult?.tv_results?.[0] || findResult?.tv_episode_results?.[0];
+                if (foundItem) tmdbId = foundItem.id;
+              }
+              if (!tmdbId && tvdbId) {
+                const findResult = await tmdbService.findByExternalId(tvdbId, 'tvdb_id');
+                const foundItem = findResult?.movie_results?.[0] || findResult?.tv_results?.[0] || findResult?.tv_episode_results?.[0];
+                if (foundItem) tmdbId = foundItem.id;
+              }
+            }
+          } catch (error) {
+            warn(`[EmbyWebhook] Failed to fetch tmdbId via external ID for ${item.Name}`, error);
+          }
+        }
+      }
 
       // On n'enregistre que si la durée est significative (ex: > 1 min)
       if (durationMinutes >= 1) {
@@ -187,6 +216,9 @@ export async function POST(req: NextRequest) {
             data: {
               durationMinutes: Math.max(existingEvent.durationMinutes, durationMinutes),
               playedAt: new Date(), // On actualise la date pour le "vu récemment"
+              tmdbId: tmdbId ? String(tmdbId) : existingEvent.tmdbId,
+              seasonNumber: seasonNumber || existingEvent.seasonNumber,
+              seriesName: seriesName || existingEvent.seriesName,
             }
           })
           log(`[Webhook] Updated playback for ${item.Name} (${durationMinutes} min)`)
@@ -195,22 +227,25 @@ export async function POST(req: NextRequest) {
           await (prisma as any).watchEvent.create({
             data: {
               embyUserId,
-              userId: user?.id,
+              user: user ? { connect: { id: user.id } } : undefined,
               itemId,
               itemName: item.Name,
               itemType: item.Type,
               durationMinutes,
               playedAt,
-              providerId: item.ProviderIds?.Tmdb || item.ProviderIds?.Imdb || null,
+              // providerId field removed as it does not exist in WatchEvent model
               // Infos supplémentaires
               sessionId: sessionId || null,
               client: client || null,
               device: device || null,
-              deviceId: deviceDeviceId || null,
+              // deviceId field removed as it does not exist in WatchEvent model
               ipAddress: ipAddress || null,
               playMethod: playMethod || null,
               seasonName: seasonName || null,
-              episodeNumber: episodeNumber || null
+              episodeNumber: episodeNumber || null,
+              seasonNumber: seasonNumber || null,
+              seriesName: seriesName || null,
+              tmdbId: tmdbId ? String(tmdbId) : null,
             }
           })
           log(`[Webhook] Created new playback event for ${item.Name} (${durationMinutes} min)`)

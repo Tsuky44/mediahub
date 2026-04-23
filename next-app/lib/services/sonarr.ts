@@ -307,8 +307,19 @@ export class SonarrService {
       const series = await this.getSeriesByTvdbId(options.tvdbid)
 
       if (series && series.id) {
+        let seasonsChanged = false;
+        const updatedSeasons = series.seasons.map((season: any) => {
+          if (options.seasons && options.seasons.includes(season.seasonNumber)) {
+            if (!season.monitored) {
+              seasonsChanged = true;
+              return { ...season, monitored: true };
+            }
+          }
+          return season;
+        });
+
         // Check if already monitored
-        if (series.monitored) {
+        if (series.monitored && !seasonsChanged) {
            return { success: true, message: 'Series already monitored', series }
         }
 
@@ -316,13 +327,16 @@ export class SonarrService {
         const updateData = {
           ...series,
           monitored: true,
-          addOptions: {
-            searchForMissingEpisodes: options.searchNow
-          }
+          seasons: updatedSeasons
         }
         
         await client.put(`/series/${series.id}`, updateData)
-        return { success: true, message: 'Series set to monitored', series: updateData }
+        
+        if (options.searchNow && seasonsChanged) {
+            await this.sendCommand('SeriesSearch', { seriesId: series.id });
+        }
+
+        return { success: true, message: 'Series and seasons set to monitored', series: updateData }
       }
 
       // Add new series

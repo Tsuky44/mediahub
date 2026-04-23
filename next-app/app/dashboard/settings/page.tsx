@@ -56,8 +56,15 @@ export default async function SettingsPage() {
       orderBy: { createdAt: 'desc' }
     })
 
+    // Fetch account requests
+    const accountRequests = await prisma.accountRequest.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
     // Fetch all settings
-    const settingsList = await prisma.setting.findMany({})
+    const settingsList = await prisma.setting.findMany({
+      select: { key: true, value: true }
+    })
     
     const settings = settingsList.reduce((acc: any, curr: any) => ({ ...acc, [curr.key]: curr.value }), {})
     
@@ -69,6 +76,7 @@ export default async function SettingsPage() {
             userRole={userRole}
             roles={roles}
             userGroups={userGroups}
+            accountRequests={accountRequests}
         />
       </AbilityProvider>
     )

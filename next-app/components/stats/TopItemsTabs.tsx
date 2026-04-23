@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { TrendingUp, Film, Tv } from 'lucide-react'
 import { EmbyImage } from '../EmbyImage'
 
@@ -10,12 +11,39 @@ interface TopItemCardProps {
 }
 
 function TopItemCard({ item, rank }: TopItemCardProps) {
-  const isSeries = item.Type === 'Episode' || !!item.SeriesName || item.ItemType === 'Episode'
+  const isSeries = item.Type === 'Episode' || !!item.SeriesName || item.ItemType === 'Episode' || item.mediaType === 'tv'
   const name = item.Name || item.ItemName || item.NowPlayingItemName || 'Inconnu'
-  const itemId = item.imageItemId || item.NowPlayingItemId || item.ItemId || item.Id || item.id
+  
+  // Refine name for search if it's a series/episode
+  let searchName = name;
+  if (isSeries) {
+      if (item.SeriesName) {
+          searchName = item.SeriesName;
+      } else if (name.includes(' - ')) {
+          searchName = name.split(' - ')[0];
+      } else if (name.includes(' : ')) {
+          searchName = name.split(' : ')[0];
+      }
+  }
+
+  // Ensure itemId is a string and not "0" or "undefined" if possible, but allow 0 if it's a valid ID
+  const rawId = item.imageItemId || item.NowPlayingItemId || item.ItemId || item.Id || item.id
+  const itemId = rawId ? String(rawId) : undefined
   const count = item.count || 0
   
-  return (
+  const seasonNum = item.seasonIndex ?? item.ParentIndexNumber;
+  const episodeNum = item.episodeIndex ?? item.IndexNumber;
+  
+  const tmdbId = item.tmdbId || item.TmdbId || item.mediaInfo?.tmdbId || item.mediaInfo?.ProviderIds?.Tmdb;
+
+  let href = null;
+  if (tmdbId) {
+      href = `/dashboard/media/${tmdbId}?type=${isSeries ? 'tv' : 'movie'}${isSeries && seasonNum !== undefined && episodeNum !== undefined ? `&season=${seasonNum}&episode=${episodeNum}` : ''}`;
+  } else if (itemId) {
+      href = `/dashboard/media/${itemId}?type=${isSeries ? 'tv' : 'movie'}&source=${item.Source || 'emby'}&name=${encodeURIComponent(searchName)}${isSeries && seasonNum !== undefined && episodeNum !== undefined ? `&season=${seasonNum}&episode=${episodeNum}` : ''}`;
+  }
+
+  const Content = (
     <div className="flex items-center gap-4 p-3 rounded-lg bg-gray-900/50 border border-gray-800 hover:border-gray-700 transition-all group">
       <div className="text-lg font-bold text-gray-600 w-4">{rank}</div>
       <div className="relative h-16 w-11 flex-shrink-0 overflow-hidden rounded bg-gray-800">
@@ -47,7 +75,17 @@ function TopItemCard({ item, rank }: TopItemCardProps) {
         </div>
       </div>
     </div>
-  )
+  );
+
+  return href ? (
+    <Link href={href} className="block">
+      {Content}
+    </Link>
+  ) : (
+    <div>
+      {Content}
+    </div>
+  );
 }
 
 interface TopItemsTabsProps {

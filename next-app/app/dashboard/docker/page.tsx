@@ -293,6 +293,8 @@ export default function DockerPage() {
           }
           
           // Refresh list after action
+          // Wait a moment for Docker to update state (frontend side double-check)
+          await new Promise(resolve => setTimeout(resolve, 500))
           await fetchContainers(true)
       } catch (err: any) {
           setError(`Erreur lors de l'action ${action}: ${err.message}`)
@@ -381,15 +383,15 @@ export default function DockerPage() {
                             {canManageContainers && (
                                 <>
                                     <button 
-                                        onClick={(e) => { e.stopPropagation(); handleAction(container.name, 'stop') }}
+                                        onClick={(e) => { e.stopPropagation(); handleAction(container.id, 'stop') }}
                                         disabled={!!actionLoading}
                                         className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 border border-red-500/20 hover:border-red-500/40 transition-all disabled:opacity-50 hover:scale-105 active:scale-95 shadow-lg hover:shadow-red-500/10"
                                         title="Arrêter"
                                     >
-                                        {actionLoading === container.name ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4 fill-current" />}
+                                        {actionLoading === container.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4 fill-current" />}
                                     </button>
                                     <button 
-                                        onClick={(e) => { e.stopPropagation(); handleAction(container.name, 'restart') }}
+                                        onClick={(e) => { e.stopPropagation(); handleAction(container.id, 'restart') }}
                                         className="p-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-500 hover:text-indigo-400 border border-indigo-500/20 hover:border-indigo-500/40 transition-all disabled:opacity-50 hover:scale-105 active:scale-95 shadow-lg hover:shadow-indigo-500/10"
                                         title="Redémarrer"
                                     >
@@ -428,12 +430,12 @@ export default function DockerPage() {
                     ) : (
                         canManageContainers ? (
                             <button 
-                                onClick={(e) => { e.stopPropagation(); handleAction(container.name, 'start') }}
+                                onClick={(e) => { e.stopPropagation(); handleAction(container.id, 'start') }}
                                 disabled={!!actionLoading}
                                 className="p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 hover:text-emerald-400 border border-emerald-500/20 hover:border-emerald-500/40 transition-all disabled:opacity-50 hover:scale-105 active:scale-95 shadow-lg hover:shadow-emerald-500/10"
                                 title="Démarrer"
                             >
-                                {actionLoading === container.name ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+                                {actionLoading === container.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
                             </button>
                         ) : (
                             <span className="text-xs text-gray-500 italic px-2 font-medium">Arrêté</span>

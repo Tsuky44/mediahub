@@ -22,7 +22,7 @@ export async function importJellyseerrRequests(prisma: PrismaClient) {
   for (const req of requests) {
     try {
       // Check if already exists
-      const existing = await (prisma as any).mediaRequest.findFirst({
+      const existing = await prisma.mediaRequest.findFirst({
         where: {
           tmdbId: String(req.media.tmdbId),
           mediaType: req.type
@@ -69,7 +69,7 @@ export async function importJellyseerrRequests(prisma: PrismaClient) {
         }
       }
 
-      await (prisma as any).mediaRequest.create({
+      await prisma.mediaRequest.create({
         data: {
           userId,
           mediaType: req.type,

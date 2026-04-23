@@ -1,5 +1,6 @@
-import { LucideIcon, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { LucideIcon, Loader2, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react'
 import clsx from 'clsx'
+import { useState } from 'react'
 
 export interface InputFieldProps {
     label: string
@@ -12,22 +13,42 @@ export interface InputFieldProps {
     description?: string
 }
 
-export const InputField = ({ label, value, onChange, type = "text", placeholder = "", required = false, readOnly = false, description }: InputFieldProps) => (
-    <div className="space-y-1">
-        <label className="block text-sm font-medium text-gray-300">
-            {label} {required && <span className="text-red-400">*</span>}
-        </label>
-        <input
-            type={type}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={placeholder}
-            disabled={readOnly}
-            className="block w-full rounded-md border-gray-600 bg-gray-700/50 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm disabled:opacity-50"
-        />
-        {description && <p className="text-xs text-gray-400">{description}</p>}
-    </div>
-)
+export const InputField = ({ label, value, onChange, type = "text", placeholder = "", required = false, readOnly = false, description }: InputFieldProps) => {
+    const [showPassword, setShowPassword] = useState(false)
+    const isPassword = type === 'password'
+
+    return (
+        <div className="space-y-1">
+            <label className="block text-sm font-medium text-gray-300">
+                {label} {required && <span className="text-red-400">*</span>}
+            </label>
+            <div className="relative">
+                <input
+                    type={isPassword ? (showPassword ? 'text' : 'password') : type}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder={placeholder}
+                    disabled={readOnly}
+                    className={clsx(
+                        "block w-full rounded-md border-gray-600 bg-gray-700/50 py-2 px-3 text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm disabled:opacity-50",
+                        isPassword && "pr-10"
+                    )}
+                />
+                {isPassword && (
+                    <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white"
+                        tabIndex={-1}
+                    >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                )}
+            </div>
+            {description && <p className="text-xs text-gray-400">{description}</p>}
+        </div>
+    )
+}
 
 export const CheckboxField = ({ label, checked, onChange, description, readOnly = false }: { label: string, checked: boolean, onChange: (checked: boolean) => void, description?: string, readOnly?: boolean }) => (
     <div className="flex items-start space-x-3">

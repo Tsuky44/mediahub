@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Clock, Film, Play, Activity, User, Monitor } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -507,9 +508,24 @@ export function RecentHistory({ initialHistory }: RecentHistoryProps) {
                             ? `live-${item.sessionId}` 
                             : `${itemId}-${date.getTime()}-${item.id || idx}`;
 
-                        return (
+                        const seasonNum = item.seasonIndex ?? item.ParentIndexNumber;
+                        const episodeNum = item.episodeIndex ?? item.IndexNumber;
+
+                        const tmdbId = item.tmdbId || item.TmdbId || item.mediaInfo?.tmdbId || item.mediaInfo?.ProviderIds?.Tmdb;
+
+                        const searchName = isSeries 
+                            ? (item.SeriesName || item.seriesName || item.mediaInfo?.seriesName || displayName) 
+                            : (item.Name || item.itemName || displayName);
+
+                        let href = null;
+                        if (tmdbId) {
+                            href = `/dashboard/media/${tmdbId}?type=${isSeries ? 'tv' : 'movie'}${isSeries && seasonNum !== undefined && episodeNum !== undefined ? `&season=${seasonNum}&episode=${episodeNum}` : ''}`;
+                        } else if (itemId) {
+                            href = `/dashboard/media/${itemId}?type=${isSeries ? 'tv' : 'movie'}&source=${item.Source || 'emby'}&name=${encodeURIComponent(searchName || 'Unknown')}${isSeries && seasonNum !== undefined && episodeNum !== undefined ? `&season=${seasonNum}&episode=${episodeNum}` : ''}`;
+                        }
+
+                        const Content = (
                             <div 
-                                key={stableKey} 
                                 className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/10 hover:scale-[1.01] ${
                                     isLive 
                                         ? 'bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-indigo-500/40 hover:border-indigo-500/60 shadow-[0_0_15px_rgba(99,102,241,0.2)]' 
@@ -607,7 +623,17 @@ export function RecentHistory({ initialHistory }: RecentHistoryProps) {
                                     </div>
                                 </div>
                             </div>
-                        )
+                        );
+
+                        return href ? (
+                            <Link key={stableKey} href={href} className="block">
+                                {Content}
+                            </Link>
+                        ) : (
+                            <div key={stableKey}>
+                                {Content}
+                            </div>
+                        );
                     })
                 ) : (
                     <div className="flex flex-col items-center justify-center py-16 px-4 text-center rounded-3xl bg-black/20 border border-white/5 border-dashed group hover:border-indigo-500/30 transition-all duration-300 hover:bg-white/[0.02]">

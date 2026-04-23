@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
+import bcrypt from 'bcryptjs'
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -25,6 +26,87 @@ export async function GET() {
   return NextResponse.json(users)
 }
 
+export async function POST(request: Request) {
+  const session = await getServerSession(authOptions)
+  
+  if (!session || !session.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const isSuperAdmin = (session.user as any).role === 'admin'
+  if (!isSuperAdmin) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  try {
+    const { name, email, password, roleId } = await request.json()
+
+    if (!name || !email || !password) {
+      return NextResponse.json({ error: 'Champs obligatoires manquants' }, { status: 400 })
+    }
+
+    // Check if user exists
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email },
+          { name }
+        ]
+      }
+    })
+
+    if (existingUser) {
+      return NextResponse.json({ error: 'Un utilisateur avec cet email ou ce nom existe déjà' }, { status: 409 })
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+    
+    // Determine role
+    let roleName = 'user'
+    let finalRoleId = roleId
+
+    if (roleId) {
+        const role = await prisma.role.findUnique({ where: { id: roleId } })
+        if (role) roleName = role.name
+    }
+
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role: roleName,
+        roleId: finalRoleId || null
+      },
+      include: { roleRef: true }
+    })
+
+    await logAction(
+      parseInt((session.user as any).id),
+      'CREATE',
+      'User',
+      newUser.id.toString(),
+      { name, email, roleId }
+    )
+
+    try {
+        const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
+        await ExternalNotificationService.send('user_created', {
+            title: 'Nouvel utilisateur',
+            message: `L'utilisateur ${name} (${email}) a été créé manuellement par un administrateur.`,
+            data: { name, email }
+        })
+    } catch (e) {
+        console.error('Failed to send external notification for user creation:', e)
+    }
+
+    return NextResponse.json(newUser)
+  } catch (error: any) {
+    console.error('Error creating user:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
 export async function PATCH(request: Request) {
   const session = await getServerSession(authOptions)
   
@@ -39,7 +121,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { id, role, roleId } = await request.json()
+  const { id, role, roleId, whatsappNumber, telegramChatId, discordUserId, discordWebhook, customWebhook } = await request.json()
 
   if (!id) {
     return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
@@ -58,6 +140,11 @@ export async function PATCH(request: Request) {
   const dataToUpdate: any = {}
   if (role !== undefined) dataToUpdate.role = role
   if (roleId !== undefined) dataToUpdate.roleId = roleId
+  if (whatsappNumber !== undefined) dataToUpdate.whatsappNumber = whatsappNumber || null
+  if (telegramChatId !== undefined) dataToUpdate.telegramChatId = telegramChatId || null
+  if (discordUserId !== undefined) dataToUpdate.discordUserId = discordUserId || null
+  if (discordWebhook !== undefined) dataToUpdate.discordWebhook = discordWebhook || null
+  if (customWebhook !== undefined) dataToUpdate.customWebhook = customWebhook || null
 
   const updatedUser = await (prisma as any).user.update({
     where: { id: parseInt(id) },

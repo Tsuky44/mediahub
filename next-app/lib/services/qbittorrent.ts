@@ -31,6 +31,8 @@ export interface Torrent {
   ratio: number
   uploaded: number
   downloaded: number
+  uploaded_session: number
+  downloaded_session: number
   tags: string
   num_incomplete: number
   num_complete: number
@@ -39,6 +41,8 @@ export interface Torrent {
   last_activity: number
   completion_on: number
   availability: number
+  max_seeding_time: number
+  seeding_time: number
 }
 
 export class QBittorrentService {
@@ -160,13 +164,13 @@ export class QBittorrentService {
       }
   }
 
-  async addTorrent(url: string, files?: File[], category?: string | null) {
+  async addTorrent(url: string, files?: File[], category?: string | null, tags?: string[]) {
     const formData = new FormData()
-    
+
     if (url) {
       formData.append('urls', url)
     }
-    
+
     if (files && files.length > 0) {
       for (const file of files) {
         // En Node.js (côté serveur), on doit convertir le File en Blob ou Buffer pour FormData si nécessaire
@@ -176,6 +180,7 @@ export class QBittorrentService {
     }
 
     if (category) formData.append('category', category)
+    if (tags && tags.length > 0) formData.append('tags', tags.join(','))
 
     return this.request({
       method: 'POST',
@@ -187,6 +192,20 @@ export class QBittorrentService {
     })
   }
 
+  /**
+   * Extract infoUrl from torrent tags
+   * Tags format: infoUrl:https://tracker.com/torrent/12345
+   */
+  getInfoUrlFromTags(tags: string): string | null {
+    if (!tags) return null
+    const tagList = tags.split(',')
+    const infoUrlTag = tagList.find(tag => tag.trim().startsWith('infoUrl:'))
+    if (infoUrlTag) {
+      return infoUrlTag.trim().substring(8) // Remove 'infoUrl:' prefix
+    }
+    return null
+  }
+
   async getTorrents(filter: string = 'all') {
     return this.request<Torrent[]>({
         method: 'GET',
@@ -196,11 +215,41 @@ export class QBittorrentService {
   }
 
   async getServerState() {
-    const data = await this.request<any>({
-        method: 'GET',
-        url: '/api/v2/sync/maindata'
-    })
-    return data?.server_state
+    try {
+        const data = await this.request<any>({
+            method: 'GET',
+            url: '/api/v2/sync/maindata'
+        })
+        
+        const serverState = data?.server_state || {}
+        const torrents = data?.torrents || {}
+        
+        let globalSeeds = 0
+        let globalLeechs = 0
+        
+        Object.values(torrents).forEach((t: any) => {
+            globalSeeds += t.num_seeds || 0
+            globalLeechs += t.num_leechs || 0
+        })
+        
+        return {
+            ...serverState,
+            global_seeds: globalSeeds,
+            global_leechs: globalLeechs
+        }
+    } catch (e) {
+        // Fallback to basic info if maindata fails (though maindata is the main endpoint)
+        console.error('Failed to get full server state, trying transfer/info', e)
+        const info = await this.request<any>({
+            method: 'GET',
+            url: '/api/v2/transfer/info'
+        })
+        return {
+            ...info,
+            global_seeds: 0,
+            global_leechs: 0
+        }
+    }
   }
   
   async deleteTorrents(hashes: string[], deleteFiles: boolean = false) {
@@ -246,6 +295,76 @@ export class QBittorrentService {
     })
   }
 
+  async topPriority(hashes: string[]) {
+    const params = new URLSearchParams()
+    params.append('hashes', hashes.join('|'))
+    return this.request({
+        method: 'POST',
+        url: '/api/v2/torrents/topPrio',
+        data: params,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
+  }
+
+  async increasePriority(hashes: string[]) {
+    const params = new URLSearchParams()
+    params.append('hashes', hashes.join('|'))
+    return this.request({
+        method: 'POST',
+        url: '/api/v2/torrents/increasePrio',
+        data: params,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
+  }
+
+  async decreasePriority(hashes: string[]) {
+    const params = new URLSearchParams()
+    params.append('hashes', hashes.join('|'))
+    return this.request({
+        method: 'POST',
+        url: '/api/v2/torrents/decreasePrio',
+        data: params,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
+  }
+
+  async bottomPriority(hashes: string[]) {
+    const params = new URLSearchParams()
+    params.append('hashes', hashes.join('|'))
+    return this.request({
+        method: 'POST',
+        url: '/api/v2/torrents/bottomPrio',
+        data: params,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
+  }
+
+  async reannounceTorrents(hashes: string[]) {
+    const params = new URLSearchParams()
+    params.append('hashes', hashes.join('|'))
+    return this.request({
+        method: 'POST',
+        url: '/api/v2/torrents/reannounce',
+        data: params,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
+  }
+
+  async setShareLimits(hashes: string[], ratioLimit: number, seedingTimeLimit: number, inactiveSeedingTimeLimit: number = -1) {
+    const params = new URLSearchParams()
+    params.append('hashes', hashes.join('|'))
+    params.append('ratioLimit', ratioLimit.toString())
+    params.append('seedingTimeLimit', seedingTimeLimit.toString())
+    params.append('inactiveSeedingTimeLimit', inactiveSeedingTimeLimit.toString())
+    
+    return this.request({
+        method: 'POST',
+        url: '/api/v2/torrents/setShareLimits',
+        data: params,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
+  }
+
   async getCategories() {
     return this.request<Record<string, { name: string, savePath: string }>>({
         method: 'GET',
@@ -257,6 +376,69 @@ export class QBittorrentService {
     return this.request<string[]>({
         method: 'GET',
         url: '/api/v2/torrents/tags'
+    })
+  }
+
+  async getTransferInfo() {
+    return this.request<{ dl_info_data: number, up_info_data: number, dl_info_speed: number, up_info_speed: number }>({
+        method: 'GET',
+        url: '/api/v2/transfer/info'
+    })
+  }
+
+  async getTorrentProperties(hash: string) {
+    return this.request<{
+      save_path: string
+      creation_date: number
+      piece_size: number
+      comment: string
+      total_wasted: number
+      total_uploaded: number
+      total_downloaded: number
+      up_limit: number
+      dl_limit: number
+      time_elapsed: number
+      seeding_time: number
+      nb_connections: number
+      share_ratio: number
+      addition_date: number
+      completion_date: number
+      created_by: string
+      dl_speed_avg: number
+      dl_speed: number
+      up_speed_avg: number
+      up_speed: number
+      eta: number
+      last_seen: number
+      peers: number
+      peers_total: number
+      pieces_have: number
+      pieces_num: number
+      reconnects: number
+      seeds: number
+      seeds_total: number
+      total_size: number
+    }>({
+        method: 'GET',
+        url: '/api/v2/torrents/properties',
+        params: { hash }
+    })
+  }
+
+  async getTorrentTrackers(hash: string) {
+    return this.request<Array<{
+      url: string
+      status: number  // 0 = disabled, 1 = not contacted, 2 = working, 3 = updating, 4 = error
+      tier: number
+      num_peers: number
+      num_seeds: number
+      num_leeches: number
+      num_downloaded: number
+      msg: string
+    }>>({
+        method: 'GET',
+        url: '/api/v2/torrents/trackers',
+        params: { hash }
     })
   }
 }

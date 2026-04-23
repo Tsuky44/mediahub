@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { toast } from 'react-hot-toast'
 import Image from 'next/image'
+import { UserPlus, X, Loader2, Eye, EyeOff } from 'lucide-react'
 
 interface User {
   id: number
@@ -15,6 +16,11 @@ interface User {
   embyUserId: string | null
   plexUserId: string | null
   jellyfinUserId: string | null
+  telegramChatId: string | null
+  whatsappNumber: string | null
+  discordUserId: string | null
+  discordWebhook: string | null
+  customWebhook: string | null
 }
 
 interface UserManagementProps {
@@ -29,6 +35,18 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
   const [filterProvider, setFilterProvider] = useState<string>('all')
   const [bulkRole, setBulkRole] = useState<string>('')
+  
+  // Create User State
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    roleId: '',
+    whatsappNumber: ''
+  })
+  const [showPassword, setShowPassword] = useState(false)
 
   // Filter users based on selected provider
   const filteredUsers = users.filter(user => {
@@ -39,6 +57,34 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
     if (filterProvider === 'local') return !user.embyUserId && !user.plexUserId && !user.jellyfinUserId
     return true
   })
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsCreating(true)
+
+    try {
+      const response = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createForm)
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Erreur lors de la création')
+      }
+
+      const newUser = await response.json()
+      setUsers([...users, newUser])
+      toast.success(`Utilisateur ${newUser.name} créé`)
+      setShowCreateModal(false)
+      setCreateForm({ name: '', email: '', password: '', roleId: '', whatsappNumber: '' })
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setIsCreating(false)
+    }
+  }
 
   // Selection handlers
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,12 +214,45 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
     }
   }
 
+  const handleUpdateUserNotifications = async (userId: number, field: string, value: string) => {
+    try {
+      // Nettoyer l'ID Discord s'il commence par un @ (au cas où)
+      let finalValue = value;
+      if (field === 'discordUserId' && value.startsWith('@')) {
+          finalValue = value.substring(1);
+      }
+
+      const payload: any = { id: userId, [field]: finalValue }
+      const response = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) throw new Error('Failed to update user notifications')
+      const updatedUser = await response.json()
+      setUsers(users.map(u => u.id === userId ? updatedUser : u))
+      toast.success('Notifications mises à jour')
+    } catch {
+      toast.error('Erreur lors de la mise à jour des notifications')
+    }
+  }
+
+  const [editingNotifsId, setEditingNotifsId] = useState<number | null>(null)
+
   return (
     <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden">
       <div className="flex flex-col gap-4 p-6 border-b border-white/10">
         <div className="flex items-center justify-between">
             <h3 className="text-xl font-bold text-white">Gestion des utilisateurs</h3>
             <div className="flex gap-2">
+                <button
+                    onClick={() => setShowCreateModal(true)}
+                    disabled={readOnly}
+                    className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                    <UserPlus size={16} />
+                    <span>Créer</span>
+                </button>
                 <button
                     onClick={() => handleSync('emby')}
                     disabled={!!syncingProvider || readOnly}
@@ -316,6 +395,7 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
               <th className="pb-4 text-gray-400 font-medium">Utilisateur</th>
               <th className="pb-4 text-gray-400 font-medium">Email</th>
               <th className="pb-4 text-gray-400 font-medium">Source</th>
+              <th className="pb-4 text-gray-400 font-medium">Notifications</th>
               <th className="pb-4 pr-6 text-gray-400 font-medium">Rôle</th>
             </tr>
           </thead>
@@ -374,6 +454,83 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
                         )}
                     </div>
                 </td>
+                <td className="py-4">
+                  {editingNotifsId === user.id ? (
+                    <div className="flex flex-col gap-2 min-w-[200px]">
+                      <input
+                        type="text"
+                        placeholder="WhatsApp (ex: +33612...)"
+                        defaultValue={user.whatsappNumber || ''}
+                        onBlur={(e) => handleUpdateUserNotifications(user.id, 'whatsappNumber', e.target.value)}
+                        className="bg-black/20 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Telegram Chat ID"
+                        defaultValue={user.telegramChatId || ''}
+                        onBlur={(e) => handleUpdateUserNotifications(user.id, 'telegramChatId', e.target.value)}
+                        className="bg-black/20 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Discord User ID (ex: 123456789)"
+                        defaultValue={user.discordUserId || ''}
+                        onBlur={(e) => handleUpdateUserNotifications(user.id, 'discordUserId', e.target.value)}
+                        className="bg-black/20 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Discord Webhook URL"
+                        defaultValue={user.discordWebhook || ''}
+                        onBlur={(e) => handleUpdateUserNotifications(user.id, 'discordWebhook', e.target.value)}
+                        className="bg-black/20 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Custom Webhook URL"
+                        defaultValue={user.customWebhook || ''}
+                        onBlur={(e) => handleUpdateUserNotifications(user.id, 'customWebhook', e.target.value)}
+                        className="bg-black/20 border border-white/10 rounded px-2 py-1 text-xs text-white"
+                      />
+                      <button onClick={() => setEditingNotifsId(null)} className="text-xs text-indigo-400 hover:text-indigo-300 self-end">Terminer</button>
+                    </div>
+                  ) : (
+                    <div 
+                      className="flex gap-1 flex-wrap cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
+                      onClick={() => !readOnly && setEditingNotifsId(user.id)}
+                      title={readOnly ? "" : "Cliquez pour modifier les notifications de cet utilisateur"}
+                    >
+                      {user.whatsappNumber && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-500/10 text-green-400 border border-green-500/20" title={user.whatsappNumber}>
+                          WhatsApp
+                        </span>
+                      )}
+                      {user.telegramChatId && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20" title={user.telegramChatId}>
+                          Telegram
+                        </span>
+                      )}
+                      {user.discordUserId && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#5865F2]/10 text-[#5865F2] border border-[#5865F2]/20" title={user.discordUserId}>
+                          Discord ID
+                        </span>
+                      )}
+                      {user.discordWebhook && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" title="Configuré">
+                          Discord Webhook
+                        </span>
+                      )}
+                      {user.customWebhook && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" title="Configuré">
+                          Webhook
+                        </span>
+                      )}
+                      {!user.whatsappNumber && !user.telegramChatId && !user.discordWebhook && !user.customWebhook && (
+                        <span className="text-xs text-gray-600 hover:text-gray-400">Ajouter...</span>
+                      )}
+                    </div>
+                  )}
+                </td>
                 <td className="py-4 pr-6">
                   <select
                     value={user.role === 'admin' ? 'admin' : (user.roleId || '')}
@@ -399,6 +556,109 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
           </tbody>
         </table>
       </div>
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-white">Créer un utilisateur local</h3>
+              <button 
+                onClick={() => setShowCreateModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Nom d'utilisateur</label>
+                <input
+                  type="text"
+                  required
+                  value={createForm.name}
+                  onChange={e => setCreateForm({...createForm, name: e.target.value})}
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={createForm.email}
+                  onChange={e => setCreateForm({...createForm, email: e.target.value})}
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Mot de passe</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={createForm.password}
+                    onChange={e => setCreateForm({...createForm, password: e.target.value})}
+                    className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 pr-10 text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Rôle</label>
+                <select
+                  value={createForm.roleId}
+                  onChange={e => setCreateForm({...createForm, roleId: e.target.value})}
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Utilisateur (Défaut)</option>
+                  {roles.map(role => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-2 border-t border-white/10">
+                <h4 className="text-sm font-medium text-gray-300 mb-3">Notifications personnelles (Optionnel)</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Numéro WhatsApp</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: +33612345678"
+                      value={(createForm as any).whatsappNumber || ''}
+                      onChange={e => setCreateForm({...createForm, whatsappNumber: e.target.value})}
+                      className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="flex items-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {isCreating ? <Loader2 className="animate-spin" size={18} /> : null}
+                  Créer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

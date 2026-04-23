@@ -7,6 +7,8 @@ import { DockerService } from '@/lib/services/docker'
 import { prisma } from '@/lib/prisma'
 import { defineAbilityFor } from '@/lib/ability'
 
+export const dynamic = 'force-dynamic'
+
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
 const error = (...args: any[]) => { if (isDev) console.error(...args); };
@@ -32,8 +34,8 @@ export async function GET() {
 
     // Fallback to UnraidService
     log('[API] DockerService list failed, falling back to UnraidService');
-    const unraidUrlSetting = await prisma.setting.findFirst({ where: { key: 'unraid_url' } })
-    const unraidApiKeySetting = await prisma.setting.findFirst({ where: { key: 'unraid_api_key' } })
+    const unraidUrlSetting = await prisma.setting.findFirst({ where: { key: 'unraid_url' }, select: { value: true } })
+    const unraidApiKeySetting = await prisma.setting.findFirst({ where: { key: 'unraid_api_key' }, select: { value: true } })
 
     if (!unraidUrlSetting?.value || !unraidApiKeySetting?.value) {
       return NextResponse.json({ error: 'Unraid settings not configured' }, { status: 400 })

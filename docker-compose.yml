@@ -18,6 +18,7 @@ services:
     #   - ./next-app/.env
     volumes:
       - ./data:/data/db
+      - ./tokens:/app/.config  # Persist tracker tokens/cookies between restarts
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     # Uncomment if you encounter permission issues with Docker socket

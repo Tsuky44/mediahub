@@ -19,9 +19,13 @@ export async function GET() {
 
     try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const groups = await (prisma as any).userGroup.findMany({
+        const groups = await prisma.userGroup.findMany({
             include: {
-                members: true
+                members: {
+                    include: {
+                        user: true
+                    }
+                }
             },
             orderBy: {
                 name: 'asc'
@@ -56,7 +60,7 @@ export async function POST(req: Request) {
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const group = await (prisma as any).userGroup.create({
+        const group = await prisma.userGroup.create({
             data: {
                 name
             }

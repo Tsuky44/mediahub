@@ -26,8 +26,8 @@ export async function POST(request: Request) {
     // Create Settings
     await prisma.setting.createMany({
       data: [
-        { key: 'emby_url', value: emby_url, group: 'emby' },
-        { key: 'emby_api_key', value: emby_api_key, group: 'emby' }
+        { key: 'emby_url', value: emby_url, category: 'emby' },
+        { key: 'emby_api_key', value: emby_api_key, category: 'emby' }
       ]
     })
 

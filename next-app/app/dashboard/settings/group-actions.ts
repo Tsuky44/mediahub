@@ -2,6 +2,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { getCurrentUser } from '@/lib/auth'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const error = (...args: any[]) => { if (isDev) console.error(...args); };
@@ -22,12 +23,19 @@ export async function getUserGroups() {
 
 export async function createUserGroup(name: string, roleId?: string) {
   try {
+    const user = await getCurrentUser()
     const group = await prisma.userGroup.create({
       data: {
         name,
         roleId: roleId || null
       }
     })
+
+    if (user) {
+        const { logAction } = await import('@/lib/audit')
+        await logAction(parseInt((user as any).id), 'CREATE', 'UserGroup', group.id, { name, roleId })
+    }
+
     revalidatePath('/dashboard/settings')
     return group
   } catch (err) {
@@ -38,6 +46,7 @@ export async function createUserGroup(name: string, roleId?: string) {
 
 export async function updateUserGroup(id: string, name: string, roleId?: string) {
   try {
+    const user = await getCurrentUser()
     // transaction to ensure consistency
     const result = await prisma.$transaction(async (tx) => {
         const group = await tx.userGroup.update({
@@ -70,6 +79,11 @@ export async function updateUserGroup(id: string, name: string, roleId?: string)
         return group
     })
 
+    if (user) {
+        const { logAction } = await import('@/lib/audit')
+        await logAction(parseInt((user as any).id), 'UPDATE', 'UserGroup', id, { name, roleId })
+    }
+
     revalidatePath('/dashboard/settings')
     return result
   } catch (error) {
@@ -80,9 +94,16 @@ export async function updateUserGroup(id: string, name: string, roleId?: string)
 
 export async function deleteUserGroup(id: string) {
   try {
+    const user = await getCurrentUser()
     await prisma.userGroup.delete({
       where: { id }
     })
+
+    if (user) {
+        const { logAction } = await import('@/lib/audit')
+        await logAction(parseInt((user as any).id), 'DELETE', 'UserGroup', id)
+    }
+
     revalidatePath('/dashboard/settings')
   } catch (err) {
     error('Error deleting user group:', err)
@@ -92,16 +113,17 @@ export async function deleteUserGroup(id: string) {
 
 export async function addUserToGroup(groupId: string, userId: number) {
   try {
+    const user = await getCurrentUser()
     await prisma.$transaction(async (tx) => {
         // Check if user is already in the group
-        const existing = await tx.userGroupMember.findUnique({
-            where: {
-                userGroupId_userId: {
-                    userGroupId: groupId,
-                    userId: userId
-                }
+    const existing = await tx.userGroupMember.findUnique({
+        where: {
+            userId_userGroupId: {
+                userGroupId: groupId,
+                userId: userId
             }
-        })
+        }
+    })
 
         if (existing) return
 
@@ -133,6 +155,11 @@ export async function addUserToGroup(groupId: string, userId: number) {
         }
     })
 
+    if (user) {
+        const { logAction } = await import('@/lib/audit')
+        await logAction(parseInt((user as any).id), 'UPDATE', 'UserGroupMember', `${groupId}-${userId}`, { action: 'add', groupId, targetUserId: userId })
+    }
+
     revalidatePath('/dashboard/settings')
   } catch (error) {
     console.error('Error adding user to group:', error)
@@ -142,6 +169,7 @@ export async function addUserToGroup(groupId: string, userId: number) {
 
 export async function addUsersToGroup(groupId: string, userIds: number[]) {
   try {
+    const user = await getCurrentUser()
     await prisma.$transaction(async (tx) => {
         const group = await tx.userGroup.findUnique({
             where: { id: groupId }
@@ -183,6 +211,11 @@ export async function addUsersToGroup(groupId: string, userIds: number[]) {
         }
     })
 
+    if (user) {
+        const { logAction } = await import('@/lib/audit')
+        await logAction(parseInt((user as any).id), 'BULK_UPDATE', 'UserGroupMember', groupId, { action: 'add_multiple', groupId, count: userIds.length })
+    }
+
     revalidatePath('/dashboard/settings')
   } catch (error) {
     console.error('Error adding users to group:', error)
@@ -192,9 +225,10 @@ export async function addUsersToGroup(groupId: string, userIds: number[]) {
 
 export async function removeUserFromGroup(groupId: string, userId: number) {
   try {
+    const user = await getCurrentUser()
     await prisma.userGroupMember.delete({
       where: {
-        userGroupId_userId: {
+        userId_userGroupId: {
           userGroupId: groupId,
           userId: userId
         }
@@ -202,6 +236,11 @@ export async function removeUserFromGroup(groupId: string, userId: number) {
     })
     // Note: We do NOT revert the user's role automatically, as we don't know what it should be.
     // The admin can manually change it if needed.
+
+    if (user) {
+        const { logAction } = await import('@/lib/audit')
+        await logAction(parseInt((user as any).id), 'UPDATE', 'UserGroupMember', `${groupId}-${userId}`, { action: 'remove', groupId, targetUserId: userId })
+    }
     
     revalidatePath('/dashboard/settings')
   } catch (err) {

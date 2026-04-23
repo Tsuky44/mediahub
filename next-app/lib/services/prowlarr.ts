@@ -80,6 +80,99 @@ export class ProwlarrService {
     }
   }
 
+  /**
+   * Get indexer stats from Prowlarr
+   * Note: These are search/grab stats, NOT user account stats (ratio, upload, download)
+   */
+  async getIndexerStats() {
+    const client = this.getClient()
+    try {
+      const response = await client.get('/indexerstats')
+      log('[Prowlarr] IndexerStats response:', JSON.stringify(response.data).substring(0, 500))
+      return response.data
+    } catch (e: any) {
+      error('[Prowlarr] Failed to fetch indexer stats:', e.message)
+      return null
+    }
+  }
+
+  async getIndexerDetails(indexerId: number) {
+    const client = this.getClient()
+    try {
+      const response = await client.get(`/indexer/${indexerId}`)
+      return response.data as ProwlarrIndexer & { fields: any[] }
+    } catch (e: any) {
+      error(`[Prowlarr] Failed to fetch indexer ${indexerId}:`, e.message)
+      return null
+    }
+  }
+
+  /**
+   * Extract tracker configuration from Prowlarr indexer
+   * This is useful for getting API keys and base URLs from private trackers
+   */
+  async getTrackerConfigFromIndexer(indexerId: number): Promise<{
+    baseUrl?: string
+    apiKey?: string
+    passkey?: string
+    username?: string
+    password?: string
+    type?: string
+  } | null> {
+    const details = await this.getIndexerDetails(indexerId)
+    if (!details) return null
+
+    const result: any = {
+      type: details.implementation?.toLowerCase().includes('gazelle') ? 'gazelle' : 
+            details.implementation?.toLowerCase().includes('unit3d') ? 'unit3d' : 'custom'
+    }
+
+    // Extract fields
+    if (details.fields && Array.isArray(details.fields)) {
+      for (const field of details.fields) {
+        const name = field.name?.toLowerCase() || ''
+        const value = field.value
+
+        if (!value) continue
+
+        // Base URL
+        if (name.includes('baseurl') || name.includes('base_url') || name === 'base') {
+          result.baseUrl = value
+        }
+        // API Key / Passkey
+        else if (name.includes('apikey') || name.includes('api_key') || name === 'passkey' || name === 'pass') {
+          result.apiKey = value
+          result.passkey = value
+        }
+        // Username
+        else if (name === 'username' || name === 'user') {
+          result.username = value
+        }
+        // Password
+        else if (name === 'password' || name === 'pass') {
+          result.password = value
+        }
+        // Cookie (for some trackers)
+        else if (name === 'cookie') {
+          result.cookie = value
+        }
+      }
+    }
+
+    // Try to get baseUrl from definition if not in fields
+    if (!result.baseUrl && details.infoLink) {
+      result.baseUrl = details.infoLink
+    }
+
+    log(`[Prowlarr] Extracted config for ${details.name}:`, {
+      hasUrl: !!result.baseUrl,
+      hasApiKey: !!(result.apiKey || result.passkey),
+      type: result.type
+    })
+
+    return result
+  }
+
   async search(query: string, indexerIds?: number[], categories?: number[], limit: number = 200, offset: number = 0) {
     const client = this.getClient()
     

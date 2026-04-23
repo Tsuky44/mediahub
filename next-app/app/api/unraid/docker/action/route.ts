@@ -31,33 +31,76 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 })
     }
 
+    let dockerError = null;
+
     // Try direct Docker action first (more reliable)
     log(`[API] Attempting direct Docker action: ${action} on ${containerId}`)
-    const dockerResult = await DockerService.containerAction(containerId, action)
-    
-    if (dockerResult.success) {
-        return NextResponse.json({ success: true, method: 'docker' })
+    try {
+        const dockerResult = await DockerService.containerAction(containerId, action)
+        
+        if (dockerResult.success) {
+            try {
+                const { logAction } = await import('@/lib/audit');
+                await logAction(
+                    parseInt(user.id),
+                    'DOCKER_ACTION',
+                    'Docker',
+                    containerId,
+                    { action, method: 'docker' }
+                );
+            } catch (e) {
+                console.error('Failed to log docker action:', e);
+            }
+            return NextResponse.json({ success: true, method: 'docker' })
+        }
+        
+        dockerError = dockerResult.error;
+        // Only try Unraid fallback if Docker action failed AND returned an error
+        log(`[API] Docker action failed (${dockerResult.error}), trying Unraid fallback...`)
+    } catch (dockerErr: any) {
+        dockerError = dockerErr.message;
+        error(`[API] CRITICAL DockerService crash: ${dockerErr.message}`, dockerErr)
+        // Continue to Unraid fallback
     }
 
     // Fallback to Unraid API if Docker action fails
-    log(`[API] Docker action failed (${dockerResult.error}), falling back to Unraid API for ${action}`)
-    const unraidUrlSetting = await prisma.setting.findFirst({ where: { key: 'unraid_url' } })
-    const unraidApiKeySetting = await prisma.setting.findFirst({ where: { key: 'unraid_api_key' } })
+    const unraidUrlSetting = await prisma.setting.findFirst({ where: { key: 'unraid_url' }, select: { value: true } })
+    const unraidApiKeySetting = await prisma.setting.findFirst({ where: { key: 'unraid_api_key' }, select: { value: true } })
 
     if (unraidUrlSetting?.value && unraidApiKeySetting?.value) {
-        const unraidService = new UnraidService(unraidUrlSetting.value, unraidApiKeySetting.value)
-        const unraidSuccess = await unraidService.containerAction(containerId, action)
+        try {
+            const unraidService = new UnraidService(unraidUrlSetting.value, unraidApiKeySetting.value)
+            const unraidSuccess = await unraidService.containerAction(containerId, action)
 
-        if (unraidSuccess) {
-            return NextResponse.json({ success: true, method: 'unraid' })
+            if (unraidSuccess) {
+                try {
+                    const { logAction } = await import('@/lib/audit');
+                    await logAction(
+                        parseInt(user.id),
+                        'DOCKER_ACTION',
+                        'Docker',
+                        containerId,
+                        { action, method: 'unraid' }
+                    );
+                } catch (e) {
+                    console.error('Failed to log docker action:', e);
+                }
+                return NextResponse.json({ success: true, method: 'unraid' })
+            }
+        } catch (unraidErr: any) {
+             error(`[API] Unraid fallback failed: ${unraidErr.message}`)
         }
     }
 
-    // Return the specific Docker error if Unraid also failed or wasn't configured
-    return NextResponse.json({ error: dockerResult.error || 'Action failed on both Docker and Unraid API' }, { status: 500 })
+    // Return a generic error if both failed, but ensure it's JSON
+    return NextResponse.json({ 
+        error: dockerError || 'Action failed on both Docker (socket) and Unraid API. Check server logs.' 
+    }, { status: 500 })
 
   } catch (error: any) {
-    error('[API] Error performing docker action:', error)
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    error('[API] UNHANDLED EXCEPTION performing docker action:', error)
+    return NextResponse.json({ 
+        error: error.message || 'Internal Server Error (Unhandled)' 
+    }, { status: 500 })
   }
 }

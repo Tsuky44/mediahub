@@ -29,7 +29,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
         // Use a transaction to ensure both operations succeed or fail together
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (prisma as any).$transaction(async (tx: any) => {
+        await prisma.$transaction(async (tx: any) => {
             // 1. Delete all members of the group
             const membersDeleted = await tx.userGroupMember.deleteMany({
                 where: {

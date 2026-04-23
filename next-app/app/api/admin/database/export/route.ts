@@ -31,16 +31,20 @@ export async function POST(request: Request) {
       mediaRequests,
       watchEvents,
       auditLogs,
-      dockerGroups,
-      dockerGroupMembers,
       userGroups,
-      userGroupMembers,
-      mediaAvailability,
-      fileShares,
-      embyActivityLogs
+      userGroupMembers
     ] = await Promise.all([
       prisma.user.findMany(),
-      prisma.setting.findMany(),
+      prisma.setting.findMany({
+        select: {
+          id: true,
+          key: true,
+          value: true,
+          category: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      }),
       prisma.notification.findMany(),
       prisma.watchLater.findMany(),
       prisma.account.findMany(),
@@ -48,13 +52,8 @@ export async function POST(request: Request) {
       prisma.mediaRequest.findMany(),
       prisma.watchEvent.findMany(),
       prisma.auditLog.findMany(),
-      prisma.dockerGroup.findMany(),
-      prisma.dockerGroupMember.findMany(),
       prisma.userGroup.findMany(),
       prisma.userGroupMember.findMany(),
-      prisma.mediaAvailabilityIndex.findMany(),
-      prisma.fileShare.findMany(),
-      prisma.embyActivityLog.findMany(),
     ])
 
     const dbDump = {
@@ -71,13 +70,8 @@ export async function POST(request: Request) {
         mediaRequests,
         watchEvents,
         auditLogs,
-        dockerGroups,
-        dockerGroupMembers,
         userGroups,
-        userGroupMembers,
-        mediaAvailability,
-        fileShares,
-        embyActivityLogs
+        userGroupMembers
       }
     }
 

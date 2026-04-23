@@ -1,20 +1,38 @@
 import { prisma } from '@/lib/prisma'
+import { headers } from 'next/headers'
 
 export async function logAction(
-  userId: number,
+  userId: number | null,
   action: string,
   entity: string,
   entityId: string,
   details?: any
 ) {
   try {
+    let ipAddress = 'unknown'
+    let userAgent = 'unknown'
+
+    try {
+      const headersList = await headers()
+      ipAddress = headersList.get('x-forwarded-for') || headersList.get('x-real-ip') || 'unknown'
+      userAgent = headersList.get('user-agent') || 'unknown'
+    } catch (e) {
+      // In some contexts (like next-auth events outside request scope), headers() might throw
+    }
+
+    const logDetails = {
+      ...(details || {})
+    };
+
     await prisma.auditLog.create({
       data: {
         userId,
         action,
         entity,
         entityId,
-        details: details ? JSON.stringify(details) : null
+        ipAddress,
+        userAgent,
+        details: Object.keys(logDetails).length > 0 ? JSON.stringify(logDetails) : null
       }
     })
   } catch (error) {
@@ -22,3 +40,4 @@ export async function logAction(
     // Don't throw error to avoid blocking the main action
   }
 }
+

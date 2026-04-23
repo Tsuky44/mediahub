@@ -38,7 +38,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
     return []
   }
 
-  const dbUser = await (prisma as any).user.findUnique({
+  const dbUser = await prisma.user.findUnique({
     where: { email: user.email },
     select: { id: true }
   })
@@ -54,7 +54,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
 
   // 1. Fetch Personal Events (Stored in DB)
   try {
-    const personalEvents = await (prisma as any).userCalendarEvent.findMany({
+    const personalEvents = await prisma.userCalendarEvent.findMany({
         where: {
         userId: dbUser.id
         }
@@ -350,7 +350,7 @@ export async function addToCalendar(tmdbId: string, mediaType: 'movie' | 'tv', t
   const user = await getCurrentUser()
   if (!user || !user.email) throw new Error('Unauthorized')
 
-  const dbUser = await (prisma as any).user.findUnique({
+  const dbUser = await prisma.user.findUnique({
     where: { email: user.email },
     select: { id: true }
   })
@@ -358,7 +358,7 @@ export async function addToCalendar(tmdbId: string, mediaType: 'movie' | 'tv', t
   if (!dbUser) throw new Error('User not found')
 
   // Check if already exists
-  const existing = await (prisma as any).userCalendarEvent.findFirst({
+  const existing = await prisma.userCalendarEvent.findFirst({
     where: {
       userId: dbUser.id,
       tmdbId: tmdbId.toString(),
@@ -368,12 +368,12 @@ export async function addToCalendar(tmdbId: string, mediaType: 'movie' | 'tv', t
 
   if (existing) {
     // Update date if needed
-    await (prisma as any).userCalendarEvent.update({
+    await prisma.userCalendarEvent.update({
       where: { id: existing.id },
       data: { releaseDate }
     })
   } else {
-    await (prisma as any).userCalendarEvent.create({
+    await prisma.userCalendarEvent.create({
       data: {
         userId: dbUser.id,
         tmdbId: tmdbId.toString(),
@@ -392,14 +392,14 @@ export async function removeFromCalendar(tmdbId: string, mediaType: 'movie' | 't
   const user = await getCurrentUser()
   if (!user || !user.email) throw new Error('Unauthorized')
 
-  const dbUser = await (prisma as any).user.findUnique({
+  const dbUser = await prisma.user.findUnique({
     where: { email: user.email },
     select: { id: true }
   })
 
   if (!dbUser) throw new Error('User not found')
 
-  await (prisma as any).userCalendarEvent.deleteMany({
+  await prisma.userCalendarEvent.deleteMany({
     where: {
       userId: dbUser.id,
       tmdbId: tmdbId.toString(),

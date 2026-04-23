@@ -6,8 +6,10 @@ const error = (...args: any[]) => { if (isDev) console.error(...args); };
 const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 
-// FIX: Global BigInt serialization for JSON
-// This prevents crashes when sending objects containing BigInt (like EmbyActivityLog) in API responses
+// Patch 14: Serialisation BigInt pour JSON.stringify / NextResponse.json()
+// Nécessaire car les modèles Prisma DailyTrackerStat et TrackerStatsLog ont des champs
+// BigInt (totalUploaded, totalDownloaded, etc.) qui ne sont pas sérialisables nativement.
+// Guard idempotent : ne patch qu'une seule fois si non déjà défini.
 if (!(BigInt.prototype as any).toJSON) {
   (BigInt.prototype as any).toJSON = function () {
     return Number(this);
@@ -28,13 +30,6 @@ declare global {
 // Helper to get prisma with model check
 export function getPrisma() {
   if (!globalThis.prisma) {
-    globalThis.prisma = prismaClientSingleton()
-  }
-  
-  // Check if critical models are missing and force recreation if so
-  const p = globalThis.prisma as any
-  if (p && !p.dockerGroup) {
-    log('[Prisma] dockerGroup model missing from singleton, recreating client...')
     globalThis.prisma = prismaClientSingleton()
   }
   

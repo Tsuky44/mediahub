@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Emby service unavailable' }, { status: 503 })
     }
 
-    const dbUser = await (prisma as any).user.findUnique({
+    const dbUser = await prisma.user.findUnique({
         where: { email: user.email }
     })
 

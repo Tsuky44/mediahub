@@ -11,7 +11,10 @@ import { getRadarrService } from "@/lib/services/radarr"
 import { getSonarrService } from "@/lib/services/sonarr"
 import { getQBittorrentService } from "@/lib/services/qbittorrent"
 import { getSmbService } from "@/lib/services/smb"
+import { getFtpService } from "@/lib/services/ftp"
+import { getSetting } from "@/lib/settings"
 import { getProwlarrService } from "@/lib/services/prowlarr"
+import bcrypt from "bcryptjs"
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -23,6 +26,64 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   adapter: PrismaAdapter(prisma),
   providers: [
+    CredentialsProvider({
+      id: "local",
+      name: "Compte Local",
+      credentials: {
+        username: { label: "Nom d'utilisateur", type: "text" },
+        password: { label: "Mot de passe", type: "password" }
+      },
+      async authorize(credentials, req) {
+        // Check if Local auth is enabled
+        const setting = await prisma.setting.findUnique({
+          where: { key: 'auth_local_enabled' },
+          select: { value: true }
+        })
+        const isEnabled = setting ? setting.value === 'true' : true // Default true
+
+        if (!isEnabled) {
+          throw new Error("L'authentification locale est désactivée")
+        }
+
+        if (!credentials?.username || !credentials?.password) {
+          throw new Error("Identifiants manquants")
+        }
+
+        const user = await prisma.user.findFirst({
+          where: { 
+            name: credentials.username,
+            // Ensure this is a local user (has password)
+            NOT: { password: null }
+          },
+          include: { roleRef: true }
+        })
+
+        if (!user || !user.password) {
+          throw new Error("Utilisateur introuvable ou mot de passe incorrect")
+        }
+
+        const isValid = await bcrypt.compare(credentials.password, user.password)
+
+        if (!isValid) {
+          throw new Error("Utilisateur introuvable ou mot de passe incorrect")
+        }
+
+        const effectiveRole = user.roleRef ? user.roleRef.name : user.role
+
+        return {
+          id: user.id.toString(),
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          role: effectiveRole,
+          embyUserId: user.embyUserId,
+          plexUserId: user.plexUserId,
+          jellyfinUserId: user.jellyfinUserId,
+          discordUserId: user.discordUserId,
+          whatsappNumber: user.whatsappNumber,
+        }
+      }
+    }),
     CredentialsProvider({
       id: "emby",
       name: "Emby",
@@ -42,6 +103,10 @@ export const authOptions: NextAuthOptions = {
             key: {
               in: ['auth_emby_enabled', 'default_role_id']
             }
+          },
+          select: {
+            key: true,
+            value: true
           }
         })
         const enabledSetting = settings.find(s => s.key === 'auth_emby_enabled')
@@ -130,6 +195,16 @@ export const authOptions: NextAuthOptions = {
               },
               include: { roleRef: true }
             })
+
+            try {
+                const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
+                await ExternalNotificationService.send('user_created', {
+                    title: 'Nouvel utilisateur',
+                    message: `L'utilisateur ${user.name} s'est connecté pour la première fois (via Emby).`,
+                    data: { name: user.name, email: user.email, provider: 'Emby' }
+                })
+            } catch (e) {}
+
           } else {
             log(`[Auth] Updating existing user: ${user.name} (${user.id})`)
             const updateData: any = {
@@ -164,12 +239,14 @@ export const authOptions: NextAuthOptions = {
             role: effectiveRole,
             plexUserId: user.plexUserId,
             jellyfinUserId: user.jellyfinUserId,
+            discordUserId: user.discordUserId,
+            whatsappNumber: user.whatsappNumber,
           }
-        } catch (error: any) {
-          error("[Auth] Authorize error:", error)
-          if (error.message.includes("fetch")) throw new Error(`Erreur de connexion à Emby: ${error.message}`)
-          if (error.code === 'P2002') throw new Error("Erreur de base de données (conflit unique)")
-          throw new Error(error.message || "Erreur d'authentification inconnue")
+        } catch (e: any) {
+          error("[Auth] Authorize error:", e)
+          if (e.message?.includes("fetch")) throw new Error(`Erreur de connexion à Emby: ${e.message}`)
+          if (e.code === 'P2002') throw new Error("Erreur de base de données (conflit unique)")
+          throw new Error(e.message || "Erreur d'authentification inconnue")
         }
       }
     }),
@@ -266,6 +343,16 @@ export const authOptions: NextAuthOptions = {
               },
               include: { roleRef: true }
             })
+
+            try {
+                const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
+                await ExternalNotificationService.send('user_created', {
+                    title: 'Nouvel utilisateur',
+                    message: `L'utilisateur ${user.name} s'est connecté pour la première fois (via Plex).`,
+                    data: { name: user.name, email: user.email, provider: 'Plex' }
+                })
+            } catch (e) {}
+
           } else {
             log(`[Auth] Updating existing user: ${user.name} (${user.id})`)
             
@@ -303,9 +390,9 @@ export const authOptions: NextAuthOptions = {
             embyUserId: user.embyUserId,
             jellyfinUserId: user.jellyfinUserId,
           }
-        } catch (error: any) {
-          error("[Auth] Plex Authorize error:", error)
-          throw new Error(error.message || "Erreur d'authentification Plex")
+        } catch (e: any) {
+          error("[Auth] Plex Authorize error:", e)
+          throw new Error(e.message || "Erreur d'authentification Plex")
         }
       }
     }),
@@ -396,6 +483,16 @@ export const authOptions: NextAuthOptions = {
               },
               include: { roleRef: true }
             })
+
+            try {
+                const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
+                await ExternalNotificationService.send('user_created', {
+                    title: 'Nouvel utilisateur',
+                    message: `L'utilisateur ${user.name} s'est connecté pour la première fois (via Jellyfin).`,
+                    data: { name: user.name, email: user.email, provider: 'Jellyfin' }
+                })
+            } catch (e) {}
+
           } else {
             log(`[Auth] Updating existing user: ${user.name} (${user.id})`)
             const updateData: any = {
@@ -429,10 +526,12 @@ export const authOptions: NextAuthOptions = {
             jellyfinUserId: user.jellyfinUserId,
             embyUserId: user.embyUserId,
             plexUserId: user.plexUserId,
+            discordUserId: user.discordUserId,
+            whatsappNumber: user.whatsappNumber,
           }
-        } catch (error: any) {
-          error("[Auth] Jellyfin Authorize error:", error)
-          throw new Error(error.message || "Erreur d'authentification Jellyfin")
+        } catch (e: any) {
+          error("[Auth] Jellyfin Authorize error:", e)
+          throw new Error(e.message || "Erreur d'authentification Jellyfin")
         }
       }
     })
@@ -443,6 +542,40 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/login',
   },
+  events: {
+    async signIn(message) {
+      if (message.user && message.user.id) {
+        try {
+          const { logAction } = await import('@/lib/audit');
+          await logAction(
+            parseInt(message.user.id),
+            'USER_LOGIN',
+            'User',
+            message.user.id,
+            { provider: message.account?.provider }
+          );
+        } catch (e) {
+          console.error('Failed to log sign in:', e);
+        }
+      }
+    },
+    async signOut(message: any) {
+      const userId = message?.token?.sub || message?.session?.user?.id;
+      if (userId) {
+        try {
+          const { logAction } = await import('@/lib/audit');
+          await logAction(
+            parseInt(userId),
+            'USER_LOGOUT',
+            'User',
+            userId
+          );
+        } catch (e) {
+          console.error('Failed to log sign out:', e);
+        }
+      }
+    }
+  },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -452,6 +585,10 @@ export const authOptions: NextAuthOptions = {
         token.plexUserId = user.plexUserId
         // @ts-ignore
         token.jellyfinUserId = user.jellyfinUserId
+        // @ts-ignore
+        token.discordUserId = user.discordUserId
+        // @ts-ignore
+        token.whatsappNumber = user.whatsappNumber
         // @ts-ignore
         token.role = user.role
       }
@@ -467,6 +604,10 @@ export const authOptions: NextAuthOptions = {
         session.user.plexUserId = token.plexUserId
         // @ts-ignore
         session.user.jellyfinUserId = token.jellyfinUserId
+        // @ts-ignore
+        session.user.discordUserId = token.discordUserId
+        // @ts-ignore
+        session.user.whatsappNumber = token.whatsappNumber
         
         // Force refresh user from DB to get latest role and permissions
         try {
@@ -489,6 +630,10 @@ export const authOptions: NextAuthOptions = {
             session.user.plexUserId = dbUser.plexUserId
             // @ts-ignore
             session.user.jellyfinUserId = dbUser.jellyfinUserId
+            // @ts-ignore
+            session.user.discordUserId = dbUser.discordUserId
+            // @ts-ignore
+            session.user.whatsappNumber = dbUser.whatsappNumber
             
             // Impersonation logic
             if (effectiveRole === 'admin') {
@@ -547,9 +692,9 @@ export async function getRealUser() {
         // Construct user object
         const realUser = {
           ...session.user,
-          role: dbUser.roleRef ? dbUser.roleRef.name : dbUser.role,
-          permissions: dbUser.roleRef ? dbUser.roleRef.permissions : [],
-          isImpersonated: false
+          // Restore original role/permissions
+          role: (session.user as any).originalRole || dbUser.role,
+          permissions: dbUser.roleRef ? dbUser.roleRef.permissions : []
         }
         return realUser
       }
@@ -628,11 +773,36 @@ export async function getSonarrServiceForUser() {
 }
 
 export async function getQBittorrentServiceForUser() {
-  return await getQBittorrentService()
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return null
+  return getQBittorrentService()
 }
 
+export async function getStorageServiceForUser() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user) return null
+  
+  // Check protocol setting
+  const protocol = await getSetting('storage_protocol') || 'smb'
+  const host = await getSetting('storage_host')
+  
+  log('[getStorageServiceForUser] Protocol:', protocol, 'Host:', host)
+  
+  if (protocol === 'ftp') {
+    const ftpService = await getFtpService()
+    log('[getStorageServiceForUser] Returning FTP service:', ftpService ? 'configured' : 'null')
+    return ftpService
+  }
+  
+  // Default to SMB
+  const smbService = await getSmbService()
+  log('[getStorageServiceForUser] Returning SMB service:', smbService ? 'configured' : 'null')
+  return smbService
+}
+
+// Legacy alias for backward compatibility
 export async function getSmbServiceForUser() {
-  return await getSmbService()
+  return getStorageServiceForUser()
 }
 
 export async function getProwlarrServiceForUser() {

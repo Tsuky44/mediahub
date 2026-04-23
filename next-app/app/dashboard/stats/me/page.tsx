@@ -3,6 +3,7 @@ import { StatsCharts } from '../StatsCharts'
 import { TopItemsTabs } from '@/components/stats/TopItemsTabs'
 import { EmbyImage } from '@/components/EmbyImage'
 import { ChevronLeft, ChevronRight, Clock, Play, Activity, TrendingUp, Calendar, User } from 'lucide-react'
+import Link from 'next/link'
 import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { getServerSession } from 'next-auth'
@@ -139,19 +140,32 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
   // @ts-ignore
   const currentEmbyUserId = session.user.embyUserId
   const user = session.user as any
+  // @ts-ignore
+  const externalIds = [user.embyUserId, user.plexUserId, user.jellyfinUserId].filter(Boolean)
+  const internalUserId = parseInt(session.user.id)
 
-  // Simplified logic: Prioritize ID, fallback to Name
-  let whereCondition: any = {}
+  // Simplified logic: Match by Internal ID OR External IDs OR Username
+  let whereCondition: any = {
+    OR: []
+  }
 
-  if (currentEmbyUserId) {
-    whereCondition = { embyUserId: currentEmbyUserId }
-  } else if (currentUserName) {
-    whereCondition = { userName: currentUserName }
-  } else {
+  if (!isNaN(internalUserId)) {
+    whereCondition.OR.push({ userId: internalUserId })
+  }
+
+  if (externalIds.length > 0) {
+    whereCondition.OR.push({ embyUserId: { in: externalIds } })
+  }
+  
+  if (currentUserName) {
+    whereCondition.OR.push({ userName: currentUserName })
+  }
+
+  if (whereCondition.OR.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
         <h2 className="text-2xl font-bold text-white">Impossible de charger les statistiques</h2>
-        <p className="text-gray-400">Votre utilisateur n'est pas correctement identifié (Pas de nom ni d'ID Emby).</p>
+        <p className="text-gray-400">Votre utilisateur n'est pas correctement identifié.</p>
       </div>
     )
   }
@@ -196,25 +210,26 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
   }
 
   // 3. Fetch Data (Prisma)
-  const historyRaw = await prisma.embyActivityLog.findMany({
+  // Fetch from WatchEvent
+  const historyRaw = await prisma.watchEvent.findMany({
     where: {
       ...whereCondition,
-      startTime: {
+      playedAt: {
         gte: startDate,
         lte: endDate
       }
     },
     orderBy: {
-      startTime: 'desc'
+      playedAt: 'desc'
     }
   })
 
   // Process history to match WatchHistoryItem interface
   const historyArray = historyRaw.map((log: any) => {
-    let mediaInfo: any = {}
-    try {
-      mediaInfo = log.mediaInfo ? JSON.parse(log.mediaInfo) : {}
-    } catch (e) {}
+    const mediaInfo: any = {
+        seriesName: log.seriesName,
+        seasonName: log.seasonName,
+    };
 
     return {
       Id: log.id,
@@ -223,20 +238,21 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
       UserId: log.embyUserId,
       UserName: log.userName,
       Name: log.itemName,
-      SeriesName: mediaInfo.seriesName,
-      SeriesId: mediaInfo.seriesId,
-      TmdbId: mediaInfo.tmdbId,
-      SeasonName: mediaInfo.seasonName,
-      IndexNumber: mediaInfo.episodeIndex,
-      ParentIndexNumber: mediaInfo.seasonIndex,
+      SeriesName: log.seriesName,
+      SeriesId: null,
+      TmdbId: log.tmdbId,
+      SeasonName: log.seasonName,
+      IndexNumber: log.episodeNumber,
+      ParentIndexNumber: log.seasonNumber,
       Type: log.itemType,
       Client: log.client,
       DeviceName: log.device,
-      ActivityDateInserted: log.startTime.toISOString(),
-      DateCreated: log.startTime.toISOString(),
-      PlaybackDuration: log.playDuration,
-      RunTimeTicks: Number(log.totalDuration || 0),
-      Source: log.source
+      ActivityDateInserted: log.playedAt.toISOString(),
+      DateCreated: log.playedAt.toISOString(),
+      PlaybackDuration: (log.durationMinutes || 0) * 60,
+      RunTimeTicks: 0,
+      Source: log.client?.toLowerCase().includes('plex') ? 'plex' : 
+              log.client?.toLowerCase().includes('jellyfin') ? 'jellyfin' : 'emby'
     }
   })
 
@@ -300,7 +316,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
          Name: displayName,
          count: 1,
          totalDuration: sanitizedDuration,
-         lastView: new Date(item.ActivityDateInserted || item.DateCreated),
+         lastView: item.ActivityDateInserted || item.DateCreated,
          imageItemId: imageItemId,
          tmdbId: item.TmdbId,
          mediaType: isSeries ? 'tv' : 'movie'
@@ -481,30 +497,64 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
           <div className="bg-gray-800/30 rounded-xl border border-gray-700/50 overflow-hidden">
             {recentHistory.length > 0 ? (
               <div className="divide-y divide-gray-700/50">
-                {recentHistory.map((item: any, i: number) => (
-                  <div key={i} className="p-3 hover:bg-gray-700/30 transition-colors flex gap-3 items-center">
-                    <div className="w-12 h-16 bg-gray-900 rounded-md overflow-hidden flex-shrink-0 relative">
-                      <EmbyImage 
-                        itemId={item.imageItemId}
-                        className="w-full h-full object-cover"
-                        alt={item.Name}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-white truncate">{item.Name}</div>
-                      <div className="text-sm text-gray-400 truncate">
-                        {item.SeriesName && <span className="text-blue-400">{item.SeriesName} • </span>}
-                        {formatDistanceToNow(new Date(item.DateCreated), { addSuffix: true, locale: fr })}
+                {recentHistory.map((item: any, i: number) => {
+                  const isSeries = item.Type === 'Episode' || !!item.SeriesName || !!item.SeriesId;
+                  const tmdbId = item.TmdbId || item.tmdbId;
+                  const itemId = item.ItemId || item.NowPlayingItemId || item.Id;
+                  
+                  let searchName = item.Name;
+                  if (isSeries) {
+                      if (item.SeriesName) {
+                          searchName = item.SeriesName;
+                      } else if (item.Name && item.Name.includes(' - ')) {
+                          searchName = item.Name.split(' - ')[0];
+                      } else if (item.Name && item.Name.includes(' : ')) {
+                          searchName = item.Name.split(' : ')[0];
+                      }
+                  }
+
+                  let href = null;
+                  if (tmdbId) {
+                      href = `/dashboard/media/${tmdbId}?type=${isSeries ? 'tv' : 'movie'}${isSeries && item.ParentIndexNumber !== undefined && item.IndexNumber !== undefined ? `&season=${item.ParentIndexNumber}&episode=${item.IndexNumber}` : ''}`;
+                  } else if (itemId) {
+                      href = `/dashboard/media/${itemId}?type=${isSeries ? 'tv' : 'movie'}&source=${item.Source || 'emby'}&name=${encodeURIComponent(searchName || 'Unknown')}${isSeries && item.ParentIndexNumber !== undefined && item.IndexNumber !== undefined ? `&season=${item.ParentIndexNumber}&episode=${item.IndexNumber}` : ''}`;
+                  }
+
+                  const Content = (
+                    <div className="p-3 hover:bg-gray-700/30 transition-colors flex gap-3 items-center">
+                      <div className="w-12 h-16 bg-gray-900 rounded-md overflow-hidden flex-shrink-0 relative">
+                        <EmbyImage 
+                          itemId={item.imageItemId}
+                          className="w-full h-full object-cover"
+                          alt={item.Name}
+                        />
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-gray-500">
-                          {Math.round((item.PlaybackDuration || 0) / 60)} min
-                        </span>
-                        <SourceBadge source={item.Source} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-white truncate">{item.Name}</div>
+                        <div className="text-sm text-gray-400 truncate">
+                          {item.SeriesName && <span className="text-blue-400">{item.SeriesName} • </span>}
+                          {formatDistanceToNow(new Date(item.DateCreated), { addSuffix: true, locale: fr })}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-gray-500">
+                            {Math.round((item.PlaybackDuration || 0) / 60)} min
+                          </span>
+                          <SourceBadge source={item.Source} />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+
+                  return href ? (
+                    <Link key={i} href={href} className="block">
+                      {Content}
+                    </Link>
+                  ) : (
+                    <div key={i}>
+                      {Content}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="p-8 text-center text-gray-500">

@@ -4,6 +4,16 @@ export interface SettingsFormData {
     qbittorrent_password: string
     prowlarr_url: string
     prowlarr_api_key: string
+    // Storage settings (SMB or FTP)
+    storage_protocol: 'smb' | 'ftp'
+    storage_host: string
+    storage_port: string
+    storage_username: string
+    storage_password: string
+    storage_share: string  // SMB share name only (not used for FTP)
+    storage_root_path: string  // Restrict access to this subfolder (FTP & SMB)
+    storage_secure: string  // 'true' for FTPS, 'false' for plain FTP
+    // Legacy SMB settings (for migration)
     smb_host: string
     smb_username: string
     smb_password: string
@@ -24,6 +34,7 @@ export interface SettingsFormData {
     auth_emby_enabled: boolean
     auth_plex_enabled: boolean
     auth_jellyfin_enabled: boolean
+    auth_local_enabled: boolean
     unraid_url: string
     unraid_api_key: string
     docker_host: string

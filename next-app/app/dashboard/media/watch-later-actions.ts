@@ -69,12 +69,16 @@ export async function toggleWatchLater(params: {
             await prisma.watchLater.delete({
                 where: { id: existing.id }
             })
+
+            const { logAction } = await import('@/lib/audit')
+            await logAction(userId, 'WATCH_LATER_REMOVE', 'WatchLater', existing.id.toString(), { title: params.title, mediaType: params.mediaType, mediaId: params.mediaId })
+
             revalidatePath('/dashboard/requests')
             revalidatePath('/dashboard/media')
             return { success: true, action: 'removed' }
         } else {
             log('[WatchLater] Adding item:', params.title);
-            await prisma.watchLater.create({
+            const newItem = await prisma.watchLater.create({
                 data: {
                     userId,
                     mediaId: params.mediaId,
@@ -85,6 +89,10 @@ export async function toggleWatchLater(params: {
                     isEmbyItem: params.isEmbyItem
                 }
             })
+
+            const { logAction } = await import('@/lib/audit')
+            await logAction(userId, 'WATCH_LATER_ADD', 'WatchLater', newItem.id.toString(), { title: params.title, mediaType: params.mediaType, mediaId: params.mediaId })
+
             revalidatePath('/dashboard/requests')
             revalidatePath('/dashboard/media')
             return { success: true, action: 'added' }

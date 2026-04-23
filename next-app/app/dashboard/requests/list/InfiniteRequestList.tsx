@@ -339,24 +339,22 @@ export function InfiniteRequestList({ initialData, canSync = false, canDelete = 
                     let fallbackPosterPath = null
                     const proxyUrl = tmdbId ? `/api/media/image/${tmdbId}?tmdbId=${tmdbId}&mediaType=${mediaType}` : null
                     
-                    if (media.posterPath) {
-                        if (media.posterPath.startsWith('http')) {
-                            posterPath = media.posterPath
+                    if (request.media.posterPath) {
+                        if (request.media.posterPath.startsWith('http')) {
+                            posterPath = request.media.posterPath
                             fallbackPosterPath = proxyUrl
-                        } else if (media.posterPath.startsWith('/api/v3/mediacover') || 
-                                 media.posterPath.startsWith('/api/mediacover') ||
-                                 media.posterPath === "null" ||
-                                 media.posterPath === "undefined" ||
-                                 media.posterPath === "") {
-                            // Chemin invalide, on utilisera le proxy directement
+                        } else if (request.media.posterPath.startsWith('/api/v3/mediacover') || 
+                                  request.media.posterPath.startsWith('/api/mediacover') ||
+                                  request.media.posterPath === "null" ||
+                                  request.media.posterPath === "undefined" ||
+                                  request.media.posterPath === "") {
                             posterPath = proxyUrl
                         } else {
-                            const cleanPath = media.posterPath.startsWith('/') ? media.posterPath : `/${media.posterPath}`
-                            posterPath = `https://image.tmdb.org/t/p/w300${cleanPath}`
+                            const cleanPath = request.media.posterPath.startsWith('/') ? request.media.posterPath : `/${request.media.posterPath}`
+                            posterPath = `https://image.tmdb.org/t/p/w500${cleanPath}`
                             fallbackPosterPath = proxyUrl
                         }
                     } else if (tmdbId) {
-                        // Fallback vers le proxy si pas de poster du tout
                         posterPath = proxyUrl
                     }
                     

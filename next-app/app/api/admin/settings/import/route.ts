@@ -40,14 +40,12 @@ export async function POST(request: Request) {
         where: { key: setting.key },
         update: {
           value: setting.value,
-          type: setting.type,
-          group: setting.group,
+          category: setting.category || setting.group || 'general',
         },
         create: {
           key: setting.key,
           value: setting.value,
-          type: setting.type,
-          group: setting.group,
+          category: setting.category || setting.group || 'general',
         }
       })
     })

@@ -55,6 +55,13 @@ export async function POST(request: Request) {
       }
     })
 
+    try {
+        const { logAction } = await import('@/lib/audit')
+        await logAction(parseInt((user as any).id), 'CREATE', 'Role', role.id, { name, description })
+    } catch (e) {
+        console.error('Failed to log role creation:', e)
+    }
+
     return NextResponse.json(role)
   } catch (error) {
     console.error('Failed to create role:', error)

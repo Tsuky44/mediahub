@@ -35,6 +35,14 @@ export function MediaTabs({ movies, series }: MediaTabsProps) {
                     </div>
                     <input
                         type="text"
+                        name="search-media"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="none"
+                        spellCheck="false"
+                        data-1p-ignore="true"
+                        data-lpignore="true"
+                        data-form-type="other"
                         className="block w-full rounded-md border border-gray-700 bg-gray-800 py-2 pl-10 pr-3 text-white placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm"
                         placeholder="Rechercher..."
                         value={searchQuery}

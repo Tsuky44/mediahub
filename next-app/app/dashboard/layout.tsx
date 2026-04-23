@@ -1,6 +1,7 @@
 import { Navbar } from '@/components/Navbar'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
+import { SystemMessageDisplay } from '@/components/SystemMessageDisplay'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,10 @@ export default async function DashboardLayout({
       key: {
         in: ['qbittorrent_url', 'smb_host', 'docker_host', 'unraid_url']
       }
+    },
+    select: {
+      key: true,
+      value: true
     }
   })
 
@@ -41,6 +46,7 @@ export default async function DashboardLayout({
       <main className="mx-auto w-full px-2 py-8 sm:px-4 lg:px-6">
         {children}
       </main>
+      <SystemMessageDisplay />
     </div>
   )
 }

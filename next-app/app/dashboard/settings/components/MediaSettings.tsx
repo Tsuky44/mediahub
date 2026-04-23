@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Tv } from 'lucide-react'
+import { Tv, UserCircle } from 'lucide-react'
 import { InputField, SectionHeader, TestButton, TestResult, CheckboxField } from './SharedComponents'
 import { SettingsFormData } from './types'
 import { testEmbyConnection, testPlexConnection, testJellyfinConnection } from '../../downloads/file-actions'
@@ -92,6 +92,24 @@ export const MediaSettings = ({ formData, updateField, readOnly }: Props) => {
 
     return (
         <div className="space-y-6">
+            {/* Local Auth Section */}
+            <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-6">
+                <SectionHeader 
+                    icon={UserCircle} 
+                    title="Authentification Locale" 
+                    description="Configuration de l'authentification locale" 
+                />
+                <div className="mb-6">
+                    <CheckboxField
+                        label="Activer l'authentification locale"
+                        checked={formData.auth_local_enabled}
+                        onChange={(v) => updateField('auth_local_enabled', v)}
+                        description="Permettre aux utilisateurs de se connecter avec un compte local"
+                        readOnly={readOnly}
+                    />
+                </div>
+            </div>
+
             {/* Emby Section */}
             <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-6">
                 <SectionHeader 

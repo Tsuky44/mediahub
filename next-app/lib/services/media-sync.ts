@@ -81,6 +81,7 @@ export class MediaSyncService {
             const isAvailable = availability.status === 'available';
             const isPartial = availability.status === 'partial'; // Relevant for TV
 
+            /* DISABLED: MediaAvailabilityIndex removed from schema
             // Get previous state from index
             const index = await prisma.mediaAvailabilityIndex.findUnique({
                 where: {
@@ -146,6 +147,36 @@ export class MediaSyncService {
                         lastCheckedAt: new Date()
                     }
                 });
+            }
+            */
+
+            // FALLBACK LOGIC for MediaRequest only (safe without MediaAvailabilityIndex)
+            if (isAvailable) {
+                 // Check for pending requests
+                 const pendingRequests = await prisma.mediaRequest.findMany({
+                    where: {
+                        tmdbId: tmdbId,
+                        mediaType: mediaType,
+                        status: { not: 5 }
+                    }
+                 });
+
+                 if (pendingRequests.length > 0) {
+                    console.log(`[MediaSync] Item became available for requests: ${mediaType}/${tmdbId}`);
+                    
+                    // Update Requests
+                    await prisma.mediaRequest.updateMany({
+                        where: {
+                            tmdbId: tmdbId,
+                            mediaType: mediaType,
+                            status: { not: 5 }
+                        },
+                        data: { status: 5 } // Mark as AVAILABLE
+                    });
+
+                    // Notify Users (Requesters + Subscribers)
+                    await this.notifyUsers(tmdbId, mediaType, availability);
+                 }
             }
 
         } catch (error) {

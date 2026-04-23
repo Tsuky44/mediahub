@@ -35,6 +35,211 @@ export async function testQBittorrentConnectionAction(url: string, username?: st
     }
 }
 
+import { EmbyService } from '@/lib/services/emby'
+
+export async function approveAccountRequestAction(requestId: string, templateUserId?: string, customName?: string) {
+    try {
+        const user = await getCurrentUser()
+        if (!user || (user as any).role !== 'admin') {
+            throw new Error('Unauthorized')
+        }
+
+        const request = await prisma.accountRequest.findUnique({
+            where: { id: requestId }
+        })
+
+        if (!request) {
+            throw new Error('Demande introuvable')
+        }
+
+        if (request.status !== 'PENDING') {
+            throw new Error('Cette demande a déjà été traitée')
+        }
+
+        // Check if user already exists locally
+        const existingUser = await prisma.user.findUnique({
+            where: { email: request.email }
+        })
+
+        if (existingUser) {
+            // If user exists, just mark request as approved
+            await prisma.accountRequest.update({
+                where: { id: requestId },
+                data: { status: 'APPROVED' }
+            })
+            
+            revalidatePath('/dashboard/settings')
+            return { success: true, message: 'Demande approuvée (utilisateur existant).' }
+        }
+
+        // Emby Integration: Create User and Apply Template if requested
+        let embyMessage = '';
+        
+        try {
+            // Fetch Emby settings
+            const settings = await (prisma as any).setting.findMany({
+                where: {
+                    key: { in: ['emby_url', 'emby_api_key'] }
+                }
+            });
+            
+            const embyUrl = settings.find((s: any) => s.key === 'emby_url')?.value;
+            const embyApiKey = settings.find((s: any) => s.key === 'emby_api_key')?.value;
+
+            if (embyUrl && embyApiKey) {
+                const embyService = new EmbyService(embyUrl, embyApiKey)
+                
+                // 1. Create User in Emby
+                const newUserName = customName || request.firstName
+                
+                let newEmbyUser;
+                try {
+                    newEmbyUser = await embyService.createUser(newUserName)
+                } catch (e: any) {
+                        // If creation fails, try to find existing user
+                        console.error("Emby create user failed:", e)
+                        const users = await embyService.getUsers()
+                        newEmbyUser = users.find((u: any) => u.Name === newUserName)
+                        if (!newEmbyUser) {
+                             embyMessage = ` (Échec création Emby: ${e.message})`
+                             // Don't throw, proceed with just approval
+                        }
+                }
+
+                if (newEmbyUser && newEmbyUser.Id) {
+                    // 2. Get Template User Policy (if template provided)
+                    if (templateUserId) {
+                        const templateUser = await embyService.getUser(templateUserId)
+                        
+                        if (templateUser) {
+                            // 3. Apply Policy to New User
+                            if (templateUser.Policy) {
+                                await embyService.updateUserPolicy(newEmbyUser.Id, templateUser.Policy)
+                            }
+                            // 4. Apply Configuration
+                            if (templateUser.Configuration) {
+                                await embyService.updateUserConfiguration(newEmbyUser.Id, templateUser.Configuration)
+                            }
+                        }
+                    }
+
+                    // 5. Link Emby Connect (Using specific endpoint)
+                    // Check if already linked from creation
+                    const userToUpdate = await embyService.getUser(newEmbyUser.Id)
+                    if (userToUpdate.ConnectUserName === request.email) {
+                         embyMessage = ' Utilisateur Emby créé et lié (via création).'
+                    } else {
+                        try {
+                            await embyService.linkUserToConnect(newEmbyUser.Id, request.email)
+                            embyMessage = ' Utilisateur Emby créé et lié (invitation envoyée).'
+                        } catch (e: any) {
+                            embyMessage = ` (Attention: Erreur liaison Emby Connect - ${e.message})`
+                        }
+                    }
+                }
+            }
+        } catch (error: any) {
+            console.error("Emby automation failed:", error)
+            embyMessage = ` (Attention: Erreur Emby - ${error.message})`
+        }
+
+
+        // Mark request as approved - User will be created via Emby/Plex/Jellyfin sync (login)
+        await prisma.accountRequest.update({
+            where: { id: requestId },
+            data: { status: 'APPROVED' }
+        })
+
+        try {
+            const { logAction } = await import('@/lib/audit')
+            await logAction(
+                parseInt((user as any).id),
+                'ACCOUNT_REQUEST_APPROVE',
+                'AccountRequest',
+                requestId,
+                { email: request.email, firstName: request.firstName }
+            )
+
+            const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
+            await ExternalNotificationService.send('account_request', {
+                title: 'Demande de compte approuvée',
+                message: `La demande de ${request.firstName} (${request.email}) a été approuvée.`,
+                data: { email: request.email, firstName: request.firstName, status: 'approved' }
+            })
+        } catch (e) {
+            console.error('Failed to log account request approval:', e)
+        }
+
+        revalidatePath('/dashboard/settings')
+        return { success: true, message: `Demande approuvée.${embyMessage}` }
+    } catch (error: any) {
+        return { success: false, message: error.message }
+    }
+}
+
+export async function rejectAccountRequestAction(requestId: string) {
+    try {
+        const user = await getCurrentUser()
+        if (!user || (user as any).role !== 'admin') {
+            throw new Error('Unauthorized')
+        }
+
+        const request = await prisma.accountRequest.update({
+            where: { id: requestId },
+            data: { status: 'REJECTED' }
+        })
+
+        try {
+            const { logAction } = await import('@/lib/audit')
+            await logAction(
+                parseInt((user as any).id),
+                'ACCOUNT_REQUEST_REJECT',
+                'AccountRequest',
+                requestId,
+                { email: request.email, firstName: request.firstName }
+            )
+        } catch (e) {
+            console.error('Failed to log account request rejection:', e)
+        }
+
+        revalidatePath('/dashboard/settings')
+        return { success: true, message: 'Demande rejetée.' }
+    } catch (error: any) {
+        return { success: false, message: error.message }
+    }
+}
+
+export async function deleteAccountRequestAction(requestId: string) {
+    try {
+        const user = await getCurrentUser()
+        if (!user || (user as any).role !== 'admin') {
+            throw new Error('Unauthorized')
+        }
+
+        const request = await prisma.accountRequest.delete({
+            where: { id: requestId }
+        })
+
+        try {
+            const { logAction } = await import('@/lib/audit')
+            await logAction(
+                parseInt((user as any).id),
+                'ACCOUNT_REQUEST_DELETE',
+                'AccountRequest',
+                requestId,
+                { email: request.email, firstName: request.firstName }
+            )
+        } catch (e) {
+            console.error('Failed to log account request deletion:', e)
+        }
+
+        revalidatePath('/dashboard/settings')
+        return { success: true, message: 'Demande supprimée.' }
+    } catch (error: any) {
+        return { success: false, message: error.message }
+    }
+}
+
 export async function testUnraidDebugAction() {
     try {
         const user = await getCurrentUser()

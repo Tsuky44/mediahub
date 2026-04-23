@@ -3,8 +3,9 @@ import { prisma } from '@/lib/prisma';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+// Always log errors, regardless of dev mode
+const error = (...args: any[]) => { console.error(...args); };
+const warn = (...args: any[]) => { console.warn(...args); };
 
 
 export class DockerService {
@@ -13,30 +14,36 @@ export class DockerService {
     private static async init() {
         // Always re-check settings to ensure we use the latest host
         let options: any = {};
-        const dockerHostSetting = await prisma.setting.findFirst({
-            where: { key: 'docker_host' }
-        });
-
-        const dockerHost = dockerHostSetting?.value || process.env.DOCKER_HOST;
-        log(`[DockerService] Init - Env DOCKER_HOST: ${process.env.DOCKER_HOST}, DB Setting: ${dockerHostSetting?.value}`);
-
-        if (dockerHost) {
-            if (dockerHost.startsWith('tcp://')) {
-                const url = new URL(dockerHost.replace('tcp://', 'http://'));
-                options.host = url.hostname;
-                options.port = url.port;
-                log(`[DockerService] Initialized with TCP: ${options.host}:${options.port}`);
+        try {
+            const dockerHostSetting = await prisma.setting.findFirst({
+                where: { key: 'docker_host' },
+                select: { value: true }
+            });
+    
+            const dockerHost = dockerHostSetting?.value || process.env.DOCKER_HOST;
+            log(`[DockerService] Init - Env DOCKER_HOST: ${process.env.DOCKER_HOST}, DB Setting: ${dockerHostSetting?.value}`);
+    
+            if (dockerHost) {
+                if (dockerHost.startsWith('tcp://')) {
+                    const url = new URL(dockerHost.replace('tcp://', 'http://'));
+                    options.host = url.hostname;
+                    options.port = url.port;
+                    log(`[DockerService] Initialized with TCP: ${options.host}:${options.port}`);
+                } else {
+                    options.socketPath = dockerHost;
+                    log(`[DockerService] Initialized with socket: ${options.socketPath}`);
+                }
             } else {
-                options.socketPath = dockerHost;
-                log(`[DockerService] Initialized with socket: ${options.socketPath}`);
+                options.socketPath = '/var/run/docker.sock';
+                log(`[DockerService] Initialized with default socket: ${options.socketPath}`);
             }
-        } else {
-            options.socketPath = '/var/run/docker.sock';
-            log(`[DockerService] Initialized with default socket: ${options.socketPath}`);
+    
+            this.instance = new Docker(options);
+            return this.instance;
+        } catch (e: any) {
+            error('[DockerService] Failed to initialize Docker client:', e);
+            throw new Error(`Failed to initialize Docker client: ${e.message}`);
         }
-
-        this.instance = new Docker(options);
-        return this.instance;
     }
 
     static async containerAction(containerId: string, action: 'start' | 'stop' | 'restart'): Promise<{ success: boolean; error?: string }> {
@@ -50,14 +57,28 @@ export class DockerService {
             if (action === 'start') {
                 try {
                     await container.start();
-                    // Verify it's actually running
-                     const info = await container.inspect();
-                     if (!info.State.Running) {
-                         const errorMsg = info.State.Error || `ExitCode: ${info.State.ExitCode}`;
-                         throw new Error(`Container started but immediately exited (${errorMsg}). Check container logs.`);
-                     }
                 } catch (err: any) {
-                    if (err.statusCode !== 304) throw err;
+                    // If 304, it means already started. We still want to verify.
+                    if (err.statusCode !== 304) {
+                        error(`[DockerService] Start failed for ${id}:`, err);
+                        throw err;
+                    }
+                    log(`[DockerService] Container ${id} already started (304), verifying state...`);
+                }
+
+                // Wait a moment to ensure it stays up (catch immediate crash loops)
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Verify it's actually running
+                try {
+                    const info = await container.inspect();
+                    if (!info.State.Running) {
+                        const errorMsg = info.State.Error || `ExitCode: ${info.State.ExitCode}, Status: ${info.State.Status}`;
+                        throw new Error(`Container started but immediately exited (${errorMsg}). Check container logs.`);
+                    }
+                } catch (inspectErr: any) {
+                    error(`[DockerService] Failed to inspect container ${id} after start:`, inspectErr);
+                    throw new Error(`Container started but failed to verify status: ${inspectErr.message}`);
                 }
             } else if (action === 'stop') {
                 try {
@@ -69,6 +90,10 @@ export class DockerService {
             } else if (action === 'restart') {
                 try {
                     await container.restart();
+                    
+                    // Wait a moment to ensure it stays up
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
                     // Verify it's actually running
                     const info = await container.inspect();
                     if (!info.State.Running) {
@@ -85,6 +110,9 @@ export class DockerService {
                     }
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     await container.start();
+                    
+                    // Wait a moment to ensure it stays up
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     
                     // Verify it's actually running after fallback
                     const info = await container.inspect();

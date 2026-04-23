@@ -52,6 +52,7 @@ export async function GET(request: Request) {
     const viewingStats = await embyService.getItemStateForAllUsers(itemId)
 
     // Enhance viewingStats with Prisma EmbyActivityLog data (ALWAYS use internal DB for date as requested)
+    /*
     for (const stat of viewingStats) {
         try {
             // Find latest activity for this user and this item (or series)
@@ -72,7 +73,7 @@ export async function GET(request: Request) {
                 ]
             }
 
-            const lastLog = await (prisma as any).embyActivityLog.findFirst({
+            const lastLog = await prisma.embyActivityLog.findFirst({
                 where: whereClause,
                 orderBy: {
                     startTime: 'desc'
@@ -99,6 +100,7 @@ export async function GET(request: Request) {
             console.error(`Failed to fetch activity log for user ${stat.userId} item ${itemId}:`, e)
         }
     }
+    */
 
     // 2. If Series, get seasons details
     let seasons: any[] = []

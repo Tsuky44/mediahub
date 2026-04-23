@@ -21,7 +21,7 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
         
         if (!embyService) return { results: [], total_pages: 0 }
 
-        const dbUser = await (prisma as any).user.findFirst({
+        const dbUser = await prisma.user.findFirst({
             where: { 
                 email: user.email
             }
@@ -115,7 +115,7 @@ export async function fetchRecentlyWatchedItems() {
         
         if (!embyService) return []
 
-        const dbUser = await (prisma as any).user.findFirst({
+        const dbUser = await prisma.user.findFirst({
             where: { 
                 email: user.email
             }
@@ -221,7 +221,7 @@ export async function fetchUserRecommendations(page: number = 1) {
         
         if (!tmdbService) return { results: [], total_pages: 0 }
 
-        const dbUser = await (prisma as any).user.findFirst({
+        const dbUser = await prisma.user.findFirst({
             where: { 
                 email: user.email
             }
@@ -237,7 +237,7 @@ export async function fetchUserRecommendations(page: number = 1) {
         }
 
         // 2. Get user's recent requests from local DB
-        const requests = await (prisma as any).mediaRequest.findMany({
+        const requests = await prisma.mediaRequest.findMany({
             where: {
                 OR: [
                     { requesterEmail: user.email },
@@ -349,7 +349,7 @@ export async function fetchServerTrends(page: number = 1) {
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
         // 1. Get most watched items from WatchEvent
-        const topWatched = await (prisma as any).watchEvent.groupBy({
+        const topWatched = await prisma.watchEvent.groupBy({
             by: ['itemId', 'itemType', 'itemName', 'seriesName'],
             _count: {
                 itemId: true
@@ -370,7 +370,7 @@ export async function fetchServerTrends(page: number = 1) {
         const topWatchedArray = Array.isArray(topWatched) ? topWatched : []
 
         // 2. Get most requested items from MediaRequest
-        const topRequested = await (prisma as any).mediaRequest.groupBy({
+        const topRequested = await prisma.mediaRequest.groupBy({
             by: ['tmdbId', 'mediaType', 'title'],
             _count: {
                 tmdbId: true
@@ -460,7 +460,7 @@ export async function toggleFavorite(itemId: string, isFavorite: boolean) {
         const embyService = await getEmbyServiceForUser()
         if (!embyService) return false
 
-        const dbUser = await (prisma as any).user.findFirst({
+        const dbUser = await prisma.user.findFirst({
             where: { 
                 email: user.email
             }

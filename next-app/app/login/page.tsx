@@ -23,14 +23,16 @@ export default async function LoginPage() {
   }
 
   // Fetch enabled auth providers
-  const embyEnabled = await prisma.setting.findFirst({ where: { key: 'auth_emby_enabled' } })
-  const plexEnabled = await prisma.setting.findFirst({ where: { key: 'auth_plex_enabled' } })
-  const jellyfinEnabled = await prisma.setting.findFirst({ where: { key: 'auth_jellyfin_enabled' } })
+  const embyEnabled = await prisma.setting.findFirst({ where: { key: 'auth_emby_enabled' }, select: { value: true } })
+  const plexEnabled = await prisma.setting.findFirst({ where: { key: 'auth_plex_enabled' }, select: { value: true } })
+  const jellyfinEnabled = await prisma.setting.findFirst({ where: { key: 'auth_jellyfin_enabled' }, select: { value: true } })
+  const localEnabled = await prisma.setting.findFirst({ where: { key: 'auth_local_enabled' }, select: { value: true } })
 
   const enabledProviders = {
     emby: embyEnabled ? embyEnabled.value === 'true' : true, // Default true
     plex: plexEnabled ? plexEnabled.value === 'true' : false, // Default false
-    jellyfin: jellyfinEnabled ? jellyfinEnabled.value === 'true' : false // Default false
+    jellyfin: jellyfinEnabled ? jellyfinEnabled.value === 'true' : false, // Default false
+    local: localEnabled ? localEnabled.value === 'true' : true // Default true for local
   }
 
   let backdrops: string[] = []

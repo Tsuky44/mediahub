@@ -196,7 +196,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
  
    // 3. Fetch Data (Prisma)
   // Fetch User Groups for aggregation
-  const userGroups = await (prisma as any).userGroup.findMany({
+  const userGroups = await prisma.userGroup.findMany({
     include: { members: true }
   });
   const userGroupMap = new Map<string, any>(); // key: "userId", value: group
@@ -242,17 +242,27 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       }
   }
 
-  const [historyRaw, embySessionsRaw] = await Promise.all([
-    (prisma as any).embyActivityLog.findMany({
-       where: activityWhere,
-       orderBy: {
-         startTime: 'desc'
-       }
-     }),
-     (prisma as any).embyLiveSession.findMany({
-       where: liveWhere
-     })
-   ])
+  // Fetch data from WatchEvent instead of EmbyActivityLog
+  const historyRaw = await prisma.watchEvent.findMany({
+    where: {
+      playedAt: {
+        gte: startDate,
+        lte: endDate
+      },
+      ...(!hasGlobalView && hasSelfView ? {
+        OR: [
+          { userId: user.id },
+          { embyUserId: { in: [user.embyUserId, user.plexUserId, user.jellyfinUserId].filter(Boolean) } },
+          { userName: user.name }
+        ]
+      } : {})
+    },
+    orderBy: {
+      playedAt: 'desc'
+    }
+  });
+
+  const embySessionsRaw: any[] = [];
 
   // Sanitize sessions for client component (convert BigInt to Number)
   const embySessions = embySessionsRaw.map((s: any) => ({
@@ -277,20 +287,20 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
       UserId: log.embyUserId,
       UserName: log.userName,
       Name: log.itemName,
-      SeriesName: mediaInfo.seriesName || mediaInfo.SeriesName,
+      SeriesName: log.seriesName || mediaInfo.seriesName || mediaInfo.SeriesName,
       SeriesId: mediaInfo.seriesId || mediaInfo.SeriesId,
-      TmdbId: mediaInfo.tmdbId,
-      SeasonName: mediaInfo.seasonName || mediaInfo.SeasonName,
-      IndexNumber: mediaInfo.episodeIndex ?? mediaInfo.IndexNumber,
-      ParentIndexNumber: mediaInfo.seasonIndex ?? mediaInfo.ParentIndexNumber,
+      TmdbId: log.tmdbId || mediaInfo.tmdbId,
+      SeasonName: log.seasonName || mediaInfo.seasonName || mediaInfo.SeasonName,
+      IndexNumber: log.episodeNumber ?? mediaInfo.episodeIndex ?? mediaInfo.IndexNumber,
+      ParentIndexNumber: log.seasonNumber ?? mediaInfo.seasonIndex ?? mediaInfo.ParentIndexNumber,
       mediaInfo: log.mediaInfo,
       Type: log.itemType,
       Client: log.client,
       DeviceName: log.device,
-      ActivityDateInserted: log.startTime.toISOString(),
-      DateCreated: log.startTime.toISOString(),
-      PlaybackDuration: log.playDuration, // Already accurate from tracker
-      RunTimeTicks: Number(log.totalDuration || 0),
+      ActivityDateInserted: log.playedAt.toISOString(),
+      DateCreated: log.playedAt.toISOString(),
+      PlaybackDuration: (log.durationMinutes || 0) * 60,
+      RunTimeTicks: 0,
       source: 'emby',
     }
   })
@@ -685,15 +695,12 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
 
   if (!hasRealData) {
     // Check if there's any data at all to help the user navigate
-    const oldestLog = await (prisma as any).embyActivityLog.findFirst({
-      where: {
-        source: sourceFilter !== 'all' ? sourceFilter : undefined,
-      },
-      orderBy: { startTime: 'asc' },
-      select: { startTime: true }
+    const oldestLog = await prisma.watchEvent.findFirst({
+      orderBy: { playedAt: 'asc' },
+      select: { playedAt: true }
     });
 
-    const oldestYear = oldestLog ? new Date(oldestLog.startTime).getFullYear() : null;
+    const oldestYear = oldestLog ? new Date(oldestLog.playedAt).getFullYear() : null;
     const currentYear = period === 'year' ? (params.year ? parseInt(params.year) : now.getFullYear()) : null;
 
     return (

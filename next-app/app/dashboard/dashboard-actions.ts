@@ -11,6 +11,7 @@ import { promisify } from 'util'
 import { prisma } from '@/lib/prisma'
 import { getTmdbService } from '@/lib/services/tmdb'
 import { getMediaAvailability } from '@/lib/services/media-status'
+import { remember } from '@/lib/cache'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -69,6 +70,28 @@ export async function getRecentRequests() {
                 where: { id: req.id },
                 data: { status: newStatus }
             })
+            // Send media_available notification when media first becomes available
+            if (newStatus === 5) {
+                try {
+                    const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
+                    await ExternalNotificationService.send('media_available', {
+                        title: req.title,
+                        message: `${req.title} est maintenant disponible sur le serveur.`,
+                        data: {
+                            tmdbId: req.tmdbId,
+                            mediaType: req.mediaType,
+                            title: req.title,
+                            year: metadata.year || '',
+                            overview: metadata.overview || '',
+                            posterPath: posterPath || metadata.posterPath || '',
+                            genres: metadata.genres || '',
+                            user: req.requesterName || ''
+                        }
+                    }, req.userId ?? undefined)
+                } catch (notifErr) {
+                    error(`[Dashboard] Failed to send media_available notification for ${req.title}:`, notifErr)
+                }
+            }
             status = newStatus
          }
        } catch (e) {
@@ -76,12 +99,16 @@ export async function getRecentRequests() {
        }
     }
 
-    // If posterPath is missing or looks like a local Sonarr/Radarr path, try to get from TMDB
+    // Patch 11: Cache TMDB poster 5min pour éviter N appels non cachés au chargement
     if ((!posterPath || posterPath.includes('MediaCover')) && req.tmdbId && tmdbService) {
       try {
          const tmdbIdNum = parseInt(req.tmdbId)
          if (!isNaN(tmdbIdNum)) {
-           const details = await tmdbService.getDetails(tmdbIdNum, req.mediaType as 'movie' | 'tv')
+           const details = await remember(
+             `tmdb_poster_${req.mediaType}_${tmdbIdNum}`,
+             5 * 60 * 1000,
+             () => tmdbService!.getDetails(tmdbIdNum, req.mediaType as 'movie' | 'tv')
+           )
            if (details && details.poster_path) {
              posterPath = details.poster_path
            }
@@ -119,6 +146,8 @@ export async function getDashboardStats() {
       return null
     }
 
+    // Patch 9: Cache serveur 30s — évite d'appeler Emby + Unraid à chaque client
+    return await remember('dashboard_stats', 30 * 1000, async () => {
     const embyService = await getEmbyServiceForUser()
     if (!embyService) return null
 
@@ -175,6 +204,7 @@ export async function getDashboardStats() {
       },
       disk: diskUsage
     }
+    }) // end remember
   } catch (e) {
     error('Failed to get dashboard stats:', e)
     return null
@@ -190,16 +220,18 @@ export async function checkServicesHealth() {
     if (ability.cannot('read', 'DashboardStats')) {
       return { emby: 'hidden' } // Or offline
     }
-    
-    const embyUrl = await getSetting('emby_url')
-    const embyKey = await getSetting('emby_api_key')
 
-    // Test with short timeouts to avoid blocking the UI
-    const embyRes = embyUrl && embyKey ? await testEmbyConnection(embyUrl, embyKey) : { success: false }
+    // Patch 10: Cache serveur 20s — évite un appel HTTP Emby toutes les 30s par client connecté
+    return await remember('services_health', 20 * 1000, async () => {
+      const embyUrl = await getSetting('emby_url')
+      const embyKey = await getSetting('emby_api_key')
 
-    return {
-      emby: embyRes.success ? 'online' : 'offline'
-    }
+      const embyRes = embyUrl && embyKey ? await testEmbyConnection(embyUrl, embyKey) : { success: false }
+
+      return {
+        emby: embyRes.success ? 'online' : 'offline'
+      }
+    })
   } catch (e) {
     error('Failed to check services health:', e)
     return {

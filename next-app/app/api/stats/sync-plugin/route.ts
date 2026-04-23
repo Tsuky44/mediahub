@@ -16,10 +16,10 @@ const BATCH_SIZE = 1000;
 const SAFETY_LIMIT = 50000;
 
 // Helper: Batch process and insert/update logs
-async function batchProcess(source: string, items: any[], userMap: Map<string, string>) {
+async function batchProcess(source: string, items: any[], userMap: Map<string, string>, localUserMap: Map<string, number>) {
     if (items.length === 0) return 0;
 
-    // 1. Normalize items to DB schema
+    // 1. Normalize items to WatchEvent schema
     const candidates = items.map(item => {
         let startTime: Date;
         let playDuration: number;
@@ -30,8 +30,10 @@ async function batchProcess(source: string, items: any[], userMap: Map<string, s
         let userName: string;
         let client: string;
         let device: string;
-        let mediaInfo: string;
-        let totalDuration: bigint | null = null;
+        let seriesName: string | null = null;
+        let seasonName: string | null = null;
+        let episodeNumber: number | null = null;
+        let seasonNumber: number | null = null;
 
         if (source === 'plex') {
             startTime = new Date(item.viewedAt * 1000);
@@ -43,14 +45,11 @@ async function batchProcess(source: string, items: any[], userMap: Map<string, s
             userName = item.user || item.User?.title || userMap.get(embyUserId) || 'Plex User';
             client = item.player?.product || 'Plex';
             device = item.player?.title || 'Plex Device';
-            totalDuration = item.duration ? BigInt(item.duration) * BigInt(10000) : null;
-            mediaInfo = JSON.stringify({
-                pluginSynced: true,
-                seriesName: item.grandparentTitle,
-                seasonName: item.parentTitle,
-                episodeIndex: item.index,
-                seasonIndex: item.parentIndex
-            });
+            
+            seriesName = item.grandparentTitle || null;
+            seasonName = item.parentTitle || null;
+            episodeNumber = item.index || null;
+            seasonNumber = item.parentIndex || null;
         } else {
             // Emby/Jellyfin
             startTime = new Date(item.DateCreated);
@@ -65,47 +64,56 @@ async function batchProcess(source: string, items: any[], userMap: Map<string, s
             }
             client = item.Client || item.ClientName || (source === 'emby' ? 'Emby' : 'Jellyfin');
             device = item.DeviceName || (source === 'emby' ? 'Emby Device' : 'Jellyfin Device');
-            mediaInfo = JSON.stringify({
-                pluginSynced: true,
-                seriesName: item.SeriesName,
-                seasonName: item.SeasonName
-            });
+            
+            seriesName = item.SeriesName || null;
+            seasonName = item.SeasonName || null;
+            // Emby usually provides IndexNumber and ParentIndexNumber but logic might vary
+            // Assuming standard Emby structure if available, otherwise null
+            episodeNumber = item.IndexNumber || null;
+            seasonNumber = item.ParentIndexNumber || null;
         }
 
+        // Try to link to local user
+        // For Plex, embyUserId is the Plex ID (integer usually).
+        // For Emby/Jellyfin, it's a GUID.
+        // The localUserMap keys should match these IDs if they were stored correctly in User table.
+        const userId = localUserMap.get(embyUserId) || null;
+
         return {
-            source,
-            embyUserId,
+            userId,
+            embyUserId, // This stores the external ID (Plex/Emby/Jellyfin ID)
             userName,
             itemId,
             itemName,
             itemType,
-            startTime,
-            endTime: new Date(startTime.getTime() + playDuration * 1000),
-            playDuration,
-            totalDuration,
+            playedAt: startTime,
+            durationMinutes: Math.round(playDuration / 60),
             client,
             device,
-            mediaInfo
+            seriesName,
+            seasonName,
+            episodeNumber,
+            // Additional fields
+            plays: 1
         };
-    }).filter(c => c.playDuration > 10); // Filter short plays
+    }).filter(c => c.durationMinutes > 0); // Filter very short plays (< 1 min)
 
     if (candidates.length === 0) return 0;
 
     // 2. Fetch existing records in time range
-    const startTimes = candidates.map(c => c.startTime.getTime());
+    const startTimes = candidates.map(c => c.playedAt.getTime());
     const minTime = new Date(Math.min(...startTimes) - 10000); // +/- 10s buffer
     const maxTime = new Date(Math.max(...startTimes) + 10000);
 
-    const existing = await prisma.embyActivityLog.findMany({
+    const existing = await prisma.watchEvent.findMany({
         where: {
-            source,
-            startTime: { gte: minTime, lte: maxTime }
+            playedAt: { gte: minTime, lte: maxTime }
         },
         select: {
             id: true,
             embyUserId: true,
             itemId: true,
-            startTime: true,
+            playedAt: true,
             userName: true
         }
     });
@@ -115,16 +123,17 @@ async function batchProcess(source: string, items: any[], userMap: Map<string, s
 
     // 3. Filter duplicates and identify updates
     for (const cand of candidates) {
+        // Fuzzy match: same user, same item, similar time (+/- 5s)
         const match = existing.find(e => 
             e.embyUserId === cand.embyUserId &&
             e.itemId === cand.itemId &&
-            Math.abs(e.startTime.getTime() - cand.startTime.getTime()) <= 5000 // 5s tolerance
+            Math.abs(e.playedAt.getTime() - cand.playedAt.getTime()) <= 5000 
         );
 
         if (!match) {
             toCreate.push(cand);
         } else if (
-            (match.userName === 'Plex User' || match.userName === 'Unknown' || match.userName.includes('User')) && 
+            (match.userName === 'Plex User' || match.userName === 'Unknown' || (match.userName && match.userName.includes('User'))) && 
             cand.userName && !cand.userName.includes('User') && cand.userName !== 'Unknown'
         ) {
             toUpdate.push({ id: match.id, userName: cand.userName });
@@ -138,14 +147,14 @@ async function batchProcess(source: string, items: any[], userMap: Map<string, s
         const chunkSize = 100;
         for (let i = 0; i < toCreate.length; i += chunkSize) {
             const batch = toCreate.slice(i, i + chunkSize);
-            await prisma.embyActivityLog.createMany({ data: batch });
+            await prisma.watchEvent.createMany({ data: batch });
             createdCount += batch.length;
         }
     }
 
     // Updates are rare, sequential is fine
     for (const update of toUpdate) {
-        await prisma.embyActivityLog.update({
+        await prisma.watchEvent.update({
             where: { id: update.id },
             data: { userName: update.userName }
         });
@@ -154,7 +163,7 @@ async function batchProcess(source: string, items: any[], userMap: Map<string, s
     return createdCount;
 }
 
-async function syncPlex(settings: any[], getSetting: (k: string) => string | null | undefined) {
+async function syncPlex(settings: any[], getSetting: (k: string) => string | null | undefined, localUserMap: Map<string, number>) {
     const plexUrl = getSetting('plex_url');
     const plexToken = getSetting('plex_token');
     if (!plexUrl || !plexToken) throw new Error('Plex not configured');
@@ -162,7 +171,7 @@ async function syncPlex(settings: any[], getSetting: (k: string) => string | nul
     log(`[SyncPlugin] Syncing from Plex (${plexUrl})...`);
     const plex = new PlexService(plexUrl, plexToken);
     
-    // Map users
+    // Map users (remote Plex users)
     let userMap = new Map<string, string>();
     try {
         const plexUsers = await plex.getUsers();
@@ -180,7 +189,7 @@ async function syncPlex(settings: any[], getSetting: (k: string) => string | nul
         if (!batch || batch.length === 0) {
             hasMore = false;
         } else {
-            syncedCount += await batchProcess('plex', batch, userMap);
+            syncedCount += await batchProcess('plex', batch, userMap, localUserMap);
             totalFetched += batch.length;
             offset += BATCH_SIZE;
             
@@ -192,14 +201,14 @@ async function syncPlex(settings: any[], getSetting: (k: string) => string | nul
     try {
         const oldestBatch = await plex.getHistory(BATCH_SIZE, 0, 'viewedAt:asc');
         if (oldestBatch && oldestBatch.length > 0) {
-            syncedCount += await batchProcess('plex', oldestBatch, userMap);
+            syncedCount += await batchProcess('plex', oldestBatch, userMap, localUserMap);
         }
     } catch (e) { warn('Plex oldest sync failed', e); }
 
     return syncedCount;
 }
 
-async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSetting: (k: string) => string | null | undefined) {
+async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSetting: (k: string) => string | null | undefined, localUserMap: Map<string, number>) {
     const isEmby = source === 'emby';
     const targetUrl = isEmby ? getSetting('emby_url') : getSetting('jellyfin_url');
     const targetKey = isEmby ? getSetting('emby_api_key') : getSetting('jellyfin_api_key');
@@ -234,7 +243,7 @@ async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSet
             if (items.length === 0) {
                 hasMore = false;
             } else {
-                syncedCount += await batchProcess(source, items, userMap);
+                syncedCount += await batchProcess(source, items, userMap, localUserMap);
                 totalFetched += items.length;
                 startIndex += BATCH_SIZE;
                 
@@ -265,10 +274,44 @@ async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSet
                          PlayDuration: item[9],
                          UserName: userMap.get(String(item[2])) || 'Unknown'
                      }));
-                     syncedCount += await batchProcess(source, history, userMap);
+                     syncedCount += await batchProcess(source, history, userMap, localUserMap);
                  }
              } catch (fbErr: any) {
                  throw new Error(`${err.message} | Fallback: ${fbErr.message}`);
+             }
+        } 
+        // Fallback for Jellyfin: User Played Items (Standard API)
+        else if (!isEmby && syncedCount === 0) {
+             log(`[SyncPlugin] Attempting Jellyfin fallback via UserPlayedItems...`);
+             try {
+                 const users = await service.getUsers();
+                 for (const user of users) {
+                     // Limit to 500 recent items per user to avoid timeouts
+                     const playedItems = await service.getUserPlayedItems(user.Id);
+                     
+                     if (playedItems && playedItems.Items) {
+                         const history = playedItems.Items.map((item: any) => ({
+                             DateCreated: item.UserData?.LastPlayedDate || new Date().toISOString(),
+                             UserId: user.Id,
+                             ItemId: item.Id,
+                             ItemType: item.Type,
+                             ItemName: item.Name,
+                             PlaybackMethod: 'Unknown',
+                             Client: 'Jellyfin',
+                             DeviceName: 'Unknown',
+                             PlayDuration: item.RunTimeTicks ? Math.round(item.RunTimeTicks / 10000000) : 0,
+                             UserName: user.Name,
+                             SeriesName: item.SeriesName,
+                             SeasonName: item.SeasonName,
+                             IndexNumber: item.IndexNumber,
+                             ParentIndexNumber: item.ParentIndexNumber
+                         }));
+                         
+                         syncedCount += await batchProcess(source, history, userMap, localUserMap);
+                     }
+                 }
+             } catch (fbErr: any) {
+                 throw new Error(`${err.message} | Jellyfin Fallback: ${fbErr.message}`);
              }
         } else {
             throw err;
@@ -299,13 +342,26 @@ export async function POST(req: NextRequest) {
         });
         const getSetting = (key: string) => settings.find(s => s.key === key)?.value;
 
+        // Fetch local users to link
+        const localUsers = await prisma.user.findMany({
+            select: { id: true, plexUserId: true, embyUserId: true, jellyfinUserId: true }
+        });
+        
+        // Map external IDs to local user ID
+        const localUserMap = new Map<string, number>();
+        for (const u of localUsers) {
+            if (u.plexUserId) localUserMap.set(u.plexUserId, u.id);
+            if (u.embyUserId) localUserMap.set(u.embyUserId, u.id);
+            if (u.jellyfinUserId) localUserMap.set(u.jellyfinUserId, u.id);
+        }
+
         let totalSynced = 0;
         const errors: string[] = [];
 
         // Run syncs (sequentially to avoid massive DB locking if run in parallel on SQLite)
         if (source === 'all' || source === 'plex') {
             try {
-                totalSynced += await syncPlex(settings, getSetting);
+                totalSynced += await syncPlex(settings, getSetting, localUserMap);
             } catch (e: any) {
                 if (source === 'plex') errors.push(e.message);
                 error('[SyncPlugin] Plex error:', e);
@@ -314,7 +370,7 @@ export async function POST(req: NextRequest) {
 
         if (source === 'all' || source === 'emby') {
             try {
-                totalSynced += await syncEmbyLike('emby', settings, getSetting);
+                totalSynced += await syncEmbyLike('emby', settings, getSetting, localUserMap);
             } catch (e: any) {
                 if (source === 'emby') errors.push(e.message);
                 error('[SyncPlugin] Emby error:', e);
@@ -323,7 +379,7 @@ export async function POST(req: NextRequest) {
 
         if (source === 'all' || source === 'jellyfin') {
             try {
-                totalSynced += await syncEmbyLike('jellyfin', settings, getSetting);
+                totalSynced += await syncEmbyLike('jellyfin', settings, getSetting, localUserMap);
             } catch (e: any) {
                 // Only error if explicitly requested or if it's the only source? 
                 // For 'all', we might ignore if not configured.

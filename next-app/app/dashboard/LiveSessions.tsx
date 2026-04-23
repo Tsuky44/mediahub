@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import { Activity, Clock, Film, Play, Wifi, WifiOff } from 'lucide-react'
 import { useLiveSessions, LiveSession } from '@/hooks/useLiveSessions'
 
@@ -157,13 +158,27 @@ export function LiveSessions({ sessions: initialSessions, canManage }: { session
                   progress = Math.round((current / total) * 100)
               }
             }
+            
+            const tmdbId = session.tmdbId || session.TmdbId || mediaInfo.tmdbId || mediaInfo.ProviderIds?.Tmdb;
+            const itemId = session.itemId || session.NowPlayingItemId || session.Id;
 
-            return (
-              <div key={session.sessionId} className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 hover:border-green-500/30 transition-all group">
+            const searchName = isEpisode 
+                ? (seriesName || session.seriesName || displayName) 
+                : (session.itemName || displayName);
+
+            let href = null;
+            if (tmdbId) {
+                href = `/dashboard/media/${tmdbId}?type=${isEpisode ? 'tv' : 'movie'}${isEpisode && seasonIndex !== undefined && episodeIndex !== undefined ? `&season=${seasonIndex}&episode=${episodeIndex}` : ''}`;
+            } else if (itemId) {
+                href = `/dashboard/media/${itemId}?type=${isEpisode ? 'tv' : 'movie'}&source=${session.source || 'emby'}&name=${encodeURIComponent(searchName || 'Unknown')}${isEpisode && seasonIndex !== undefined && episodeIndex !== undefined ? `&season=${seasonIndex}&episode=${episodeIndex}` : ''}`;
+            }
+
+            const Content = (
+              <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 hover:border-green-500/30 transition-all group">
                 <div className="flex items-start justify-between mb-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-sm font-semibold text-white truncate flex-1">
+                      <h3 className="text-sm font-semibold text-white truncate flex-1 group-hover:text-green-400 transition-colors">
                         {displayName}
                       </h3>
                       {session.source && (
@@ -197,7 +212,17 @@ export function LiveSessions({ sessions: initialSessions, canManage }: { session
                   </div>
                 </div>
               </div>
-            )
+            );
+
+            return href ? (
+              <Link key={session.sessionId} href={href} className="block">
+                {Content}
+              </Link>
+            ) : (
+              <div key={session.sessionId}>
+                {Content}
+              </div>
+            );
           })}
         </div>
       )}

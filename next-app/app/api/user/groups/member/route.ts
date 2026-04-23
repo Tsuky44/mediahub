@@ -29,11 +29,10 @@ export async function POST(req: Request) {
         // The unique constraint in schema handles this: @@unique([userId])
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const member = await (prisma as any).userGroupMember.create({
+        const member = await prisma.userGroupMember.create({
             data: {
                 userGroupId,
-                userId: String(userId),
-                username
+                userId: parseInt(String(userId)),
             }
         })
 
@@ -74,7 +73,7 @@ export async function DELETE(req: Request) {
         const { memberId } = await req.json()
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (prisma as any).userGroupMember.delete({
+        await prisma.userGroupMember.delete({
             where: {
                 id: memberId
             }

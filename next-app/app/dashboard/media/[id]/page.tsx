@@ -1,10 +1,10 @@
-import { getEmbyServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
+import { getEmbyServiceForUser, getTmdbServiceForUser, getPlexServiceForUser, getJellyfinServiceForUser } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { defineAbilityFor } from '@/lib/ability'
 import Image from 'next/image'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import RequestButton from './RequestButton'
 import { SeasonList } from '@/components/SeasonList'
 import { PlayButton } from '@/components/PlayButton'
@@ -44,11 +44,138 @@ async function getImdbRating(imdbId: string) {
 
 export const dynamic = 'force-dynamic'
 
-export default async function MediaDetailsPage({ params, searchParams }: { params: Promise<{ id: string }>, searchParams: Promise<{ type?: string }> }) {
+export default async function MediaDetailsPage({ params, searchParams }: { params: Promise<{ id: string }>, searchParams: Promise<{ type?: string, source?: string, name?: string }> }) {
   const { id } = await params
-  const { type } = await searchParams
+  const { type, source, name } = await searchParams
   const mediaType = (type as 'movie' | 'tv') || 'movie'
-  const tmdbId = parseInt(id)
+  let tmdbId = parseInt(id)
+
+  const normalizedSource = source ? source.toLowerCase() : undefined;
+  const isExternalItem = (normalizedSource && ['emby', 'plex', 'jellyfin'].includes(normalizedSource)) || id.length > 15 || isNaN(Number(id));
+  
+  if (isExternalItem) {
+      console.log(`[MediaPage] Processing External item: ${id}, source=${normalizedSource}`)
+      let item: any = null;
+      let providerName = normalizedSource ? normalizedSource.charAt(0).toUpperCase() + normalizedSource.slice(1) : 'Emby';
+
+      if (normalizedSource === 'plex') {
+          const plexService = await getPlexServiceForUser();
+          if (plexService) {
+             try {
+                 item = await plexService.getItemDetails(id);
+                 if (item) {
+                     // Normalize Plex item
+                     // Guid can be array of objects {id: "..."} or undefined
+                     const guids = Array.isArray(item.Guid) ? item.Guid : [];
+                     const tmdbGuid = guids.find((g: any) => g.id && g.id.startsWith('tmdb://'));
+                     const imdbGuid = guids.find((g: any) => g.id && g.id.startsWith('imdb://'));
+                     const tvdbGuid = guids.find((g: any) => g.id && g.id.startsWith('tvdb://'));
+                     
+                     item.ProviderIds = {
+                         Tmdb: tmdbGuid ? tmdbGuid.id.replace('tmdb://', '') : null,
+                         Imdb: imdbGuid ? imdbGuid.id.replace('imdb://', '') : null,
+                         Tvdb: tvdbGuid ? tvdbGuid.id.replace('tvdb://', '') : null
+                     };
+                     item.Name = item.title;
+                     item.Type = item.type === 'movie' ? 'Movie' : 'Series'; 
+                     // Plex doesn't have explicit Type field like Emby in Metadata, but 'type' property
+                 }
+             } catch (e) { console.error('[MediaPage] Plex fetch error:', e) }
+          }
+      } else if (normalizedSource === 'jellyfin') {
+          const jellyfinService = await getJellyfinServiceForUser();
+          if (jellyfinService) {
+              try {
+                  item = await jellyfinService.getItemDetails(id);
+              } catch (e) { console.error('[MediaPage] Jellyfin fetch error:', e) }
+          }
+      } else {
+          // Default to Emby (including if source is undefined but ID is non-numeric/long)
+          const embyService = await getEmbyServiceForUser()
+          if (embyService) {
+              try {
+                  item = await embyService.getItemDetails(id)
+                  console.log(`[MediaPage] Emby item found: ${item?.Name}, ProviderIds:`, item?.ProviderIds)
+              } catch (e) {
+                  // ignore
+              }
+          }
+      }
+
+      let itemTmdbId = null;
+
+      if (item) {
+          itemTmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.tmdb || item.ProviderIds?.TMDB;
+          
+          if (!itemTmdbId) {
+              const imdbId = item.ProviderIds?.Imdb || item.ProviderIds?.imdb || item.ProviderIds?.IMDB;
+              const tvdbId = item.ProviderIds?.Tvdb || item.ProviderIds?.tvdb || item.ProviderIds?.TVDB;
+              if (imdbId || tvdbId) {
+                  const tmdbService = await getTmdbServiceForUser();
+                  if (tmdbService) {
+                      if (imdbId) {
+                          const findResult = await tmdbService.findByExternalId(imdbId, 'imdb_id');
+                          const foundItem = findResult?.movie_results?.[0] || findResult?.tv_results?.[0] || findResult?.tv_episode_results?.[0];
+                          if (foundItem) itemTmdbId = foundItem.id;
+                      }
+                      if (!itemTmdbId && tvdbId) {
+                          const findResult = await tmdbService.findByExternalId(tvdbId, 'tvdb_id');
+                          const foundItem = findResult?.movie_results?.[0] || findResult?.tv_results?.[0] || findResult?.tv_episode_results?.[0];
+                          if (foundItem) itemTmdbId = foundItem.id;
+                      }
+                  }
+              }
+          }
+      }
+
+      // FALLBACK: If item not found via provider, try to find by Name via TMDB
+       if (!itemTmdbId) {
+           if (name && name !== 'Unknown') {
+              console.log(`[MediaPage] External item not found. Trying fallback search for "${name}"...`);
+             const tmdbService = await getTmdbServiceForUser();
+             if (tmdbService) {
+                 try {
+                     const searchResults = await tmdbService.searchMulti(decodeURIComponent(name));
+                     const bestMatch = searchResults?.results?.[0];
+                     
+                     if (bestMatch) {
+                         console.log(`[MediaPage] Fallback found: ${bestMatch.title || bestMatch.name} (${bestMatch.id})`);
+                         itemTmdbId = bestMatch.id;
+                         
+                         const { redirect } = await import('next/navigation')
+                         // Determine type if not provided
+                         const targetType = bestMatch.media_type === 'tv' ? 'tv' : 'movie';
+                         redirect(`/dashboard/media/${itemTmdbId}?type=${targetType}`);
+                     }
+                 } catch (e) {
+                     console.error('[MediaPage] Fallback search failed:', e);
+                 }
+             }
+          }
+      }
+
+      if (itemTmdbId) {
+          const { redirect } = await import('next/navigation')
+          redirect(`/dashboard/media/${itemTmdbId}?type=${item?.Type === 'Movie' ? 'movie' : 'tv'}`)
+      }
+      
+      return (
+        <div className="flex h-[50vh] flex-col items-center justify-center text-center">
+          <h1 className="mb-4 text-3xl font-bold text-white">Média Introuvable</h1>
+          <p className="mb-8 text-gray-400">
+            Ce média ({providerName}) n'est pas lié à une base de données publique (TMDB) et ne possède pas de page de détails.
+            <br/>
+            {item ? `Nom: ${item.Name}` : `ID: ${id}`}
+          </p>
+          <Link 
+            href="/dashboard/stats" 
+            className="rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-indigo-500"
+          >
+            Retour aux statistiques
+          </Link>
+        </div>
+      )
+  }
 
   if (isNaN(tmdbId)) {
       notFound()

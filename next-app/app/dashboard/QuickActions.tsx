@@ -151,6 +151,14 @@ export function QuickActions({ initialTorrents = [], userName, isAdmin, configSt
           <div className="relative flex items-center">
             <input
               type="text"
+              name="search-home"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck="false"
+              data-1p-ignore="true"
+              data-lpignore="true"
+              data-form-type="other"
               placeholder="Rechercher un film ou une série..."
               className="w-full bg-gray-900 border border-gray-800 rounded-2xl px-6 py-5 pl-14 text-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-2xl"
               value={searchQuery}

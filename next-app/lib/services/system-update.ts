@@ -239,6 +239,17 @@ export class SystemUpdateService {
             'system_update',
             { version, container }
         );
+
+        try {
+            const { ExternalNotificationService } = await import('./external-notification-service')
+            await ExternalNotificationService.send('system_update', {
+                title: title,
+                message: message,
+                data: { version, container }
+            })
+        } catch (e) {
+            console.error('[SystemUpdate] Failed to send external notification:', e)
+        }
     }
 
     /**

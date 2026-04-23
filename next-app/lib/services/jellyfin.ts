@@ -113,4 +113,20 @@ export class JellyfinService {
   getItemImageUrl(itemId: string, width: number = 400) {
     return `${this.baseUrl}/Items/${itemId}/Images/Primary?maxWidth=${width}`
   }
+
+  async getItemDetails(itemId: string, userId?: string) {
+    try {
+      const client = await this.getClient(3000)
+      const url = userId ? `/Users/${userId}/Items/${itemId}` : `/Items/${itemId}`
+      const response = await client.get(url, {
+          params: {
+              Fields: 'Overview,PrimaryImageAspectRatio,ProviderIds,UserData'
+          }
+      })
+      return response.data
+    } catch (e: any) {
+      error('[JellyfinService] getItemDetails failed:', e.message)
+      return null
+    }
+  }
 }

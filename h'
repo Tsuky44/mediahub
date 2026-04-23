@@ -1,0 +1,307 @@
+[1mdiff --git a/next-app/prisma/schema.prisma b/next-app/prisma/schema.prisma[m
+[1mindex 830aa9f..985cca2 100644[m
+[1m--- a/next-app/prisma/schema.prisma[m
+[1m+++ b/next-app/prisma/schema.prisma[m
+[36m@@ -8,6 +8,46 @@[m [mdatasource db {[m
+   url      = env("DATABASE_URL")[m
+ }[m
+ [m
+[32m+[m[32mmodel AccountRequest {[m
+[32m+[m[32m  id        String   @id @default(cuid())[m
+[32m+[m[32m  email     String   @unique[m
+[32m+[m[32m  firstName String   @map("first_name")[m
+[32m+[m[32m  inviter   String?[m
+[32m+[m[32m  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED[m
+[32m+[m[32m  createdAt DateTime @default(now()) @map("created_at")[m
+[32m+[m[32m  updatedAt DateTime @updatedAt @map("updated_at")[m
+[32m+[m
+[32m+[m[32m  @@map("account_requests")[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mmodel DailyTrackerStat {[m
+[32m+[m[32m  id              Int      @id @default(autoincrement())[m
+[32m+[m[32m  date            DateTime @map("date") // Date only (00:00:00)[m
+[32m+[m[32m  tracker         String[m
+[32m+[m[32m  totalUploaded   BigInt   @default(0) @map("total_uploaded")[m
+[32m+[m[32m  totalDownloaded BigInt   @default(0) @map("total_downloaded")[m
+[32m+[m[32m  createdAt       DateTime @default(now()) @map("created_at")[m
+[32m+[m[32m  updatedAt       DateTime @updatedAt @map("updated_at")[m
+[32m+[m
+[32m+[m[32m  @@unique([date, tracker])[m
+[32m+[m[32m  @@index([date])[m
+[32m+[m[32m  @@map("daily_tracker_stats")[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mmodel TrackerStatsLog {[m
+[32m+[m[32m  id              Int      @id @default(autoincrement())[m
+[32m+[m[32m  tracker         String[m
+[32m+[m[32m  totalUploaded   BigInt   @map("total_uploaded")[m
+[32m+[m[32m  totalDownloaded BigInt   @map("total_downloaded")[m
+[32m+[m[32m  uploadedDiff    BigInt   @default(0) @map("uploaded_diff")[m
+[32m+[m[32m  downloadedDiff  BigInt   @default(0) @map("downloaded_diff")[m
+[32m+[m[32m  timestamp       DateTime @default(now())[m
+[32m+[m
+[32m+[m[32m  @@index([timestamp])[m
+[32m+[m[32m  @@index([tracker, timestamp])[m
+[32m+[m[32m  @@map("tracker_stats_logs")[m
+[32m+[m[32m}[m
+[32m+[m
+ model UserCalendarEvent {[m
+   id        String   @id @default(uuid())[m
+   userId    Int      @map("user_id")[m
+[36m@@ -38,6 +78,12 @@[m [mmodel User {[m
+   roleId           String?        @map("role_id")[m
+   roleRef          Role?          @relation(fields: [roleId], references: [id])[m
+   hasSeenWelcome   Boolean        @default(false) @map("has_seen_welcome")[m
+[32m+[m[32m  lastSeenSystemMessageVersion String? @map("last_seen_system_message_version")[m
+[32m+[m[32m  telegramChatId   String?        @map("telegram_chat_id")[m
+[32m+[m[32m  discordUserId    String?        @map("discord_user_id")[m
+[32m+[m[32m  discordWebhook   String?        @map("discord_webhook")[m
+[32m+[m[32m  customWebhook    String?        @map("custom_webhook")[m
+[32m+[m[32m  whatsappNumber   String?        @map("whatsapp_number")[m
+   createdAt        DateTime       @default(now()) @map("created_at")[m
+   updatedAt        DateTime       @updatedAt @map("updated_at")[m
+   accounts         Account[][m
+[36m@@ -173,8 +219,10 @@[m [mmodel WatchEvent {[m
+   ipAddress       String?  @map("ip_address")[m
+   playMethod      String?  @map("play_method")[m
+   seasonName      String?  @map("season_name")[m
+[32m+[m[32m  seasonNumber    Int?     @map("season_number")[m
+   sessionId       String?  @map("session_id")[m
+   userName        String?  @map("user_name")[m
+[32m+[m[32m  tmdbId          String?  @map("tmdb_id")[m
+   user            User?    @relation(fields: [userId], references: [id])[m
+ [m
+   @@unique([embyUserId, itemId, playedAt])[m
+[36m@@ -185,36 +233,60 @@[m [mmodel Setting {[m
+   id         Int      @id @default(autoincrement())[m
+   key        String   @unique[m
+   value      String?[m
+[31m-  type       String   @default("string")[m
+[31m-  group      String   @default("general")[m
+[32m+[m[32m  category   String   @default("general")[m
+   createdAt  DateTime @default(now()) @map("created_at")[m
+   updatedAt  DateTime @updatedAt @map("updated_at")[m
+ [m
+   @@map("settings")[m
+ }[m
+ [m
+[31m-model MediaAvailabilityIndex {[m
+[31m-  id               Int      @id @default(autoincrement())[m
+[31m-  tmdbId           String   @map("tmdb_id")[m
+[31m-  mediaType        String   @map("media_type")[m
+[31m-  isAvailable      Boolean  @default(false) @map("is_available")[m
+[31m-  availabilityData String?  @map("availability_data")[m
+[31m-  jellyseerrStatus Int?     @map("jellyseerr_status")[m
+[31m-  lastCheckedAt    DateTime @default(now()) @map("last_checked_at")[m
+[31m-  createdAt        DateTime @default(now()) @map("created_at")[m
+[31m-  updatedAt        DateTime @updatedAt @map("updated_at")[m
+[31m-[m
+[31m-  @@unique([tmdbId, mediaType])[m
+[31m-  @@index([mediaType, isAvailable])[m
+[31m-  @@map("media_availability_index")[m
+[32m+[m[32mmodel AuditLog {[m
+[32m+[m[32m  id        Int      @id @default(autoincrement())[m
+[32m+[m[32m  userId    Int?     @map("user_id")[m
+[32m+[m[32m  action    String[m
+[32m+[m[32m  entity    String?[m
+[32m+[m[32m  entityId  String?  @map("entity_id")[m
+[32m+[m[32m  ipAddress String?  @map("ip_address")[m
+[32m+[m[32m  userAgent String?  @map("user_agent")[m
+[32m+[m[32m  details   String?[m
+[32m+[m[32m  createdAt DateTime @default(now()) @map("created_at")[m
+[32m+[m[32m  user      User?    @relation(fields: [userId], references: [id])[m
+[32m+[m
+[32m+[m[32m  @@map("audit_logs")[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mmodel Role {[m
+[32m+[m[32m  id          String       @id @default(uuid())[m
+[32m+[m[32m  name        String       @unique[m
+[32m+[m[32m  description String?[m
+[32m+[m[32m  permissions Permission[][m
+[32m+[m[32m  isSystem    Boolean      @default(false) @map("is_system")[m
+[32m+[m[32m  createdAt   DateTime     @default(now()) @map("created_at")[m
+[32m+[m[32m  updatedAt   DateTime     @updatedAt @map("updated_at")[m
+[32m+[m[32m  users       User[][m
+[32m+[m[32m  groups      UserGroup[][m
+[32m+[m
+[32m+[m[32m  @@map("roles")[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mmodel Permission {[m
+[32m+[m[32m  id         String  @id @default(uuid())[m
+[32m+[m[32m  action     String[m
+[32m+[m[32m  subject    String[m
+[32m+[m[32m  conditions String? // JSON string[m
+[32m+[m[32m  roleId     String  @map("role_id")[m
+[32m+[m[32m  role       Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)[m
+[32m+[m
+[32m+[m[32m  @@map("permissions")[m
+ }[m
+ [m
+ model MediaSubscription {[m
+   id        Int      @id @default(autoincrement())[m
+   userId    Int      @map("user_id")[m
+   tmdbId    String   @map("tmdb_id")[m
+[31m-  mediaType String   @map("media_type")[m
+[32m+[m[32m  mediaType String   @map("media_type") // 'movie' or 'tv'[m
+   title     String[m
+[32m+[m[32m  posterPath String? @map("poster_path")[m
+   createdAt DateTime @default(now()) @map("created_at")[m
+   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)[m
+ [m
+[36m@@ -222,140 +294,27 @@[m [mmodel MediaSubscription {[m
+   @@map("media_subscriptions")[m
+ }[m
+ [m
+[31m-model FileShare {[m
+[31m-  id         String    @id @default(uuid())[m
+[31m-  filePath   String    @map("file_path")[m
+[31m-  token      String    @unique[m
+[31m-  expiresAt  DateTime? @map("expires_at")[m
+[31m-  createdAt  DateTime  @default(now()) @map("created_at")[m
+[31m-[m
+[31m-  @@map("file_shares")[m
+[31m-}[m
+[31m-[m
+[31m-model EmbyLiveSession {[m
+[31m-  id                  String   @id @default(uuid())[m
+[31m-  sessionId           String   @unique @map("session_id")[m
+[31m-  source              String   @default("emby")[m
+[31m-  userId              String   @map("user_id")[m
+[31m-  userName            String   @map("user_name")[m
+[31m-  client              String?[m
+[31m-  device              String?[m
+[31m-  deviceId            String?  @map("device_id")[m
+[31m-  applicationVersion  String?  @map("app_version")[m
+[31m-  itemId              String?  @map("item_id")[m
+[31m-  itemName            String?  @map("item_name")[m
+[31m-  itemType            String?  @map("item_type")[m
+[31m-  runTimeTicks        BigInt?  @map("runtime_ticks")[m
+[31m-  isPaused            Boolean  @default(false) @map("is_paused")[m
+[31m-  lastActivity        DateTime @default(now()) @map("last_activity")[m
+[31m-  startedAt           DateTime @default(now()) @map("started_at")[m
+[31m-  playbackPosition    BigInt?  @map("playback_position")[m
+[31m-  accumulatedDuration Int      @default(0) @map("accumulated_duration")[m
+[31m-[m
+[31m-  @@map("emby_live_sessions")[m
+[31m-}[m
+[31m-[m
+ model UserGroup {[m
+[31m-  id        String            @id @default(uuid())[m
+[31m-  name      String[m
+[31m-  roleId    String?           @map("role_id")[m
+[31m-  role      Role?             @relation(fields: [roleId], references: [id])[m
+[31m-  createdAt DateTime          @default(now()) @map("created_at")[m
+[31m-  updatedAt DateTime          @updatedAt @map("updated_at")[m
+[31m-  members   UserGroupMember[][m
+[32m+[m[32m  id          String            @id @default(uuid())[m
+[32m+[m[32m  name        String[m
+[32m+[m[32m  description String?[m
+[32m+[m[32m  createdAt   DateTime          @default(now()) @map("created_at")[m
+[32m+[m[32m  updatedAt   DateTime          @updatedAt @map("updated_at")[m
+[32m+[m[32m  members     UserGroupMember[][m
+[32m+[m[32m  roleId      String?           @map("role_id")[m
+[32m+[m[32m  role        Role?             @relation(fields: [roleId], references: [id])[m
+ [m
+   @@map("user_groups")[m
+ }[m
+ [m
+ model UserGroupMember {[m
+[31m-  id          Int       @id @default(autoincrement())[m
+[31m-  userGroupId String    @map("user_group_id")[m
+[32m+[m[32m  id          String    @id @default(uuid())[m
+   userId      Int       @map("user_id")[m
+[31m-  username    String?[m
+[31m-  userGroup   UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)[m
+[32m+[m[32m  userGroupId String    @map("user_group_id")[m
+[32m+[m[32m  joinedAt    DateTime  @default(now()) @map("joined_at")[m
+   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)[m
+[32m+[m[32m  group       UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)[m
+ [m
+[31m-  @@unique([userGroupId, userId])[m
+[32m+[m[32m  @@unique([userId, userGroupId])[m
+   @@map("user_group_members")[m
+ }[m
+[31m-[m
+[31m-model EmbyActivityLog {[m
+[31m-  id            String    @id @default(uuid())[m
+[31m-  source        String    @default("emby")[m
+[31m-  embyUserId    String    @map("emby_user_id")[m
+[31m-  userName      String    @map("user_name")[m
+[31m-  itemId        String    @map("item_id")[m
+[31m-  itemName      String    @map("item_name")[m
+[31m-  itemType      String    @map("item_type")[m
+[31m-  startTime     DateTime  @default(now()) @map("start_time")[m
+[31m-  endTime       DateTime? @map("end_time")[m
+[31m-  playDuration  Int       @default(0) @map("play_duration")[m
+[31m-  totalDuration BigInt?   @map("total_duration")[m
+[31m-  client        String?[m
+[31m-  device        String?[m
+[31m-  deviceId      String?   @map("device_id")[m
+[31m-  ipAddress     String?   @map("ip_address")[m
+[31m-  mediaInfo     String?   @map("media_info")[m
+[31m-[m
+[31m-  @@index([embyUserId])[m
+[31m-  @@index([startTime])[m
+[31m-  @@map("emby_activity_logs")[m
+[31m-}[m
+[31m-[m
+[31m-model DockerGroup {[m
+[31m-  id        String              @id @default(cuid())[m
+[31m-  name      String[m
+[31m-  createdAt DateTime            @default(now()) @map("created_at")[m
+[31m-  updatedAt DateTime            @updatedAt @map("updated_at")[m
+[31m-  members   DockerGroupMember[][m
+[31m-[m
+[31m-  @@map("docker_groups")[m
+[31m-}[m
+[31m-[m
+[31m-model DockerGroupMember {[m
+[31m-  id            String      @id @default(cuid())[m
+[31m-  groupId       String      @map("group_id")[m
+[31m-  containerName String      @map("container_name")[m
+[31m-  group         DockerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)[m
+[31m-[m
+[31m-  @@unique([groupId, containerName])[m
+[31m-  @@map("docker_group_members")[m
+[31m-}[m
+[31m-[m
+[31m-model AuditLog {[m
+[31m-  id        String   @id @default(cuid())[m
+[31m-  userId    Int      @map("user_id")[m
+[31m-  action    String[m
+[31m-  entity    String[m
+[31m-  entityId  String   @map("entity_id")[m
+[31m-  details   String?[m
+[31m-  createdAt DateTime @default(now()) @map("created_at")[m
+[31m-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)[m
+[31m-[m
+[31m-  @@map("audit_logs")[m
+[31m-}[m
+[31m-[m
+[31m-model Role {[m
+[31m-  id          String       @id @default(cuid())[m
+[31m-  name        String       @unique[m
+[31m-  description String?[m
+[31m-  isSystem    Boolean      @default(false) @map("is_system")[m
+[31m-  permissions Permission[][m
+[31m-  users       User[][m
+[31m-  createdAt   DateTime     @default(now()) @map("created_at")[m
+[31m-  updatedAt   DateTime     @updatedAt @map("updated_at")[m
+[31m-  userGroups  UserGroup[][m
+[31m-[m
+[31m-  @@map("roles")[m
+[31m-}[m
+[31m-[m
+[31m-model Permission {[m
+[31m-  id          String   @id @default(cuid())[m
+[31m-  action      String   [m
+[31m-  subject     String   [m
+[31m-  conditions  String?  [m
+[31m-  roleId      String   @map("role_id")[m
+[31m-  role        Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)[m
+[31m-[m
+[31m-  @@map("permissions")[m
+[31m-}[m

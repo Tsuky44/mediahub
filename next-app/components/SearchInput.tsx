@@ -50,6 +50,14 @@ export function SearchInput({ placeholder }: { placeholder?: string }) {
       </div>
       <input
         type="text"
+        name="search"
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="none"
+        spellCheck="false"
+        data-1p-ignore="true"
+        data-lpignore="true"
+        data-form-type="other"
         className="block w-full rounded-full border border-white/5 bg-gray-900/50 py-2.5 pl-10 pr-4 text-white placeholder-gray-500 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 focus:bg-gray-900 transition-all duration-300 shadow-inner group-hover:bg-gray-800/50 group-hover:border-white/10 backdrop-blur-sm sm:text-sm sm:leading-6"
         placeholder={placeholder || "Rechercher..."}
         value={text}

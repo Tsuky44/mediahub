@@ -9,6 +9,7 @@ async function main() {
   const sessionId = 'test-session-id';
   
   console.log(`Creating session with ID ${sessionId}`);
+  /* DISABLED: embyLiveSession removed
   await (prisma as any).embyLiveSession.upsert({
     where: { 
       sessionId
@@ -23,9 +24,11 @@ async function main() {
       isPaused: false,
     },
   });
+  */
 
   // 2. Add some activity logs
   console.log('Adding activity logs...');
+  /* DISABLED: embyActivityLog removed
   await (prisma as any).embyActivityLog.create({
     data: {
       embyUserId: 'user1',
@@ -38,6 +41,7 @@ async function main() {
       playDuration: 3600,
     }
   });
+  */
 
   console.log('--- Seed Complete ---');
   await prisma.$disconnect();

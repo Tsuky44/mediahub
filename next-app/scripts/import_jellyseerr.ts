@@ -14,7 +14,7 @@ async function main() {
   
   // 2. Import from Jellyseerr
   console.log('[Script] Importing from Jellyseerr...')
-  const result = await importJellyseerrRequests(prisma as any)
+  const result = await importJellyseerrRequests(prisma)
   console.log(`[Script] Imported ${result.imported} requests.`)
   
   // 3. Fix titles

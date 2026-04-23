@@ -188,21 +188,21 @@ export async function checkDownloadStatus(
                 }
             }
 
-            // Check if movie exists and has file
-            const movie = await radarr.getMovieByTmdbId(tmdbId)
-            if (movie && movie.hasFile && movie.movieFile) {
+            // Patch 7: Réutilise radarrMovie déjà fetchée, pas de second appel Radarr
+            if (radarrMovie && radarrMovie.hasFile && radarrMovie.movieFile) {
+                const { movieFile } = radarrMovie
                 return {
                     isDownloading: false,
                     progress: 100,
                     timeleft: '',
                     status: 'Downloaded',
-                    title: movie.title,
-                    releaseTitle: movie.movieFile.sceneName || movie.movieFile.relativePath,
-                    size: formatBytes(movie.movieFile.size),
+                    title: radarrMovie.title,
+                    releaseTitle: movieFile.sceneName || movieFile.relativePath,
+                    size: formatBytes(movieFile.size),
                     sizeLeft: '0 B',
-                    quality: movie.movieFile.quality.quality.name,
-                    dateAdded: new Date(movie.movieFile.dateAdded).toLocaleDateString(),
-                    language: movie.movieFile.languages.map(l => l.name).join(', ')
+                    quality: movieFile.quality.quality.name,
+                    dateAdded: new Date(movieFile.dateAdded).toLocaleDateString(),
+                    language: movieFile.languages.map(l => l.name).join(', ')
                 }
             }
 
@@ -251,16 +251,49 @@ export async function checkDownloadStatus(
 
             // Populate downloadingSeasons map
             relevantQueueItems.forEach(item => {
+                let seasonNumber: number | null = null
+                
+                // 1. Essayer d'abord depuis l'épisode (fonctionne pour les épisodes individuels)
                 if (item.episode?.seasonNumber) {
-                     downloadingSeasons.set(item.episode.seasonNumber, item)
+                    seasonNumber = item.episode.seasonNumber
                 }
-                // If it's a season pack, it might not have episode.seasonNumber directly, 
-                // but usually Sonarr breaks it down or has season identifier. 
-                // For now we assume episode.seasonNumber is available or we can't map it easily.
+                
+                // 2. Fallback: Extraire depuis le titre de la release (pour les season packs)
+                // Ex: "The.Blacklist.S08.COMPLETE.1080p..." ou "The Blacklist Season 8"
+                if (!seasonNumber && item.title) {
+                    const title = item.title
+                    // Patterns: S08, Season 8, S8, etc.
+                    const patterns = [
+                        /[sS](\d+)[eE]\d+/,      // S08E01 -> capture 08
+                        /[sS]?(\d+)[xX]\d+/,     // 08x01, S08x01
+                        /[sS]?(\d{1,2})\D/,       // S08, S8 suivi d'un non-digit
+                        /Season\s*(\d+)/i,        // Season 8, Season08
+                        /Saison\s*(\d+)/i,        // Saison 8 (français)
+                        /[\._\-](\d{1,2})[\._\-]/  // .08., _08_, -08-
+                    ]
+                    
+                    for (const pattern of patterns) {
+                        const match = title.match(pattern)
+                        if (match) {
+                            const num = parseInt(match[1], 10)
+                            if (num > 0 && num < 100) { // Sanity check
+                                seasonNumber = num
+                                log(`Extracted season ${seasonNumber} from title: "${title}"`)
+                                break
+                            }
+                        }
+                    }
+                }
+                
+                if (seasonNumber) {
+                     downloadingSeasons.set(seasonNumber, item)
+                } else {
+                    warn(`Could not determine season number for queue item: ${item.title}`)
+                }
             })
 
-            // Check if series exists and has files
-            const series = await sonarr.getSeriesByTvdbId(tvdbId) as SonarrSeries | null
+            // Patch 7: Réutilise sonarrSeries déjà fetchée, pas de second appel Sonarr
+            const series = sonarrSeries as SonarrSeries | null
             let seasons: SeasonInfo[] = []
             
             if (series) {
@@ -290,7 +323,7 @@ export async function checkDownloadStatus(
 
                 // Iterate through all seasons known to Sonarr (or files)
                 // We'll use series.seasons which contains stats
-                seasons = series.seasons
+                const knownSeasons = series.seasons
                     .filter(s => s.seasonNumber > 0) // Skip specials if needed, or keep them
                     .map(s => {
                         const seasonFiles = filesBySeason.get(s.seasonNumber) || []
@@ -407,6 +440,85 @@ export async function checkDownloadStatus(
                             isSeasonPack
                         }
                     })
+
+                // Ajouter les saisons en cours de téléchargement qui ne sont pas dans series.seasons
+                // (ex: nouvelle saison demandée qui n'a pas encore été créée dans Sonarr)
+                const knownSeasonNumbers = new Set(knownSeasons.map(s => s.seasonNumber))
+                const downloadingOnlySeasons: SeasonInfo[] = []
+                
+                downloadingSeasons.forEach((downloadingItem, seasonNumber) => {
+                    if (!knownSeasonNumbers.has(seasonNumber)) {
+                        // Cette saison est en téléchargement mais pas dans la liste Sonarr
+                        let qbitStats = null
+                        if (downloadingItem.downloadId) {
+                            const downloadId = downloadingItem.downloadId
+                            const torrent = qbitTorrents.find((t: any) => t.hash.toLowerCase() === downloadId.toLowerCase())
+                            if (torrent) {
+                                qbitStats = {
+                                    progress: torrent.progress * 100,
+                                    timeleft: torrent.eta > 0 ? formatTime(torrent.eta) : '∞',
+                                    speed: formatSpeed(torrent.dlspeed),
+                                    size: torrent.size,
+                                    downloaded: torrent.downloaded
+                                }
+                            }
+                        }
+
+                        // Fallback: Match by title
+                        if (!qbitStats && downloadingItem.title) {
+                            const titleToMatch = normalize(downloadingItem.title)
+                            const torrent = qbitTorrents.find((t: any) => {
+                                const tName = normalize(t.name)
+                                return tName.includes(titleToMatch) || titleToMatch.includes(tName)
+                            })
+                            
+                            if (torrent) {
+                                qbitStats = {
+                                    progress: torrent.progress * 100,
+                                    timeleft: torrent.eta > 0 ? formatTime(torrent.eta) : '∞',
+                                    speed: formatSpeed(torrent.dlspeed),
+                                    size: torrent.size,
+                                    downloaded: torrent.downloaded
+                                }
+                            }
+                        }
+
+                        const total = qbitStats?.size || downloadingItem.size
+                        const left = qbitStats ? (qbitStats.size - qbitStats.downloaded) : downloadingItem.sizeleft
+                        const progress = qbitStats?.progress ?? (total > 0 ? ((total - left) / total) * 100 : 0)
+                        
+                        // Déterminer si c'est un season pack
+                        let isSeasonPack = false
+                        const releaseTitle = downloadingItem.title
+                        if (releaseTitle) {
+                            const episodePattern = /[sS]\d+[eE]\d+|[eE]\d+|\d+x\d+/
+                            const hasEpisodeMarker = episodePattern.test(releaseTitle)
+                            const hasFileExtension = /\.(mkv|mp4|avi|ts|m4v)$/i.test(releaseTitle)
+                            const hasSeasonMarker = /[sS]\d+|Season\s*\d+/i.test(releaseTitle)
+                            const hasComplete = /COMPLETE|FULL|PACK/i.test(releaseTitle)
+                            
+                            if (((hasSeasonMarker && !hasEpisodeMarker) || hasComplete) && !hasFileExtension) {
+                                isSeasonPack = true
+                            }
+                        }
+
+                        downloadingOnlySeasons.push({
+                            seasonNumber,
+                            status: 'Downloading',
+                            progress: Math.min(Math.round(progress), 100),
+                            timeleft: qbitStats?.timeleft || downloadingItem.timeleft,
+                            quality: '...',
+                            size: formatBytes(total),
+                            language: '',
+                            dateAdded: undefined,
+                            releaseTitle: downloadingItem.title,
+                            isSeasonPack
+                        })
+                    }
+                })
+
+                // Combiner et trier toutes les saisons
+                seasons = [...knownSeasons, ...downloadingOnlySeasons]
                     .sort((a, b) => a.seasonNumber - b.seasonNumber)
             }
 

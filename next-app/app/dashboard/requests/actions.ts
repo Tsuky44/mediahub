@@ -15,6 +15,19 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
     let data;
     
     if (search) {
+      if (page === 1) {
+        try {
+          const { logAction } = await import('@/lib/audit')
+          const user = await import('@/lib/auth').then(m => m.getCurrentUser())
+          if (user) {
+            const dbUser = await import('@/lib/prisma').then(m => (m.prisma as any).user.findFirst({ where: { email: user.email || '' } }))
+            await logAction(dbUser?.id || null, 'MEDIA_SEARCH', 'Search', '', { query: search, type })
+          }
+        } catch (e) {
+          console.error('Failed to log search:', e)
+        }
+      }
+
       if (type === 'movie' || type === 'tv') {
         data = await tmdbService.search(type, search, page)
       } else {

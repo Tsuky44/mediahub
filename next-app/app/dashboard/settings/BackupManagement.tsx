@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Download, Upload, Lock, FileText, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
+import { Download, Upload, Lock, FileText, AlertCircle, CheckCircle, Loader2, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
 
@@ -10,20 +10,24 @@ export default function BackupManagement() {
   
   // Settings Export State
   const [settingsExportPassword, setSettingsExportPassword] = useState('')
+  const [showSettingsExportPassword, setShowSettingsExportPassword] = useState(false)
   const [isSettingsExporting, setIsSettingsExporting] = useState(false)
 
   // Settings Import State
   const [settingsImportPassword, setSettingsImportPassword] = useState('')
+  const [showSettingsImportPassword, setShowSettingsImportPassword] = useState(false)
   const [settingsImportFile, setSettingsImportFile] = useState<File | null>(null)
   const [isSettingsImporting, setIsSettingsImporting] = useState(false)
   const settingsFileInputRef = useRef<HTMLInputElement>(null)
 
   // Database Export State
   const [dbExportPassword, setDbExportPassword] = useState('')
+  const [showDbExportPassword, setShowDbExportPassword] = useState(false)
   const [isDbExporting, setIsDbExporting] = useState(false)
 
   // Database Import State
   const [dbImportPassword, setDbImportPassword] = useState('')
+  const [showDbImportPassword, setShowDbImportPassword] = useState(false)
   const [dbImportFile, setDbImportFile] = useState<File | null>(null)
   const [isDbImporting, setIsDbImporting] = useState(false)
   const dbFileInputRef = useRef<HTMLInputElement>(null)
@@ -224,13 +228,20 @@ export default function BackupManagement() {
                     <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
                         <input 
-                            type="password"
+                            type={showSettingsExportPassword ? "text" : "password"}
                             value={settingsExportPassword}
                             onChange={(e) => setSettingsExportPassword(e.target.value)}
-                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-10 text-white focus:ring-2 focus:ring-blue-500 outline-none"
                             placeholder="Définissez un mot de passe..."
                             required
                         />
+                        <button
+                            type="button"
+                            onClick={() => setShowSettingsExportPassword(!showSettingsExportPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                        >
+                            {showSettingsExportPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                     </div>
                 </div>
                 <button
@@ -274,13 +285,20 @@ export default function BackupManagement() {
                     <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
                         <input 
-                            type="password"
+                            type={showSettingsImportPassword ? "text" : "password"}
                             value={settingsImportPassword}
                             onChange={(e) => setSettingsImportPassword(e.target.value)}
-                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-10 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                             placeholder="Mot de passe du fichier..."
                             required
                         />
+                        <button
+                            type="button"
+                            onClick={() => setShowSettingsImportPassword(!showSettingsImportPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                        >
+                            {showSettingsImportPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                     </div>
                 </div>
 
@@ -320,13 +338,20 @@ export default function BackupManagement() {
                     <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
                         <input 
-                            type="password"
+                            type={showDbExportPassword ? "text" : "password"}
                             value={dbExportPassword}
                             onChange={(e) => setDbExportPassword(e.target.value)}
-                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-10 text-white focus:ring-2 focus:ring-purple-500 outline-none"
                             placeholder="Définissez un mot de passe..."
                             required
                         />
+                        <button
+                            type="button"
+                            onClick={() => setShowDbExportPassword(!showDbExportPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                        >
+                            {showDbExportPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                     </div>
                 </div>
                 <button
@@ -370,13 +395,20 @@ export default function BackupManagement() {
                     <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
                         <input 
-                            type="password"
+                            type={showDbImportPassword ? "text" : "password"}
                             value={dbImportPassword}
                             onChange={(e) => setDbImportPassword(e.target.value)}
-                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:ring-2 focus:ring-red-500 outline-none"
+                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-10 text-white focus:ring-2 focus:ring-red-500 outline-none"
                             placeholder="Mot de passe du fichier..."
                             required
                         />
+                        <button
+                            type="button"
+                            onClick={() => setShowDbImportPassword(!showDbImportPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                        >
+                            {showDbImportPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                     </div>
                 </div>
 

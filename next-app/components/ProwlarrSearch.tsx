@@ -378,6 +378,14 @@ export function ProwlarrSearch({ title, canManage = true, mediaType, tmdbId, tvd
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                     <input 
                         type="text" 
+                        name="search-prowlarr"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="none"
+                        spellCheck="false"
+                        data-1p-ignore="true"
+                        data-lpignore="true"
+                        data-form-type="other"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch(0)}

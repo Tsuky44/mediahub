@@ -24,8 +24,7 @@ export async function POST(request: Request) {
       select: {
         key: true,
         value: true,
-        type: true,
-        group: true
+        category: true
       }
     })
 

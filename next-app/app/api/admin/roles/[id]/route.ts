@@ -77,6 +77,13 @@ export async function PUT(
       }
     }
 
+    try {
+        const { logAction } = await import('@/lib/audit')
+        await logAction(parseInt((user as any).id), 'UPDATE', 'Role', id, { name, description })
+    } catch (e) {
+        console.error('Failed to log role update:', e)
+    }
+
     return NextResponse.json(updatedRole)
   } catch (error) {
     console.error('Failed to update role:', error)
@@ -120,6 +127,13 @@ export async function DELETE(
     await (prisma as any).role.delete({
       where: { id }
     })
+
+    try {
+        const { logAction } = await import('@/lib/audit')
+        await logAction(parseInt((user as any).id), 'DELETE', 'Role', id, { name: role.name })
+    } catch (e) {
+        console.error('Failed to log role deletion:', e)
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

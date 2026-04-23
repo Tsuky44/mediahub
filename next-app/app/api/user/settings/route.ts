@@ -38,6 +38,15 @@ export async function POST(request: NextRequest) {
         smb_password,
         smb_share,
         smb_path,
+        // FTP/Unified Storage settings
+        storage_protocol,
+        storage_host,
+        storage_port,
+        storage_username,
+        storage_password,
+        storage_share,
+        storage_root_path,
+        storage_secure,
         radarr_url,
         radarr_api_key,
         sonarr_url,
@@ -53,6 +62,7 @@ export async function POST(request: NextRequest) {
         auth_emby_enabled,
         auth_plex_enabled,
         auth_jellyfin_enabled,
+        auth_local_enabled,
         unraid_url,
         unraid_api_key,
         docker_host,
@@ -81,6 +91,16 @@ export async function POST(request: NextRequest) {
     await updateSetting('smb_share', smb_share)
     await updateSetting('smb_path', smb_path)
     
+    // FTP/Unified Storage settings
+    await updateSetting('storage_protocol', storage_protocol)
+    await updateSetting('storage_host', storage_host)
+    await updateSetting('storage_port', storage_port)
+    await updateSetting('storage_username', storage_username)
+    await updateSetting('storage_password', storage_password)
+    await updateSetting('storage_share', storage_share)
+    await updateSetting('storage_root_path', storage_root_path)
+    await updateSetting('storage_secure', storage_secure)
+    
     await updateSetting('radarr_url', radarr_url)
     await updateSetting('radarr_api_key', radarr_api_key)
     
@@ -102,6 +122,7 @@ export async function POST(request: NextRequest) {
     await updateSetting('auth_emby_enabled', auth_emby_enabled)
     await updateSetting('auth_plex_enabled', auth_plex_enabled)
     await updateSetting('auth_jellyfin_enabled', auth_jellyfin_enabled)
+    await updateSetting('auth_local_enabled', auth_local_enabled)
 
     await updateSetting('unraid_url', unraid_url)
     await updateSetting('unraid_api_key', unraid_api_key)

@@ -210,6 +210,19 @@ export async function DELETE(
              await (prisma as any).mediaRequest.deleteMany({
                  where: { tmdbId: tmdbIdStr }
              })
+             
+             try {
+                 const { logAction } = await import('@/lib/audit')
+                 await logAction(
+                     parseInt((user as any).id),
+                     'MEDIA_DELETE',
+                     'Media',
+                     tmdbIdStr,
+                     { mediaType, tmdbId, action: 'media', deleteFiles }
+                 )
+             } catch (e) {
+                 console.error('Failed to log media deletion:', e)
+             }
         }
     } else if (action === 'request') {
         if (!targetId) return NextResponse.json({ error: 'Missing targetId' }, { status: 400 })
@@ -297,9 +310,27 @@ export async function DELETE(
             }
 
             // Just delete the local DB entry
-            await (prisma as any).mediaRequest.delete({
+            const deletedRequest = await (prisma as any).mediaRequest.delete({
                 where: { id: currentTargetId }
             })
+            
+            try {
+                const { logAction } = await import('@/lib/audit')
+                await logAction(
+                    parseInt((user as any).id),
+                    'REQUEST_DELETE',
+                    'MediaRequest',
+                    currentTargetId.toString(),
+                    { 
+                        tmdbId: tmdbIdStr, 
+                        mediaType,
+                        title: deletedRequest?.title,
+                        action: 'request'
+                    }
+                )
+            } catch (e) {
+                console.error('Failed to log request deletion:', e)
+            }
         }
         result = { success: true }
     }

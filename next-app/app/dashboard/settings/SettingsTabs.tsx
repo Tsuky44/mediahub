@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Users, Link as LinkIcon, Server, Database, Shield, UsersRound } from 'lucide-react'
+import { Users, Link as LinkIcon, Server, Database, Shield, UsersRound, MessageSquare, UserPlus, Activity, Bell, BellRing, BarChart3 } from 'lucide-react'
 import { useAbility } from '@casl/react'
 import { AbilityContext } from '@/components/AbilityContext'
 import { useSearchParams } from 'next/navigation'
@@ -11,6 +11,12 @@ import LinkedAccounts from './LinkedAccounts'
 import BackupManagement from './BackupManagement'
 import RoleManagement from './RoleManagement'
 import UserGroupManagement from './UserGroupManagement'
+import SystemMessageManagement from './SystemMessageManagement'
+import AccountRequestsManagement from './AccountRequestsManagement'
+import ActivityLogs from './ActivityLogs'
+import ExternalNotifications from './ExternalNotifications'
+import NotificationsV2Settings from './NotificationsV2'
+import { TrackerStatsManagement } from './TrackerStatsManagement'
 
 interface SettingsTabsProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,6 +28,8 @@ interface SettingsTabsProps {
     roles: any[]
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     userGroups: any[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    accountRequests: any[]
 }
 
 export default function SettingsTabs({ 
@@ -29,7 +37,8 @@ export default function SettingsTabs({
     settings,
     userRole,
     roles,
-    userGroups
+    userGroups,
+    accountRequests
 }: SettingsTabsProps) {
     const searchParams = useSearchParams()
     const tabParam = searchParams.get('tab')
@@ -46,13 +55,18 @@ export default function SettingsTabs({
     const hasLinkingView = isAdmin
     const hasBackupView = isAdmin
     const hasRolesView = isAdmin
+    const hasMessagesView = isAdmin
+    const hasRequestsView = isAdmin
+    const hasLogsView = isAdmin
+    const hasNotificationsView = isAdmin
+    const hasTrackersView = isAdmin
 
     const canManageSettings = isAdmin
     const canManageUsers = isAdmin
 
     // Determine initial active tab based on permissions
     const getInitialTab = () => {
-        if (tabParam && ['services', 'users', 'groups', 'roles', 'linking', 'backup'].includes(tabParam)) {
+        if (tabParam && ['services', 'users', 'groups', 'roles', 'linking', 'backup', 'messages', 'requests', 'logs', 'notifications', 'notifications-v2', 'trackers'].includes(tabParam)) {
             return tabParam as any
         }
         if (hasSettingsView) return 'services'
@@ -61,14 +75,19 @@ export default function SettingsTabs({
         if (hasRolesView) return 'roles'
         if (hasLinkingView) return 'linking'
         if (hasBackupView) return 'backup'
+        if (hasMessagesView) return 'messages'
+        if (hasRequestsView) return 'requests'
+        if (hasLogsView) return 'logs'
+        if (hasNotificationsView) return 'notifications'
+        if (hasTrackersView) return 'trackers'
         return 'services' // Fallback
     }
 
-    const [activeTab, setActiveTab] = useState<'services' | 'users' | 'groups' | 'linking' | 'backup' | 'roles'>(getInitialTab())
+    const [activeTab, setActiveTab] = useState<'services' | 'users' | 'groups' | 'linking' | 'backup' | 'roles' | 'messages' | 'requests' | 'logs' | 'notifications' | 'notifications-v2' | 'trackers'>(getInitialTab())
 
     // Update tab if URL param changes (optional, but good for back/forward navigation)
     useEffect(() => {
-        if (tabParam && ['services', 'users', 'groups', 'roles', 'linking', 'backup'].includes(tabParam)) {
+        if (tabParam && ['services', 'users', 'groups', 'roles', 'linking', 'backup', 'messages', 'requests', 'logs', 'notifications', 'notifications-v2', 'trackers'].includes(tabParam)) {
             setActiveTab(tabParam as any)
         }
     }, [tabParam])
@@ -157,6 +176,89 @@ export default function SettingsTabs({
                             Sauvegarde
                         </button>
                     )}
+                    {hasMessagesView && (
+                        <button
+                            onClick={() => setActiveTab('messages')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === 'messages' 
+                                    ? 'bg-indigo-600 text-white shadow-lg' 
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <MessageSquare size={16} />
+                            Messages
+                        </button>
+                    )}
+                    {hasRequestsView && (
+                        <button
+                            onClick={() => setActiveTab('requests')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === 'requests' 
+                                    ? 'bg-indigo-600 text-white shadow-lg' 
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <UserPlus size={16} />
+                            Demandes
+                            {accountRequests.filter((r: any) => r.status === 'PENDING').length > 0 && (
+                                <span className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                                    {accountRequests.filter((r: any) => r.status === 'PENDING').length}
+                                </span>
+                            )}
+                        </button>
+                    )}
+                    {hasLogsView && (
+                        <button
+                            onClick={() => setActiveTab('logs')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === 'logs' 
+                                    ? 'bg-indigo-600 text-white shadow-lg' 
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <Activity size={16} />
+                            Activité
+                        </button>
+                    )}
+                    {hasNotificationsView && (
+                        <button
+                            onClick={() => setActiveTab('notifications')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === 'notifications' 
+                                    ? 'bg-indigo-600 text-white shadow-lg' 
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <Bell size={16} />
+                            Notifications
+                        </button>
+                    )}
+                    {hasNotificationsView && (
+                        <button
+                            onClick={() => setActiveTab('notifications-v2')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === 'notifications-v2'
+                                    ? 'bg-indigo-600 text-white shadow-lg'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <BellRing size={16} />
+                            Notif V2
+                        </button>
+                    )}
+                    {hasTrackersView && (
+                        <button
+                            onClick={() => setActiveTab('trackers')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === 'trackers'
+                                    ? 'bg-indigo-600 text-white shadow-lg'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <BarChart3 size={16} />
+                            Trackers
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -189,6 +291,27 @@ export default function SettingsTabs({
                 )}
                 {activeTab === 'backup' && hasBackupView && (
                     <BackupManagement />
+                )}
+                {activeTab === 'messages' && hasMessagesView && (
+                    <SystemMessageManagement />
+                )}
+                {activeTab === 'requests' && hasRequestsView && (
+                    <AccountRequestsManagement 
+                        requests={accountRequests} 
+                        users={dbUsers}
+                    />
+                )}
+                {activeTab === 'logs' && hasLogsView && (
+                    <ActivityLogs />
+                )}
+                {activeTab === 'notifications' && hasNotificationsView && (
+                    <ExternalNotifications />
+                )}
+                {activeTab === 'notifications-v2' && hasNotificationsView && (
+                    <NotificationsV2Settings />
+                )}
+                {activeTab === 'trackers' && hasTrackersView && (
+                    <TrackerStatsManagement />
                 )}
             </div>
         </div>

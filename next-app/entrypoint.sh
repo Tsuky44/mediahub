@@ -24,30 +24,53 @@ echo "Running Prisma migrations..."
 # Try to deploy migrations
 if npx prisma migrate deploy; then
     echo "Prisma migrations completed successfully."
+    echo "Ensuring schema is fully synced with database (for non-migrated changes)..."
+    npx prisma db push --accept-data-loss --skip-generate || echo "Warning: db push failed, but continuing since migrations passed."
 else
     echo "ERROR: Prisma migrations failed!"
     
-    # Auto-resolve the specific migration we know might fail due to the previous attempt
-    MIGRATION_NAME="20260227100000_fix_user_group_members_id"
-    echo "Attempting to auto-resolve potential failed migration '$MIGRATION_NAME'..."
+    # List of migrations that might need resolution (idempotent migrations)
+    # We try to mark them as rolled back so they can be re-applied
+    MIGRATIONS_TO_RESOLVE="20260227100000_fix_user_group_members_id 20260307140000_fix_schema_drift"
     
-    if npx prisma migrate resolve --rolled-back "$MIGRATION_NAME"; then
-        echo "Successfully marked '$MIGRATION_NAME' as rolled back. Retrying deploy..."
-        if npx prisma migrate deploy; then
-            echo "Prisma migrations completed successfully after resolution."
+    RESOLVED_ANY=false
+    
+    for MIGRATION_NAME in $MIGRATIONS_TO_RESOLVE; do
+        echo "Checking potential failed migration '$MIGRATION_NAME'..."
+        if npx prisma migrate resolve --rolled-back "$MIGRATION_NAME"; then
+            echo "Successfully marked '$MIGRATION_NAME' as rolled back."
+            RESOLVED_ANY=true
         else
-            echo "ERROR: Prisma migrations failed again after resolution."
-            echo "Listing prisma directory for debugging:"
-            ls -la prisma/
-            echo "CRITICAL ERROR: MIGRATION FAILED TWICE"
-            tail -f /dev/null
+            echo "Migration '$MIGRATION_NAME' could not be resolved (likely not in failed state)."
         fi
+    done
+
+    echo "Retrying deploy..."
+    if npx prisma migrate deploy; then
+        echo "Prisma migrations completed successfully after resolution."
     else
-        echo "Failed to resolve migration. It might not be in a failed state or another error occurred."
-        echo "Listing prisma directory for debugging:"
-        ls -la prisma/
-        echo "CRITICAL ERROR: MIGRATION FAILED AND COULD NOT BE RESOLVED"
-        tail -f /dev/null
+        echo "ERROR: Prisma migrations failed again. Attempting forced schema push..."
+        echo "WARNING: This might cause data loss if columns are removed, but it will sync the database schema."
+        
+        # Emergency cleanup script before push
+        echo "Running emergency database cleanup script..."
+        node scripts/emergency-fix-db.js || echo "Cleanup script failed, but continuing..."
+        
+        # Added --skip-generate because we are in a production container where we can't easily regenerate the client
+        # and the client should have been generated during the build stage anyway.
+        if npx prisma db push --accept-data-loss --skip-generate; then
+             echo "Prisma db push completed successfully. Database schema is now in sync."
+             
+             # Mark all migrations as resolved since we pushed the schema
+             echo "Marking all pending migrations as resolved..."
+             npx prisma migrate resolve --applied 20260227100000_fix_user_group_members_id || true
+             npx prisma migrate resolve --applied 20260307140000_fix_schema_drift || true
+        else
+             echo "CRITICAL ERROR: Both migration and db push failed."
+             echo "Listing prisma directory for debugging:"
+             ls -la prisma/
+             tail -f /dev/null
+        fi
     fi
 fi
 

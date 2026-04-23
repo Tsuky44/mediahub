@@ -9,7 +9,7 @@ export async function getNotifications() {
     const user = await getCurrentUser()
     if (!user || !user.email) return []
 
-    const dbUser = await (prisma as any).user.findUnique({
+    const dbUser = await prisma.user.findUnique({
       where: { 
         email: user.email
       },
@@ -18,7 +18,7 @@ export async function getNotifications() {
 
     if (!dbUser) return []
 
-    const notifications = await (prisma as any).notification.findMany({
+    const notifications = await prisma.notification.findMany({
       where: { userId: dbUser.id },
       orderBy: { createdAt: 'desc' },
       take: 50
@@ -36,7 +36,7 @@ export async function getUnreadCount() {
     const user = await getCurrentUser()
     if (!user || !user.email) return 0
 
-    const dbUser = await (prisma as any).user.findUnique({
+    const dbUser = await prisma.user.findUnique({
       where: { 
         email: user.email
       },
@@ -45,7 +45,7 @@ export async function getUnreadCount() {
 
     if (!dbUser) return 0
 
-    const count = await (prisma as any).notification.count({
+    const count = await prisma.notification.count({
       where: {
         userId: dbUser.id,
         isRead: false
@@ -64,7 +64,7 @@ export async function markAsRead(id: number) {
     const user = await getCurrentUser()
     if (!user) return { success: false }
 
-    await (prisma as any).notification.update({
+    await prisma.notification.update({
       where: { id },
       data: { isRead: true }
     })
@@ -82,7 +82,7 @@ export async function markAllAsRead() {
     const user = await getCurrentUser()
     if (!user || !user.email) return { success: false }
 
-    const dbUser = await (prisma as any).user.findUnique({
+    const dbUser = await prisma.user.findUnique({
       where: { 
         email: user.email
       },
@@ -91,7 +91,7 @@ export async function markAllAsRead() {
 
     if (!dbUser) return { success: false }
 
-    await (prisma as any).notification.updateMany({
+    await prisma.notification.updateMany({
       where: { 
         userId: dbUser.id,
         isRead: false
@@ -112,7 +112,7 @@ export async function deleteNotification(id: number) {
     const user = await getCurrentUser()
     if (!user) return { success: false }
 
-    await (prisma as any).notification.delete({
+    await prisma.notification.delete({
       where: { id }
     })
 
