@@ -8,6 +8,8 @@ import { Plus, Trash2, Pause, Play, Download, Upload, FileDown, HardDrive, Searc
 import Link from 'next/link'
 import clsx from 'clsx'
 import { ProwlarrSearch } from '@/components/global/ProwlarrSearch'
+import { formatSpeed, formatSize, formatDate, formatDateTime, formatEta, getTrackerName } from '../_utils/torrent-formatters'
+import { useVisibleColumns } from '../_hooks/useVisibleColumns'
 
 export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boolean, canManage: boolean, canSearch: boolean }) {
     const [torrents, setTorrents] = useState<Torrent[]>([])
@@ -41,44 +43,7 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
 
     // Column Visibility State
     const [isColumnsOpen, setIsColumnsOpen] = useState(false)
-    const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
-        tracker: true,
-        tags: true,
-        added_on: true,
-        status: true,
-        download_info: true,
-        upload_info: true,
-        peers: true,
-        ratio: true,
-        eta: true,
-        progress_text: true,
-        progress_bar: true,
-        category: false,
-        availability: false,
-        last_activity: false,
-        completion_on: false
-    })
-
-    // Load columns from localStorage
-    useEffect(() => {
-        const saved = localStorage.getItem('torrent_visible_columns')
-        if (saved) {
-            try {
-                setVisibleColumns(prev => ({ ...prev, ...JSON.parse(saved) }))
-            } catch (e) {
-                console.error('Failed to parse visible columns', e)
-            }
-        }
-    }, [])
-
-    // Save columns to localStorage
-    const toggleColumn = (key: string) => {
-        setVisibleColumns(prev => {
-            const next = { ...prev, [key]: !prev[key] }
-            localStorage.setItem('torrent_visible_columns', JSON.stringify(next))
-            return next
-        })
-    }
+    const { visibleColumns, toggleColumn } = useVisibleColumns()
 
     useEffect(() => {
         setMounted(true)
@@ -103,72 +68,6 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
 
         return () => clearInterval(interval)
     }, [filter, refreshInterval])
-
-    const formatSpeed = (bytes: number) => {
-        if (bytes === 0) return '0 Ko/s'
-        const k = 1024
-        const sizes = ['o/s', 'Ko/s', 'Mo/s', 'Go/s']
-        const i = Math.floor(Math.log(bytes) / Math.log(k))
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-    }
-
-    const formatSize = (bytes: number) => {
-        if (bytes === 0) return '0 Go'
-        const k = 1024
-        const sizes = ['o', 'Ko', 'Mo', 'Go', 'To']
-        const i = Math.floor(Math.log(bytes) / Math.log(k))
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-    }
-
-    const formatDate = (timestamp: number) => {
-        const date = new Date(timestamp * 1000)
-        return date.toLocaleDateString('fr-FR', {
-            day: 'numeric',
-            month: 'short',
-            year: '2-digit'
-        })
-    }
-
-    const formatDateTime = (timestamp: number) => {
-        const date = new Date(timestamp * 1000)
-        return date.toLocaleString('fr-FR', {
-            day: 'numeric',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit'
-        })
-    }
-
-    const getTrackerName = (tracker: string) => {
-        if (!tracker) return 'TORRENT'
-        try {
-            const url = new URL(tracker)
-            const hostname = url.hostname.toLowerCase()
-            if (hostname.includes('yggtorrent') || hostname.includes('ygg')) return 'YGG'
-            if (hostname.includes('shareisland') || hostname.includes('share')) return 'SHARE'
-            if (hostname.includes('torrent-syndikat') || hostname.includes('tos')) return 'TOS'
-            if (hostname.includes('ethor')) return 'ETHOR'
-            
-            // Fallback to domain name without TLD
-            const parts = hostname.split('.')
-            return parts.length > 1 ? parts[parts.length - 2].toUpperCase() : hostname.toUpperCase()
-        } catch (e) {
-            return 'TORRENT'
-        }
-    }
-
-    const formatEta = (seconds: number) => {
-        if (seconds === 8640000 || seconds === -1) return '∞'
-        if (seconds <= 0) return 'Terminé'
-        
-        const d = Math.floor(seconds / 86400)
-        const h = Math.floor((seconds % 86400) / 3600)
-        const m = Math.floor((seconds % 3600) / 60)
-        
-        if (d > 0) return `${d}j ${h}h`
-        if (h > 0) return `${h}h ${m}m`
-        return `${m}m ${seconds % 60}s`
-    }
 
     const trackers = Array.from(new Set(torrents.map(t => getTrackerName(t.tracker)))).sort()
 
