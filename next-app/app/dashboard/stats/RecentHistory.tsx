@@ -6,7 +6,7 @@ import { Clock, Film, Play, Activity, User, Monitor } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { io, Socket } from 'socket.io-client'
-import { EmbyImage } from '@/components/EmbyImage'
+import { EmbyImage } from '@/components/global/EmbyImage'
 
 interface RecentHistoryProps {
     initialHistory: any[]

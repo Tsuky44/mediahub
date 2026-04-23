@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useInView } from 'react-intersection-observer'
-import { MediaCard } from '@/components/MediaCard'
+import { MediaCard } from '@/components/global/MediaCard'
 import { Loader2 } from 'lucide-react'
 
 interface InfiniteDiscoverListProps {

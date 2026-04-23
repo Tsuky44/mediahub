@@ -1,6 +1,6 @@
 import { fetchEmbyMedia, fetchRecentlyWatchedItems } from './actions'
 import { InfiniteEmbyList } from './InfiniteEmbyList'
-import { SearchInput } from '@/components/SearchInput'
+import { SearchInput } from '@/components/global/SearchInput'
 import { Suspense } from 'react'
 import { RecentlyWatched } from './RecentlyWatched'
 import { getServerSession } from 'next-auth'

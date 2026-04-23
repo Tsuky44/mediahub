@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useInView } from 'react-intersection-observer'
-import { MediaCard } from '@/components/MediaCard'
-import { MediaFilters } from '@/components/MediaFilters'
+import { MediaCard } from '@/components/global/MediaCard'
+import { MediaFilters } from '@/components/global/MediaFilters'
 import { fetchMedia } from './actions'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'

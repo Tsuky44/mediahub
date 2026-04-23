@@ -1,5 +1,5 @@
 import { getTmdbServiceForUser, getCurrentUser } from '@/lib/auth'
-import { MediaCard } from '@/components/MediaCard'
+import { MediaCard } from '@/components/global/MediaCard'
 import { notFound, redirect } from 'next/navigation'
 import { defineAbilityFor } from '@/lib/ability'
 

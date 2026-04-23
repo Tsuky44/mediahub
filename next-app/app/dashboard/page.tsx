@@ -14,7 +14,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 import { WelcomePopup } from './_components/WelcomePopup'
-import { ReleaseCalendar } from '@/components/ReleaseCalendar'
+import { ReleaseCalendar } from '@/components/global/ReleaseCalendar'
 
 export const dynamic = 'force-dynamic'
 

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Search, User, Loader2 } from 'lucide-react'
-import { ProwlarrSearch } from '@/components/ProwlarrSearch'
+import { ProwlarrSearch } from '@/components/global/ProwlarrSearch'
 import { triggerAutomaticSearch } from '@/app/dashboard/media/[id]/interactive-actions'
 
 interface SearchActionsProps {

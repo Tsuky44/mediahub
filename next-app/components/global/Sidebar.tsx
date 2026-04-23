@@ -7,7 +7,7 @@ import Image from 'next/image'
 import { signOut, useSession } from 'next-auth/react'
 import clsx from 'clsx'
 import { useAbility } from '@casl/react'
-import { AbilityContext } from '@/components/AbilityContext'
+import { AbilityContext } from '@/components/providers/AbilityContext'
 
 const navigation = [
   { name: 'Tableau de bord', href: '/dashboard', icon: Home },

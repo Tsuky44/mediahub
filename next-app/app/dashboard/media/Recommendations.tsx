@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { Sparkles, ChevronLeft, ChevronRight } from 'lucide-react'
-import { MediaCard } from '@/components/MediaCard'
+import { MediaCard } from '@/components/global/MediaCard'
 
 interface RecommendationItem {
     id: number

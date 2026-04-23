@@ -7,7 +7,7 @@ import { Torrent } from '@/lib/services/qbittorrent'
 import { Plus, Trash2, Pause, Play, Download, Upload, FileDown, HardDrive, Search, Users, ArrowUpDown, Tag, X, CheckCircle, Activity, Filter, RotateCcw, Calendar, ChevronRight, SlidersHorizontal, ChevronsUp, ChevronUp, ChevronDown, ChevronsDown, Signal, Clock, LayoutTemplate, Info } from 'lucide-react'
 import Link from 'next/link'
 import clsx from 'clsx'
-import { ProwlarrSearch } from '@/components/ProwlarrSearch'
+import { ProwlarrSearch } from '@/components/global/ProwlarrSearch'
 
 export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boolean, canManage: boolean, canSearch: boolean }) {
     const [torrents, setTorrents] = useState<Torrent[]>([])

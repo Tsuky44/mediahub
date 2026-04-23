@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { TrendingUp, Film, Tv } from 'lucide-react'
-import { EmbyImage } from '@/components/EmbyImage'
+import { EmbyImage } from '@/components/global/EmbyImage'
 
 interface TopItemCardProps {
   item: any

@@ -1,7 +1,7 @@
-import { Navbar } from '@/components/Navbar'
+import { Navbar } from '@/components/global/Navbar'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
-import { SystemMessageDisplay } from '@/components/SystemMessageDisplay'
+import { SystemMessageDisplay } from '@/components/global/SystemMessageDisplay'
 
 export const dynamic = 'force-dynamic'
 

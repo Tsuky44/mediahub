@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { getTorrents } from '../downloads/actions'
 import { checkServicesHealth, liveSearch, getDashboardStats } from '../dashboard-actions'
 import { useAbility } from '@casl/react'
-import { AbilityContext } from '@/components/AbilityContext'
+import { AbilityContext } from '@/components/providers/AbilityContext'
 
 const isDev = process.env.NODE_ENV === 'development';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };

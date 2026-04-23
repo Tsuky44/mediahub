@@ -1,6 +1,6 @@
 import { fetchMedia } from './actions'
 import { InfiniteMediaList } from './InfiniteMediaList'
-import { SearchInput } from '@/components/SearchInput'
+import { SearchInput } from '@/components/global/SearchInput'
 import { Suspense } from 'react'
 import { fetchUserRecommendations } from '../media/actions'
 import { getServerSession } from 'next-auth'

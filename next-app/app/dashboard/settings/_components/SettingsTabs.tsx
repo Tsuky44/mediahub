@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { Users, Link as LinkIcon, Server, Database, Shield, UsersRound, MessageSquare, UserPlus, Activity, Bell, BellRing, BarChart3 } from 'lucide-react'
 import { useAbility } from '@casl/react'
-import { AbilityContext } from '@/components/AbilityContext'
+import { AbilityContext } from '@/components/providers/AbilityContext'
 import { useSearchParams } from 'next/navigation'
 import UserManagement from './UserManagement'
 import SettingsForm from './SettingsForm'

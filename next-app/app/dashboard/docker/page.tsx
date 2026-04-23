@@ -30,7 +30,7 @@ interface DockerGroup {
 }
 
 import { useAbility } from '@casl/react'
-import { AbilityContext } from '@/components/AbilityContext'
+import { AbilityContext } from '@/components/providers/AbilityContext'
 
 export default function DockerPage() {
   const { data: session } = useSession()

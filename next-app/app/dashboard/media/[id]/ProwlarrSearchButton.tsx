@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Search } from 'lucide-react'
-import { ProwlarrSearch } from '@/components/ProwlarrSearch'
+import { ProwlarrSearch } from '@/components/global/ProwlarrSearch'
 
 interface ProwlarrSearchButtonProps {
   title: string

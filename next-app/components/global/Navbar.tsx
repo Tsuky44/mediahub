@@ -8,8 +8,8 @@ import { Home, Film, ListPlus, Settings, LogOut, Search, Download, BarChart3, Us
 import { signOut, useSession, signIn } from 'next-auth/react'
 import { NotificationBell } from './NotificationBell'
 import { useAbility } from '@casl/react'
-import { AbilityContext } from '@/components/AbilityContext'
-import { ImpersonationBannerClient } from '@/app/dashboard/ImpersonationBannerClient'
+import { AbilityContext } from '@/components/providers/AbilityContext'
+import { ImpersonationBannerClient } from './ImpersonationBannerClient'
 import clsx from 'clsx'
 
 const navigation = [

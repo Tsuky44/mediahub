@@ -12,7 +12,7 @@ import { CastList } from './_components/CastList'
 import FullCreditsButton from './FullCreditsButton'
 import { TrailerButton } from './_components/TrailerButton'
 import { ChevronRight, Clock } from 'lucide-react'
-import { MediaSlider } from '@/components/MediaSlider'
+import { MediaSlider } from '@/components/global/MediaSlider'
 import FavoriteButton from './FavoriteButton'
 import WatchLaterButton from './WatchLaterButton'
 import { ManageMediaButton } from './ManageMediaButton'
@@ -24,7 +24,7 @@ import { getSetting } from '@/lib/settings'
 import { getMediaAvailability } from '@/lib/services/media-status'
 import { DownloadStatusCard } from './DownloadStatusCard'
 import { UserActivityButton } from './_components/UserActivityButton'
-import { CalendarButton } from '@/components/CalendarButton'
+import { CalendarButton } from '@/components/global/CalendarButton'
 
 const isDev = process.env.NODE_ENV === 'development';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
