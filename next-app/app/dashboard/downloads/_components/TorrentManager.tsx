@@ -1,15 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { getTorrents, addTorrent, deleteTorrents, pauseTorrents, resumeTorrents, getTags, setPriority, reannounceTorrents, setShareLimits } from '../actions'
 import { Torrent } from '@/lib/services/qbittorrent'
-import { Plus, Trash2, Pause, Play, Download, Upload, FileDown, HardDrive, Search, Users, ArrowUpDown, Tag, X, CheckCircle, Activity, Filter, RotateCcw, Calendar, ChevronRight, SlidersHorizontal, ChevronsUp, ChevronUp, ChevronDown, ChevronsDown, Signal, Clock, LayoutTemplate, Info } from 'lucide-react'
+import { Plus, Trash2, Pause, Play, Download, Upload, HardDrive, Search, Users, ArrowUpDown, Tag, X, CheckCircle, Activity, Filter, Signal, LayoutTemplate, Info } from 'lucide-react'
 import Link from 'next/link'
 import clsx from 'clsx'
-import { ProwlarrSearch } from '@/components/global/ProwlarrSearch'
 import { formatSpeed, formatSize, formatDate, formatDateTime, formatEta, getTrackerName } from '../_utils/torrent-formatters'
 import { useVisibleColumns } from '../_hooks/useVisibleColumns'
+import { AddTorrentModal } from './torrent/AddTorrentModal'
+import { DeleteTorrentModal } from './torrent/DeleteTorrentModal'
+import { FilterModal } from './torrent/FilterModal'
+import { SearchModal } from './torrent/SearchModal'
+import { BatchActionsBar } from './torrent/BatchActionsBar'
+import { ShareLimitModal } from './torrent/ShareLimitModal'
 
 export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boolean, canManage: boolean, canSearch: boolean }) {
     const [torrents, setTorrents] = useState<Torrent[]>([])
@@ -39,15 +43,10 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
     const [shareLimitTime, setShareLimitTime] = useState<number>(60)
     const [shareLimitUnit, setShareLimitUnit] = useState<'minutes' | 'hours' | 'days' | 'weeks' | 'months'>('days')
     const [shareLimitType, setShareLimitType] = useState<'global' | 'unlimited' | 'custom'>('custom')
-    const [mounted, setMounted] = useState(false)
 
     // Column Visibility State
     const [isColumnsOpen, setIsColumnsOpen] = useState(false)
     const { visibleColumns, toggleColumn } = useVisibleColumns()
-
-    useEffect(() => {
-        setMounted(true)
-    }, [])
 
     const fetchTorrents = async () => {
         const data = await getTorrents(filter)
@@ -748,571 +747,76 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
         </div>
 
             {/* Add Torrent Modal */}
-        {mounted && isAddModalOpen && createPortal(
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="bg-[#0A0A0A]/95 backdrop-blur-xl rounded-3xl border border-white/10 w-full max-w-md p-8 shadow-2xl animate-in fade-in zoom-in-95 ring-1 ring-white/10">
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-black text-white flex items-center gap-3">
-                                <div className="p-2.5 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
-                                    <Plus className="w-5 h-5 text-indigo-400" />
-                                </div>
-                                Ajouter un Torrent
-                            </h2>
-                            <button 
-                                onClick={() => setIsAddModalOpen(false)}
-                                className="p-2 rounded-xl hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        
-                        {/* Tabs for URL/File */}
-                        <div className="flex p-1 bg-black/20 rounded-xl border border-white/5 mb-6">
-                            <button
-                                onClick={() => setAddMode('url')}
-                                className={clsx(
-                                    'flex-1 py-2.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all',
-                                    addMode === 'url' 
-                                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
-                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
-                                )}
-                            >
-                                Lien Magnet / URL
-                            </button>
-                            <button
-                                onClick={() => setAddMode('file')}
-                                className={clsx(
-                                    'flex-1 py-2.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all',
-                                    addMode === 'file' 
-                                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
-                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
-                                )}
-                            >
-                                Fichier .torrent
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleAddTorrent} className="space-y-6">
-                            {addMode === 'url' ? (
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Lien Magnet ou URL</label>
-                                    <textarea
-                                        value={newTorrentUrl}
-                                        onChange={(e) => setNewTorrentUrl(e.target.value)}
-                                        placeholder="magnet:?xt=urn:btih:..."
-                                        className="w-full h-32 bg-black/20 border border-white/10 rounded-2xl p-4 text-white placeholder-gray-500 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 resize-none transition-all focus:bg-black/40 outline-none text-sm font-mono leading-relaxed"
-                                        required
-                                    />
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Fichier .torrent</label>
-                                    <div className="flex items-center justify-center w-full">
-                                        <label htmlFor="dropzone-file" className="flex flex-col items-center justify-center w-full h-40 border-2 border-white/10 border-dashed rounded-2xl cursor-pointer bg-black/20 hover:bg-white/5 hover:border-indigo-500/30 transition-all group">
-                                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                                <div className="p-3 bg-white/5 rounded-full mb-3 group-hover:scale-110 transition-transform duration-300">
-                                                    <FileDown className="w-6 h-6 text-indigo-400" />
-                                                </div>
-                                                <p className="mb-2 text-sm text-gray-400">
-                                                    <span className="font-bold text-white">Cliquez pour upload</span> ou glissez-déposez
-                                                </p>
-                                                <p className="text-xs text-gray-500 font-medium">.torrent uniquement</p>
-                                                {torrentFiles && torrentFiles.length > 0 && (
-                                                    <div className="mt-4 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
-                                                        <p className="text-xs text-indigo-400 font-bold truncate max-w-[200px] flex items-center gap-2">
-                                                            <CheckCircle className="w-3 h-3" />
-                                                            {torrentFiles[0].name}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <input 
-                                                id="dropzone-file" 
-                                                type="file" 
-                                                className="hidden" 
-                                                accept=".torrent"
-                                                onChange={(e) => setTorrentFiles(e.target.files)}
-                                            />
-                                        </label>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="flex justify-end gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsAddModalOpen(false)}
-                                    className="px-6 py-2.5 text-sm font-bold text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"
-                                >
-                                    Annuler
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Ajouter
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>,
-                document.body
-            )}
+            <AddTorrentModal
+                isOpen={isAddModalOpen}
+                onClose={() => setIsAddModalOpen(false)}
+                onSubmit={handleAddTorrent}
+                addMode={addMode}
+                onAddModeChange={setAddMode}
+                newTorrentUrl={newTorrentUrl}
+                onNewTorrentUrlChange={setNewTorrentUrl}
+                torrentFiles={torrentFiles}
+                onTorrentFilesChange={setTorrentFiles}
+            />
 
             {/* Delete Confirmation Modal */}
-            {mounted && isDeleteModalOpen && torrentToDelete && createPortal(
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                    <div className="bg-[#0A0A0A]/95 backdrop-blur-xl rounded-3xl border border-white/10 w-full max-w-md p-8 shadow-2xl ring-1 ring-white/5 space-y-8 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                        <div className="text-center space-y-4">
-                            <div className="mx-auto w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center border border-red-500/20 shadow-lg shadow-red-500/10 mb-6 group-hover:scale-110 transition-transform duration-300">
-                                <Trash2 className="w-8 h-8 text-red-500" />
-                            </div>
-                            
-                            <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">
-                                Supprimer le torrent
-                            </h3>
-                            
-                            <p className="text-gray-400 font-medium leading-relaxed">
-                                Voulez-vous vraiment supprimer <br/>
-                                <span className="text-white font-bold text-base bg-white/5 px-2 py-0.5 rounded-lg border border-white/5 inline-block mt-1">"{torrentToDelete.name}"</span> ?
-                            </p>
-                        </div>
-
-                        <div className="space-y-3">
-                            <button
-                                onClick={() => confirmDelete(false)}
-                                className="w-full px-4 py-4 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 text-white rounded-2xl font-bold transition-all flex items-center justify-between group overflow-hidden relative"
-                            >
-                                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/5 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                                <div className="flex items-center gap-4">
-                                    <div className="p-2 rounded-xl bg-gray-500/20 text-gray-400 group-hover:text-white group-hover:scale-110 transition-all">
-                                        <Trash2 className="h-5 w-5" />
-                                    </div>
-                                    <div className="text-left">
-                                        <div className="text-sm font-bold">Torrent uniquement</div>
-                                        <div className="text-xs text-gray-500 font-medium">Conserver les fichiers</div>
-                                    </div>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-white transition-colors" />
-                            </button>
-
-                            <button
-                                onClick={() => confirmDelete(true)}
-                                className="w-full px-4 py-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 hover:text-red-300 rounded-2xl font-bold transition-all flex items-center justify-between group overflow-hidden relative"
-                            >
-                                <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 via-red-500/10 to-red-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                                <div className="flex items-center gap-4">
-                                    <div className="p-2 rounded-xl bg-red-500/20 text-red-500 group-hover:scale-110 transition-all shadow-lg shadow-red-500/10">
-                                        <Trash2 className="h-5 w-5" />
-                                    </div>
-                                    <div className="text-left">
-                                        <div className="text-sm font-bold">Tout supprimer</div>
-                                        <div className="text-xs text-red-500/60 font-medium">Torrent + Fichiers</div>
-                                    </div>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-red-500/50 group-hover:text-red-500 transition-colors" />
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={() => {
-                                setIsDeleteModalOpen(false)
-                                setTorrentToDelete(null)
-                            }}
-                            className="w-full py-3 text-sm font-bold text-gray-500 hover:text-white transition-colors"
-                        >
-                            Annuler
-                        </button>
-                    </div>
-                </div>,
-                document.body
-            )}
+            <DeleteTorrentModal
+                isOpen={isDeleteModalOpen}
+                torrent={torrentToDelete}
+                onConfirm={confirmDelete}
+                onCancel={() => {
+                    setIsDeleteModalOpen(false)
+                    setTorrentToDelete(null)
+                }}
+            />
 
             {/* Advanced Filters Modal */}
-            {mounted && isFilterModalOpen && createPortal(
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-                    <div className="bg-[#0A0A0A]/95 backdrop-blur-xl rounded-3xl border border-white/10 w-full max-w-4xl shadow-2xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden ring-1 ring-white/10">
-                        {/* Header */}
-                        <div className="flex items-center justify-between p-6 border-b border-white/5 bg-white/5">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2.5 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
-                                    <Filter className="h-5 w-5 text-indigo-400" />
-                                </div>
-                                <h2 className="text-xl font-black text-white tracking-tight">Filtres avancés</h2>
-                            </div>
-                            <button 
-                                onClick={() => setIsFilterModalOpen(false)}
-                                className="p-2 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-all"
-                            >
-                                <X className="h-6 w-6" />
-                            </button>
-                        </div>
-
-                        {/* Content */}
-                        <div className="p-8 space-y-8">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-[11px] font-bold uppercase tracking-[2px] text-gray-500">Configuration des filtres</span>
-                                <button 
-                                    onClick={() => {
-                                        setSelectedTags([]);
-                                        setSelectedTrackers([]);
-                                        setDateFrom('');
-                                        setSortBy('added_on');
-                                    }}
-                                    className="flex items-center gap-2 text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 px-3 py-1.5 rounded-lg border border-indigo-500/20"
-                                >
-                                    <RotateCcw className="h-3.5 w-3.5" />
-                                    Réinitialiser tout
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                                {/* Sort Section */}
-                                <div className="space-y-4">
-                                    <div className="flex items-center gap-2 text-gray-200 font-bold text-sm">
-                                        <ArrowUpDown className="h-4 w-4 text-indigo-400" />
-                                        Trier par
-                                    </div>
-                                    <div className="bg-black/20 border border-white/5 rounded-2xl p-2 h-[320px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                                        {sortOptions.map((option) => (
-                                            <button
-                                                key={option.id}
-                                                onClick={() => setSortBy(option.id as any)}
-                                                className={clsx(
-                                                    "w-full text-left px-4 py-3 rounded-xl text-xs font-bold transition-all mb-1",
-                                                    sortBy === option.id 
-                                                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" 
-                                                        : "text-gray-400 hover:bg-white/5 hover:text-white"
-                                                )}
-                                            >
-                                                {option.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Trackers Section */}
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2 text-gray-200 font-bold text-sm">
-                                            <Signal className="h-4 w-4 text-indigo-400" />
-                                            Trackers
-                                        </div>
-                                        <span className="bg-indigo-500/10 text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-500/20">
-                                            {selectedTrackers.length} sélectionné
-                                        </span>
-                                    </div>
-                                    <div className="bg-black/20 border border-white/5 rounded-2xl p-4 h-[320px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                                        <div className="grid grid-cols-1 gap-2">
-                                            {trackers.map((tracker) => (
-                                                <button
-                                                    key={tracker}
-                                                    onClick={() => {
-                                                        setSelectedTrackers(prev => 
-                                                            prev.includes(tracker) 
-                                                                ? prev.filter(t => t !== tracker) 
-                                                                : [...prev, tracker]
-                                                        )
-                                                    }}
-                                                    className={clsx(
-                                                        "flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold transition-all border",
-                                                        selectedTrackers.includes(tracker)
-                                                            ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-sm shadow-indigo-500/5"
-                                                            : "bg-transparent text-gray-400 border-white/5 hover:border-white/10 hover:bg-white/5 hover:text-white"
-                                                    )}
-                                                >
-                                                    <span className="truncate">{tracker}</span>
-                                                    <div className={clsx(
-                                                        "w-4 h-4 rounded-full border flex items-center justify-center transition-all",
-                                                        selectedTrackers.includes(tracker)
-                                                            ? "bg-indigo-500 border-indigo-500"
-                                                            : "border-white/20"
-                                                    )}>
-                                                        {selectedTrackers.includes(tracker) && <CheckCircle className="h-3 w-3 text-white" />}
-                                                    </div>
-                                                </button>
-                                            ))}
-                                            {trackers.length === 0 && (
-                                                <div className="text-center py-12 text-gray-500 text-xs italic flex flex-col items-center gap-2">
-                                                    <Signal className="w-8 h-8 opacity-20" />
-                                                    Aucun tracker disponible
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Tags Section */}
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2 text-gray-200 font-bold text-sm">
-                                            <Tag className="h-4 w-4 text-indigo-400" />
-                                            Tags
-                                        </div>
-                                        <span className="bg-indigo-500/10 text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-500/20">
-                                            {selectedTags.length} sélectionné
-                                        </span>
-                                    </div>
-                                    <div className="bg-black/20 border border-white/5 rounded-2xl p-4 h-[320px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                                        <div className="grid grid-cols-1 gap-2">
-                                            {tags.map((tag) => (
-                                                <button
-                                                    key={tag}
-                                                    onClick={() => {
-                                                        setSelectedTags(prev => 
-                                                            prev.includes(tag) 
-                                                                ? prev.filter(t => t !== tag) 
-                                                                : [...prev, tag]
-                                                        )
-                                                    }}
-                                                    className={clsx(
-                                                        "flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold transition-all border",
-                                                        selectedTags.includes(tag)
-                                                            ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-sm shadow-indigo-500/5"
-                                                            : "bg-transparent text-gray-400 border-white/5 hover:border-white/10 hover:bg-white/5 hover:text-white"
-                                                    )}
-                                                >
-                                                    <span className="truncate">{tag}</span>
-                                                    <div className={clsx(
-                                                        "w-4 h-4 rounded-full border flex items-center justify-center transition-all",
-                                                        selectedTags.includes(tag)
-                                                            ? "bg-indigo-500 border-indigo-500"
-                                                            : "border-white/20"
-                                                    )}>
-                                                        {selectedTags.includes(tag) && <CheckCircle className="h-3 w-3 text-white" />}
-                                                    </div>
-                                                </button>
-                                            ))}
-                                            {tags.length === 0 && (
-                                                <div className="text-center py-12 text-gray-500 text-xs italic flex flex-col items-center gap-2">
-                                                    <Tag className="w-8 h-8 opacity-20" />
-                                                    Aucun tag disponible
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Period Section */}
-                                <div className="space-y-6">
-                                    <div className="space-y-4">
-                                        <div className="flex items-center gap-2 text-gray-200 font-bold text-sm">
-                                            <Calendar className="h-4 w-4 text-indigo-400" />
-                                            Période
-                                        </div>
-                                        <div className="bg-black/20 border border-white/5 rounded-2xl p-6 space-y-4">
-                                            <div>
-                                                <label className="block text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">À partir de</label>
-                                                <div className="relative">
-                                                    <input 
-                                                        type="date" 
-                                                        value={dateFrom}
-                                                        onChange={(e) => setDateFrom(e.target.value)}
-                                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:ring-2 focus:ring-indigo-500/30 outline-none transition-all [color-scheme:dark]"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="p-6 border-t border-white/5 flex justify-end bg-white/5">
-                            <button 
-                                onClick={() => setIsFilterModalOpen(false)}
-                                className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95"
-                            >
-                                Voir les résultats
-                            </button>
-                        </div>
-                    </div>
-                </div>,
-                document.body
-            )}
+            <FilterModal
+                isOpen={isFilterModalOpen}
+                onClose={() => setIsFilterModalOpen(false)}
+                sortBy={sortBy}
+                onSortByChange={(id) => setSortBy(id as any)}
+                sortOptions={sortOptions}
+                trackers={trackers}
+                selectedTrackers={selectedTrackers}
+                onSelectedTrackersChange={setSelectedTrackers}
+                tags={tags}
+                selectedTags={selectedTags}
+                onSelectedTagsChange={setSelectedTags}
+                dateFrom={dateFrom}
+                onDateFromChange={setDateFrom}
+                onReset={() => {
+                    setSelectedTags([])
+                    setSelectedTrackers([])
+                    setDateFrom('')
+                    setSortBy('added_on')
+                }}
+            />
             {/* Search Modal */}
-            {mounted && isSearchOpen && createPortal(
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm overflow-y-auto">
-                    <div className="bg-[#0A0A0A]/95 backdrop-blur-xl rounded-3xl border border-white/10 w-full max-w-7xl h-[90vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 ring-1 ring-white/10">
-                        <div className="p-6 border-b border-white/10 flex items-center justify-between sticky top-0 bg-[#0A0A0A]/95 backdrop-blur-xl z-10 rounded-t-3xl">
-                            <h2 className="text-xl font-black text-white flex items-center gap-3 tracking-tight">
-                                <div className="p-2.5 bg-purple-500/10 rounded-xl border border-purple-500/20">
-                                    <Search className="w-5 h-5 text-purple-400" />
-                                </div>
-                                Recherche Interactive
-                            </h2>
-                            <button 
-                                onClick={() => setIsSearchOpen(false)}
-                                className="p-2.5 hover:bg-white/10 rounded-xl transition-all text-gray-400 hover:text-white"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                            <ProwlarrSearch title="" canManage={true} />
-                        </div>
-                    </div>
-                </div>,
-                document.body
-            )}
+            <SearchModal
+                isOpen={isSearchOpen}
+                onClose={() => setIsSearchOpen(false)}
+            />
             {/* Batch Actions Floating Bar */}
-            {mounted && createPortal(
-                <div className={clsx(
-                    "fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-2 flex items-center gap-2 transition-all duration-300 origin-bottom",
-                    selectedTorrents.length > 0 ? "translate-y-0 opacity-100 scale-100" : "translate-y-24 opacity-0 scale-90 pointer-events-none"
-                )}>
-                    <div className="px-3 py-1 bg-white/5 rounded-xl border border-white/5 text-xs font-bold text-white flex items-center gap-2 mr-2">
-                        <span className="bg-indigo-600 text-white px-1.5 py-0.5 rounded-md text-[10px]">{selectedTorrents.length}</span>
-                        <span className="hidden sm:inline">sélectionnés</span>
-                    </div>
-                    
-                    <div className="h-8 w-px bg-white/10 mx-1" />
-
-                    <button onClick={() => handleBatchAction('resume')} className="p-2 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded-xl transition-colors" title="Reprendre">
-                        <Play className="w-5 h-5 fill-current" />
-                    </button>
-                    <button onClick={() => handleBatchAction('pause')} className="p-2 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 rounded-xl transition-colors" title="Pause">
-                        <Pause className="w-5 h-5 fill-current" />
-                    </button>
-                    <button onClick={() => handleBatchAction('delete')} className="p-2 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-xl transition-colors" title="Supprimer">
-                        <Trash2 className="w-5 h-5" />
-                    </button>
-
-                    <div className="h-8 w-px bg-white/10 mx-1" />
-                    
-                    {/* Priority Controls */}
-                    <div className="flex items-center gap-1">
-                        <button onClick={() => handleBatchAction('top')} className="p-2 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 rounded-xl transition-colors" title="Priorité Max (Top)">
-                            <ChevronsUp className="w-5 h-5" />
-                        </button>
-                        <button onClick={() => handleBatchAction('up')} className="p-2 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 rounded-xl transition-colors" title="Augmenter Priorité">
-                            <ChevronUp className="w-5 h-5" />
-                        </button>
-                        <button onClick={() => handleBatchAction('down')} className="p-2 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 rounded-xl transition-colors" title="Diminuer Priorité">
-                            <ChevronDown className="w-5 h-5" />
-                        </button>
-                        <button onClick={() => handleBatchAction('bottom')} className="p-2 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 rounded-xl transition-colors" title="Priorité Min (Bas)">
-                            <ChevronsDown className="w-5 h-5" />
-                        </button>
-                    </div>
-                    
-                    <div className="h-8 w-px bg-white/10 mx-1" />
-
-                <button onClick={() => handleBatchAction('reannounce')} className="p-2 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 rounded-xl transition-colors" title="Réannoncer">
-                    <Signal className="w-5 h-5" />
-                </button>
-                <button onClick={() => setIsShareLimitModalOpen(true)} className="p-2 hover:bg-orange-500/20 text-orange-400 hover:text-orange-300 rounded-xl transition-colors" title="Définir la limite de temps (ETA)">
-                    <Clock className="w-5 h-5" />
-                </button>
-
-                <div className="h-8 w-px bg-white/10 mx-1" />
-
-                    <button onClick={() => setSelectedTorrents([])} className="p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-xl transition-colors" title="Annuler sélection">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>,
-                document.body
-            )}
+            <BatchActionsBar
+                selectedCount={selectedTorrents.length}
+                onBatchAction={handleBatchAction}
+                onShareLimitClick={() => setIsShareLimitModalOpen(true)}
+                onClearSelection={() => setSelectedTorrents([])}
+            />
         </div>
             {/* Share Limit Modal */}
-            {mounted && isShareLimitModalOpen && createPortal(
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-                    <div className="bg-[#0A0A0A]/95 backdrop-blur-xl rounded-3xl border border-white/10 w-full max-w-md p-8 shadow-2xl ring-1 ring-white/5 space-y-8 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                        <div className="text-center space-y-4">
-                            <div className="mx-auto w-16 h-16 bg-orange-500/10 rounded-2xl flex items-center justify-center border border-orange-500/20 shadow-lg shadow-orange-500/10 mb-6">
-                                <Clock className="w-8 h-8 text-orange-500" />
-                            </div>
-                            
-                            <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">
-                                Limite de temps (Seed)
-                            </h3>
-                            
-                            <p className="text-gray-400 font-medium leading-relaxed text-sm">
-                                Définissez la durée maximale pendant laquelle les torrents sélectionnés resteront actifs avant d'être arrêtés ou supprimés (selon la configuration globale).
-                            </p>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-3 gap-2">
-                                <button
-                                    onClick={() => setShareLimitType('global')}
-                                    className={clsx(
-                                        "p-3 rounded-xl text-xs font-bold border transition-all",
-                                        shareLimitType === 'global'
-                                            ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-400"
-                                            : "bg-white/5 border-white/5 text-gray-400 hover:bg-white/10"
-                                    )}
-                                >
-                                    Global
-                                </button>
-                                <button
-                                    onClick={() => setShareLimitType('unlimited')}
-                                    className={clsx(
-                                        "p-3 rounded-xl text-xs font-bold border transition-all",
-                                        shareLimitType === 'unlimited'
-                                            ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
-                                            : "bg-white/5 border-white/5 text-gray-400 hover:bg-white/10"
-                                    )}
-                                >
-                                    Infini
-                                </button>
-                                <button
-                                    onClick={() => setShareLimitType('custom')}
-                                    className={clsx(
-                                        "p-3 rounded-xl text-xs font-bold border transition-all",
-                                        shareLimitType === 'custom'
-                                            ? "bg-orange-500/20 border-orange-500/50 text-orange-400"
-                                            : "bg-white/5 border-white/5 text-gray-400 hover:bg-white/10"
-                                    )}
-                                >
-                                    Personnalisé
-                                </button>
-                            </div>
-
-                            {shareLimitType === 'custom' && (
-                                <div className="flex gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={shareLimitTime}
-                                        onChange={(e) => setShareLimitTime(parseInt(e.target.value) || 0)}
-                                        className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:ring-2 focus:ring-orange-500/30 outline-none transition-all"
-                                    />
-                                    <select
-                                        value={shareLimitUnit}
-                                        onChange={(e: any) => setShareLimitUnit(e.target.value)}
-                                        className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:ring-2 focus:ring-orange-500/30 outline-none transition-all appearance-none cursor-pointer"
-                                    >
-                                        <option value="minutes">Minutes</option>
-                                        <option value="hours">Heures</option>
-                                        <option value="days">Jours</option>
-                                        <option value="weeks">Semaines</option>
-                                        <option value="months">Mois</option>
-                                    </select>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex gap-3 pt-4">
-                            <button
-                                onClick={() => setIsShareLimitModalOpen(false)}
-                                className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-xl font-bold transition-all"
-                            >
-                                Annuler
-                            </button>
-                            <button
-                                onClick={handleShareLimit}
-                                className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold shadow-lg shadow-orange-500/20 transition-all hover:scale-105 active:scale-95"
-                            >
-                                Appliquer
-                            </button>
-                        </div>
-                    </div>
-                </div>,
-                document.body
-            )}
+            <ShareLimitModal
+                isOpen={isShareLimitModalOpen}
+                onClose={() => setIsShareLimitModalOpen(false)}
+                onApply={handleShareLimit}
+                shareLimitTime={shareLimitTime}
+                onShareLimitTimeChange={setShareLimitTime}
+                shareLimitUnit={shareLimitUnit}
+                onShareLimitUnitChange={setShareLimitUnit}
+                shareLimitType={shareLimitType}
+                onShareLimitTypeChange={setShareLimitType}
+            />
         </>
     )
 }
