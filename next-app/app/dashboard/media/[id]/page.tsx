@@ -23,7 +23,7 @@ import { isInWatchLater } from '../watch-later-actions'
 import { getSetting } from '@/lib/settings'
 import { getMediaAvailability } from '@/lib/services/media-status'
 import { DownloadStatusCard } from './DownloadStatusCard'
-import { UserActivityButton } from '@/components/UserActivityButton'
+import { UserActivityButton } from './_components/UserActivityButton'
 import { CalendarButton } from '@/components/CalendarButton'
 
 const isDev = process.env.NODE_ENV === 'development';
