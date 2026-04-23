@@ -1,5 +1,5 @@
 import React from 'react'
-import { StatsCharts } from '../StatsCharts'
+import { StatsCharts } from '../_components/StatsCharts'
 import { TopItemsTabs } from '../_components/TopItemsTabs'
 import { EmbyImage } from '@/components/global/EmbyImage'
 import { ChevronLeft, ChevronRight, Clock, Play, Activity, TrendingUp, Calendar, User } from 'lucide-react'
