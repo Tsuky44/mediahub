@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { getTorrents, addTorrent, deleteTorrents, pauseTorrents, resumeTorrents, getTags, setPriority, reannounceTorrents, setShareLimits } from '../actions'
-import { Torrent } from '@/lib/services/qbittorrent'
+import { useState } from 'react'
 import { Plus, Trash2, Pause, Play, Download, Upload, HardDrive, Search, Users, ArrowUpDown, Tag, X, CheckCircle, Activity, Filter, Signal, LayoutTemplate, Info } from 'lucide-react'
 import Link from 'next/link'
 import clsx from 'clsx'
 import { formatSpeed, formatSize, formatDate, formatDateTime, formatEta, getTrackerName } from '../_utils/torrent-formatters'
 import { useVisibleColumns } from '../_hooks/useVisibleColumns'
+import { useTorrents } from '../_hooks/useTorrents'
 import { AddTorrentModal } from './torrent/AddTorrentModal'
 import { DeleteTorrentModal } from './torrent/DeleteTorrentModal'
 import { FilterModal } from './torrent/FilterModal'
@@ -16,12 +15,9 @@ import { BatchActionsBar } from './torrent/BatchActionsBar'
 import { ShareLimitModal } from './torrent/ShareLimitModal'
 
 export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boolean, canManage: boolean, canSearch: boolean }) {
-    const [torrents, setTorrents] = useState<Torrent[]>([])
-    const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('all')
     const [selectedTags, setSelectedTags] = useState<string[]>([])
     const [selectedTrackers, setSelectedTrackers] = useState<string[]>([])
-    const [tags, setTags] = useState<string[]>([])
     const [searchQuery, setSearchQuery] = useState('')
     const [isAddModalOpen, setIsAddModalOpen] = useState(false)
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false)
@@ -32,7 +28,6 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
     const [newTorrentUrl, setNewTorrentUrl] = useState('')
     const [torrentFiles, setTorrentFiles] = useState<FileList | null>(null)
     const [selectedTorrents, setSelectedTorrents] = useState<string[]>([])
-    const [refreshInterval, setRefreshInterval] = useState(2000)
     const [sortBy, setSortBy] = useState<'name' | 'ratio' | 'upspeed' | 'dlspeed' | 'global_speed' | 'added_on' | 'progress' | 'uploaded' | 'size' | 'amount_left' | 'eta' | 'num_seeds' | 'num_leechs' | 'last_activity' | 'completion_on' | 'availability' | 'downloaded' | 'category'>('added_on')
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
     const [isSortOpen, setIsSortOpen] = useState(false)
@@ -48,25 +43,19 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
     const [isColumnsOpen, setIsColumnsOpen] = useState(false)
     const { visibleColumns, toggleColumn } = useVisibleColumns()
 
-    const fetchTorrents = async () => {
-        const data = await getTorrents(filter)
-        setTorrents(data)
-        setLoading(false)
-    }
-
-    useEffect(() => {
-        fetchTorrents()
-        const interval = setInterval(fetchTorrents, refreshInterval)
-        
-        // Fetch tags
-        const fetchMetadata = async () => {
-            const tgs = await getTags()
-            setTags(tgs)
-        }
-        fetchMetadata()
-
-        return () => clearInterval(interval)
-    }, [filter, refreshInterval])
+    // Data + CRUD actions (fetching + polling encapsulated in hook)
+    const {
+        torrents,
+        loading,
+        tags,
+        addTorrent,
+        deleteTorrents,
+        pauseTorrents,
+        resumeTorrents,
+        reannounceTorrents,
+        setPriority,
+        setShareLimits,
+    } = useTorrents(filter)
 
     const trackers = Array.from(new Set(torrents.map(t => getTrackerName(t.tracker)))).sort()
 
@@ -100,7 +89,6 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
             setNewTorrentUrl('')
             setTorrentFiles(null)
             setIsAddModalOpen(false)
-            fetchTorrents()
         } else {
             alert(res.error || 'Failed to add torrent')
         }
@@ -116,7 +104,6 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
         
         const res = await deleteTorrents([torrentToDelete.hash], deleteFiles)
         if (res.success) {
-            fetchTorrents()
             setIsDeleteModalOpen(false)
             setTorrentToDelete(null)
         }
@@ -124,12 +111,10 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
 
     const handlePause = async (hash: string) => {
         await pauseTorrents([hash])
-        fetchTorrents()
     }
 
     const handleResume = async (hash: string) => {
         await resumeTorrents([hash])
-        fetchTorrents()
     }
 
     const handleSelect = (hash: string) => {
@@ -153,17 +138,8 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
 
         if (action === 'delete') {
             if (confirm(`Voulez-vous vraiment supprimer ${selectedTorrents.length} torrents ?`)) {
-                await deleteTorrents(selectedTorrents, true) // Default to delete files too? Or ask? User asked for modify ETA, so maybe not delete. Let's assume just remove from list or maybe prompt.
-                // Actually the current UI has a modal for single delete. For batch, let's just do it or maybe ask.
-                // The single delete modal has "delete files" checkbox. 
-                // For now, let's just pass false for deleteFiles to be safe, or maybe I should use the modal?
-                // Let's use a simple confirm for now, and maybe assume false for files.
-                // Wait, users usually want to keep files.
-                // Let's change this to use the modal logic later if needed, but for now simple action.
-                // Re-reading: "modifier les ETA". Deleting is not ETA. 
-                // Let's stick to simple confirmation for delete, and pass false for files (safer).
+                await deleteTorrents(selectedTorrents, true)
                 setSelectedTorrents([])
-                fetchTorrents()
             }
             return
         }
@@ -174,7 +150,6 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
         else await setPriority(selectedTorrents, action)
         
         setSelectedTorrents([])
-        fetchTorrents()
     }
 
     const handleShareLimit = async () => {
@@ -209,7 +184,6 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
         
         setIsShareLimitModalOpen(false)
         setSelectedTorrents([])
-        fetchTorrents()
     }
 
     const filteredTorrents = Array.isArray(torrents) 
