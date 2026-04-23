@@ -1,12 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Pause, Download, HardDrive, Search, ArrowUpDown, CheckCircle, Activity, Filter, LayoutTemplate } from 'lucide-react'
-import clsx from 'clsx'
 import { useVisibleColumns } from '../_hooks/useVisibleColumns'
 import { useTorrents } from '../_hooks/useTorrents'
 import { useTorrentFilters } from '../_hooks/useTorrentFilters'
 import { useTorrentSelection } from '../_hooks/useTorrentSelection'
+import { SORT_OPTIONS } from '../_constants/torrent-options'
 import { AddTorrentModal } from './torrent/AddTorrentModal'
 import { DeleteTorrentModal } from './torrent/DeleteTorrentModal'
 import { FilterModal } from './torrent/FilterModal'
@@ -14,6 +13,7 @@ import { SearchModal } from './torrent/SearchModal'
 import { BatchActionsBar } from './torrent/BatchActionsBar'
 import { ShareLimitModal } from './torrent/ShareLimitModal'
 import { TorrentRow } from './torrent/TorrentRow'
+import { TorrentFiltersBar } from './torrent/TorrentFiltersBar'
 
 export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boolean, canManage: boolean, canSearch: boolean }) {
     const [filter, setFilter] = useState('all')
@@ -24,7 +24,6 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
     const [addMode, setAddMode] = useState<'url' | 'file'>('url')
     const [newTorrentUrl, setNewTorrentUrl] = useState('')
     const [torrentFiles, setTorrentFiles] = useState<FileList | null>(null)
-    const [isSortOpen, setIsSortOpen] = useState(false)
     // Prowlarr Search State
     const [isSearchOpen, setIsSearchOpen] = useState(false)
     // Share Limit State
@@ -33,8 +32,7 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
     const [shareLimitUnit, setShareLimitUnit] = useState<'minutes' | 'hours' | 'days' | 'weeks' | 'months'>('days')
     const [shareLimitType, setShareLimitType] = useState<'global' | 'unlimited' | 'custom'>('custom')
 
-    // Column Visibility State
-    const [isColumnsOpen, setIsColumnsOpen] = useState(false)
+    // Column Visibility (persisted via localStorage in the hook)
     const { visibleColumns, toggleColumn } = useVisibleColumns()
 
     // Data + CRUD actions (fetching + polling encapsulated in hook)
@@ -183,240 +181,31 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
         clearSelection()
     }
 
-    const filters = [
-        { id: 'all', label: 'Tous', icon: HardDrive },
-        { id: 'downloading', label: 'En cours', icon: Download },
-        { id: 'completed', label: 'Terminés', icon: CheckCircle },
-        { id: 'paused', label: 'En pause', icon: Pause },
-        { id: 'active', label: 'Actifs', icon: Activity },
-    ]
-
-    const sortOptions = [
-        { id: 'added_on', label: 'Date d\'ajout' },
-        { id: 'name', label: 'Nom' },
-        { id: 'size', label: 'Taille' },
-        { id: 'progress', label: 'Progression' },
-        { id: 'amount_left', label: 'Restant' },
-        { id: 'eta', label: 'ETA' },
-        { id: 'global_speed', label: 'Vitesse globale' },
-        { id: 'dlspeed', label: 'Vitesse Down' },
-        { id: 'upspeed', label: 'Vitesse Up' },
-        { id: 'ratio', label: 'Ratio' },
-        { id: 'downloaded', label: 'Total Downloadé' },
-        { id: 'uploaded', label: 'Total Uploadé' },
-        { id: 'num_seeds', label: 'Seeds' },
-        { id: 'num_leechs', label: 'Peers' },
-        { id: 'availability', label: 'Disponibilité' },
-        { id: 'last_activity', label: 'Dernière activité' },
-        { id: 'completion_on', label: 'Date de fin' },
-        { id: 'category', label: 'Catégorie' },
-    ]
-
     return (
         <>
         <div className="w-full space-y-6">
             <div className="flex flex-col gap-6">
-                {/* Filters & Tools Row */}
-                <div className="flex flex-col gap-4 w-full">
-                    {/* Status Categories - Scrollable Row */}
-                    <div className="w-full overflow-x-auto pb-1 no-scrollbar [&::-webkit-scrollbar]:hidden">
-                        <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-2xl p-1.5 backdrop-blur-md shadow-inner w-max min-w-full sm:min-w-0 sm:w-auto">
-                            {filters.map((f) => (
-                                <button
-                                    key={f.id}
-                                    onClick={() => setFilter(f.id)}
-                                    className={clsx(
-                                        'px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2',
-                                        filter === f.id 
-                                            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
-                                            : 'text-gray-400 hover:text-white hover:bg-white/5'
-                                    )}
-                                >
-                                    <f.icon className={clsx("w-3.5 h-3.5", filter === f.id ? "text-white" : "text-gray-500 group-hover:text-white")} />
-                                    {f.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col md:flex-row gap-3 w-full">
-                        {/* Search */}
-                        <div className="relative flex-1 group order-1">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-indigo-400 transition-colors" />
-                            <input
-                                type="text"
-                                name="search-torrent"
-                                autoComplete="off"
-                                autoCorrect="off"
-                                autoCapitalize="none"
-                                spellCheck="false"
-                                data-1p-ignore="true"
-                                data-lpignore="true"
-                                data-form-type="other"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Rechercher..."
-                                className="w-full pl-11 pr-4 h-11 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 outline-none transition-all focus:bg-white/10 backdrop-blur-sm"
-                            />
-                        </div>
-
-                        {/* Controls Row (Sort + Filter) */}
-                        <div className="flex gap-2 order-2 md:order-2 w-full md:w-auto">
-                            {/* Sort Dropdown */}
-                            <div className="relative flex-1 md:flex-none z-30">
-                                <div className="flex items-center justify-center gap-1 bg-white/5 border border-white/10 rounded-xl px-2 h-11 w-full backdrop-blur-md">
-                                    <button 
-                                        onClick={() => setIsSortOpen(!isSortOpen)}
-                                        className="flex items-center gap-2 text-xs text-gray-300 hover:text-white transition-colors px-2"
-                                    >
-                                        <ArrowUpDown className="h-4 w-4 text-indigo-400" />
-                                        <span className="font-semibold truncate max-w-[80px] md:max-w-none">{sortOptions.find(o => o.id === sortBy)?.label}</span>
-                                    </button>
-                                    <div className="w-[1px] h-4 bg-white/10 mx-1" />
-                                    <button 
-                                        onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                                        className="p-1 hover:bg-white/10 rounded-lg text-gray-400 hover:text-indigo-400 transition-all"
-                                    >
-                                        {sortOrder === 'asc' ? '↑' : '↓'}
-                                    </button>
-                                </div>
-
-                                {isSortOpen && (
-                                    <>
-                                        <div className="fixed inset-0 z-10" onClick={() => setIsSortOpen(false)} />
-                                        <div className="absolute top-full left-0 mt-2 w-52 bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-20 overflow-hidden py-1.5 animate-in fade-in zoom-in-95 duration-100 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
-                                            {sortOptions.map((option) => (
-                                                <button
-                                                    key={option.id}
-                                                    onClick={() => {
-                                                        setSortBy(option.id as any)
-                                                        setIsSortOpen(false)
-                                                    }}
-                                                    className={clsx(
-                                                        "w-full text-left px-4 py-2.5 text-xs transition-colors",
-                                                        sortBy === option.id 
-                                                            ? "bg-indigo-600 text-white font-bold" 
-                                                            : "text-gray-400 hover:bg-white/10 hover:text-white"
-                                                    )}
-                                                >
-                                                    {option.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Columns Button */}
-                            <div className="relative flex-1 md:flex-none z-30">
-                                <button 
-                                    onClick={() => setIsColumnsOpen(!isColumnsOpen)}
-                                    className={clsx(
-                                        "w-full md:w-auto flex items-center justify-center gap-2 px-3 h-11 bg-white/5 backdrop-blur-md border rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap",
-                                        isColumnsOpen
-                                            ? "border-indigo-500/50 text-indigo-400 bg-indigo-500/10" 
-                                            : "border-white/10 text-gray-400 hover:text-white hover:bg-white/5"
-                                    )}
-                                    title="Choisir les colonnes"
-                                >
-                                    <LayoutTemplate className="h-4 w-4" />
-                                </button>
-
-                                {isColumnsOpen && (
-                                    <>
-                                        <div className="fixed inset-0 z-10" onClick={() => setIsColumnsOpen(false)} />
-                                        <div className="absolute top-full right-0 md:left-0 mt-2 w-56 bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-20 overflow-hidden py-1.5 animate-in fade-in zoom-in-95 duration-100 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
-                                            <div className="px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-white/5 mb-1">
-                                                Affichage
-                                            </div>
-                                            {[
-                                                { id: 'tracker', label: 'Tracker' },
-                                                { id: 'tags', label: 'Tags' },
-                                                { id: 'category', label: 'Catégorie' },
-                                                { id: 'added_on', label: 'Date d\'ajout' },
-                                                { id: 'completion_on', label: 'Date de fin' },
-                                                { id: 'last_activity', label: 'Dernière activité' },
-                                                { id: 'status', label: 'Statut' },
-                                                { id: 'download_info', label: 'Téléchargement' },
-                                                { id: 'upload_info', label: 'Envoi' },
-                                                { id: 'peers', label: 'Peers (Seeds/Leechs)' },
-                                                { id: 'availability', label: 'Disponibilité' },
-                                                { id: 'ratio', label: 'Ratio' },
-                                                { id: 'progress_bar', label: 'Barre de progression' },
-                                                { id: 'progress_text', label: 'Pourcentage' },
-                                                { id: 'eta', label: 'ETA' },
-                                            ].map((col) => (
-                                                <button
-                                                    key={col.id}
-                                                    onClick={() => toggleColumn(col.id)}
-                                                    className="w-full text-left px-4 py-2.5 text-xs transition-colors flex items-center gap-3 hover:bg-white/5 text-gray-300 hover:text-white"
-                                                >
-                                                    <div className={clsx(
-                                                        "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                                                        visibleColumns[col.id]
-                                                            ? "bg-indigo-600 border-indigo-500 text-white"
-                                                            : "bg-white/5 border-white/20"
-                                                    )}>
-                                                        {visibleColumns[col.id] && <CheckCircle className="w-3 h-3 fill-current" />}
-                                                    </div>
-                                                    {col.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Select All Button */}
-                            <button 
-                                onClick={handleSelectAll}
-                                className={clsx(
-                                    "flex-1 md:flex-none flex items-center justify-center gap-2 px-3 h-11 bg-white/5 backdrop-blur-md border rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap",
-                                    (selectedTorrents.length > 0 && selectedTorrents.length === filteredTorrents.length)
-                                        ? "border-indigo-500/50 text-indigo-400 bg-indigo-500/10" 
-                                        : "border-white/10 text-gray-400 hover:text-white hover:bg-white/5"
-                                )}
-                                title={selectedTorrents.length === filteredTorrents.length ? "Tout désélectionner" : "Tout sélectionner"}
-                            >
-                                <CheckCircle className="h-4 w-4" />
-                                <span className="hidden sm:inline">Tout</span>
-                            </button>
-
-                            {/* Advanced Filters Button */}
-                            <button 
-                                onClick={() => setIsFilterModalOpen(true)}
-                                className={clsx(
-                                    "flex-1 md:flex-none flex items-center justify-center gap-2 px-4 h-11 bg-white/5 backdrop-blur-md border rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap",
-                                    (selectedTags.length > 0 || selectedTrackers.length > 0 || dateFrom) 
-                                        ? "border-indigo-500/50 text-indigo-400 bg-indigo-500/10" 
-                                        : "border-white/10 text-gray-400 hover:text-white hover:bg-white/5"
-                                )}
-                            >
-                                <Filter className="h-4 w-4" />
-                                <span className="hidden sm:inline">Filtres avancés</span>
-                                <span className="sm:hidden">Filtres</span>
-                                {(selectedTags.length > 0 || selectedTrackers.length > 0 || dateFrom) && (
-                                    <span className="flex items-center justify-center w-4 h-4 rounded-full bg-indigo-600 text-[10px] text-white">
-                                        {(selectedTags.length > 0 ? 1 : 0) + (selectedTrackers.length > 0 ? 1 : 0) + (dateFrom ? 1 : 0)}
-                                    </span>
-                                )}
-                            </button>
-                        </div>
-
-                        {/* Actions Row */}
-                        <div className="flex gap-2 order-3 md:order-3 w-full md:w-auto">
-                            {canAdd && (
-                                <button
-                                    onClick={() => setIsAddModalOpen(true)}
-                                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 h-11 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 whitespace-nowrap"
-                                >
-                                    <Plus className="h-4 w-4" />
-                                    Ajouter
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
+                <TorrentFiltersBar
+                    filter={filter}
+                    onFilterChange={setFilter}
+                    searchQuery={searchQuery}
+                    onSearchQueryChange={setSearchQuery}
+                    sortBy={sortBy}
+                    onSortByChange={(id) => setSortBy(id as any)}
+                    sortOrder={sortOrder}
+                    onSortOrderChange={setSortOrder}
+                    visibleColumns={visibleColumns}
+                    onToggleColumn={toggleColumn}
+                    selectedCount={selectedTorrents.length}
+                    filteredCount={filteredTorrents.length}
+                    onSelectAll={handleSelectAll}
+                    selectedTagsCount={selectedTags.length}
+                    selectedTrackersCount={selectedTrackers.length}
+                    dateFrom={dateFrom}
+                    onOpenFilterModal={() => setIsFilterModalOpen(true)}
+                    canAdd={canAdd}
+                    onOpenAddModal={() => setIsAddModalOpen(true)}
+                />
 
                 {/* Torrent List */}
                 <div className="w-full">
@@ -476,7 +265,7 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
                 onClose={() => setIsFilterModalOpen(false)}
                 sortBy={sortBy}
                 onSortByChange={(id) => setSortBy(id as any)}
-                sortOptions={sortOptions}
+                sortOptions={SORT_OPTIONS}
                 trackers={trackers}
                 selectedTrackers={selectedTrackers}
                 onSelectedTrackersChange={setSelectedTrackers}
