@@ -104,15 +104,30 @@ downloads/
 |-------|--------|------------|--------|
 | 5.5 | `f89eb00` | `_types/webhook.ts`, `_utils/webhook-templates.ts`, `_hooks/useWebhooks.ts`, `_components/webhooks/{WebhookCard, WebhookVariablesModal, WebhookRecipients, WebhookTemplatesList}` | 647 → **105** (−84 %) |
 
+### Phase 5.6 — `stats/page.tsx` (server component)
+
+| Phase | Commit | Extraction | Taille |
+|-------|--------|------------|--------|
+| 5.6 | `149381d` | `_utils/{stats-sanitize, stats-period, stats-aggregation}`, `_services/stats-data` (server-only), `_components/{StatCard, StatsPeriodNav, StatsHeader, StatsEmptyState, StatsRestrictedAccess}` | 876 → **186** (−79 %) |
+
+### Phase 5.7 — `stats/me/page.tsx` (server component)
+
+| Phase | Commit | Extraction | Taille |
+|-------|--------|------------|--------|
+| 5.7 | `a4903b5` | `me/_utils/{me-period, me-aggregation}`, `me/_services/me-data`, `me/_components/{MeStatCard, MePeriodNav, MeRecentHistoryList}` + réutilisation utils du parent | 570 → **116** (−80 %) |
+
+### Phase 5.8 — `settings/_components/RoleEditor.tsx`
+
+| Phase | Commit | Extraction | Taille |
+|-------|--------|------------|--------|
+| 5.8 | `ef6b874` | `_types/permission.ts`, `_utils/{role-permissions, role-tabs-config}` (config déclarative), `_components/roles/{PermissionCheckbox, PermissionRow, RoleTabsNav, RolePermissionsPanel}` | 555 → **124** (−78 %) |
+
 ## 3. Cibles restantes
 
 ### Pages / composants volumineux à décomposer
 
 | Cible | Lignes | État |
 |-------|--------|------|
-| `stats/page.tsx` | 809 | à faire |
-| `stats/me/page.tsx` | 523 | à faire |
-| `settings/_components/RoleEditor.tsx` | 522 | à faire |
 | `requests/list/InfiniteRequestList.tsx` | 488 | à faire |
 | `settings/_components/TrackerStatsManagement.tsx` | 451 | à faire |
 | `settings/_components/UserGroupManagement.tsx` | 444 | à faire |
@@ -122,9 +137,9 @@ downloads/
 
 ### Priorisation suggérée
 
-1. **`stats/page.tsx`** — server component principal, sûrement surtout de la data fetching à isoler.
-2. **`settings/_components/RoleEditor.tsx`** — pattern similaire à `UserManagement`.
-3. **`requests/list/InfiniteRequestList.tsx`** — infinite scroll + filtres, utile à pattern-iser.
+1. **`requests/list/InfiniteRequestList.tsx`** — infinite scroll + filtres, pattern réutilisable.
+2. **`docker/_components/ContainerDetails.tsx`** — suite naturelle de phase 5.3.
+3. **`settings/_components/UserGroupManagement.tsx`** — proche de `UserManagement` (CRUD).
 4. **`global/ProwlarrSearch.tsx`** — utilisé dans plusieurs pages, ROI partagé.
 5. **`media/[id]/page.tsx`** — page complexe mais très scoped.
 6. **Autres settings** — à traiter après.
