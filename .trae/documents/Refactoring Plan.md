@@ -92,6 +92,18 @@ downloads/
 | 5.3.a | `3051565` | `_types/docker.ts` + 4 hooks (`useDockerContainers`, `useDockerGroups`, `useDragAutoScroll`, `useDockerViewPreferences`) | — |
 | 5.3.b-d | `bfe2f0f` | `_components/container/ContainerCard` (grid+list), `_components/{DockerStatsGrid, DockerSearchBar, DockerGroupSection}` | 942 → **275** (−71 %) |
 
+### Phase 5.4 — `settings/_components/UserManagement.tsx`
+
+| Phase | Commit | Extraction | Taille |
+|-------|--------|------------|--------|
+| 5.4 | `818580a` | `_types/user.ts`, `_hooks/useUsers.ts` (CRUD + bulk + sync), `_components/users/{UserSyncButtons, ProviderFilterTabs, UserBulkActionBar, UserTableRow, CreateUserModal}` | 666 → **140** (−79 %) |
+
+### Phase 5.5 — `settings/_components/ExternalNotifications.tsx`
+
+| Phase | Commit | Extraction | Taille |
+|-------|--------|------------|--------|
+| 5.5 | `f89eb00` | `_types/webhook.ts`, `_utils/webhook-templates.ts`, `_hooks/useWebhooks.ts`, `_components/webhooks/{WebhookCard, WebhookVariablesModal, WebhookRecipients, WebhookTemplatesList}` | 647 → **105** (−84 %) |
+
 ## 3. Cibles restantes
 
 ### Pages / composants volumineux à décomposer
@@ -99,8 +111,6 @@ downloads/
 | Cible | Lignes | État |
 |-------|--------|------|
 | `stats/page.tsx` | 809 | à faire |
-| `settings/_components/UserManagement.tsx` | 630 | à faire |
-| `settings/_components/ExternalNotifications.tsx` | 614 | à faire |
 | `stats/me/page.tsx` | 523 | à faire |
 | `settings/_components/RoleEditor.tsx` | 522 | à faire |
 | `requests/list/InfiniteRequestList.tsx` | 488 | à faire |
@@ -113,10 +123,11 @@ downloads/
 ### Priorisation suggérée
 
 1. **`stats/page.tsx`** — server component principal, sûrement surtout de la data fetching à isoler.
-2. **`settings/_components/UserManagement.tsx`** et **`ExternalNotifications.tsx`** — gros composants avec CRUD similaires, pattern reproductible.
-3. **`global/ProwlarrSearch.tsx`** — utilisé dans plusieurs pages, ROI de la modularisation partagé.
-4. **`media/[id]/page.tsx`** — page complexe mais très scoped.
-5. **Autres settings** — à traiter après.
+2. **`settings/_components/RoleEditor.tsx`** — pattern similaire à `UserManagement`.
+3. **`requests/list/InfiniteRequestList.tsx`** — infinite scroll + filtres, utile à pattern-iser.
+4. **`global/ProwlarrSearch.tsx`** — utilisé dans plusieurs pages, ROI partagé.
+5. **`media/[id]/page.tsx`** — page complexe mais très scoped.
+6. **Autres settings** — à traiter après.
 
 ## 4. Règles de validation
 
