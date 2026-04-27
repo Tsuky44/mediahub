@@ -9,6 +9,18 @@ import { parseTorrentName, ParsedTorrentName, MediaType } from '@/lib/torrent-pa
 import { checkAccess } from '../actions'
 import { Torrent } from '@/lib/services/qbittorrent'
 
+// Typed shapes for external API responses to avoid `any`
+interface IndexerField { name: string; value?: string }
+interface TmdbGenre { name: string }
+interface TmdbCastMember {
+  name: string
+  character?: string
+  profile_path?: string
+  roles?: Array<{ character: string }>
+}
+interface IgdbPlatform { name: string }
+interface IgdbGameMode { name: string }
+
 const isDev = process.env.NODE_ENV === 'development'
 const log = (...args: any[]) => { if (isDev) console.log(...args) }
 const error = (...args: any[]) => { if (isDev) console.error(...args) }
@@ -51,7 +63,7 @@ async function getProwlarrIndexersMap(): Promise<Map<string, string>> {
       // Try to get base URL from fields if available
       let baseUrl = ''
       if (indexer.fields) {
-        const baseUrlField = indexer.fields.find((f: any) =>
+        const baseUrlField = (indexer.fields as IndexerField[]).find((f) =>
           f.name === 'baseUrl' || f.name === 'baseurl' || f.name === 'apiUrl'
         )
         if (baseUrlField && baseUrlField.value) {
@@ -91,22 +103,26 @@ export interface EnrichedTorrentInfo {
 }
 
 export interface MediaInfo {
-  type: MediaType
-  title: string
-  overview?: string
-  backdropUrl?: string
-  posterUrl?: string
-  year?: number
-  rating?: number
-  // TMDB specific
-  tmdbId?: number
-  genres?: string[]
-  runtime?: number
-  cast?: Array<{ name: string; character?: string; profile_path?: string }>
-  // IGDB specific
+  mediaType: MediaType;
+  title: string;
+  year?: number;
+  overview?: string;
+  posterUrl?: string;
+  backdropUrl?: string;
+  vote_average?: number;
+  vote_count?: number;
+  runtime?: number;
+  genres?: string[];
+  number_of_seasons?: number;
+  number_of_episodes?: number;
+  platforms?: string[];
+  developers?: string[];
+  cast?: Array<{
+    name: string;
+    character?: string;
+    profile_path?: string;
+  }>;
   igdbId?: number
-  platforms?: string[]
-  developers?: string[]
   publishers?: string[]
   gameModes?: string[]
   // Common
@@ -216,23 +232,25 @@ async function fetchTMDBInfo(parsed: ParsedTorrentName): Promise<MediaInfo | nul
 
     // Extract cast
     const rawCredits = mediaType === 'tv' ? (details.aggregate_credits || { cast: [] }) : (details.credits || { cast: [] })
-    const cast = (rawCredits.cast || []).slice(0, 10).map((c: any) => ({
+    const cast = (rawCredits.cast || []).slice(0, 10).map((c: TmdbCastMember) => ({
       name: c.name,
-      character: mediaType === 'tv' ? (c.roles?.map((r: any) => r.character).join(' / ') || c.character) : c.character,
+      character: mediaType === 'tv' ? (c.roles?.map((r) => r.character).join(' / ') || c.character) : c.character,
       profile_path: c.profile_path
     }))
 
     const result: MediaInfo = {
-      type: parsed.mediaType,
+      mediaType: parsed.mediaType,
       title: details.title || details.name || parsed.title,
       overview: details.overview,
       backdropUrl: details.backdrop_path ? `https://image.tmdb.org/t/p/original${details.backdrop_path}` : undefined,
       posterUrl: details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : undefined,
       year: parsed.year || (details.release_date ? new Date(details.release_date).getFullYear() : undefined) || (details.first_air_date ? new Date(details.first_air_date).getFullYear() : undefined),
-      rating: details.vote_average,
-      tmdbId: bestMatch.id,
-      genres: (details.genres || []).map((g: any) => g.name),
+      vote_average: details.vote_average,
+      vote_count: details.vote_count,
+      genres: (details.genres || []).map((g: TmdbGenre) => g.name),
       runtime: details.runtime,
+      number_of_seasons: details.number_of_seasons,
+      number_of_episodes: details.number_of_episodes,
       cast,
       externalUrl
     }
@@ -287,18 +305,18 @@ async function fetchIGDBInfo(parsed: ParsedTorrentName): Promise<MediaInfo | nul
     }
 
     const result: MediaInfo = {
-      type: 'game',
+      mediaType: 'game',
       title: gameDetails.name,
       overview: gameDetails.summary || gameDetails.storyline,
       posterUrl: igdbService.getCoverUrl(gameDetails.cover) || undefined,
       backdropUrl: gameDetails.artworks?.[0] ? igdbService.getImageUrl(gameDetails.artworks[0], '1080p') || undefined : undefined,
       year: gameDetails.first_release_date ? new Date(gameDetails.first_release_date * 1000).getFullYear() : undefined,
-      rating: gameDetails.aggregated_rating ? gameDetails.aggregated_rating / 10 : (gameDetails.rating ? gameDetails.rating / 10 : undefined),
+      vote_average: gameDetails.aggregated_rating ? gameDetails.aggregated_rating / 10 : (gameDetails.rating ? gameDetails.rating / 10 : undefined),
       igdbId: gameDetails.id,
-      platforms: (gameDetails.platforms || []).map((p: any) => p.name),
+      platforms: (gameDetails.platforms || []).map((p: IgdbPlatform) => p.name),
       developers: igdbService.getDevelopers(gameDetails.involved_companies),
       publishers: igdbService.getPublishers(gameDetails.involved_companies),
-      gameModes: (gameDetails.game_modes || []).map((m: any) => m.name),
+      gameModes: (gameDetails.game_modes || []).map((m: IgdbGameMode) => m.name),
       externalUrl
     }
 

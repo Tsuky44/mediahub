@@ -1,9 +1,10 @@
 'use client'
 
-import { createElement, useCallback, useEffect, useMemo, useState } from 'react'
+import { createElement, useEffect, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-hot-toast'
 import { io } from 'socket.io-client'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 import {
     deleteNotification,
@@ -20,41 +21,62 @@ import type { NotificationItem } from '../_types/notification-bell'
 const POLL_INTERVAL_MS = 60_000
 const REALTIME_TOAST_DURATION_MS = 5_000
 
+const notificationsKey = ['notifications', 'list'] as const
+const unreadKey = ['notifications', 'unread-count'] as const
+
 interface UseNotificationsResult {
     notifications: NotificationItem[]
     displayedNotifications: NotificationItem[]
     unreadCount: number
     refresh: () => Promise<void>
-    markAsRead: (id: number) => Promise<void>
-    deleteOne: (id: number) => Promise<void>
-    markAllAsRead: () => Promise<void>
+    markAsRead: (id: number) => Promise<{ success: boolean }>
+    deleteOne: (id: number) => Promise<{ success: boolean }>
+    markAllAsRead: () => Promise<{ success: boolean }>
 }
 
 /**
- * Owns the notifications data layer:
- * - Initial fetch on mount + 60s polling fallback.
- * - Realtime socket.io connection (gated by `session.user.id`) that pops a
- *   custom toast and refreshes the dropdown on incoming events.
- * - Optimistic mutations: markAsRead, deleteOne, markAllAsRead.
+ * TanStack Query-powered notifications hook.
+ *
+ * - Notifications + unread count fetched & polled via useQuery (60s).
+ * - Realtime socket.io connection (gated by `session.user.id`) pops a
+ *   custom toast and invalidates the query cache on incoming events.
+ * - Mutations invalidate queries on success for automatic refresh.
  */
 export function useNotifications(): UseNotificationsResult {
     const { data: session } = useSession()
     const userId = session?.user?.id
+    const queryClient = useQueryClient()
 
-    const [notifications, setNotifications] = useState<NotificationItem[]>([])
-    const [unreadCount, setUnreadCount] = useState(0)
+    const { data: notifications = [] } = useQuery({
+        queryKey: notificationsKey,
+        queryFn: async () => getNotifications() as Promise<NotificationItem[]>,
+        refetchInterval: POLL_INTERVAL_MS,
+    })
 
-    const refresh = useCallback(async () => {
-        const [data, count] = await Promise.all([getNotifications(), getUnreadCount()])
-        setNotifications(data as NotificationItem[])
-        setUnreadCount(count)
-    }, [])
+    const { data: unreadCount = 0 } = useQuery({
+        queryKey: unreadKey,
+        queryFn: getUnreadCount,
+        refetchInterval: POLL_INTERVAL_MS,
+    })
 
-    useEffect(() => {
-        refresh()
-        const interval = setInterval(refresh, POLL_INTERVAL_MS)
-        return () => clearInterval(interval)
-    }, [refresh])
+    const refresh = async () => {
+        await queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    }
+
+    const markAsReadMutation = useMutation({
+        mutationFn: markAsReadAction,
+        onSuccess: () => refresh(),
+    })
+
+    const deleteOneMutation = useMutation({
+        mutationFn: deleteNotification,
+        onSuccess: () => refresh(),
+    })
+
+    const markAllAsReadMutation = useMutation({
+        mutationFn: markAllAsReadAction,
+        onSuccess: () => refresh(),
+    })
 
     useEffect(() => {
         if (!userId) return
@@ -76,28 +98,7 @@ export function useNotifications(): UseNotificationsResult {
         return () => {
             socket.disconnect()
         }
-    }, [userId, refresh])
-
-    const markAsRead = useCallback(
-        async (id: number) => {
-            await markAsReadAction(id)
-            await refresh()
-        },
-        [refresh]
-    )
-
-    const deleteOne = useCallback(
-        async (id: number) => {
-            await deleteNotification(id)
-            await refresh()
-        },
-        [refresh]
-    )
-
-    const markAllAsRead = useCallback(async () => {
-        await markAllAsReadAction()
-        setUnreadCount(0)
-    }, [])
+    }, [userId])
 
     const displayedNotifications = useMemo(
         () => notifications.filter(n => !n.isRead),
@@ -109,8 +110,8 @@ export function useNotifications(): UseNotificationsResult {
         displayedNotifications,
         unreadCount,
         refresh,
-        markAsRead,
-        deleteOne,
-        markAllAsRead,
+        markAsRead: (id: number) => markAsReadMutation.mutateAsync(id),
+        deleteOne: (id: number) => deleteOneMutation.mutateAsync(id),
+        markAllAsRead: () => markAllAsReadMutation.mutateAsync(),
     }
 }
