@@ -125,9 +125,9 @@ export class SystemUpdateService {
             // Pull the latest image
             console.log(`[SystemUpdate] Pulling latest image for ${label} (${imageName})...`);
             await new Promise((resolve, reject) => {
-                docker.pull(imageName, (err: any, stream: any) => {
+                docker.pull(imageName, (err: Error | null, stream: NodeJS.ReadableStream) => {
                     if (err) return reject(err);
-                    docker.modem.followProgress(stream, (err: any) => err ? reject(err) : resolve(true));
+                    docker.modem.followProgress(stream, (err: Error | null) => err ? reject(err) : resolve(true));
                 });
             });
 
@@ -146,7 +146,7 @@ export class SystemUpdateService {
                 imageName
             };
 
-        } catch (error: any) {
+        } catch (error) {
             console.error(`[SystemUpdate] Check failed for ${label}:`, error);
             return {
                 name: label,
@@ -154,7 +154,7 @@ export class SystemUpdateService {
                 latestVersion: 'error',
                 updateAvailable: false,
                 imageName: 'error',
-                error: error.message
+                error: (error as Error).message
             };
         }
     }
@@ -385,9 +385,9 @@ export class SystemUpdateService {
             // Pull Watchtower
             const watchtowerImage = 'containrrr/watchtower:latest';
             await new Promise((resolve, reject) => {
-                docker.pull(watchtowerImage, (err: any, stream: any) => {
+                docker.pull(watchtowerImage, (err: Error | null, stream: NodeJS.ReadableStream) => {
                     if (err) return reject(err);
-                    docker.modem.followProgress(stream, (err: any) => err ? reject(err) : resolve(true));
+                    docker.modem.followProgress(stream, (err: Error | null) => err ? reject(err) : resolve(true));
                 });
             });
 
@@ -407,9 +407,9 @@ export class SystemUpdateService {
             await watchtower.start();
             console.log('[SystemUpdate] Watchtower started.');
 
-        } catch (error: any) {
+        } catch (error) {
             console.error('[SystemUpdate] Update failed:', error);
-            throw new Error(`Failed to start update process: ${error.message}`);
+            throw new Error(`Failed to start update process: ${(error as Error).message}`);
         }
     }
 }
