@@ -1,8 +1,3 @@
-import { getEmbyServiceForUser, getTmdbServiceForUser, getPlexServiceForUser, getJellyfinServiceForUser } from '@/lib/auth'
-import { getCurrentUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { defineAbilityFor } from '@/lib/ability'
-import Image from 'next/image'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import RequestButton from './RequestButton'
@@ -17,192 +12,80 @@ import FavoriteButton from './FavoriteButton'
 import WatchLaterButton from './WatchLaterButton'
 import { ManageMediaButton } from './ManageMediaButton'
 import { SubscribeButton } from './SubscribeButton'
-import { getSubscriptionStatus } from './subscribe-actions'
 import { SearchActions } from './_components/SearchActions'
-import { isInWatchLater } from '../watch-later-actions'
-import { getSetting } from '@/lib/settings'
-import { getMediaAvailability } from '@/lib/services/media-status'
 import { DownloadStatusCard } from './DownloadStatusCard'
 import { UserActivityButton } from './_components/UserActivityButton'
 import { CalendarButton } from '@/components/global/CalendarButton'
-
-const isDev = process.env.NODE_ENV === 'development';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
-
-
-async function getImdbRating(imdbId: string) {
-    try {
-        // TMDB doesn't give IMDB rating directly, usually people use OMDb or similar
-        // For now we'll return a placeholder or use TMDB vote average as fallback
-        return null
-    } catch (e) {
-        return null
-    }
-}
+import {
+  isExternalMediaId,
+  resolveExternalItem,
+} from './_services/external-item-resolver'
+import { loadMediaPageData } from './_services/media-page-data'
+import type { MediaSearchParams, MediaType } from './_types/media-page'
 
 export const dynamic = 'force-dynamic'
 
-export default async function MediaDetailsPage({ params, searchParams }: { params: Promise<{ id: string }>, searchParams: Promise<{ type?: string, source?: string, name?: string }> }) {
+export default async function MediaDetailsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<MediaSearchParams>
+}) {
   const { id } = await params
   const { type, source, name } = await searchParams
-  const mediaType = (type as 'movie' | 'tv') || 'movie'
-  let tmdbId = parseInt(id)
+  const mediaType: MediaType = (type as MediaType) || 'movie'
 
-  const normalizedSource = source ? source.toLowerCase() : undefined;
-  const isExternalItem = (normalizedSource && ['emby', 'plex', 'jellyfin'].includes(normalizedSource)) || id.length > 15 || isNaN(Number(id));
-  
-  if (isExternalItem) {
-      console.log(`[MediaPage] Processing External item: ${id}, source=${normalizedSource}`)
-      let item: any = null;
-      let providerName = normalizedSource ? normalizedSource.charAt(0).toUpperCase() + normalizedSource.slice(1) : 'Emby';
-
-      if (normalizedSource === 'plex') {
-          const plexService = await getPlexServiceForUser();
-          if (plexService) {
-             try {
-                 item = await plexService.getItemDetails(id);
-                 if (item) {
-                     // Normalize Plex item
-                     // Guid can be array of objects {id: "..."} or undefined
-                     const guids = Array.isArray(item.Guid) ? item.Guid : [];
-                     const tmdbGuid = guids.find((g: any) => g.id && g.id.startsWith('tmdb://'));
-                     const imdbGuid = guids.find((g: any) => g.id && g.id.startsWith('imdb://'));
-                     const tvdbGuid = guids.find((g: any) => g.id && g.id.startsWith('tvdb://'));
-                     
-                     item.ProviderIds = {
-                         Tmdb: tmdbGuid ? tmdbGuid.id.replace('tmdb://', '') : null,
-                         Imdb: imdbGuid ? imdbGuid.id.replace('imdb://', '') : null,
-                         Tvdb: tvdbGuid ? tvdbGuid.id.replace('tvdb://', '') : null
-                     };
-                     item.Name = item.title;
-                     item.Type = item.type === 'movie' ? 'Movie' : 'Series'; 
-                     // Plex doesn't have explicit Type field like Emby in Metadata, but 'type' property
-                 }
-             } catch (e) { console.error('[MediaPage] Plex fetch error:', e) }
-          }
-      } else if (normalizedSource === 'jellyfin') {
-          const jellyfinService = await getJellyfinServiceForUser();
-          if (jellyfinService) {
-              try {
-                  item = await jellyfinService.getItemDetails(id);
-              } catch (e) { console.error('[MediaPage] Jellyfin fetch error:', e) }
-          }
-      } else {
-          // Default to Emby (including if source is undefined but ID is non-numeric/long)
-          const embyService = await getEmbyServiceForUser()
-          if (embyService) {
-              try {
-                  item = await embyService.getItemDetails(id)
-                  console.log(`[MediaPage] Emby item found: ${item?.Name}, ProviderIds:`, item?.ProviderIds)
-              } catch (e) {
-                  // ignore
-              }
-          }
-      }
-
-      let itemTmdbId = null;
-
-      if (item) {
-          itemTmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.tmdb || item.ProviderIds?.TMDB;
-          
-          if (!itemTmdbId) {
-              const imdbId = item.ProviderIds?.Imdb || item.ProviderIds?.imdb || item.ProviderIds?.IMDB;
-              const tvdbId = item.ProviderIds?.Tvdb || item.ProviderIds?.tvdb || item.ProviderIds?.TVDB;
-              if (imdbId || tvdbId) {
-                  const tmdbService = await getTmdbServiceForUser();
-                  if (tmdbService) {
-                      if (imdbId) {
-                          const findResult = await tmdbService.findByExternalId(imdbId, 'imdb_id');
-                          const foundItem = findResult?.movie_results?.[0] || findResult?.tv_results?.[0] || findResult?.tv_episode_results?.[0];
-                          if (foundItem) itemTmdbId = foundItem.id;
-                      }
-                      if (!itemTmdbId && tvdbId) {
-                          const findResult = await tmdbService.findByExternalId(tvdbId, 'tvdb_id');
-                          const foundItem = findResult?.movie_results?.[0] || findResult?.tv_results?.[0] || findResult?.tv_episode_results?.[0];
-                          if (foundItem) itemTmdbId = foundItem.id;
-                      }
-                  }
-              }
-          }
-      }
-
-      // FALLBACK: If item not found via provider, try to find by Name via TMDB
-       if (!itemTmdbId) {
-           if (name && name !== 'Unknown') {
-              console.log(`[MediaPage] External item not found. Trying fallback search for "${name}"...`);
-             const tmdbService = await getTmdbServiceForUser();
-             if (tmdbService) {
-                 try {
-                     const searchResults = await tmdbService.searchMulti(decodeURIComponent(name));
-                     const bestMatch = searchResults?.results?.[0];
-                     
-                     if (bestMatch) {
-                         console.log(`[MediaPage] Fallback found: ${bestMatch.title || bestMatch.name} (${bestMatch.id})`);
-                         itemTmdbId = bestMatch.id;
-                         
-                         const { redirect } = await import('next/navigation')
-                         // Determine type if not provided
-                         const targetType = bestMatch.media_type === 'tv' ? 'tv' : 'movie';
-                         redirect(`/dashboard/media/${itemTmdbId}?type=${targetType}`);
-                     }
-                 } catch (e) {
-                     console.error('[MediaPage] Fallback search failed:', e);
-                 }
-             }
-          }
-      }
-
-      if (itemTmdbId) {
-          const { redirect } = await import('next/navigation')
-          redirect(`/dashboard/media/${itemTmdbId}?type=${item?.Type === 'Movie' ? 'movie' : 'tv'}`)
-      }
-      
-      return (
-        <div className="flex h-[50vh] flex-col items-center justify-center text-center">
-          <h1 className="mb-4 text-3xl font-bold text-white">Média Introuvable</h1>
-          <p className="mb-8 text-gray-400">
-            Ce média ({providerName}) n'est pas lié à une base de données publique (TMDB) et ne possède pas de page de détails.
-            <br/>
-            {item ? `Nom: ${item.Name}` : `ID: ${id}`}
-          </p>
-          <Link 
-            href="/dashboard/stats" 
-            className="rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-indigo-500"
-          >
-            Retour aux statistiques
-          </Link>
-        </div>
+  if (isExternalMediaId(id, source)) {
+    const resolution = await resolveExternalItem({ id, source, name })
+    if (resolution.kind === 'redirect') {
+      redirect(
+        `/dashboard/media/${resolution.tmdbId}?type=${resolution.mediaType}`
       )
+    }
+    return (
+      <div className="flex h-[50vh] flex-col items-center justify-center text-center">
+        <h1 className="mb-4 text-3xl font-bold text-white">Média Introuvable</h1>
+        <p className="mb-8 text-gray-400">
+          Ce média ({resolution.providerName}) n'est pas lié à une base de
+          données publique (TMDB) et ne possède pas de page de détails.
+          <br />
+          {resolution.itemName ? `Nom: ${resolution.itemName}` : `ID: ${id}`}
+        </p>
+        <Link
+          href="/dashboard/stats"
+          className="rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-indigo-500"
+        >
+          Retour aux statistiques
+        </Link>
+      </div>
+    )
   }
 
+  const tmdbId = parseInt(id)
   if (isNaN(tmdbId)) {
-      notFound()
+    notFound()
   }
 
-  const tmdbService = await getTmdbServiceForUser()
-  if (!tmdbService) {
-      notFound()
+  const result = await loadMediaPageData({
+    tmdbId,
+    mediaType,
+    externalId: id,
+  })
+
+  if (result.kind === 'not-found') {
+    notFound()
   }
 
-  const details = await tmdbService.getDetails(tmdbId, mediaType)
-  
-  if (!details) {
-      notFound()
-  }
-
-  const user = await getCurrentUser()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ability = defineAbilityFor(user as any)
-  
-  if (ability.cannot('read', 'Media') && ability.cannot('read', 'Library')) {
+  if (result.kind === 'access-denied') {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center text-center">
         <h1 className="mb-4 text-3xl font-bold text-white">Accès Refusé</h1>
-        <p className="mb-8 text-gray-400">Vous n'avez pas la permission de consulter ce contenu.</p>
-        <Link 
-          href="/dashboard" 
+        <p className="mb-8 text-gray-400">
+          Vous n'avez pas la permission de consulter ce contenu.
+        </p>
+        <Link
+          href="/dashboard"
           className="rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-indigo-500"
         >
           Retour au tableau de bord
@@ -211,152 +94,36 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
     )
   }
 
-  const embyService = await getEmbyServiceForUser()
+  const {
+    details,
+    ability,
+    availability,
+    isWatchLaterItem,
+    isSubscribed,
+    embyUrl,
+    credits: normalizedCredits,
+    meta,
+    progress,
+  } = result.data
+  const { director, writers, editors, keywords, watchProviders } = meta
+  const {
+    embyItem,
+    embyServerId,
+    userProgress,
+    seasonProgress,
+    isInCalendar,
+  } = progress
 
   const videos = details.videos?.results || []
-  const trailer = videos.find((v: any) => v.type === 'Trailer' && v.site === 'YouTube')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const trailer = videos.find(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (v: any) => v.type === 'Trailer' && v.site === 'YouTube'
+  )
 
-  const rawCredits = mediaType === 'tv' ? (details.aggregate_credits || { cast: [], crew: [] }) : (details.credits || { cast: [], crew: [] })
-  
-  // Normaliser les crédits (TMDB utilise aggregate_credits pour les séries avec une structure différente)
-  const normalizedCredits = {
-    cast: (rawCredits.cast || []).map((c: any) => ({
-        ...c,
-        character: mediaType === 'tv' ? (c.roles?.map((r: any) => r.character).join(' / ') || c.character) : c.character
-    })),
-    crew: (rawCredits.crew || []).map((c: any) => ({
-        ...c,
-        job: mediaType === 'tv' ? (c.jobs?.map((j: any) => j.job).join(' / ') || c.job) : c.job
-    }))
-  }
+  const cast = normalizedCredits.cast.slice(0, 25)
 
-  const cast = normalizedCredits.cast.slice(0, 25) // Top 25 pour le slider rapide
-
-  const availability = await getMediaAvailability(tmdbId, mediaType, true)
-  const isWatchLaterItem = await isInWatchLater(id, mediaType)
-  const isSubscribed = await getSubscriptionStatus(id, mediaType)
-
-  // TMDB Ratings and External IDs
-  const ratingImdb = details.external_ids?.imdb_id ? await getImdbRating(details.external_ids.imdb_id) : null
   const tvdbId = details.external_ids?.tvdb_id
-  const watchProviders = (details['watch/providers']?.results?.FR?.flatrate || [])
-    .filter((p: any) => !p.provider_name.toLowerCase().includes('ads'))
-  const keywords = (details.keywords?.keywords || details.keywords?.results || []).slice(0, 15)
-  const director = normalizedCredits.crew?.find((c: any) => c.job === 'Director' || c.job === 'Executive Producer')?.name
-  const writers = normalizedCredits.crew?.filter((c: any) => ['Screenplay', 'Writer', 'Story'].includes(c.job)).slice(0, 3).map((c: any) => c.name)
-  const editors = normalizedCredits.crew?.filter((c: any) => c.job === 'Editor').slice(0, 2).map((c: any) => c.name)
-
-  // Fetch User Progress from Emby
-  let userProgress = null
-  let embyUserId = null
-  let seasonProgress: any[] = []
-  let embyItem: any = null
-  let embyServerId: string | null = null
-  let isInCalendar = false
-  
-  if (user && user.email) {
-      const dbUser = await (prisma as any).user.findUnique({
-          where: { 
-            email: user.email
-          }
-      })
-
-      if (dbUser) {
-          const calendarEvent = await (prisma as any).userCalendarEvent.findUnique({
-              where: {
-                  userId_tmdbId_mediaType: {
-                      userId: dbUser.id,
-                      tmdbId: tmdbId.toString(),
-                      mediaType
-                  }
-              }
-          })
-          isInCalendar = !!calendarEvent
-      }
-      
-      if (dbUser && dbUser.embyUserId && embyService) {
-          embyUserId = dbUser.embyUserId
-          try {
-              embyItem = await embyService.getItemByTmdbId(dbUser.embyUserId, tmdbId, mediaType === 'movie' ? 'Movie' : 'Series')
-              
-              // Try to get server ID from item if available (ServerId property) or system info
-              if (embyItem && embyItem.ServerId) {
-                  embyServerId = embyItem.ServerId
-              } else {
-                  // Fallback to fetching system info
-                  const sysInfo = await embyService.getSystemInfo()
-                  if (sysInfo) embyServerId = sysInfo.Id
-              }
-
-              if (embyItem) {
-                  if (embyItem.UserData) {
-                      userProgress = {
-                          played: embyItem.UserData.Played,
-                          playedPercentage: embyItem.UserData.PlayedPercentage,
-                          unplayedItemCount: embyItem.UserData.UnplayedItemCount,
-                          playbackPositionTicks: embyItem.UserData.PlaybackPositionTicks,
-                          totalEpisodes: mediaType === 'tv' && embyItem.RecursiveItemCount ? embyItem.RecursiveItemCount : undefined
-                      }
-                  }
-
-                   // Calculate per-season progress for TV shows
-                  if (mediaType === 'tv') {
-                       log(`[MediaDetails] Fetching episodes for series ${embyItem.Id}`)
-                       const allEpisodes = await embyService.getEpisodes(dbUser.embyUserId, embyItem.Id)
-                       log(`[MediaDetails] Found ${allEpisodes.length} episodes`)
-                       
-                       // Recalculate progress if missing from UserData (common for Series)
-                       if (userProgress && allEpisodes.length > 0) {
-                           const playedCount = allEpisodes.filter((e: any) => e.UserData?.Played).length
-                           // Use TMDB total episodes if available and greater than 0, otherwise fallback to Emby episode count
-                           const totalEpisodes = details.number_of_episodes && details.number_of_episodes > 0 
-                               ? details.number_of_episodes 
-                               : allEpisodes.length
-
-                           userProgress.playedPercentage = Math.min(100, (playedCount / totalEpisodes) * 100)
-                           userProgress.totalEpisodes = totalEpisodes
-                           userProgress.unplayedItemCount = Math.max(0, totalEpisodes - playedCount)
-                       }
-
-                       // Group by season
-                       const progressMap = new Map<number, { played: number, total: number }>()
-                       
-                       allEpisodes.forEach((ep: any) => {
-                           const seasonNum = ep.ParentIndexNumber
-                           if (seasonNum === undefined) return
-                           
-                           if (!progressMap.has(seasonNum)) {
-                               progressMap.set(seasonNum, { played: 0, total: 0 })
-                           }
-                           const stats = progressMap.get(seasonNum)!
-                           stats.total++
-                           if (ep.UserData?.Played) {
-                               stats.played++
-                           }
-                       })
-
-                       seasonProgress = Array.from(progressMap.entries()).map(([seasonNumber, stats]) => ({
-                           seasonNumber,
-                           played: stats.played,
-                           total: stats.total,
-                           isWatched: stats.played >= stats.total && stats.total > 0
-                       }))
-                  }
-                  
-                  if (userProgress) {
-                      log('[MediaDetails] User Progress:', JSON.stringify(userProgress, null, 2))
-                  }
-              }
-          } catch (e) {
-              error('Failed to fetch Emby progress', e)
-          }
-      }
-  }
-
-  const embyUrl = await getSetting('emby_url')
-  if (!embyUrl) {
-      // This is not fatal but we should handle it if we want to show Play button
-  }
 
   const title = details.title || details.name
   const overview = details.overview
@@ -552,7 +319,7 @@ export default async function MediaDetailsPage({ params, searchParams }: { param
                     />
 
                     {/* Progress Bar (TV Series) */}
-                    {mediaType === 'tv' && userProgress && userProgress.totalEpisodes > 0 && (
+                    {mediaType === 'tv' && userProgress && userProgress.totalEpisodes !== undefined && userProgress.totalEpisodes > 0 && (
                         <div className="pt-2 max-w-md">
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider mb-2">
                                 <span className="text-gray-400">Progression</span>
