@@ -2,9 +2,43 @@ import axios from 'axios';
 import https from 'https';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
+
+interface PlexAccount {
+  id?: string | number
+  name?: string
+  title?: string
+  username?: string
+  email?: string
+  thumb?: string
+}
+
+interface PlexUser {
+  id?: string | number
+  name?: string
+  title?: string
+  email?: string
+  thumb?: string
+}
+
+interface PlexSession {
+  User?: { id?: string | number; title?: string }
+  Player?: { product?: string; title?: string; device?: string; machineIdentifier?: string; version?: string; state?: string }
+  viewOffset?: number
+  duration?: number
+  sessionKey?: string | number
+  ratingKey?: string | number
+  accountID?: string | number
+  title?: string
+  type?: string
+  grandparentTitle?: string
+  parentTitle?: string
+  grandparentRatingKey?: string | number
+  index?: number
+  parentIndex?: number
+}
 
 
 export class PlexService {
@@ -73,7 +107,7 @@ export class PlexService {
   }
 
   async getUsers() {
-    let allUsers: any[] = [];
+    let allUsers: Array<{ Id: string; Name: string; Email?: string; Thumb?: string }> = [];
     let lastError: Error | null = null;
 
     // 1. Try /accounts (often contains friends/managed users)
@@ -86,7 +120,7 @@ export class PlexService {
       
       if (Array.isArray(accounts)) {
         log(`[PlexService] Processing ${accounts.length} accounts...`);
-        const validAccounts = accounts.filter((acc: any) => {
+        const validAccounts = accounts.filter((acc: PlexAccount) => {
             const isValid = acc.id && acc.id !== '0' && acc.id !== 0 && (acc.name || acc.title || acc.username);
             if (!isValid) {
                 log(`[PlexService] Skipping account: ID=${acc.id}, Name=${acc.name}, Title=${acc.title}`);
@@ -96,7 +130,7 @@ export class PlexService {
         
         log(`[PlexService] Found ${validAccounts.length} valid accounts.`);
 
-        allUsers = [...allUsers, ...validAccounts.map((acc: any) => ({
+        allUsers = [...allUsers, ...validAccounts.map((acc: PlexAccount) => ({
           Id: String(acc.id),
           Name: acc.name || acc.title || acc.username || `Plex User ${acc.id}`,
           Email: acc.email,
@@ -118,9 +152,9 @@ export class PlexService {
         log(`[PlexService] Found ${users.length} users via /users`);
         
         if (Array.isArray(users)) {
-          allUsers = [...allUsers, ...users.map((u: any) => ({
+          allUsers = [...allUsers, ...users.map((u: PlexUser) => ({
             Id: String(u.id),
-            Name: u.name || u.title,
+            Name: u.name || u.title || '',
             Email: u.email,
             Thumb: u.thumb
           }))];
@@ -229,7 +263,7 @@ export class PlexService {
   // Removed duplicate getItemImageUrl
 
 
-  static normalizeSession(session: any) {
+  static normalizeSession(session: PlexSession) {
     const user = session.User || {};
     const player = session.Player || {};
     
