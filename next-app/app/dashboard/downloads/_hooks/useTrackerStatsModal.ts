@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getSessionTrackerStats, getTrackerHistory } from '../actions'
 
 export interface SessionTrackerStat {
@@ -29,49 +30,44 @@ function defaultStartDate() {
     return d.toISOString().split('T')[0]
 }
 
+const sessionQueryKey = ['tracker-stats', 'session'] as const
+const historyQueryKey = (start: string, end: string) =>
+    ['tracker-stats', 'history', start, end] as const
+
 /**
- * Charge les stats par tracker (session et historique) lorsque la modal est ouverte,
- * avec debounce sur les changements de dates.
+ * TanStack Query-powered tracker stats modal.
+ *
+ * - Session stats fetched only when modal is open and tab is 'session'.
+ * - History fetched with debounced date range when modal is open and tab is 'history'.
  */
 export function useTrackerStatsModal(isOpen: boolean) {
     const [activeTab, setActiveTab] = useState<TrackerStatsTab>('session')
-    const [trackerStats, setTrackerStats] = useState<SessionTrackerStat[]>([])
-    const [history, setHistory] = useState<HistoryEntry[]>([])
-    const [loadingTrackers, setLoadingTrackers] = useState(false)
-    const [loadingHistory, setLoadingHistory] = useState(false)
     const [startDate, setStartDate] = useState(defaultStartDate)
     const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0])
 
-    useEffect(() => {
-        if (!isOpen || activeTab !== 'session') return
-        const fetchSession = async () => {
-            setLoadingTrackers(true)
-            try {
-                const data = await getSessionTrackerStats()
-                setTrackerStats(data)
-            } catch (e) {
-                console.error(e)
-            }
-            setLoadingTrackers(false)
-        }
-        fetchSession()
-    }, [isOpen, activeTab])
+    const [debouncedDates, setDebouncedDates] = useState({ start: startDate, end: endDate })
 
     useEffect(() => {
-        if (!isOpen || activeTab !== 'history') return
-        const fetchHistoryData = async () => {
-            setLoadingHistory(true)
-            try {
-                const data = await getTrackerHistory(startDate, endDate)
-                setHistory(data as unknown as HistoryEntry[])
-            } catch (e) {
-                console.error(e)
-            }
-            setLoadingHistory(false)
-        }
-        const timer = setTimeout(fetchHistoryData, HISTORY_DEBOUNCE_MS)
+        const timer = setTimeout(() => {
+            setDebouncedDates({ start: startDate, end: endDate })
+        }, HISTORY_DEBOUNCE_MS)
         return () => clearTimeout(timer)
-    }, [isOpen, activeTab, startDate, endDate])
+    }, [startDate, endDate])
+
+    const { data: trackerStats = [], isLoading: loadingTrackers } = useQuery({
+        queryKey: sessionQueryKey,
+        queryFn: getSessionTrackerStats,
+        enabled: isOpen && activeTab === 'session',
+    })
+
+    const { data: history = [], isLoading: loadingHistory } = useQuery({
+        queryKey: historyQueryKey(debouncedDates.start, debouncedDates.end),
+        queryFn: async () => {
+            const data = await getTrackerHistory(debouncedDates.start, debouncedDates.end)
+            return data as unknown as HistoryEntry[]
+        },
+        enabled: isOpen && activeTab === 'history',
+    })
 
     return {
         activeTab,

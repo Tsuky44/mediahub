@@ -626,9 +626,14 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 - [x] Convertir `useTorrents.ts` en `useQuery` + 7 mutations (add/delete/pause/resume/reannounce/priority/shareLimits)
 - [x] Convertir `useGlobalStats.ts` en `useQuery` (polling 2s)
 - [x] Convertir `useFileManager.ts` en `useQuery` (path-based queryKey, useMemo filter)
-- [ ] Convertir `useNotifications.ts` en `useQuery` + polling (Socket.IO complexe, garder useEffect isolé)
+- [x] Convertir `useNotifications.ts` en `useQuery` + useMutation + Socket.IO isolé (polling 60s, 3 mutations)
 - [x] Convertir `useActivityLogs.ts` en `useQuery` + pagination + mutation import
-- [ ] Remplacer les `useEffect` de fetch dans les 4 hooks restants les plus utilisés
+- [x] Convertir `useTrackerStatsCard.ts` en `useQuery`
+- [x] Convertir `useTrackerStatsModal.ts` en `useQuery` (conditional enabled + debounced dates)
+- [x] Convertir `useSeasonEpisodes.ts` en `useQuery` (lazy enabled + staleTime Infinity)
+- [ ] Convertir `useManageMedia.ts` en `useQuery` + `useMutation` (fetch + delete/mark actions)
+- [ ] Convertir `useProwlarrSearch.ts` / `useProwlarrEpisodes.ts` / `useProwlarrDownload.ts`
+- [ ] Remplacer les `useEffect` de fetch dans les hooks restants
 
 ### Phase 3 : Composants (Semaine 3) 🔄 EN COURS
 

@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getSeasonDetails } from '@/app/dashboard/media/[id]/actions'
 import type { Episode } from '../_types/season'
 
@@ -10,12 +11,15 @@ export interface UseSeasonEpisodesResult {
     loading: boolean
     loaded: boolean
     error: boolean
-    toggleOpen: () => Promise<void>
+    toggleOpen: () => void
 }
 
+const queryKey = (tvId: number, seasonNumber: number) =>
+    ['season-episodes', tvId, seasonNumber] as const
+
 /**
- * Gere le toggle d'une saison (accordion) et charge ses episodes a la demande
- * via TMDB la premiere fois (puis cache local).
+ * TanStack Query-powered season accordion.
+ * Episodes are fetched on demand via `enabled` flag and cached indefinitely.
  */
 export function useSeasonEpisodes(
     tvId: number,
@@ -23,45 +27,32 @@ export function useSeasonEpisodes(
     initiallyOpen: boolean,
 ): UseSeasonEpisodesResult {
     const [isOpen, setIsOpen] = useState(initiallyOpen)
-    const [episodes, setEpisodes] = useState<Episode[]>([])
-    const [loading, setLoading] = useState(false)
-    const [loaded, setLoaded] = useState(false)
-    const [error, setError] = useState(false)
 
-    const loadEpisodes = useCallback(async () => {
-        setLoading(true)
-        setError(false)
-        try {
+    const {
+        data: episodes = [],
+        isLoading: loading,
+        isSuccess,
+        isError,
+    } = useQuery({
+        queryKey: queryKey(tvId, seasonNumber),
+        queryFn: async () => {
             const data = await getSeasonDetails(tvId, seasonNumber)
-            if (data && data.episodes) {
-                setEpisodes(data.episodes)
-                setLoaded(true)
-            } else {
-                setError(true)
-            }
-        } catch (err) {
-            console.error('Failed to load episodes', err)
-            setError(true)
-        } finally {
-            setLoading(false)
-        }
-    }, [tvId, seasonNumber])
+            return data?.episodes ?? []
+        },
+        enabled: isOpen,
+        staleTime: Infinity,
+    })
 
-    useEffect(() => {
-        if (initiallyOpen && !loaded && !loading) {
-            loadEpisodes()
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initiallyOpen])
+    const toggleOpen = () => {
+        setIsOpen(prev => !prev)
+    }
 
-    const toggleOpen = useCallback(async () => {
-        if (isOpen) {
-            setIsOpen(false)
-            return
-        }
-        setIsOpen(true)
-        if (!loaded) await loadEpisodes()
-    }, [isOpen, loaded, loadEpisodes])
-
-    return { isOpen, episodes, loading, loaded, error, toggleOpen }
+    return {
+        isOpen,
+        episodes,
+        loading,
+        loaded: isSuccess,
+        error: isError,
+        toggleOpen,
+    }
 }
