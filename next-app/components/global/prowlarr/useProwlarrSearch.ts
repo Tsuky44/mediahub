@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
     searchProwlarr,
     getProwlarrIndexers,
@@ -46,11 +47,10 @@ export interface UseProwlarrSearchResult {
 
 /**
  * Gere la recherche Prowlarr (raw ou smart via Sonarr/Radarr) avec pagination,
- * tri client-side et chargement initial des indexers.
+ * tri client-side et chargement initial des indexers via TanStack Query.
  */
 export function useProwlarrSearch(): UseProwlarrSearchResult {
     const [results, setResults] = useState<ProwlarrRelease[]>([])
-    const [indexers, setIndexers] = useState<ProwlarrIndexer[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [page, setPage] = useState(0)
@@ -58,19 +58,21 @@ export function useProwlarrSearch(): UseProwlarrSearchResult {
     const [sortBy, setSortBy] = useState<ProwlarrSortBy>('seeders')
     const [sortOrder, setSortOrder] = useState<ProwlarrSortOrder>('desc')
 
-    // Load indexers once
-    useEffect(() => {
-        getProwlarrIndexers().then(res => {
-            if (res.indexers) setIndexers(res.indexers.filter((i: any) => i.enable))
-        })
-    }, [])
+    const { data: indexers = [] } = useQuery({
+        queryKey: ['prowlarr', 'indexers'] as const,
+        queryFn: async () => {
+            const res = await getProwlarrIndexers()
+            return (res.indexers || []).filter((i: any) => i.enable) as ProwlarrIndexer[]
+        },
+        staleTime: Infinity,
+    })
 
-    // Sort when sortBy / sortOrder changes
-    useEffect(() => {
-        if (results.length === 0) return
+    // Client-side sorting via useMemo (no useEffect loop)
+    const sortedResults = useMemo(() => {
+        if (results.length === 0) return results
         const sorted = [...results].sort((a, b) => {
-            let valA: number = 0
-            let valB: number = 0
+            let valA = 0
+            let valB = 0
             if (sortBy === 'seeders') {
                 valA = a.seeders ?? 0
                 valB = b.seeders ?? 0
@@ -83,9 +85,8 @@ export function useProwlarrSearch(): UseProwlarrSearchResult {
             }
             return sortOrder === 'desc' ? valB - valA : valA - valB
         })
-        const changed = sorted.some((val, idx) => val.guid !== results[idx].guid)
-        if (changed) setResults(sorted)
-    }, [sortBy, sortOrder, results])
+        return sorted
+    }, [results, sortBy, sortOrder])
 
     const search = useCallback(async (params: SearchParams, newOffset: number = 0, append: boolean = false) => {
         const {
@@ -154,10 +155,18 @@ export function useProwlarrSearch(): UseProwlarrSearchResult {
     }, [])
 
     return {
-        results, setResults, indexers,
-        loading, error, setError,
-        page, hasMore,
-        sortBy, sortOrder, setSortBy, setSortOrder,
+        results: sortedResults,
+        setResults,
+        indexers,
+        loading,
+        error,
+        setError,
+        page,
+        hasMore,
+        sortBy,
+        sortOrder,
+        setSortBy,
+        setSortOrder,
         search,
     }
 }
