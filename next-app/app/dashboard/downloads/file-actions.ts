@@ -122,8 +122,8 @@ export async function testEmbyConnection(url: string, apiKey: string) {
         });
 
         return { success: true };
-    } catch (e: any) {
-        console.error('Emby ping failed:', e.message);
+    } catch (e) {
+        console.error('Emby ping failed:', axios.isAxiosError(e) ? e.message : String(e));
         return { success: false, error: 'Serveur Emby injoignable ou invalide' };
     }
 }
@@ -142,8 +142,8 @@ export async function testPlexConnection(url: string, token: string) {
         });
 
         return { success: true };
-    } catch (e: any) {
-        console.error('Plex ping failed:', e.message);
+    } catch (e) {
+        console.error('Plex ping failed:', axios.isAxiosError(e) ? e.message : String(e));
         return { success: false, error: 'Serveur Plex injoignable ou invalide' };
     }
 }
@@ -161,8 +161,8 @@ export async function testJellyfinConnection(url: string, apiKey: string) {
         });
 
         return { success: true };
-    } catch (e: any) {
-        console.error('Jellyfin ping failed:', e.message);
+    } catch (e) {
+        console.error('Jellyfin ping failed:', axios.isAxiosError(e) ? e.message : String(e));
         return { success: false, error: 'Serveur Jellyfin injoignable ou invalide' };
     }
 }
@@ -175,8 +175,8 @@ export async function testUnraidConnection(url: string, apiKey: string) {
             return { success: true };
         }
         return { success: false, error: 'Impossible de récupérer les statistiques Unraid' };
-    } catch (e: any) {
-        console.error('Unraid connection test failed:', e.message);
+    } catch (e) {
+        console.error('Unraid connection test failed:', axios.isAxiosError(e) ? e.message : String(e));
         return { success: false, error: 'Serveur Unraid injoignable ou clé API invalide' };
     }
 }
