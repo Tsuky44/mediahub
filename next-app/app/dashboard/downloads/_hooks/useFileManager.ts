@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useMemo, useState, useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileInfo } from '@/lib/services/smb'
 import { getRemoteFiles } from '../file-actions'
 
@@ -17,33 +18,35 @@ export interface UseFileManagerResult {
     navigateBack: () => void
 }
 
+const filesQueryKey = (path: string) => ['file-manager', 'files', path] as const
+
 /**
- * Gere la navigation et la recherche dans l'arborescence SMB cote client.
- * Refait un fetch a chaque changement de path et applique le filtre nom localement.
+ * TanStack Query-powered file manager.
+ * Path changes trigger automatic re-fetch via queryKey.
+ * Search filter is applied client-side with useMemo.
  */
 export function useFileManager(): UseFileManagerResult {
+    const queryClient = useQueryClient()
     const [path, setPath] = useState('')
-    const [files, setFiles] = useState<FileInfo[]>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
 
-    const fetchFiles = useCallback(async () => {
-        setLoading(true)
-        setError(null)
-        try {
-            const data = await getRemoteFiles(path)
-            setFiles(data)
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Une erreur est survenue')
-        } finally {
-            setLoading(false)
-        }
-    }, [path])
+    const {
+        data: files = [],
+        isLoading: loading,
+        error: queryError,
+    } = useQuery({
+        queryKey: filesQueryKey(path),
+        queryFn: async () => getRemoteFiles(path),
+    })
 
-    useEffect(() => {
-        fetchFiles()
-    }, [fetchFiles])
+    const filteredFiles = useMemo(
+        () => (Array.isArray(files)
+            ? files.filter(file => file.name.toLowerCase().includes(searchQuery.toLowerCase()))
+            : []),
+        [files, searchQuery]
+    )
+
+    const errorMessage = queryError instanceof Error ? queryError.message : null
 
     const navigateInto = useCallback((folderName: string) => {
         setPath(prev => (prev ? `${prev}/${folderName}` : folderName))
@@ -57,16 +60,16 @@ export function useFileManager(): UseFileManagerResult {
         setSearchQuery('')
     }, [path])
 
-    const filteredFiles = Array.isArray(files)
-        ? files.filter(file => file.name.toLowerCase().includes(searchQuery.toLowerCase()))
-        : []
+    const fetchFiles = async () => {
+        await queryClient.invalidateQueries({ queryKey: filesQueryKey(path) })
+    }
 
     return {
         path,
         files,
         filteredFiles,
         loading,
-        error,
+        error: errorMessage,
         searchQuery,
         setSearchQuery,
         fetchFiles,

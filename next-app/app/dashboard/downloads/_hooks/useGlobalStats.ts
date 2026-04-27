@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getGlobalStats } from '../actions'
 
 export interface GlobalStats {
@@ -16,25 +16,22 @@ export interface GlobalStats {
 }
 
 const POLL_INTERVAL_MS = 2000
+const QUERY_KEY = ['torrents', 'global-stats'] as const
 
 /**
- * Polling toutes les 2 secondes des stats globales qBittorrent.
- * Retourne null pendant le premier chargement.
+ * TanStack Query-powered global qBittorrent stats.
+ * Polling every 2s via refetchInterval.
  */
 export function useGlobalStats() {
-    const [stats, setStats] = useState<GlobalStats | null>(null)
-    const [loading, setLoading] = useState(true)
-
-    useEffect(() => {
-        const fetchStats = async () => {
+    const { data: stats, isLoading: loading } = useQuery({
+        queryKey: QUERY_KEY,
+        queryFn: async () => {
             const data = await getGlobalStats()
-            if (data) setStats(data as GlobalStats)
-            setLoading(false)
-        }
-        fetchStats()
-        const interval = setInterval(fetchStats, POLL_INTERVAL_MS)
-        return () => clearInterval(interval)
-    }, [])
+            return data as GlobalStats | null
+        },
+        refetchInterval: POLL_INTERVAL_MS,
+        staleTime: POLL_INTERVAL_MS / 2,
+    })
 
     return { stats, loading }
 }
