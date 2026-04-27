@@ -8,7 +8,13 @@ import {
 } from '@/app/dashboard/media/[id]/prowlarr-actions'
 import type { ProwlarrRelease } from './prowlarr-types'
 
-export interface DownloadContext {
+export interface DownloadResult {
+    success?: boolean
+    error?: string
+    message?: string
+}
+
+interface DownloadContext {
     mediaType?: 'movie' | 'tv'
     tmdbId?: number
     tvdbId?: number
@@ -28,7 +34,7 @@ export interface UseProwlarrDownloadResult {
     bulkDownload: (releases: ProwlarrRelease[], ctx: DownloadContext) => Promise<void>
 }
 
-async function performDownload(release: ProwlarrRelease, ctx: DownloadContext) {
+async function performDownload(release: ProwlarrRelease, ctx: DownloadContext): Promise<DownloadResult> {
     const { mediaType, tmdbId, tvdbId, selectedSeason, selectedEpisode } = ctx
     const url = release.downloadUrl || release.magnetUrl
 
@@ -65,7 +71,7 @@ export function useProwlarrDownload(): UseProwlarrDownloadResult {
 
     const downloadMutation = useMutation({
         mutationFn: async ({ release, ctx }: { release: ProwlarrRelease; ctx: DownloadContext }) => {
-            const res: any = await performDownload(release, ctx)
+            const res: DownloadResult = await performDownload(release, ctx)
             const errorMsg = res.error || (res.success === false ? res.message : null)
             if (errorMsg) throw new Error(errorMsg)
             return release.guid

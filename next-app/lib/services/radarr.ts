@@ -2,9 +2,9 @@ import axios from 'axios'
 import { getSetting } from '../settings'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export async function getRadarrService() {
@@ -120,7 +120,7 @@ export class RadarrService {
     })
   }
 
-  async sendCommand(name: string, params: any = {}) {
+  async sendCommand(name: string, params: Record<string, unknown> = {}) {
     const client = this.getClient()
     try {
       const response = await client.post('/command', {
@@ -250,7 +250,7 @@ export class RadarrService {
       // Usually it's safer to use the lookup result as base if available, but here `movie` is null or ID-less.
       // Actually, lookup returns the movie object even if not in DB (id is 0 or undefined).
       
-      const payload = movie ? { ...movie } : {} as any
+      const payload: Record<string, unknown> = movie ? { ...movie } : {}
       
       // Override with options
       payload.title = options.title
@@ -345,7 +345,7 @@ export class RadarrService {
     }
   }
 
-  async pushRelease(release: any) {
+  async pushRelease(release: Record<string, unknown>) {
     const client = this.getClient()
     try {
       const response = await client.post('/release/push', release)

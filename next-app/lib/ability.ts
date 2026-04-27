@@ -22,7 +22,13 @@ interface PermissionDef {
   conditions?: string
 }
 
-export function defineAbilityFor(user?: User & { permissions?: PermissionDef[] }) {
+interface AbilityUser {
+  role: string
+  permissions?: Array<{ action: string; subject: string; conditions?: string }>
+  [key: string]: unknown
+}
+
+export function defineAbilityFor(user?: AbilityUser) {
   const { can, cannot, build } = new AbilityBuilder<AppAbility>(createMongoAbility);
 
   if (!user) {
@@ -39,13 +45,13 @@ export function defineAbilityFor(user?: User & { permissions?: PermissionDef[] }
       // can('create', 'MediaRequest');
       
       if (user.permissions) {
-        user.permissions.forEach((p: PermissionDef) => {
+        user.permissions.forEach((p) => {
           try {
             const conditions = p.conditions ? JSON.parse(p.conditions) : undefined;
-            can(p.action, p.subject, conditions);
+            can(p.action as Actions, p.subject as Subjects, conditions);
           } catch (e) {
             console.error('Failed to parse permission conditions', e);
-            can(p.action, p.subject);
+            can(p.action as Actions, p.subject as Subjects);
           }
         });
       }

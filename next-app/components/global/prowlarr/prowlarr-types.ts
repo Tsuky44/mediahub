@@ -14,8 +14,8 @@ export interface ProwlarrRelease {
     guid: string
     title: string
     size: number
-    seeders: number
-    leechers: number
+    seeders?: number
+    leechers?: number
     publishDate: string
     indexer: string
     indexerId?: number

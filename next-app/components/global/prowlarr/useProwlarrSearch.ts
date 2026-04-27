@@ -14,7 +14,13 @@ import type {
     ProwlarrSortBy,
     ProwlarrSortOrder,
 } from './prowlarr-types'
+import { ProwlarrSearchResult } from '@/lib/services/prowlarr'
 import { RESULTS_PER_PAGE } from './prowlarr-utils'
+
+interface SearchResponse {
+    error?: string
+    results?: ProwlarrRelease[] | ProwlarrSearchResult[]
+}
 
 export interface SearchParams {
     query: string
@@ -112,7 +118,7 @@ export function useProwlarrSearch(): UseProwlarrSearchResult {
         }
 
         try {
-            let res: any
+            let res: SearchResponse
             if (
                 searchSource === 'smart' && mediaType && tmdbId &&
                 (mediaType === 'movie' || (mediaType === 'tv' && selectedSeason !== null))
