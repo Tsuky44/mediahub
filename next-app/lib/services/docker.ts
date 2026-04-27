@@ -2,10 +2,10 @@ import Docker from 'dockerode';
 import { prisma } from '@/lib/prisma';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
 // Always log errors, regardless of dev mode
-const error = (...args: any[]) => { console.error(...args); };
-const warn = (...args: any[]) => { console.warn(...args); };
+const error = (...args: unknown[]) => { console.error(...args); };
+const warn = (...args: unknown[]) => { console.warn(...args); };
 
 
 export class DockerService {
@@ -13,7 +13,7 @@ export class DockerService {
 
     private static async init() {
         // Always re-check settings to ensure we use the latest host
-        let options: any = {};
+        let options: Record<string, unknown> = {};
         try {
             const dockerHostSetting = await prisma.setting.findFirst({
                 where: { key: 'docker_host' },
@@ -158,9 +158,9 @@ export class DockerService {
             let rxBytes = 0;
             let txBytes = 0;
             if (stats.networks) {
-                Object.values(stats.networks).forEach((net: any) => {
-                    rxBytes += net.rx_bytes;
-                    txBytes += net.tx_bytes;
+                Object.values(stats.networks).forEach((net: { rx_bytes?: number; tx_bytes?: number }) => {
+                    rxBytes += net.rx_bytes || 0;
+                    txBytes += net.tx_bytes || 0;
                 });
             }
 
@@ -202,7 +202,7 @@ export class DockerService {
                 image: info.Config.Image,
                 cmd: info.Config.Cmd ? info.Config.Cmd.join(' ') : '',
                 env: info.Config.Env || [],
-                volumes: (info.Mounts || []).map((m: any) => ({
+                volumes: (info.Mounts || []).map((m: { Source?: string; Destination?: string; Mode?: string; RW?: boolean }) => ({
                     source: m.Source,
                     destination: m.Destination,
                     mode: m.Mode,
