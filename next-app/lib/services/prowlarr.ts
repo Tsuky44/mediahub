@@ -78,8 +78,8 @@ export class ProwlarrService {
     try {
       const response = await client.get('/indexer')
       return response.data as ProwlarrIndexer[]
-    } catch (e: any) {
-      error('[Prowlarr] Failed to fetch indexers:', e.message)
+    } catch (e) {
+      error('[Prowlarr] Failed to fetch indexers:', (e as Error).message)
       return []
     }
   }
@@ -94,8 +94,8 @@ export class ProwlarrService {
       const response = await client.get('/indexerstats')
       log('[Prowlarr] IndexerStats response:', JSON.stringify(response.data).substring(0, 500))
       return response.data
-    } catch (e: any) {
-      error('[Prowlarr] Failed to fetch indexer stats:', e.message)
+    } catch (e) {
+      error('[Prowlarr] Failed to fetch indexer stats:', (e as Error).message)
       return null
     }
   }
@@ -105,8 +105,8 @@ export class ProwlarrService {
     try {
       const response = await client.get(`/indexer/${indexerId}`)
       return response.data as ProwlarrIndexer
-    } catch (e: any) {
-      error(`[Prowlarr] Failed to fetch indexer ${indexerId}:`, e.message)
+    } catch (e) {
+      error(`[Prowlarr] Failed to fetch indexer ${indexerId}:`, (e as Error).message)
       return null
     }
   }
@@ -236,8 +236,9 @@ export class ProwlarrService {
         if (seedersB !== seedersA) return seedersB - seedersA
         return new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime()
       })
-    } catch (e: any) {
-      error(`[Prowlarr] Search failed:`, e.response?.data || e.message)
+    } catch (e) {
+      const err = e as Error & { response?: { data?: unknown } }
+      error(`[Prowlarr] Search failed:`, err.response?.data || err.message)
       return []
     }
   }
