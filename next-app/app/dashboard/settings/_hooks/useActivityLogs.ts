@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useState, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 import {
     getActivityLogs,
@@ -30,58 +31,50 @@ interface UseActivityLogsResult {
 
 const INITIAL_FILTERS: ActivityLogsFilters = { action: '', userId: '' }
 
+const usersQueryKey = ['activity-logs', 'users'] as const
+const logsQueryKey = (page: number, filters: ActivityLogsFilters) =>
+    ['activity-logs', 'list', page, filters.action, filters.userId] as const
+
 /**
- * Owns the activity logs feature state: users dropdown, paginated logs,
- * filters, and the "import past requests" admin action. Side effects:
+ * TanStack Query-powered activity logs hook.
  *
- * - Loads the users dropdown once on mount.
- * - Re-fetches the logs page whenever page / filters change.
- * - After a successful import, re-loads the current page.
+ * - Users dropdown fetched once and cached.
+ * - Paginated logs keyed by page + filters (deduped, cached, background-refetched).
+ * - Import mutation invalidates the logs list cache on success.
  */
 export function useActivityLogs(): UseActivityLogsResult {
-    const [logs, setLogs] = useState<ActivityLog[]>([])
-    const [users, setUsers] = useState<ActivityLogUserOption[]>([])
-    const [total, setTotal] = useState(0)
-    const [loading, setLoading] = useState(true)
-    const [importing, setImporting] = useState(false)
+    const queryClient = useQueryClient()
     const [page, setPageState] = useState(1)
     const [filters, setFilters] = useState<ActivityLogsFilters>(INITIAL_FILTERS)
 
-    const loadLogs = useCallback(async () => {
-        setLoading(true)
-        try {
-            const serverFilters: { action?: string; userId?: string } = {}
-            if (filters.action) serverFilters.action = filters.action
-            if (filters.userId) serverFilters.userId = filters.userId
+    const { data: users = [], isLoading: usersLoading } = useQuery({
+        queryKey: usersQueryKey,
+        queryFn: async () => getLogUsers() as Promise<ActivityLogUserOption[]>,
+        staleTime: Infinity,
+    })
 
+    const serverFilters = {
+        ...(filters.action ? { action: filters.action } : {}),
+        ...(filters.userId ? { userId: filters.userId } : {}),
+    }
+
+    const { data: logsData, isLoading: logsLoading } = useQuery({
+        queryKey: logsQueryKey(page, filters),
+        queryFn: async () => {
             const data = await getActivityLogs(page, LOGS_PAGE_SIZE, serverFilters)
-            setLogs(data.logs as ActivityLog[])
-            setTotal(data.total)
-        } catch (error) {
-            console.error('Failed to load logs', error)
-        } finally {
-            setLoading(false)
-        }
-    }, [page, filters.action, filters.userId])
-
-    useEffect(() => {
-        let cancelled = false
-        ;(async () => {
-            try {
-                const data = await getLogUsers()
-                if (!cancelled) setUsers(data as ActivityLogUserOption[])
-            } catch (error) {
-                console.error('Failed to load users', error)
+            return {
+                logs: data.logs as ActivityLog[],
+                total: data.total,
             }
-        })()
-        return () => {
-            cancelled = true
-        }
-    }, [])
+        },
+    })
 
-    useEffect(() => {
-        loadLogs()
-    }, [loadLogs])
+    const importMutation = useMutation({
+        mutationFn: importPastRequestsIntoLogs,
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: ['activity-logs', 'list'] })
+        },
+    })
 
     const setFilter = useCallback(
         <K extends keyof ActivityLogsFilters>(key: K, value: ActivityLogsFilters[K]) => {
@@ -95,32 +88,29 @@ export function useActivityLogs(): UseActivityLogsResult {
         setPageState(prev => updater(prev))
     }, [])
 
-    const importPastRequests = useCallback(async () => {
+    const importPastRequests = async () => {
         try {
-            setImporting(true)
-            const res = await importPastRequestsIntoLogs()
+            const res = await importMutation.mutateAsync()
             if (res.success) {
                 alert(`Importation réussie. ${res.imported} anciennes demandes ont été ajoutées aux logs.`)
-                await loadLogs()
             } else {
                 alert("Erreur lors de l'importation: " + res.error)
             }
         } catch (e) {
             console.error(e)
             alert("Erreur lors de l'importation")
-        } finally {
-            setImporting(false)
         }
-    }, [loadLogs])
+    }
 
+    const total = logsData?.total ?? 0
     const totalPages = Math.ceil(total / LOGS_PAGE_SIZE)
 
     return {
-        logs,
+        logs: logsData?.logs ?? [],
         users,
         total,
-        loading,
-        importing,
+        loading: usersLoading || logsLoading,
+        importing: importMutation.isPending,
         page,
         filters,
         totalPages,

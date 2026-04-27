@@ -623,10 +623,10 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 - [x] Convertir `useDockerContainers.ts` en `useQuery` + `useMutation` (polling 10s, action invalidation)
 - [x] Convertir `useDockerGroups.ts` en `useQuery` + `useMutation` (move container, cross-invalidation)
 - [x] Adapter `docker/page.tsx` aux nouveaux hooks (`isLoading`/`isFetching`)
-- [ ] Convertir `useTorrents.ts` en `useQuery`
-- [ ] Convertir `useNotifications.ts` en `useQuery` + polling
-- [ ] Convertir `useActivityLogs.ts` en `useQuery` + pagination
-- [ ] Remplacer les `useEffect` de fetch dans les 10 hooks les plus utilisés
+- [x] Convertir `useTorrents.ts` en `useQuery` + 7 mutations (add/delete/pause/resume/reannounce/priority/shareLimits)
+- [ ] Convertir `useNotifications.ts` en `useQuery` + polling (Socket.IO complexe, garder useEffect isolé)
+- [x] Convertir `useActivityLogs.ts` en `useQuery` + pagination + mutation import
+- [ ] Remplacer les `useEffect` de fetch dans les 6 hooks restants les plus utilisés
 
 ### Phase 3 : Composants (Semaine 3)
 

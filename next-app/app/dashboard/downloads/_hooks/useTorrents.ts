@@ -1,16 +1,16 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
     getTorrents,
     addTorrent,
-    deleteTorrents,
-    pauseTorrents,
-    resumeTorrents,
+    deleteTorrents as deleteTorrentsAction,
+    pauseTorrents as pauseTorrentsAction,
+    resumeTorrents as resumeTorrentsAction,
     getTags,
-    setPriority,
-    reannounceTorrents,
-    setShareLimits,
+    setPriority as setPriorityAction,
+    reannounceTorrents as reannounceTorrentsAction,
+    setShareLimits as setShareLimitsAction,
 } from '../actions'
 import { Torrent } from '@/lib/services/qbittorrent'
 
@@ -30,82 +30,109 @@ export interface UseTorrentsResult {
     setShareLimits: (hashes: string[], ratio: number, minutes: number, inactive: number) => Promise<void>
 }
 
+const torrentsQueryKey = (filter: string) => ['torrents', 'list', filter] as const
+const tagsQueryKey = ['torrents', 'tags'] as const
+
 /**
- * Gere le chargement des torrents (+ polling), le fetch des tags,
- * et expose les server actions en les "re-fetchant" automatiquement au succes.
+ * TanStack Query-powered torrents hook.
+ *
+ * - Torrents polled via refetchInterval.
+ * - Tags fetched once and cached.
+ * - Every mutation invalidates the torrent list cache on success.
  */
 export function useTorrents(filter: string, refreshInterval: number = 2000): UseTorrentsResult {
-    const [torrents, setTorrents] = useState<Torrent[]>([])
-    const [loading, setLoading] = useState(true)
-    const [tags, setTags] = useState<string[]>([])
+    const queryClient = useQueryClient()
 
-    const fetchTorrents = useCallback(async () => {
-        const data = await getTorrents(filter)
-        setTorrents(data)
-        setLoading(false)
-    }, [filter])
+    const { data: torrents = [], isLoading: loading } = useQuery({
+        queryKey: torrentsQueryKey(filter),
+        queryFn: async () => getTorrents(filter),
+        refetchInterval: refreshInterval,
+        staleTime: refreshInterval / 2,
+    })
 
-    useEffect(() => {
-        fetchTorrents()
-        const interval = setInterval(fetchTorrents, refreshInterval)
+    const { data: tags = [] } = useQuery({
+        queryKey: tagsQueryKey,
+        queryFn: async () => getTags(),
+        staleTime: 60_000,
+    })
 
-        const fetchMetadata = async () => {
-            const tgs = await getTags()
-            setTags(tgs)
-        }
-        fetchMetadata()
+    const invalidateTorrents = async () => {
+        await queryClient.invalidateQueries({ queryKey: torrentsQueryKey(filter) })
+    }
 
-        return () => clearInterval(interval)
-    }, [fetchTorrents, refreshInterval])
+    const addTorrentMutation = useMutation({
+        mutationFn: addTorrent,
+        onSuccess: invalidateTorrents,
+    })
 
-    const addTorrentAction = useCallback(async (formData: FormData) => {
-        const res = await addTorrent(formData)
-        if (res.success) await fetchTorrents()
-        return res
-    }, [fetchTorrents])
+    const deleteTorrentsMutation = useMutation({
+        mutationFn: async ({ hashes, deleteFiles }: { hashes: string[]; deleteFiles: boolean }) =>
+            deleteTorrentsAction(hashes, deleteFiles),
+        onSuccess: invalidateTorrents,
+    })
 
-    const deleteTorrentsAction = useCallback(async (hashes: string[], deleteFiles: boolean) => {
-        const res = await deleteTorrents(hashes, deleteFiles)
-        if (res.success) await fetchTorrents()
-        return res
-    }, [fetchTorrents])
+    const pauseTorrentsMutation = useMutation({
+        mutationFn: pauseTorrentsAction,
+        onSuccess: invalidateTorrents,
+    })
 
-    const pauseTorrentsAction = useCallback(async (hashes: string[]) => {
-        await pauseTorrents(hashes)
-        await fetchTorrents()
-    }, [fetchTorrents])
+    const resumeTorrentsMutation = useMutation({
+        mutationFn: resumeTorrentsAction,
+        onSuccess: invalidateTorrents,
+    })
 
-    const resumeTorrentsAction = useCallback(async (hashes: string[]) => {
-        await resumeTorrents(hashes)
-        await fetchTorrents()
-    }, [fetchTorrents])
+    const reannounceTorrentsMutation = useMutation({
+        mutationFn: reannounceTorrentsAction,
+        onSuccess: invalidateTorrents,
+    })
 
-    const reannounceTorrentsAction = useCallback(async (hashes: string[]) => {
-        await reannounceTorrents(hashes)
-        await fetchTorrents()
-    }, [fetchTorrents])
+    const setPriorityMutation = useMutation({
+        mutationFn: async ({ hashes, priority }: { hashes: string[]; priority: TorrentPriority }) =>
+            setPriorityAction(hashes, priority),
+        onSuccess: invalidateTorrents,
+    })
 
-    const setPriorityAction = useCallback(async (hashes: string[], priority: TorrentPriority) => {
-        await setPriority(hashes, priority)
-        await fetchTorrents()
-    }, [fetchTorrents])
+    const setShareLimitsMutation = useMutation({
+        mutationFn: async (params: {
+            hashes: string[]
+            ratio: number
+            minutes: number
+            inactive: number
+        }) => setShareLimitsAction(params.hashes, params.ratio, params.minutes, params.inactive),
+        onSuccess: invalidateTorrents,
+    })
 
-    const setShareLimitsAction = useCallback(async (hashes: string[], ratio: number, minutes: number, inactive: number) => {
-        await setShareLimits(hashes, ratio, minutes, inactive)
-        await fetchTorrents()
-    }, [fetchTorrents])
+    const refetch = async () => {
+        await queryClient.invalidateQueries({ queryKey: torrentsQueryKey(filter) })
+    }
 
     return {
         torrents,
         loading,
         tags,
-        refetch: fetchTorrents,
-        addTorrent: addTorrentAction,
-        deleteTorrents: deleteTorrentsAction,
-        pauseTorrents: pauseTorrentsAction,
-        resumeTorrents: resumeTorrentsAction,
-        reannounceTorrents: reannounceTorrentsAction,
-        setPriority: setPriorityAction,
-        setShareLimits: setShareLimitsAction,
+        refetch,
+        addTorrent: async (formData: FormData) => {
+            const res = await addTorrentMutation.mutateAsync(formData)
+            return res
+        },
+        deleteTorrents: async (hashes: string[], deleteFiles: boolean) => {
+            const res = await deleteTorrentsMutation.mutateAsync({ hashes, deleteFiles })
+            return res
+        },
+        pauseTorrents: async (hashes: string[]) => {
+            await pauseTorrentsMutation.mutateAsync(hashes)
+        },
+        resumeTorrents: async (hashes: string[]) => {
+            await resumeTorrentsMutation.mutateAsync(hashes)
+        },
+        reannounceTorrents: async (hashes: string[]) => {
+            await reannounceTorrentsMutation.mutateAsync(hashes)
+        },
+        setPriority: async (hashes: string[], priority: TorrentPriority) => {
+            await setPriorityMutation.mutateAsync({ hashes, priority })
+        },
+        setShareLimits: async (hashes: string[], ratio: number, minutes: number, inactive: number) => {
+            await setShareLimitsMutation.mutateAsync({ hashes, ratio, minutes, inactive })
+        },
     }
 }
