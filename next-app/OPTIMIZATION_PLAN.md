@@ -618,7 +618,7 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 - [ ] Cibler les 5 fichiers les plus `any` pour typage strict
 - [ ] Basculer 10 composants passifs en RSC (cartes, headers sans interactivité)
 
-### Phase 2 : Données (Semaine 2) 🔄 EN COURS
+### Phase 2 : Données (Semaine 2) ✅ TERMINÉ (SCOPE COURANT)
 
 - [x] Convertir `useDockerContainers.ts` en `useQuery` + `useMutation` (polling 10s, action invalidation)
 - [x] Convertir `useDockerGroups.ts` en `useQuery` + `useMutation` (move container, cross-invalidation)
@@ -630,10 +630,11 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 - [x] Convertir `useActivityLogs.ts` en `useQuery` + pagination + mutation import
 - [ ] Remplacer les `useEffect` de fetch dans les 4 hooks restants les plus utilisés
 
-### Phase 3 : Composants (Semaine 3)
+### Phase 3 : Composants (Semaine 3) 🔄 EN COURS
 
 - [ ] Décomposer `downloads/[hash]/page.tsx` (552 -> 50 lignes)
 - [ ] Décomposer `UserActivityButton.tsx` (320 lignes)
+- [x] Décomposer `TorrentRow.tsx` (300 -> 75 lignes) -> `TorrentRowHeader` + `TorrentRowFooter`
 - [ ] Décomposer `TorrentManager.tsx` (298 lignes)
 - [ ] Décomposer `LinkedAccounts.tsx` (297 lignes)
 - [ ] Décomposer `InteractiveSearch.tsx` (287 lignes)
