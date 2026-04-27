@@ -14,10 +14,30 @@ import { getMediaAvailability } from '@/lib/services/media-status'
 import { remember } from '@/lib/cache'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
+interface MediaRequestLite {
+  id: number
+  tmdbId?: string | null
+  mediaType: string
+  status: number
+  metadata?: string | null
+  title?: string | null
+  requesterName?: string | null
+  userId?: number | null
+}
+
+interface TmdbSearchItem {
+  media_type?: string
+  id?: number
+  title?: string
+  name?: string
+  release_date?: string
+  first_air_date?: string
+  poster_path?: string
+}
 
 export async function getRecentRequests() {
   const user = await getCurrentUser()
@@ -34,13 +54,13 @@ export async function getRecentRequests() {
 
   const tmdbService = await getTmdbService()
 
-  return await Promise.all(requestsRes.map(async (req: any) => {
-    let metadata: any = {}
+  return await Promise.all((requestsRes as MediaRequestLite[]).map(async (req) => {
+    let metadata: Record<string, unknown> = {}
     try {
       metadata = req.metadata ? JSON.parse(req.metadata) : {}
     } catch (e) {}
 
-    let posterPath = metadata.posterPath
+    let posterPath = metadata.posterPath as string | undefined
     
     // Check availability if not already marked as available
     let status = req.status
@@ -75,8 +95,8 @@ export async function getRecentRequests() {
                 try {
                     const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
                     await ExternalNotificationService.send('media_available', {
-                        title: req.title,
-                        message: `${req.title} est maintenant disponible sur le serveur.`,
+                        title: req.title ?? 'Média',
+                        message: `${req.title ?? 'Média'} est maintenant disponible sur le serveur.`,
                         data: {
                             tmdbId: req.tmdbId,
                             mediaType: req.mediaType,
@@ -258,9 +278,9 @@ export async function liveSearch(query: string) {
     const results = await tmdbService.searchMulti(query)
     const resultsArray = Array.isArray(results.results) ? results.results : []
     return resultsArray
-      .filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv')
+      .filter((item: TmdbSearchItem) => item.media_type === 'movie' || item.media_type === 'tv')
       .slice(0, 8)
-      .map((item: any) => ({
+      .map((item: TmdbSearchItem) => ({
         id: item.id,
         title: item.title || item.name,
         type: item.media_type,
