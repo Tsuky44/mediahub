@@ -54,7 +54,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
         )
     }
 
-    const user = session.user as any
+    const user = session?.user
     const ability = defineAbilityFor(user)
 
     const hasGlobalView = ability.can('read_all', 'Stats')

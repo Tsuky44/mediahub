@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 
 export interface StatsScopedUser {
     id: number | string
-    name: string
+    name?: string | null
     embyUserId?: string | null
     plexUserId?: string | null
     jellyfinUserId?: string | null
