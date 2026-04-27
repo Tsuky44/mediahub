@@ -633,6 +633,8 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 - [x] Convertir `useSeasonEpisodes.ts` en `useQuery` (lazy enabled + staleTime Infinity)
 - [x] Convertir `useManageMedia.ts` en `useQuery` + invalidations (fetch + delete/mark actions)
 - [x] Convertir `useProwlarrSearch.ts` (useQuery for indexers + useMemo for sorting)
+- [x] Convertir `useProwlarrEpisodes.ts` (useQuery with enabled + staleTime Infinity)
+- [x] Convertir `useProwlarrDownload.ts` (useMutation for download tracking)
 - [ ] Remplacer les `useEffect` de fetch dans les hooks restants
 
 ### Phase 3 : Composants (Semaine 3) 🔄 EN COURS

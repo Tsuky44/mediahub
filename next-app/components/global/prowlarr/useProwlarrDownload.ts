@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import {
     downloadTorrent,
     downloadMediaRelease,
@@ -54,12 +55,22 @@ async function performDownload(release: ProwlarrRelease, ctx: DownloadContext) {
 /**
  * Gere les telechargements unitaires et en masse depuis Prowlarr,
  * ainsi que l'etat de selection multi-torrent.
+ * La mutation unitaire utilise useMutation pour beneficier du suivi TQ.
  */
 export function useProwlarrDownload(): UseProwlarrDownloadResult {
     const [downloading, setDownloading] = useState<string | null>(null)
     const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null)
     const [bulkDownloading, setBulkDownloading] = useState(false)
     const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
+
+    const downloadMutation = useMutation({
+        mutationFn: async ({ release, ctx }: { release: ProwlarrRelease; ctx: DownloadContext }) => {
+            const res: any = await performDownload(release, ctx)
+            const errorMsg = res.error || (res.success === false ? res.message : null)
+            if (errorMsg) throw new Error(errorMsg)
+            return release.guid
+        },
+    })
 
     const toggleSelect = useCallback((guid: string) => {
         setSelectedGuids(prev => {
@@ -77,20 +88,15 @@ export function useProwlarrDownload(): UseProwlarrDownloadResult {
     const download = useCallback(async (release: ProwlarrRelease, ctx: DownloadContext) => {
         setDownloading(release.guid)
         try {
-            const res: any = await performDownload(release, ctx)
-            const errorMsg = res.error || (res.success === false ? res.message : null)
-            if (errorMsg) {
-                alert(`Erreur: ${errorMsg}`)
-            } else {
-                setDownloadSuccess(release.guid)
-                setTimeout(() => setDownloadSuccess(null), 3000)
-            }
-        } catch {
-            alert('Erreur lors du téléchargement')
+            await downloadMutation.mutateAsync({ release, ctx })
+            setDownloadSuccess(release.guid)
+            setTimeout(() => setDownloadSuccess(null), 3000)
+        } catch (err: unknown) {
+            alert(`Erreur: ${err instanceof Error ? err.message : 'Erreur lors du téléchargement'}`)
         } finally {
             setDownloading(null)
         }
-    }, [])
+    }, [downloadMutation])
 
     const bulkDownload = useCallback(async (releases: ProwlarrRelease[], ctx: DownloadContext) => {
         if (releases.length === 0) return
@@ -99,13 +105,9 @@ export function useProwlarrDownload(): UseProwlarrDownloadResult {
         let failCount = 0
         for (const release of releases) {
             try {
-                const res: any = await performDownload(release, ctx)
-                const errorMsg = res.error || (res.success === false ? res.message : null)
-                if (errorMsg) failCount++
-                else {
-                    successCount++
-                    setDownloadSuccess(release.guid)
-                }
+                await downloadMutation.mutateAsync({ release, ctx })
+                successCount++
+                setDownloadSuccess(release.guid)
             } catch {
                 failCount++
             }
@@ -117,7 +119,7 @@ export function useProwlarrDownload(): UseProwlarrDownloadResult {
         } else {
             setTimeout(() => setDownloadSuccess(null), 3000)
         }
-    }, [])
+    }, [downloadMutation])
 
     return {
         downloading, downloadSuccess, bulkDownloading,
