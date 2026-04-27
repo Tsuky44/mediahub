@@ -5,9 +5,9 @@ import archiver from 'archiver';
 import { Readable, PassThrough } from 'stream';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 export interface FileInfo {
     name: string;
@@ -138,8 +138,9 @@ export class FtpService {
             // Try to list to verify access
             const list = await testClient.list();
             log('[FTP-Test] Listed', list.length, 'items');
-        } catch (e: any) {
-            let errorMessage = e?.message || 'Échec de la connexion FTP';
+        } catch (e) {
+            const err = e as Error
+            let errorMessage = err?.message || 'Échec de la connexion FTP';
             if (errorMessage.includes('ENOTFOUND')) errorMessage = 'Hôte introuvable';
             if (errorMessage.includes('ETIMEDOUT')) errorMessage = 'Délai de connexion dépassé';
             if (errorMessage.includes('ECONNREFUSED')) errorMessage = 'Connexion refusée - vérifie l\'hôte et le port';
@@ -237,7 +238,7 @@ export class FtpService {
             const passThrough = new PassThrough();
             
             // Download to the passthrough stream
-            client.downloadTo(passThrough, remotePath).catch((err: any) => {
+            client.downloadTo(passThrough, remotePath).catch((err: Error) => {
                 error('[FTP] Download error:', err);
                 passThrough.destroy(err);
             });
