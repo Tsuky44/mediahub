@@ -41,7 +41,7 @@ export default function DockerPage() {
     const canManageGroups = ability.can('manage_groups', 'Docker')
     const canManageContainers = canManageState
 
-    const { containers, loading, refreshing, error, actionLoading, refetch, performAction } =
+    const { containers, isLoading, isFetching, error, actionLoading, refetch, performAction } =
         useDockerContainers()
     const { groups, moveContainer } = useDockerGroups()
     const { viewMode, setViewMode, collapsedGroups, toggleGroupCollapse } =
@@ -96,10 +96,10 @@ export default function DockerPage() {
             isActionLoading={actionLoading === container.id}
             isDragged={dragDrop.draggedContainerId === container.id}
             isMenuOpen={openMenuId === container.id}
-            onDragStart={e => dragDrop.onDragStart(e, container.id)}
+            onDragStart={(e: React.DragEvent) => dragDrop.onDragStart(e, container.id)}
             onDragEnd={dragDrop.onDragEnd}
             onSelectStats={() => modals.openStats(container)}
-            onToggleMenu={e => {
+            onToggleMenu={(e: React.MouseEvent) => {
                 e.stopPropagation()
                 toggleMenu(container.id)
             }}
@@ -119,7 +119,7 @@ export default function DockerPage() {
         <div className="space-y-8 animate-in fade-in duration-500" ref={menuRef}>
             <div className="space-y-6">
                 <DockerPageHeader
-                    refreshing={refreshing}
+                    refreshing={isFetching}
                     canManageGroups={canManageGroups}
                     onRefresh={refetch}
                     onOpenGroupManager={modals.openGroupManager}
@@ -142,7 +142,7 @@ export default function DockerPage() {
                 </div>
             )}
 
-            {loading && !refreshing ? (
+            {isLoading && !isFetching ? (
                 <DockerLoadingState />
             ) : (
                 <div className="space-y-10">

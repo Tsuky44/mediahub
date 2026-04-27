@@ -1,12 +1,35 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api, ApiError } from '@/lib/api-client'
 import type { DockerContainer, DockerAction } from '../_types/docker'
+
+const QUERY_KEY = ['docker', 'containers'] as const
+
+interface ContainersApiResponse {
+    containers: DockerContainer[]
+}
+
+interface ActionPayload {
+    containerId: string
+    action: DockerAction
+}
+
+async function fetchContainers(): Promise<DockerContainer[]> {
+    const data = await api.get<ContainersApiResponse>('/api/unraid/docker')
+    return data.containers ?? []
+}
+
+async function performContainerAction({ containerId, action }: ActionPayload): Promise<void> {
+    await api.post('/api/unraid/docker/action', { containerId, action })
+    // Small delay to let Docker update state server-side
+    await new Promise(resolve => setTimeout(resolve, 500))
+}
 
 export interface UseDockerContainersResult {
     containers: DockerContainer[]
-    loading: boolean
-    refreshing: boolean
+    isLoading: boolean
+    isFetching: boolean
     error: string | null
     actionLoading: string | null
     refetch: () => Promise<void>
@@ -14,76 +37,52 @@ export interface UseDockerContainersResult {
 }
 
 /**
- * Charge les conteneurs Docker (`/api/unraid/docker`) avec polling toutes les 10s
- * et expose l'action start/stop/restart avec rafraichissement automatique.
+ * TanStack Query-powered Docker containers hook.
+ * Polling every 10s via refetchInterval.
+ * performAction invalidates the container cache on success.
  */
 export function useDockerContainers(): UseDockerContainersResult {
-    const [containers, setContainers] = useState<DockerContainer[]>([])
-    const [loading, setLoading] = useState(true)
-    const [refreshing, setRefreshing] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [actionLoading, setActionLoading] = useState<string | null>(null)
+    const queryClient = useQueryClient()
 
-    const fetchContainers = useCallback(async (isRefresh = false) => {
-        if (isRefresh) setRefreshing(true)
-        else setLoading(true)
-        setError(null)
+    const {
+        data: containers = [],
+        isLoading,
+        isFetching,
+        error: queryError,
+        refetch,
+    } = useQuery({
+        queryKey: QUERY_KEY,
+        queryFn: fetchContainers,
+        refetchInterval: 10000,
+    })
 
-        try {
-            const res = await fetch('/api/unraid/docker')
-            if (!res.ok) {
-                if (res.status === 401) throw new Error('Non autorisé')
-                throw new Error('Erreur lors de la récupération des conteneurs')
-            }
-            const data = await res.json()
-            setContainers(data.containers || [])
-        } catch (err: any) {
-            setError(err.message)
-        } finally {
-            setLoading(false)
-            setRefreshing(false)
-        }
-    }, [])
+    const mutation = useMutation({
+        mutationFn: performContainerAction,
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+        },
+    })
 
-    const refetch = useCallback(() => fetchContainers(true), [fetchContainers])
+    const errorMessage =
+        queryError instanceof ApiError
+            ? queryError.message
+            : queryError instanceof Error
+              ? queryError.message
+              : null
 
-    const performAction = useCallback(async (containerId: string, action: DockerAction) => {
-        setActionLoading(containerId)
-        try {
-            const res = await fetch('/api/unraid/docker/action', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ containerId, action }),
-            })
-
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}))
-                throw new Error(data.error || 'Action failed')
-            }
-
-            // Wait a moment for Docker to update state
-            await new Promise(resolve => setTimeout(resolve, 500))
-            await fetchContainers(true)
-        } catch (err: any) {
-            setError(`Erreur lors de l'action ${action}: ${err.message}`)
-        } finally {
-            setActionLoading(null)
-        }
-    }, [fetchContainers])
-
-    useEffect(() => {
-        fetchContainers()
-        const interval = setInterval(() => fetchContainers(true), 10000)
-        return () => clearInterval(interval)
-    }, [fetchContainers])
+    const performAction = async (containerId: string, action: DockerAction) => {
+        await mutation.mutateAsync({ containerId, action })
+    }
 
     return {
         containers,
-        loading,
-        refreshing,
-        error,
-        actionLoading,
-        refetch,
+        isLoading,
+        isFetching,
+        error: errorMessage,
+        actionLoading: mutation.isPending ? mutation.variables?.containerId ?? null : null,
+        refetch: async () => {
+            await refetch()
+        },
         performAction,
     }
 }

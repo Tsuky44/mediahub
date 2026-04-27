@@ -609,7 +609,7 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 
 ## 9. Roadmap par phase
 
-### Phase 1 : Fondations (Semaine 1) 🔄 EN COURS
+### Phase 1 : Fondations (Semaine 1) ✅ TERMINÉ
 
 - [x] Installer TanStack Query v5 (`@tanstack/react-query`, `@tanstack/react-query-devtools`)
 - [x] Créer `lib/query-client.ts` (singleton, staleTime 5s, gcTime 5min)
@@ -618,9 +618,11 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 - [ ] Cibler les 5 fichiers les plus `any` pour typage strict
 - [ ] Basculer 10 composants passifs en RSC (cartes, headers sans interactivité)
 
-### Phase 2 : Données (Semaine 2)
+### Phase 2 : Données (Semaine 2) 🔄 EN COURS
 
-- [ ] Convertir `useDockerContainers.ts` en `useQuery`
+- [x] Convertir `useDockerContainers.ts` en `useQuery` + `useMutation` (polling 10s, action invalidation)
+- [x] Convertir `useDockerGroups.ts` en `useQuery` + `useMutation` (move container, cross-invalidation)
+- [x] Adapter `docker/page.tsx` aux nouveaux hooks (`isLoading`/`isFetching`)
 - [ ] Convertir `useTorrents.ts` en `useQuery`
 - [ ] Convertir `useNotifications.ts` en `useQuery` + polling
 - [ ] Convertir `useActivityLogs.ts` en `useQuery` + pagination
