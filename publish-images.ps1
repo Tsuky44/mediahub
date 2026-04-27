@@ -21,6 +21,10 @@ function Check-Error {
     }
 }
 
+# Déterminer le répertoire du script pour utiliser des chemins absolus
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$NextAppPath = Join-Path $ScriptDir "next-app"
+
 # Login
 # Write-Host "1. Connexion à ghcr.io..." -ForegroundColor Yellow
 # docker login ghcr.io -u $GitHubUser
@@ -28,7 +32,7 @@ function Check-Error {
 
 # Build & Push App
 Write-Host "2. Build & Push : Application..." -ForegroundColor Yellow
-docker build --network=host --target runner -t "ghcr.io/$GitHubUser/mediahub-app:latest" ./next-app
+docker build --network=host --target runner -t "ghcr.io/$GitHubUser/mediahub-app:latest" "$NextAppPath"
 Check-Error "Échec du build de l'application"
 
 docker push "ghcr.io/$GitHubUser/mediahub-app:latest"
@@ -36,7 +40,7 @@ Check-Error "Échec du push de l'application"
 
 # Build & Push Tracker
 Write-Host "3. Build & Push : Tracker..." -ForegroundColor Yellow
-docker build --network=host --target tracker -t "ghcr.io/$GitHubUser/mediahub-tracker:latest" ./next-app
+docker build --network=host --target tracker -t "ghcr.io/$GitHubUser/mediahub-tracker:latest" "$NextAppPath"
 Check-Error "Échec du build du tracker"
 
 docker push "ghcr.io/$GitHubUser/mediahub-tracker:latest"

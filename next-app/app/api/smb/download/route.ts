@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
                     archive.resume();
                 },
                 cancel() {
-                    archive.abort();
+                    archive.destroy();
                 }
             });
 
