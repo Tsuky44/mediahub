@@ -638,7 +638,7 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 ### Phase 3 : Composants (Semaine 3) 🔄 EN COURS
 
 - [ ] Décomposer `downloads/[hash]/page.tsx` (552 -> 50 lignes)
-- [ ] Décomposer `UserActivityButton.tsx` (320 lignes)
+- [x] Décomposer `UserActivityButton.tsx` (320 -> 157 lignes) -> `useUserActivity.ts`
 - [x] Décomposer `TorrentRow.tsx` (300 -> 75 lignes) -> `TorrentRowHeader` + `TorrentRowFooter`
 - [x] Décomposer `TorrentManager.tsx` (298 -> 195 lignes) -> `useTorrentManagerActions.ts`
 - [x] Décomposer `LinkedAccounts.tsx` (297 -> 157 lignes) -> `useLinkedAccounts.ts` (TQ + mutations)

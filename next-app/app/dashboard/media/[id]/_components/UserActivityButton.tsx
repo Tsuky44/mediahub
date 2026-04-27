@@ -1,10 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Eye, X, Film, Tv, RefreshCw, Trash2, AlertTriangle, Activity } from 'lucide-react'
-import { toast } from 'react-hot-toast'
-import { useRouter } from 'next/navigation'
+import { Eye, X, Film, Tv, RefreshCw, AlertTriangle, Activity } from 'lucide-react'
 import { useSession } from 'next-auth/react'
+import { useUserActivity } from '../_hooks/useUserActivity'
 
 interface UserActivityButtonProps {
     tmdbId: number
@@ -12,141 +10,21 @@ interface UserActivityButtonProps {
     title: string
 }
 
-interface SeasonStat {
-  seasonNumber: number
-  total: number
-  played: number
-  percentage: number
-}
-
-interface ViewingStat {
-  userId: string
-  userName: string
-  played: boolean
-  lastPlayedDate: string | null
-  playbackPositionTicks: number
-  totalDurationTicks: number
-  percentage: number
-  episodeText?: string
-  seasons?: SeasonStat[]
-  playedEpisodes?: number
-  totalEpisodes?: number
-}
-
-interface SeasonDetail {
-  id: string
-  name: string
-  index: number
-  size: number
-  episodesCount: number
-  path: string
-}
-
-interface ItemDetails {
-  viewingStats: ViewingStat[]
-  seasons: SeasonDetail[]
-}
-
 export function UserActivityButton({ tmdbId, mediaType, title }: UserActivityButtonProps) {
-    const [isOpen, setIsOpen] = useState(false)
-    const [loading, setLoading] = useState(false)
-    const [details, setDetails] = useState<ItemDetails | null>(null)
-    const [error, setError] = useState<string | null>(null)
     const { data: session } = useSession()
-    const router = useRouter()
-
-    // Delete Modal State
-    const [itemToDelete, setItemToDelete] = useState<{ season?: SeasonDetail } | null>(null)
-    const [deleteFromArr, setDeleteFromArr] = useState(true)
-    const [isDeleting, setIsDeleting] = useState(false)
-    const [showDeleteModal, setShowDeleteModal] = useState(false)
+    const {
+        isOpen,
+        setIsOpen,
+        loading,
+        details,
+        error,
+        handleOpen,
+        formatBytes,
+    } = useUserActivity(tmdbId, mediaType)
 
     // Only show for admins
     if (session?.user?.role !== 'admin') {
         return null
-    }
-
-    const fetchDetails = async () => {
-        setLoading(true)
-        setError(null)
-        try {
-            // Convert mediaType to API expected type
-            const type = mediaType === 'movie' ? 'Movie' : 'Series'
-            
-            const res = await fetch(`/api/admin/storage/details?tmdbId=${tmdbId}&type=${type}`)
-            
-            if (!res.ok) {
-                if (res.status === 404) throw new Error('Média non trouvé dans le stockage')
-                if (res.status === 401) throw new Error('Non autorisé')
-                throw new Error('Erreur lors du chargement des détails')
-            }
-            
-            const data = await res.json()
-            setDetails(data)
-        } catch (err: any) {
-            console.error(err)
-            setError(err.message || 'Impossible de charger les détails')
-            // Don't show toast here to avoid spam if just checking
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    const handleOpen = () => {
-        setIsOpen(true)
-        fetchDetails()
-    }
-
-    const formatBytes = (bytes: number, decimals = 2) => {
-        if (!bytes) return '0 B'
-        const k = 1024
-        const dm = decimals < 0 ? 0 : decimals
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
-        const i = Math.floor(Math.log(bytes) / Math.log(k))
-        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
-    }
-
-    const openDeleteConfirm = (season?: SeasonDetail) => {
-        setItemToDelete({ season })
-        setShowDeleteModal(true)
-        setDeleteFromArr(true)
-    }
-
-    const confirmDelete = async () => {
-        if (!details) return
-
-        setIsDeleting(true)
-        try {
-            // We need the internal ID which we don't have directly in props, 
-            // but we can get it from the fetch logic or assume the API handles it?
-            // Wait, the delete API needs itemId.
-            // We don't have the main itemId in state unless we fetch it.
-            // But we fetched details which returns viewingStats and seasons.
-            // It doesn't return the main item ID in the response root.
-            // The seasons have IDs.
-            // For the main item, we might need to get it.
-            // Actually, we can pass tmdbId to the delete API if we modify it, OR
-            // we can extract the itemId from the details if available.
-            // Let's check the API response structure in route.ts.
-            // It returns { viewingStats, seasons }.
-            // It doesn't return the itemId.
-            // We should update the API to return the itemId as well.
-            
-            // For now, let's assume we can't delete easily without the ID.
-            // But wait, seasons have IDs. So deleting a season works.
-            // Deleting the whole show/movie requires the ID.
-            
-            // I'll update the API to return the item info as well.
-            
-            // Placeholder for now
-            toast.error("La suppression n'est pas encore disponible depuis cette vue")
-            
-        } catch (error: any) {
-            toast.error(error.message)
-        } finally {
-            setIsDeleting(false)
-            setShowDeleteModal(false)
-        }
     }
 
     return (
