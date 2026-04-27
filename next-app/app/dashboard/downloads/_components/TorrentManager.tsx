@@ -4,7 +4,7 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useVisibleColumns } from '../_hooks/useVisibleColumns'
 import { useTorrents } from '../_hooks/useTorrents'
-import { useTorrentFilters } from '../_hooks/useTorrentFilters'
+import { useTorrentFilters, TorrentSortBy } from '../_hooks/useTorrentFilters'
 import { useTorrentSelection } from '../_hooks/useTorrentSelection'
 import { useTorrentManagerActions } from '../_hooks/useTorrentManagerActions'
 import { SORT_OPTIONS } from '../_constants/torrent-options'
@@ -81,7 +81,7 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
                     searchQuery={searchQuery}
                     onSearchQueryChange={setSearchQuery}
                     sortBy={sortBy}
-                    onSortByChange={(id) => setSortBy(id as any)}
+                    onSortByChange={(id) => setSortBy(id as TorrentSortBy)}
                     sortOrder={sortOrder}
                     onSortOrderChange={setSortOrder}
                     visibleColumns={visibleColumns}
@@ -154,7 +154,7 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
                 isOpen={actions.isFilterModalOpen}
                 onClose={() => actions.setIsFilterModalOpen(false)}
                 sortBy={sortBy}
-                onSortByChange={(id) => setSortBy(id as any)}
+                onSortByChange={(id) => setSortBy(id as TorrentSortBy)}
                 sortOptions={SORT_OPTIONS}
                 trackers={trackers}
                 selectedTrackers={selectedTrackers}
