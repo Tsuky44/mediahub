@@ -17,6 +17,20 @@ export async function getTmdbService() {
   return new TmdbService(apiKey)
 }
 
+interface DiscoverParams {
+    page?: number
+    sort_by?: string
+    start_date?: string
+    end_date?: string
+    genres?: number[]
+    keywords?: string
+    language?: string
+    min_duration?: number
+    max_duration?: number
+    watch_region?: string
+    watch_providers?: number[]
+}
+
 export class TmdbService {
   private apiKey: string
   private static posterPathCache = new Map<string, string>()
@@ -101,12 +115,12 @@ export class TmdbService {
       }
   }
 
-  async discover(type: 'movie' | 'tv', params: any = {}) {
+  async discover(type: 'movie' | 'tv', params: DiscoverParams = {}) {
     const client = await this.getClient()
     if (!client) return { results: [] }
     
     // Map internal filter names to TMDB API parameters
-    const queryParams: any = {
+    const queryParams: Record<string, unknown> = {
         page: params.page || 1,
         sort_by: params.sort_by || 'popularity.desc',
         'vote_count.gte': 0,
@@ -115,19 +129,13 @@ export class TmdbService {
     if (params.start_date) queryParams[type === 'movie' ? 'primary_release_date.gte' : 'first_air_date.gte'] = params.start_date
     if (params.end_date) queryParams[type === 'movie' ? 'primary_release_date.lte' : 'first_air_date.lte'] = params.end_date
     if (params.genres && params.genres.length > 0) queryParams.with_genres = params.genres.join(',')
-    if (params.keywords) queryParams.with_keywords = params.keywords // ID based, need search first? User input string? 
-    // Usually keywords input in UI needs to search for IDs first. 
-    // For simplicity, if it's a string, we might skip or assume IDs if formatted. 
-    // The Vue component seemed to take text? No, it implies search usually. 
-    // Let's assume the user might input text and we need to handle that later or ignore for now if complex.
-    // Re-reading Vue: input type text. So it searches keywords? 
-    // TMDB with_keywords expects IDs. We'll skip keywords for now or implement search later.
+    if (params.keywords) queryParams.with_keywords = params.keywords
 
     if (params.language && params.language !== 'all') queryParams.with_original_language = params.language
     if (params.min_duration) queryParams['with_runtime.gte'] = params.min_duration
     if (params.max_duration) queryParams['with_runtime.lte'] = params.max_duration
     if (params.watch_region) queryParams.watch_region = params.watch_region
-    if (params.watch_providers && params.watch_providers.length > 0) queryParams.with_watch_providers = params.watch_providers.join('|') // OR logic for providers
+    if (params.watch_providers && params.watch_providers.length > 0) queryParams.with_watch_providers = params.watch_providers.join('|')
 
     const response = await client.get(`/discover/${type}`, {
         params: queryParams
@@ -135,7 +143,7 @@ export class TmdbService {
     return response.data
   }
 
-  async discoverMixed(params: any = {}) {
+  async discoverMixed(params: DiscoverParams = {}) {
     const genreIds = params.genres || []
 
     // Map common genres between Movie and TV
@@ -172,8 +180,8 @@ export class TmdbService {
         this.discover('tv', { ...params, genres: tvGenres.length > 0 ? tvGenres : undefined })
     ])
 
-    const movieResults = (movies.results || []).map((m: any) => ({ ...m, media_type: 'movie' }))
-    const tvResults = (series.results || []).map((t: any) => ({ ...t, media_type: 'tv' }))
+    const movieResults = (movies.results || []).map((m: Record<string, unknown>) => ({ ...m, media_type: 'movie' }))
+    const tvResults = (series.results || []).map((t: Record<string, unknown>) => ({ ...t, media_type: 'tv' }))
 
     // Combine and sort by sort_by param (default popularity)
     const combined = [...movieResults, ...tvResults]
