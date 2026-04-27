@@ -1,10 +1,10 @@
-import axios, { AxiosInstance } from 'axios'
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
 import { getSetting } from '../settings'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export async function getQBittorrentService() {
@@ -148,7 +148,7 @@ export class QBittorrentService {
       }
   }
 
-  private async request<T>(config: any, retry: boolean = true): Promise<T> {
+  private async request<T>(config: AxiosRequestConfig, retry: boolean = true): Promise<T> {
       try {
           await this.init()
           if (!this.client) throw new Error('Client not initialized')
@@ -227,7 +227,8 @@ export class QBittorrentService {
         let globalSeeds = 0
         let globalLeechs = 0
         
-        Object.values(torrents).forEach((t: any) => {
+        const torrentValues = Object.values(torrents) as Array<{ num_seeds?: number; num_leechs?: number }>
+        torrentValues.forEach((t) => {
             globalSeeds += t.num_seeds || 0
             globalLeechs += t.num_leechs || 0
         })
