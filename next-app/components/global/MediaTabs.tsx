@@ -2,11 +2,12 @@
 
 import { useState, useMemo } from 'react'
 import { MediaList } from './MediaList'
+import { MediaItem } from './MediaCard'
 import { Clapperboard, Tv, Search } from 'lucide-react'
 
 interface MediaTabsProps {
-    movies: any[]
-    series: any[]
+    movies: MediaItem[]
+    series: MediaItem[]
 }
 
 export function MediaTabs({ movies, series }: MediaTabsProps) {
@@ -16,13 +17,13 @@ export function MediaTabs({ movies, series }: MediaTabsProps) {
     const filteredMovies = useMemo(() => {
         if (!searchQuery) return movies
         const lowerQuery = searchQuery.toLowerCase()
-        return movies.filter(m => m.title.toLowerCase().includes(lowerQuery))
+        return movies.filter(m => m.title?.toLowerCase().includes(lowerQuery))
     }, [movies, searchQuery])
 
     const filteredSeries = useMemo(() => {
         if (!searchQuery) return series
         const lowerQuery = searchQuery.toLowerCase()
-        return series.filter(s => s.name.toLowerCase().includes(lowerQuery))
+        return series.filter(s => s.name?.toLowerCase().includes(lowerQuery))
     }, [series, searchQuery])
 
     return (

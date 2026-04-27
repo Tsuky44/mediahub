@@ -3,12 +3,12 @@
 import { useRef } from 'react'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { MediaCard } from './MediaCard'
+import { MediaCard, MediaItem } from './MediaCard'
 
 type MediaListVariant = 'grid' | 'slider'
 
 interface MediaListProps {
-    items: any[]
+    items: MediaItem[]
     variant?: MediaListVariant
     // Grid-specific
     showFavoriteButton?: boolean

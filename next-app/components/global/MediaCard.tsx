@@ -7,7 +7,7 @@ import { toggleFavorite } from '@/app/dashboard/media/actions'
 import { toggleWatchLater } from '@/app/dashboard/media/watch-later-actions'
 import { useState } from 'react'
 
-interface MediaItem {
+export interface MediaItem {
   id: string | number
   title?: string
   name?: string

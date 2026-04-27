@@ -78,7 +78,7 @@ export function Sidebar() {
           )
         })}
 
-        {session?.user && (session.user as any).role === 'admin' && (
+        {session?.user && session.user.role === 'admin' && (
           <Link
             href="/dashboard/settings"
             className={clsx(
