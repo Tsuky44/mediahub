@@ -649,7 +649,7 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 ### Phase 4 : Polish (Semaine 4)
 
 - [x] Ajouter `React.memo` sur `TorrentRow` (principale ligne de liste torrents)
-- [ ] Lazy-load les modales
+- [x] Lazy-load les modales (FilterModal, SearchModal, ShareLimitModal dans TorrentManager)
 - [ ] Virtualiser les grandes listes
 - [ ] Audit complet `any` restants (objectif : < 50)
 - [ ] Config ESLint : interdire `any`, interdire `fetch` en dehors de `lib/api-client.ts`

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useVisibleColumns } from '../_hooks/useVisibleColumns'
 import { useTorrents } from '../_hooks/useTorrents'
 import { useTorrentFilters } from '../_hooks/useTorrentFilters'
@@ -9,12 +10,13 @@ import { useTorrentManagerActions } from '../_hooks/useTorrentManagerActions'
 import { SORT_OPTIONS } from '../_constants/torrent-options'
 import { AddTorrentModal } from './torrent/AddTorrentModal'
 import { DeleteTorrentModal } from './torrent/DeleteTorrentModal'
-import { FilterModal } from './torrent/FilterModal'
-import { SearchModal } from './torrent/SearchModal'
 import { BatchActionsBar } from './torrent/BatchActionsBar'
-import { ShareLimitModal } from './torrent/ShareLimitModal'
 import { TorrentRow } from './torrent/TorrentRow'
 import { TorrentFiltersBar } from './torrent/TorrentFiltersBar'
+
+const FilterModal = dynamic(() => import('./torrent/FilterModal').then(m => m.FilterModal), { ssr: false })
+const SearchModal = dynamic(() => import('./torrent/SearchModal').then(m => m.SearchModal), { ssr: false })
+const ShareLimitModal = dynamic(() => import('./torrent/ShareLimitModal').then(m => m.ShareLimitModal), { ssr: false })
 
 export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boolean, canManage: boolean, canSearch: boolean }) {
     const [filter, setFilter] = useState('all')
