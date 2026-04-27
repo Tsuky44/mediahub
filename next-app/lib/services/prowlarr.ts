@@ -2,10 +2,14 @@ import axios from 'axios'
 import { getSetting } from '../settings'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
+export interface IndexerField {
+  name: string
+  value?: string | number | boolean
+}
 
 export async function getProwlarrService() {
   const url = await getSetting('prowlarr_url')
@@ -18,7 +22,7 @@ export async function getProwlarrService() {
 export interface ProwlarrIndexer {
   id: number
   name: string
-  fields: any[]
+  fields: IndexerField[]
   implementation: string
   implementationName: string
   infoLink: string
@@ -100,7 +104,7 @@ export class ProwlarrService {
     const client = this.getClient()
     try {
       const response = await client.get(`/indexer/${indexerId}`)
-      return response.data as ProwlarrIndexer & { fields: any[] }
+      return response.data as ProwlarrIndexer
     } catch (e: any) {
       error(`[Prowlarr] Failed to fetch indexer ${indexerId}:`, e.message)
       return null
@@ -122,8 +126,16 @@ export class ProwlarrService {
     const details = await this.getIndexerDetails(indexerId)
     if (!details) return null
 
-    const result: any = {
-      type: details.implementation?.toLowerCase().includes('gazelle') ? 'gazelle' : 
+    const result: {
+      baseUrl?: string
+      apiKey?: string
+      passkey?: string
+      username?: string
+      password?: string
+      type?: string
+      cookie?: string
+    } = {
+      type: details.implementation?.toLowerCase().includes('gazelle') ? 'gazelle' :
             details.implementation?.toLowerCase().includes('unit3d') ? 'unit3d' : 'custom'
     }
 
@@ -137,24 +149,24 @@ export class ProwlarrService {
 
         // Base URL
         if (name.includes('baseurl') || name.includes('base_url') || name === 'base') {
-          result.baseUrl = value
+          result.baseUrl = String(value)
         }
         // API Key / Passkey
         else if (name.includes('apikey') || name.includes('api_key') || name === 'passkey' || name === 'pass') {
-          result.apiKey = value
-          result.passkey = value
+          result.apiKey = String(value)
+          result.passkey = String(value)
         }
         // Username
         else if (name === 'username' || name === 'user') {
-          result.username = value
+          result.username = String(value)
         }
         // Password
         else if (name === 'password' || name === 'pass') {
-          result.password = value
+          result.password = String(value)
         }
         // Cookie (for some trackers)
         else if (name === 'cookie') {
-          result.cookie = value
+          result.cookie = String(value)
         }
       }
     }

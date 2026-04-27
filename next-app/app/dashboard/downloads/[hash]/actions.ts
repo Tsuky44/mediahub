@@ -8,9 +8,9 @@ import { getProwlarrService } from '@/lib/services/prowlarr'
 import { parseTorrentName, ParsedTorrentName, MediaType } from '@/lib/torrent-parser'
 import { checkAccess } from '../actions'
 import { Torrent } from '@/lib/services/qbittorrent'
+import { IndexerField } from '@/lib/services/prowlarr'
 
 // Typed shapes for external API responses to avoid `any`
-interface IndexerField { name: string; value?: string }
 interface TmdbGenre { name: string }
 interface TmdbCastMember {
   name: string
@@ -67,7 +67,7 @@ async function getProwlarrIndexersMap(): Promise<Map<string, string>> {
           f.name === 'baseUrl' || f.name === 'baseurl' || f.name === 'apiUrl'
         )
         if (baseUrlField && baseUrlField.value) {
-          baseUrl = baseUrlField.value
+          baseUrl = String(baseUrlField.value)
         }
       }
 
