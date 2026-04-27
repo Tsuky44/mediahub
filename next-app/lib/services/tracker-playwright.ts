@@ -4,7 +4,7 @@
  * Based on api-ratio-main project
  */
 
-import { chromium, Browser, BrowserContext, Page } from 'playwright'
+import { chromium, Browser, BrowserContext, Page, Cookie } from 'playwright'
 import { promises as fs } from 'fs'
 import path from 'path'
 
@@ -12,8 +12,8 @@ import path from 'path'
 const isDev = process.env.NODE_ENV === 'development'
 const isTest = process.env.NODE_ENV === 'test'
 const enableLogging = !isTest // Enable in dev and production, disable in tests
-const log = (...args: any[]) => { if (enableLogging) console.log(...args) }
-const error = (...args: any[]) => { if (enableLogging) console.error(...args) }
+const log = (...args: unknown[]) => { if (enableLogging) console.log(...args) }
+const error = (...args: unknown[]) => { if (enableLogging) console.error(...args) }
 
 const COOKIES_DIR = path.join(process.cwd(), '.config')
 
@@ -36,7 +36,7 @@ async function loadCookies(filename: string): Promise<any[] | null> {
   }
 }
 
-async function saveCookies(filename: string, cookies: any[]) {
+async function saveCookies(filename: string, cookies: unknown[]) {
   await ensureCookiesDir()
   const filePath = path.join(COOKIES_DIR, filename)
   await fs.writeFile(filePath, JSON.stringify(cookies), { mode: 0o600 })
@@ -187,7 +187,7 @@ export async function scrapeC411Playwright(username: string, password: string, h
     const page = await context.newPage()
 
     // Try to load existing cookies (optional, for non-Docker environments)
-    let existingCookies: any[] | null = null
+    let existingCookies: Cookie[] | null = null
     try {
       existingCookies = await loadCookies(COOKIES_FILE)
       if (existingCookies && existingCookies.length > 0) {
@@ -203,7 +203,7 @@ export async function scrapeC411Playwright(username: string, password: string, h
     // Try to fetch stats
     log('[C411-Playwright] Fetching stats from API...')
     let response = await context.request.get(STATS_URL, { timeout: 30000 })
-    let apiData: any = {}
+    let apiData: Record<string, unknown> = {}
     let responseStatus = response.status()
     log(`[C411-Playwright] Initial API response status: ${responseStatus}`)
 
@@ -311,7 +311,7 @@ export async function scrapeC411Playwright(username: string, password: string, h
     }
 
     // Extract stats
-    const userData = apiData?.user
+    const userData = apiData?.user as { uploaded?: number; downloaded?: number } | undefined
     if (!userData) {
       error('[C411-Playwright] No user data in response')
       return null
@@ -1172,7 +1172,7 @@ export async function scrapeTOS(apiToken: string, baseUrl: string = 'https://the
  * Parse stats value that might be number or formatted string like "1.5 TB" or "50.06 GiB"
  * Handles both decimal (KB/MB/GB/TB) and binary (KiB/MiB/GiB/TiB) units
  */
-function parseStatsValue(value: any): number {
+function parseStatsValue(value: unknown): number {
   if (typeof value === 'number') return value
   if (typeof value === 'string') {
     // Try direct number
