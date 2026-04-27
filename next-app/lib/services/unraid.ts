@@ -18,6 +18,28 @@ export interface UnraidContainer {
   icon?: string
 }
 
+interface GraphQLData {
+  array?: { capacity?: { kilobytes?: { total?: string; used?: string; free?: string }; bytes?: { total?: string; used?: string; free?: string } } }
+  storage?: { array?: { size?: string; used?: string; free?: string } }
+}
+
+interface DockerPort {
+  publicPort?: number
+  privatePort?: number
+  type?: string
+}
+
+interface DockerContainerRaw {
+  id: string
+  names?: string | string[]
+  image: string
+  state: string
+  status: string
+  ports?: DockerPort[]
+  autoStart: boolean
+  labels?: Record<string, string | null | undefined>
+}
+
 export class UnraidService {
   private url: string
   private apiKey: string
@@ -76,8 +98,10 @@ export class UnraidService {
               }
               // If successful, the field usually returns true or null without errors
               return true
-          } catch (error: any) {
-              console.error(`[UnraidService] Error executing ${action} on ${endpoint}:`, error.message)
+          } catch (error: unknown) {
+              if (axios.isAxiosError(error)) {
+                console.error(`[UnraidService] Error executing ${action} on ${endpoint}:`, error.message)
+              }
           }
       }
       return false
@@ -96,39 +120,39 @@ export class UnraidService {
         {
             name: 'kilobytes (7.2+)',
             query: `query { array { capacity { kilobytes { total used free } } } }`,
-            parser: (data: any) => {
+            parser: (data: GraphQLData) => {
                 const k = data?.array?.capacity?.kilobytes
                 if (!k) return null
                 return {
-                    size: parseInt(k.total) * 1024,
-                    used: parseInt(k.used) * 1024,
-                    free: parseInt(k.free) * 1024
+                    size: parseInt(k.total || '0') * 1024,
+                    used: parseInt(k.used || '0') * 1024,
+                    free: parseInt(k.free || '0') * 1024
                 }
             }
         },
         {
             name: 'bytes (7.0+)',
             query: `query { array { capacity { bytes { total used free } } } }`,
-            parser: (data: any) => {
+            parser: (data: GraphQLData) => {
                 const b = data?.array?.capacity?.bytes
                 if (!b) return null
                 return {
-                    size: parseInt(b.total),
-                    used: parseInt(b.used),
-                    free: parseInt(b.free)
+                    size: parseInt(b.total || '0'),
+                    used: parseInt(b.used || '0'),
+                    free: parseInt(b.free || '0')
                 }
             }
         },
         {
             name: 'legacy',
             query: `query { storage { array { size used free } } }`,
-            parser: (data: any) => {
+            parser: (data: GraphQLData) => {
                 const a = data?.storage?.array
                 if (!a) return null
                 return {
-                    size: parseInt(a.size),
-                    used: parseInt(a.used),
-                    free: parseInt(a.free)
+                    size: parseInt(a.size || '0'),
+                    used: parseInt(a.used || '0'),
+                    free: parseInt(a.free || '0')
                 }
             }
         }
@@ -147,10 +171,12 @@ export class UnraidService {
                 if (result) {
                     return this.formatResult(result)
                 }
-            } catch (error: any) {
-                const status = error.response?.status
-                if (status !== 404 && status !== 400) {
-                     console.error(`[UnraidService] Error probing ${endpoint} with ${q.name}:`, error.message)
+            } catch (error: unknown) {
+                if (axios.isAxiosError(error)) {
+                    const status = error.response?.status
+                    if (status !== 404 && status !== 400) {
+                         console.error(`[UnraidService] Error probing ${endpoint} with ${q.name}:`, error.message)
+                    }
                 }
             }
         }
@@ -201,29 +227,27 @@ export class UnraidService {
 
             const containers = response.data?.data?.docker?.containers
             if (Array.isArray(containers)) {
-                return containers.map((c: any) => {
+                return (containers as DockerContainerRaw[]).map((c) => {
                     // Format ports
                     let ports = ''
                     if (Array.isArray(c.ports) && c.ports.length > 0) {
                         ports = c.ports
-                            .filter((p: any) => p.publicPort)
-                            .map((p: any) => `${p.publicPort}:${p.privatePort}/${p.type === 'TCP' ? 'tcp' : 'udp'}`)
+                            .filter((p: DockerPort) => p.publicPort)
+                            .map((p: DockerPort) => `${p.publicPort}:${p.privatePort}/${p.type === 'TCP' ? 'tcp' : 'udp'}`)
                             .join(', ')
                     }
 
                     // Format name (remove leading slash)
-                    let name = c.names
-                    if (Array.isArray(c.names)) {
-                        name = c.names[0]
-                    }
+                    let name: string | undefined = Array.isArray(c.names) ? c.names[0] : c.names
                     if (typeof name === 'string' && name.startsWith('/')) {
                         name = name.substring(1)
                     }
+                    if (!name) name = c.id || 'unknown'
 
                     // Extract Icon
-                    let icon = null
+                    let icon: string | undefined = undefined
                     if (c.labels) {
-                        icon = c.labels['net.unraid.docker.icon'] || c.labels['icon'] || null
+                        icon = c.labels['net.unraid.docker.icon'] || c.labels['icon'] || undefined
                     }
 
                     return {
@@ -238,8 +262,10 @@ export class UnraidService {
                     }
                 })
             }
-        } catch (error: any) {
-            // console.error(`[UnraidService] Error fetching docker containers from ${endpoint}:`, error.message)
+        } catch (error: unknown) {
+            if (axios.isAxiosError(error)) {
+                // console.error(`[UnraidService] Error fetching docker containers from ${endpoint}:`, error.message)
+            }
         }
     }
     
