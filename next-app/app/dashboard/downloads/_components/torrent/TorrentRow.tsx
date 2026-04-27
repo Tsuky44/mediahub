@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import clsx from 'clsx'
 import { Torrent } from '@/lib/services/qbittorrent'
 import TorrentRowHeader from './TorrentRowHeader'
@@ -20,7 +21,7 @@ interface TorrentRowProps {
     onResume: (hash: string) => void | Promise<void>
 }
 
-export function TorrentRow({
+function TorrentRowComponent({
     torrent,
     isSelected,
     visibleColumns,
@@ -72,3 +73,5 @@ export function TorrentRow({
         </div>
     )
 }
+
+export const TorrentRow = React.memo(TorrentRowComponent)

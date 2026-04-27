@@ -648,7 +648,7 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 
 ### Phase 4 : Polish (Semaine 4)
 
-- [ ] Ajouter `React.memo` sur les lignes de table/liste
+- [x] Ajouter `React.memo` sur `TorrentRow` (principale ligne de liste torrents)
 - [ ] Lazy-load les modales
 - [ ] Virtualiser les grandes listes
 - [ ] Audit complet `any` restants (objectif : < 50)
