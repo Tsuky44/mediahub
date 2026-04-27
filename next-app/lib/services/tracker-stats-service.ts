@@ -15,8 +15,8 @@ import axios from 'axios'
 import { getSetting } from '../settings'
 
 const isDev = process.env.NODE_ENV === 'development'
-const log = (...args: any[]) => { if (isDev) console.log(...args) }
-const error = (...args: any[]) => { if (isDev) console.error(...args) }
+const log = (...args: unknown[]) => { if (isDev) console.log(...args) }
+const error = (...args: unknown[]) => { if (isDev) console.error(...args) }
 
 export interface TrackerConfig {
   id: string
