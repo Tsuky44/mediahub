@@ -7,6 +7,20 @@ interface ExternalNotificationPayload {
   data?: any
 }
 
+interface WebhookConfig {
+  enabled: boolean
+  events: string[]
+  type: string
+  url?: string
+  template?: string
+  targetUsers?: string[]
+  notifyRequester?: boolean
+  botToken?: string
+  evolutionUrl?: string
+  evolutionInstance?: string
+  evolutionApiKey?: string
+}
+
 export class ExternalNotificationService {
   /**
    * Envoie une notification externe basée sur les webhooks configurés (Global)
