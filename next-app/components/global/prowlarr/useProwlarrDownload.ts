@@ -1,0 +1,128 @@
+'use client'
+
+import { useCallback, useState } from 'react'
+import {
+    downloadTorrent,
+    downloadMediaRelease,
+} from '@/app/dashboard/media/[id]/prowlarr-actions'
+import type { ProwlarrRelease } from './prowlarr-types'
+
+export interface DownloadContext {
+    mediaType?: 'movie' | 'tv'
+    tmdbId?: number
+    tvdbId?: number
+    selectedSeason: number | null
+    selectedEpisode: number | null
+}
+
+export interface UseProwlarrDownloadResult {
+    downloading: string | null
+    downloadSuccess: string | null
+    bulkDownloading: boolean
+    selectedGuids: Set<string>
+    setSelectedGuids: React.Dispatch<React.SetStateAction<Set<string>>>
+    toggleSelect: (guid: string) => void
+    toggleSelectAll: (allGuids: string[]) => void
+    download: (release: ProwlarrRelease, ctx: DownloadContext) => Promise<void>
+    bulkDownload: (releases: ProwlarrRelease[], ctx: DownloadContext) => Promise<void>
+}
+
+async function performDownload(release: ProwlarrRelease, ctx: DownloadContext) {
+    const { mediaType, tmdbId, tvdbId, selectedSeason, selectedEpisode } = ctx
+    const url = release.downloadUrl || release.magnetUrl
+
+    if (mediaType && tmdbId && release.indexerId) {
+        const releaseInfo = {
+            title: release.title,
+            downloadUrl: url || '',
+            protocol: release.protocol || '',
+            publishDate: release.publishDate,
+            indexer: release.indexer,
+            size: release.size,
+            guid: release.guid,
+        }
+        return downloadMediaRelease(
+            release.guid, release.indexerId, mediaType, tmdbId, tvdbId,
+            selectedSeason ?? undefined, selectedEpisode ?? undefined, releaseInfo,
+        )
+    }
+
+    if (!url) return { error: 'URL de téléchargement manquante' }
+    return downloadTorrent(url)
+}
+
+/**
+ * Gere les telechargements unitaires et en masse depuis Prowlarr,
+ * ainsi que l'etat de selection multi-torrent.
+ */
+export function useProwlarrDownload(): UseProwlarrDownloadResult {
+    const [downloading, setDownloading] = useState<string | null>(null)
+    const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null)
+    const [bulkDownloading, setBulkDownloading] = useState(false)
+    const [selectedGuids, setSelectedGuids] = useState<Set<string>>(new Set())
+
+    const toggleSelect = useCallback((guid: string) => {
+        setSelectedGuids(prev => {
+            const next = new Set(prev)
+            if (next.has(guid)) next.delete(guid)
+            else next.add(guid)
+            return next
+        })
+    }, [])
+
+    const toggleSelectAll = useCallback((allGuids: string[]) => {
+        setSelectedGuids(prev => (prev.size === allGuids.length ? new Set() : new Set(allGuids)))
+    }, [])
+
+    const download = useCallback(async (release: ProwlarrRelease, ctx: DownloadContext) => {
+        setDownloading(release.guid)
+        try {
+            const res: any = await performDownload(release, ctx)
+            const errorMsg = res.error || (res.success === false ? res.message : null)
+            if (errorMsg) {
+                alert(`Erreur: ${errorMsg}`)
+            } else {
+                setDownloadSuccess(release.guid)
+                setTimeout(() => setDownloadSuccess(null), 3000)
+            }
+        } catch {
+            alert('Erreur lors du téléchargement')
+        } finally {
+            setDownloading(null)
+        }
+    }, [])
+
+    const bulkDownload = useCallback(async (releases: ProwlarrRelease[], ctx: DownloadContext) => {
+        if (releases.length === 0) return
+        setBulkDownloading(true)
+        let successCount = 0
+        let failCount = 0
+        for (const release of releases) {
+            try {
+                const res: any = await performDownload(release, ctx)
+                const errorMsg = res.error || (res.success === false ? res.message : null)
+                if (errorMsg) failCount++
+                else {
+                    successCount++
+                    setDownloadSuccess(release.guid)
+                }
+            } catch {
+                failCount++
+            }
+        }
+        setBulkDownloading(false)
+        setSelectedGuids(new Set())
+        if (failCount > 0) {
+            alert(`${successCount} torrents ajoutés, ${failCount} échecs.`)
+        } else {
+            setTimeout(() => setDownloadSuccess(null), 3000)
+        }
+    }, [])
+
+    return {
+        downloading, downloadSuccess, bulkDownloading,
+        selectedGuids, setSelectedGuids,
+        toggleSelect, toggleSelectAll,
+        download, bulkDownload,
+    }
+}
