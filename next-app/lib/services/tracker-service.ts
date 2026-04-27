@@ -51,14 +51,14 @@ class TrackerService {
     });
   }
 
-  public emit(event: string, data: any) {
+  public emit(event: string, data: unknown) {
     if (!this.socket?.connected) {
       this.connect();
     }
     this.socket?.emit(event, data);
   }
 
-  public broadcastNotification(userIds: number[], notification: any) {
+  public broadcastNotification(userIds: number[], notification: unknown) {
     this.emit('server_broadcast_notification', {
       userIds,
       notification
