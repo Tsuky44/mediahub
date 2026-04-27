@@ -23,7 +23,7 @@ interface DiscoverParams {
     start_date?: string
     end_date?: string
     genres?: number[]
-    keywords?: string
+    keywords?: string | number
     language?: string
     min_duration?: number
     max_duration?: number

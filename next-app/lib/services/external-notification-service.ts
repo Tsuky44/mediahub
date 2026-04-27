@@ -16,9 +16,13 @@ interface WebhookConfig {
   targetUsers?: string[]
   notifyRequester?: boolean
   botToken?: string
+  chatId?: string
   evolutionUrl?: string
   evolutionInstance?: string
   evolutionApiKey?: string
+  whatsappNumber?: string
+  templates?: Record<string, string | undefined>
+  includeImage?: boolean | Record<string, boolean>
 }
 
 export class ExternalNotificationService {
@@ -35,7 +39,7 @@ export class ExternalNotificationService {
 
       const webhooks = JSON.parse(setting.value)
       
-      const activeWebhooks = webhooks.filter((w: any) => 
+      const activeWebhooks = webhooks.filter((w: WebhookConfig) => 
         w.enabled && 
         w.events && 
         w.events.includes(event)
@@ -48,7 +52,7 @@ export class ExternalNotificationService {
       const fullPayload = { ...payload, event }
 
       // Gérer l'envoi pour chaque webhook en fonction de ses destinataires
-      const promises = activeWebhooks.map(async (webhook: any) => {
+      const promises = activeWebhooks.map(async (webhook: WebhookConfig) => {
           // Si le webhook n'a pas de cible spécifique, c'est un webhook global (comme un channel Discord général)
           if ((!webhook.targetUsers || webhook.targetUsers.length === 0) && webhook.notifyRequester !== true) {
               return this.dispatchWebhook(webhook, fullPayload);
@@ -140,28 +144,28 @@ export class ExternalNotificationService {
 
       // WhatsApp via Evolution API
       if (user.whatsappNumber) {
-        const evo = webhooks.find((w: any) => w.type === 'evolution' && w.evolutionUrl && w.enabled && w.events?.includes(event))
+        const evo = webhooks.find((w: WebhookConfig) => w.type === 'evolution' && w.evolutionUrl && w.enabled && w.events?.includes(event))
         if (evo) {
             promises.push(this.sendEvolutionApi(evo, user.whatsappNumber, fullPayload))
         }
       }
 
       if (user.telegramChatId) {
-        const telegramBot = webhooks.find((w: any) => w.type === 'telegram' && w.botToken && w.enabled && w.events?.includes(event))
+        const telegramBot = webhooks.find((w: WebhookConfig) => w.type === 'telegram' && w.botToken && w.enabled && w.events?.includes(event))
         if (telegramBot) {
             promises.push(this.sendTelegram(telegramBot.botToken, user.telegramChatId, fullPayload))
         }
       }
 
       if (user.discordWebhook) {
-        const discordSettings = webhooks.find((w: any) => w.type === 'discord' && w.enabled && w.events?.includes(event))
+        const discordSettings = webhooks.find((w: WebhookConfig) => w.type === 'discord' && w.enabled && w.events?.includes(event))
         if (discordSettings) {
-            promises.push(this.sendDiscord({ url: user.discordWebhook, template: discordSettings?.template }, fullPayload))
+            promises.push(this.sendDiscord({ ...discordSettings, url: user.discordWebhook }, fullPayload))
         }
       }
 
       if (user.customWebhook) {
-        const customSettings = webhooks.find((w: any) => w.type === 'custom' && w.enabled && w.events?.includes(event))
+        const customSettings = webhooks.find((w: WebhookConfig) => w.type === 'custom' && w.enabled && w.events?.includes(event))
         if (customSettings) {
             promises.push(this.sendCustom(user.customWebhook, fullPayload))
         }
@@ -174,7 +178,7 @@ export class ExternalNotificationService {
     }
   }
 
-  static async testWebhook(webhook: any, testType: 'movie' | 'tv' | 'default' = 'default', eventType: string = 'request_approved', currentUser?: any) {
+  static async testWebhook(webhook: WebhookConfig, testType: 'movie' | 'tv' | 'default' = 'default', eventType: string = 'request_approved', currentUser?: unknown) {
     let payload: ExternalNotificationPayload = {
       title: 'Test de Notification',
       message: 'Ceci est un message de test depuis MediaHub.',
@@ -184,7 +188,8 @@ export class ExternalNotificationService {
 
     // Récupère le pseudo Discord de l'admin s'il existe, sinon utilise '<@123456789012345678>' par défaut
     // S'il y a des cibles spécifiques dans le webhook, on va simuler un ping pour chacune d'elles
-    let discordUser = currentUser?.discordUserId ? `<@${currentUser.discordUserId}>` : (currentUser?.name || currentUser?.email || 'Utilisateur Test')
+    const currentUserRecord = currentUser as Record<string, unknown> | undefined
+    let discordUser = currentUserRecord?.discordUserId ? `<@${currentUserRecord.discordUserId}>` : (currentUserRecord?.name || currentUserRecord?.email || 'Utilisateur Test')
     
     // Si on a des utilisateurs cibles (targetUsers) configurés dans le webhook
     if (webhook.targetUsers && webhook.targetUsers.length > 0) {
@@ -251,18 +256,18 @@ export class ExternalNotificationService {
     return this.dispatchWebhook(webhook, payload, true, currentUser)
   }
 
-  private static async dispatchWebhook(webhook: any, payload: ExternalNotificationPayload, isTest = false, currentUser?: any): Promise<{success: boolean, error?: string}> {
+  private static async dispatchWebhook(webhook: WebhookConfig, payload: ExternalNotificationPayload, isTest = false, currentUser?: unknown): Promise<{success: boolean, error?: string}> {
     try {
       if (webhook.type === 'discord') {
         return await this.sendDiscord(webhook, payload)
       } else if (webhook.type === 'telegram') {
-        return await this.sendTelegram(webhook.botToken, webhook.chatId, payload)
+        return await this.sendTelegram(webhook.botToken!, webhook.chatId!, payload)
       } else if (webhook.type === 'evolution') {
         // Envoi global de test (utilise le numéro fourni dans le webhook, ou le numéro de l'utilisateur courant s'il existe)
-        const testPhone = webhook.whatsappNumber || currentUser?.whatsappNumber || '33612345678'
+        const testPhone = webhook.whatsappNumber || (currentUser as Record<string, unknown>)?.whatsappNumber as string || '33612345678'
         return await this.sendEvolutionApi(webhook, testPhone, payload)
       } else if (webhook.type === 'custom') {
-        return await this.sendCustom(webhook.url, payload)
+        return await this.sendCustom(webhook.url!, payload)
       }
       return { success: false, error: 'Type de webhook inconnu' }
     } catch (error: any) {
@@ -274,7 +279,7 @@ export class ExternalNotificationService {
     }
   }
 
-  private static async sendDiscord(webhook: any, payload: ExternalNotificationPayload) {
+  private static async sendDiscord(webhook: WebhookConfig, payload: ExternalNotificationPayload) {
     if (!webhook.url) throw new Error('URL Discord manquante')
 
     // Formater pour Discord
@@ -294,7 +299,7 @@ export class ExternalNotificationService {
         console.log('[Discord Webhook] Resolved Image URL:', imageUrl)
     }
 
-    let embed: any = {
+    let embed: Record<string, unknown> & { fields?: Array<Record<string, unknown>> } = {
       color: color,
       timestamp: new Date().toISOString(),
       footer: {
@@ -380,7 +385,9 @@ export class ExternalNotificationService {
     // Custom override if user provided a template
     // We check webhook.templates[payload.event] specifically, fallback to webhook.template for older setups
     const templateToUse = webhook.templates?.[payload.event] !== undefined ? webhook.templates[payload.event] : webhook.template;
-    const includeImage = webhook.includeImage?.[payload.event] !== false; // True par défaut
+    const includeImage = typeof webhook.includeImage === 'object' && webhook.includeImage !== null
+        ? (webhook.includeImage as Record<string, boolean>)[payload.event] !== false
+        : webhook.includeImage !== false;
 
     if (templateToUse) {
         embed = {
@@ -411,7 +418,7 @@ export class ExternalNotificationService {
         delete embed.thumbnail;
     }
 
-    const discordPayload: any = {
+    const discordPayload: Record<string, unknown> = {
       username: 'MediaHub',
       avatar_url: 'https://raw.githubusercontent.com/walkxhub/Dashboard-Icons/main/png/mediahub.png', // Optional default avatar
       embeds: [embed]
@@ -578,7 +585,7 @@ export class ExternalNotificationService {
     }
   }
 
-  private static async sendEvolutionApi(webhook: any, phone: string, payload: ExternalNotificationPayload) {
+  private static async sendEvolutionApi(webhook: WebhookConfig, phone: string, payload: ExternalNotificationPayload) {
     if (!webhook.evolutionUrl || !webhook.evolutionInstance || !webhook.evolutionApiKey) {
       throw new Error('Configuration Evolution API incomplète')
     }
@@ -681,7 +688,9 @@ export class ExternalNotificationService {
         text: text
       }
 
-      const includeImage = webhook.includeImage?.[payload.event] !== false; // True par défaut
+      const includeImage = typeof webhook.includeImage === 'object' && webhook.includeImage !== null
+        ? (webhook.includeImage as Record<string, boolean>)[payload.event] !== false
+        : webhook.includeImage !== false;
 
       // Si on a une image et que l'option n'est pas désactivée, on l'envoie via sendMedia
       if (payload.data?.posterPath && includeImage) {
