@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Search, Download, Loader2, AlertTriangle, HardDrive, Globe, Users, Database, Filter } from 'lucide-react'
-import { searchReleases, downloadRelease, getSeriesEpisodes } from './interactive-actions'
+import { Search, Download, Loader2, AlertTriangle } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { useInteractiveSearch } from './_hooks/useInteractiveSearch'
 
 interface InteractiveSearchProps {
     tmdbId: number
@@ -12,105 +11,33 @@ interface InteractiveSearchProps {
     title: string
 }
 
+function formatSize(bytes: number) {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
 export function InteractiveSearch({ tmdbId, mediaType, title }: InteractiveSearchProps) {
-    const [episodes, setEpisodes] = useState<any[]>([])
-    const [seasons, setSeasons] = useState<number[]>([])
-    
-    // Search Mode: 'episode' or 'season' (only for TV)
-    const [searchMode, setSearchMode] = useState<'episode' | 'season'>('episode')
-    
-    const [selectedEpisode, setSelectedEpisode] = useState<number | null>(null)
-    const [selectedSeason, setSelectedSeason] = useState<number | null>(null)
-    
-    const [releases, setReleases] = useState<any[]>([])
-    const [loading, setLoading] = useState(false)
-    const [downloading, setDownloading] = useState<string | null>(null)
-    const [error, setError] = useState<string | null>(null)
-    const [loadingEpisodes, setLoadingEpisodes] = useState(false)
-
-    // Load episodes for TV shows
-    useEffect(() => {
-        if (mediaType === 'tv') {
-            setLoadingEpisodes(true)
-            getSeriesEpisodes(tmdbId).then(res => {
-                if (res.error) {
-                    setError(res.error)
-                } else if (res.episodes) {
-                    const eps = res.episodes.sort((a: any, b: any) => 
-                        (b.seasonNumber - a.seasonNumber) || (b.episodeNumber - a.episodeNumber)
-                    )
-                    setEpisodes(eps)
-                    
-                    // Extract unique seasons
-                    const uniqueSeasons = Array.from(new Set(eps.map((e: any) => e.seasonNumber))).sort((a: any, b: any) => b - a)
-                    setSeasons(uniqueSeasons as number[])
-                }
-                setLoadingEpisodes(false)
-            })
-        }
-    }, [tmdbId, mediaType])
-
-    // Reset selection when switching modes
-    useEffect(() => {
-        setSelectedEpisode(null)
-        setSelectedSeason(null)
-        setReleases([])
-        setError(null)
-    }, [searchMode])
-
-    const handleSearch = async () => {
-        setLoading(true)
-        setError(null)
-        setReleases([])
-
-        let res;
-        if (mediaType === 'tv' && searchMode === 'season') {
-            if (selectedSeason === null) {
-                setError("Veuillez sélectionner une saison")
-                setLoading(false)
-                return
-            }
-            res = await searchReleases(tmdbId, mediaType, undefined, selectedSeason)
-        } else {
-            res = await searchReleases(tmdbId, mediaType, selectedEpisode || undefined)
-        }
-        
-        if (res.error) {
-            setError(res.error)
-        } else if (res.releases) {
-            setReleases(res.releases.sort((a: any, b: any) => b.seeders - a.seeders)) // Default sort by seeders
-        }
-        
-        setLoading(false)
-    }
-
-    const handleDownload = async (guid: string, indexerId: number) => {
-        setDownloading(guid)
-        const res = await downloadRelease(mediaType, guid, indexerId)
-        
-        if (res.error) {
-            setError(res.error) // Or toast
-        } else {
-            // Success feedback
-            alert('Téléchargement lancé avec succès')
-        }
-        setDownloading(null)
-    }
-
-    const formatSize = (bytes: number) => {
-        if (bytes === 0) return '0 B'
-        const k = 1024
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-        const i = Math.floor(Math.log(bytes) / Math.log(k))
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-    }
-
-    const canSearch = () => {
-        if (loading) return false
-        if (mediaType === 'movie') return true
-        if (searchMode === 'season') return selectedSeason !== null
-        return selectedEpisode !== null
-    }
+    const {
+        episodes,
+        seasons,
+        searchMode,
+        setSearchMode,
+        selectedEpisode,
+        setSelectedEpisode,
+        selectedSeason,
+        setSelectedSeason,
+        releases,
+        loading,
+        loadingEpisodes,
+        downloading,
+        error,
+        handleSearch,
+        handleDownload,
+        canSearch,
+    } = useInteractiveSearch(tmdbId, mediaType)
 
     return (
         <div className="space-y-6">
