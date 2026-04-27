@@ -3,10 +3,21 @@ import { EmbyService } from './emby'
 import { getSetting } from '@/lib/settings'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); }
 
+interface EmbySession {
+  UserId: string
+  UserName?: string
+  NowPlayingItem: {
+    Id: string | number
+    Name?: string
+    Type?: string
+    SeriesName?: string
+  }
+  PlayState: { IsPaused: boolean; PositionTicks?: number }
+}
 
 /**
  * Ce service permet de synchroniser les sessions de lecture actives
@@ -27,15 +38,15 @@ export async function syncActiveSessions() {
 
         const embyService = new EmbyService(embyUrl, embyApiKey)
         
-        let sessions: any[] = []
+        let sessions: EmbySession[] = []
         try {
-            sessions = await embyService.getSessions()
+            sessions = (await embyService.getSessions()) as EmbySession[]
         } catch (e) {
             error('[Sync] Failed to fetch sessions:', e)
             return { success: false, error: e }
         }
 
-        const livePlaying = sessions.filter((s: any) => s.NowPlayingItem && s.PlayState)
+        const livePlaying = sessions.filter((s: EmbySession) => s.NowPlayingItem && s.PlayState)
 
         if (livePlaying.length === 0) {
             log(`[Sync] No active sessions found.`)
