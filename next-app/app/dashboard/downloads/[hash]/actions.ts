@@ -22,8 +22,8 @@ interface IgdbPlatform { name: string }
 interface IgdbGameMode { name: string }
 
 const isDev = process.env.NODE_ENV === 'development'
-const log = (...args: any[]) => { if (isDev) console.log(...args) }
-const error = (...args: any[]) => { if (isDev) console.error(...args) }
+const log = (...args: unknown[]) => { if (isDev) console.log(...args) }
+const error = (...args: unknown[]) => { if (isDev) console.error(...args) }
 
 // Cache for Prowlarr indexers
 let prowlarrIndexersCache: Map<string, string> | null = null
