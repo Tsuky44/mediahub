@@ -8,10 +8,61 @@ import { getSonarrService } from '@/lib/services/sonarr'
 import { getTmdbService } from '@/lib/services/tmdb'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
+// Typed shapes for external API responses
+interface TmdbSeason {
+  season_number: number
+  air_date?: string
+}
+interface TmdbEpisode {
+  id?: number | string
+  air_date?: string
+  episode_number: number
+  name: string
+  overview?: string
+  still_path?: string
+}
+interface RadarrCalendarMovie {
+  id: number
+  inCinemas?: string
+  digitalRelease?: string
+  physicalRelease?: string
+  added?: string
+  tmdbId: number
+  title: string
+  overview?: string
+  images?: Array<{ coverType?: string; url?: string; remoteUrl?: string }>
+  certification?: string
+  genres?: string[]
+  runtime?: number
+  hasFile: boolean
+  monitored: boolean
+}
+interface SonarrCalendarEpisode {
+  id: number
+  airDateUtc?: string
+  seasonNumber: number
+  episodeNumber: number
+  title: string
+  overview?: string
+  hasFile: boolean
+  monitored: boolean
+  series: {
+    id: number
+    title: string
+    tmdbId?: number
+    tvdbId?: number
+    images?: Array<{ coverType?: string; url?: string; remoteUrl?: string }>
+    overview?: string
+    certification?: string
+    genres?: string[]
+    runtime?: number
+    network?: string
+  }
+}
 
 export interface CalendarEvent {
   id: string
@@ -19,7 +70,7 @@ export interface CalendarEvent {
   start: Date
   end?: Date
   allDay?: boolean
-  resource?: any
+  resource?: unknown
   type: 'request' | 'personal'
   mediaType: 'movie' | 'tv'
   tmdbId: string
@@ -63,7 +114,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
 
     // Process personal events (Movies use stored date, TV shows fetch episodes)
     
-    const personalPromises = personalEvents.map(async (e: any) => {
+    const personalPromises = personalEvents.map(async (e: { id: string; mediaType: string; releaseDate: Date; tmdbId: string; title: string }) => {
         if (e.mediaType === 'movie') {
         // For movies, only show if releaseDate is in range
         if (e.releaseDate >= start && e.releaseDate <= end) {
@@ -106,17 +157,17 @@ export async function getCalendarEvents(start: Date, end: Date) {
             
             // Filter relevant seasons: Last season + current season + next season
             const relevantSeasons = show.seasons
-            .filter((s: any) => s.season_number > 0 && s.air_date) // Skip specials and seasons without date
-            .sort((a: any, b: any) => b.season_number - a.season_number)
+            .filter((s: TmdbSeason) => s.season_number > 0 && s.air_date) // Skip specials and seasons without date
+            .sort((a: TmdbSeason, b: TmdbSeason) => b.season_number - a.season_number)
             .slice(0, 3) // Check last 3 seasons just in case
 
             for (const season of relevantSeasons) {
             const seasonDetails = await tmdb.getSeasonDetails(parseInt(e.tmdbId), season.season_number)
             if (seasonDetails && seasonDetails.episodes) {
                 // Group episodes by air_date
-                const episodesByDate = new Map<string, any[]>()
-                
-                seasonDetails.episodes.forEach((ep: any) => {
+                const episodesByDate = new Map<string, TmdbEpisode[]>()
+
+                seasonDetails.episodes.forEach((ep: TmdbEpisode) => {
                 if (ep.air_date) {
                     const dateStr = ep.air_date
                     if (!episodesByDate.has(dateStr)) {
@@ -190,9 +241,9 @@ export async function getCalendarEvents(start: Date, end: Date) {
       const movies = await radarr.getCalendar(start, end)
       log(`[Calendar] Found ${movies.length} Radarr movies`)
       
-      const radarrEventsPromises = movies.map(async (m: any) => {
+      const radarrEventsPromises = movies.map(async (m: RadarrCalendarMovie) => {
         // Calculate the best date
-        const date = new Date(m.inCinemas || m.digitalRelease || m.physicalRelease || m.added)
+        const date = new Date(m.inCinemas || m.digitalRelease || m.physicalRelease || m.added || '')
         
         // Use the event if Radarr returned it, trusting the service's date range filter mostly
         // But still good to check if it's completely out of bounds, but let's be more lenient or log if we drop it
@@ -244,10 +295,10 @@ export async function getCalendarEvents(start: Date, end: Date) {
       log(`[Calendar] Found ${episodes.length} Sonarr episodes`)
       
       // Group episodes by seriesId + seasonNumber + airDate
-      const episodesGrouped = new Map<string, any[]>()
+      const episodesGrouped = new Map<string, SonarrCalendarEpisode[]>()
 
-      episodes.forEach((e: any) => {
-          const date = new Date(e.airDateUtc).toISOString().split('T')[0]
+      episodes.forEach((e: SonarrCalendarEpisode) => {
+          const date = new Date(e.airDateUtc || '').toISOString().split('T')[0]
           const key = `${e.series.id}-${e.seasonNumber}-${date}`
           if (!episodesGrouped.has(key)) {
               episodesGrouped.set(key, [])
@@ -258,7 +309,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
       const sonarrEventsPromises = Array.from(episodesGrouped.values()).map(async (groupEpisodes) => {
         const firstEp = groupEpisodes[0]
         const tmdbId = firstEp.series.tmdbId || firstEp.series.tvdbId
-        const startDate = new Date(firstEp.airDateUtc)
+        const startDate = new Date(firstEp.airDateUtc || '')
         const endDate = new Date(startDate.getTime() + (30 * 60 * 1000))
         
         // Relaxed filter: Trust Sonarr's return
@@ -289,7 +340,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
                     // Single Episode: Use episode overview and still
                     let episodeFound = false
                     if (season && season.episodes) {
-                        const episode = season.episodes.find((ep: any) => ep.episode_number === firstEp.episodeNumber)
+                        const episode = season.episodes.find((ep: TmdbEpisode) => ep.episode_number === firstEp.episodeNumber)
                         if (episode) {
                             episodeFound = true
                             if (episode.overview) overview = episode.overview
@@ -323,7 +374,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
             allDay: isSeasonRelease, // Season releases are usually all day events
             type: 'request',
             mediaType: 'tv',
-            tmdbId: tmdbId.toString(),
+            tmdbId: tmdbId?.toString() ?? '',
             status: firstEp.hasFile ? 'available' : (firstEp.monitored ? 'monitored' : 'unmonitored'),
             overview,
             posterUrl,
