@@ -6,15 +6,14 @@ import DownloadsClient from './_components/DownloadsClient'
 import { defineAbilityFor } from '@/lib/ability'
 
 const isDev = process.env.NODE_ENV === 'development';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export default async function DownloadsPage() {
   const session = await getServerSession(authOptions)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const user = session?.user as any
+  const user = session?.user
   const ability = defineAbilityFor(user)
 
   if (!ability.can('read', 'Downloads')) {
@@ -96,7 +95,7 @@ export default async function DownloadsPage() {
         hasSmb={!!smbService} 
         hasProwlarr={!!prowlarrService} 
         permissions={permissions}
-        isAdmin={user.role === 'admin'}
+        isAdmin={user?.role === 'admin'}
       />
     </div>
   )

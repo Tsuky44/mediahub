@@ -16,7 +16,13 @@ export type Subjects =
 
 export type AppAbility = MongoAbility<[Actions, Subjects]>;
 
-export function defineAbilityFor(user?: any) {
+interface PermissionDef {
+  action: Actions
+  subject: Subjects
+  conditions?: string
+}
+
+export function defineAbilityFor(user?: User & { permissions?: PermissionDef[] }) {
   const { can, cannot, build } = new AbilityBuilder<AppAbility>(createMongoAbility);
 
   if (!user) {
@@ -33,7 +39,7 @@ export function defineAbilityFor(user?: any) {
       // can('create', 'MediaRequest');
       
       if (user.permissions) {
-        user.permissions.forEach((p: any) => {
+        user.permissions.forEach((p: PermissionDef) => {
           try {
             const conditions = p.conditions ? JSON.parse(p.conditions) : undefined;
             can(p.action, p.subject, conditions);
