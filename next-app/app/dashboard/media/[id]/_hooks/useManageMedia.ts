@@ -1,10 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ManageMediaInfo, ManageMediaType } from '../_types/manage-media'
 
 const ROUTER_REFRESH_DELAY_MS = 500
+const QUERY_KEY = (tmdbId: number, mediaType: ManageMediaType) =>
+    ['media-manage', tmdbId, mediaType] as const
 
 export interface UseManageMediaResult {
     loading: boolean
@@ -21,9 +24,11 @@ export interface UseManageMediaResult {
 }
 
 /**
- * Encapsule la logique de gestion d'un media (fetch, suppression de demandes,
- * suppression Sonarr/Radarr, marquage comme disponible) avec gestion de l'etat
- * de chargement, des erreurs et de la selection multiple.
+ * TanStack Query-powered media management hook.
+ *
+ * - Data fetched on demand via useQuery (enabled by isOpen).
+ * - Mutations (delete request, delete media, mark as available) invalidate
+ *   the query cache on success and refresh the router.
  */
 export function useManageMedia(
     isOpen: boolean,
@@ -32,34 +37,34 @@ export function useManageMedia(
     onClose: () => void,
 ): UseManageMediaResult {
     const router = useRouter()
-    const [loading, setLoading] = useState(true)
-    const [mediaInfo, setMediaInfo] = useState<ManageMediaInfo | null>(null)
-    const [error, setError] = useState<string | null>(null)
+    const queryClient = useQueryClient()
     const [isDeleting, setIsDeleting] = useState<string | null>(null)
     const [selectedRequests, setSelectedRequests] = useState<number[]>([])
 
-    const fetchMediaInfo = useCallback(async (refresh = false) => {
-        setLoading(true)
-        setError(null)
-        try {
-            const url = `/api/media/${tmdbId}/manage?type=${mediaType}${refresh ? '&refresh=true' : ''}`
+    const {
+        data: mediaInfo,
+        isLoading: loading,
+        error: queryError,
+    } = useQuery({
+        queryKey: QUERY_KEY(tmdbId, mediaType),
+        queryFn: async () => {
+            const url = `/api/media/${tmdbId}/manage?type=${mediaType}`
             const res = await fetch(url)
             if (!res.ok) {
                 const data = await res.json()
                 throw new Error(data.error || 'Failed to fetch media info')
             }
-            const data = await res.json()
-            setMediaInfo(data)
-        } catch (err: any) {
-            setError(err.message)
-        } finally {
-            setLoading(false)
-        }
-    }, [tmdbId, mediaType])
+            return res.json() as Promise<ManageMediaInfo>
+        },
+        enabled: isOpen,
+    })
 
-    useEffect(() => {
-        if (isOpen) fetchMediaInfo()
-    }, [isOpen, fetchMediaInfo])
+    const errorMessage = queryError instanceof Error ? queryError.message : null
+
+    const refreshData = async () => {
+        await queryClient.invalidateQueries({ queryKey: QUERY_KEY(tmdbId, mediaType) })
+        setTimeout(() => router.refresh(), ROUTER_REFRESH_DELAY_MS)
+    }
 
     const toggleRequestSelection = useCallback((requestId: number) => {
         setSelectedRequests(prev =>
@@ -86,8 +91,7 @@ export function useManageMedia(
             )
             if (res.ok) {
                 if (idsArray.length > 1) setSelectedRequests([])
-                await fetchMediaInfo(true)
-                setTimeout(() => router.refresh(), ROUTER_REFRESH_DELAY_MS)
+                await refreshData()
             }
         } catch (err) {
             console.error(err)
@@ -114,10 +118,8 @@ export function useManageMedia(
                 if (deleteFiles) {
                     await fetch(`/api/media/availability/${tmdbId}?type=${mediaType}&refresh=true`)
                     onClose()
-                } else {
-                    await fetchMediaInfo(true)
                 }
-                router.refresh()
+                await refreshData()
             }
         } catch (err) {
             console.error(err)
@@ -136,8 +138,7 @@ export function useManageMedia(
                 method: 'POST',
             })
             if (res.ok) {
-                await fetchMediaInfo(true)
-                router.refresh()
+                await refreshData()
             }
         } catch (err) {
             console.error(err)
@@ -148,13 +149,13 @@ export function useManageMedia(
 
     return {
         loading,
-        error,
-        mediaInfo,
+        error: errorMessage,
+        mediaInfo: mediaInfo ?? null,
         isDeleting,
         selectedRequests,
         toggleRequestSelection,
         setSelectedRequests,
-        fetchMediaInfo,
+        fetchMediaInfo: refreshData,
         deleteRequest,
         deleteMedia,
         markAsAvailable,
