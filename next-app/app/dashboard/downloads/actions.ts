@@ -10,7 +10,7 @@ import { defineAbilityFor } from '@/lib/ability'
 
 export async function checkAccess(permission?: string) {
   const session = await getServerSession(authOptions)
-  const user = session?.user as any
+  const user = session?.user
   
   if (!user) {
     throw new Error('Unauthorized')
@@ -340,9 +340,9 @@ export async function addTorrent(formData: FormData) {
     await qbtService.addTorrent(urls || '', validFiles)
     revalidatePath('/dashboard/downloads')
     return { success: true }
-  } catch (e: any) {
+  } catch (e) {
     console.error('Failed to add torrent', e)
-    return { success: false, error: e.message || 'Failed to add torrent' }
+    return { success: false, error: (e as Error).message || 'Failed to add torrent' }
   }
 }
 
@@ -474,11 +474,11 @@ export async function deleteStoragePath(path: string) {
     await storageService.delete(path)
     revalidatePath('/dashboard/downloads')
     return { success: true }
-  } catch (e: any) {
+  } catch (e) {
     console.error('Failed to delete storage path', e)
     return { 
       success: false, 
-      error: e.message || 'Erreur lors de la suppression' 
+      error: (e as Error).message || 'Erreur lors de la suppression' 
     }
   }
 }
