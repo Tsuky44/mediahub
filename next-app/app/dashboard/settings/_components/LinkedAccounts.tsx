@@ -1,167 +1,29 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
 import { Plus, Trash2, Link as LinkIcon, Users, X } from 'lucide-react'
 
-interface UserGroupMember {
-    id: number
-    userGroupId: string
-    userId: string
-    username?: string
-}
-
-interface UserGroup {
-    id: string
-    name: string
-    members: UserGroupMember[]
-    _count?: {
-        members: number
-    }
-}
-
-interface Candidate {
-    userId: string
-    username: string
-    source: 'logs' | 'db' | 'both'
-}
+import { useLinkedAccounts } from '../_hooks/useLinkedAccounts'
 
 export default function LinkedAccounts() {
-    const [groups, setGroups] = useState<UserGroup[]>([])
-    const [loading, setLoading] = useState(true)
-    const [creating, setCreating] = useState(false)
-    const [newGroupName, setNewGroupName] = useState('')
-    
-    // Modal state for adding member
-    const [selectedGroup, setSelectedGroup] = useState<UserGroup | null>(null)
-    const [candidates, setCandidates] = useState<Candidate[]>([])
-    const [loadingCandidates, setLoadingCandidates] = useState(false)
-    const [showAddMemberModal, setShowAddMemberModal] = useState(false)
-
-    useEffect(() => {
-        fetchGroups()
-    }, [])
-
-    const filteredCandidates = candidates.sort((a, b) => a.username.localeCompare(b.username))
-
-    const fetchGroups = async () => {
-        try {
-            const res = await fetch('/api/user/groups')
-            if (res.ok) {
-                const data = await res.json()
-                setGroups(data)
-            }
-        } catch {
-            console.error('Error fetching groups')
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    const handleCreateGroup = async (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!newGroupName.trim()) return
-
-        try {
-            const res = await fetch('/api/user/groups', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: newGroupName })
-            })
-            if (res.ok) {
-                setNewGroupName('')
-                setCreating(false)
-                fetchGroups()
-            } else {
-                const text = await res.text()
-                alert(`Erreur lors de la création du groupe: ${text || res.statusText}`)
-            }
-        } catch {
-            console.error('Error creating group')
-            alert('Erreur réseau ou serveur lors de la création du groupe.')
-        }
-    }
-
-    const handleDeleteGroup = async (id: string) => {
-        if (!confirm('Êtes-vous sûr de vouloir supprimer ce groupe ?')) return
-
-        try {
-            const res = await fetch(`/api/user/groups/${id}`, {
-                method: 'DELETE'
-            })
-            if (res.ok) {
-                setGroups(prev => prev.filter(g => g.id !== id))
-            } else {
-                const errorData = await res.json().catch(() => ({ details: 'Erreur inconnue' }))
-                alert(`Erreur lors de la suppression: ${errorData.details || res.statusText}`)
-            }
-        } catch (error) {
-            console.error('Error deleting group:', error)
-            alert('Erreur réseau lors de la suppression du groupe.')
-        }
-    }
-
-    const openAddMemberModal = async (group: UserGroup) => {
-        setSelectedGroup(group)
-        setShowAddMemberModal(true)
-        setLoadingCandidates(true)
-        try {
-            const res = await fetch('/api/user/candidates')
-            if (res.ok) {
-                const data = await res.json()
-                setCandidates(data)
-            }
-        } catch (error) {
-            console.error('Error fetching candidates:', error)
-        } finally {
-            setLoadingCandidates(false)
-        }
-    }
-
-    const handleAddMember = async (candidate: Candidate) => {
-        if (!selectedGroup) return
-
-        try {
-            const res = await fetch('/api/user/groups/member', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userGroupId: selectedGroup.id,
-                    userId: candidate.userId,
-                    username: candidate.username
-                })
-            })
-
-            if (res.ok) {
-                // Refresh groups to show new member
-                await fetchGroups()
-                // Remove candidate from list locally to avoid double add
-                setCandidates(prev => prev.filter(c => 
-                    c.userId !== candidate.userId
-                ))
-            } else if (res.status === 409) {
-                alert('Cet utilisateur est déjà dans un groupe.')
-            }
-        } catch (error) {
-            console.error('Error adding member:', error)
-        }
-    }
-
-    const handleRemoveMember = async (memberId: number) => {
-        if (!confirm('Retirer ce compte du groupe ?')) return
-
-        try {
-            const res = await fetch('/api/user/groups/member', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ memberId })
-            })
-            if (res.ok) {
-                fetchGroups()
-            }
-        } catch (error) {
-            console.error('Error removing member:', error)
-        }
-    }
+    const {
+        groups,
+        loading,
+        creating,
+        setCreating,
+        newGroupName,
+        setNewGroupName,
+        selectedGroup,
+        showAddMemberModal,
+        setShowAddMemberModal,
+        candidates,
+        filteredCandidates,
+        loadingCandidates,
+        handleCreateGroup,
+        handleDeleteGroup,
+        openAddMemberModal,
+        handleAddMember,
+        handleRemoveMember,
+    } = useLinkedAccounts()
 
     if (loading) return <div className="text-white">Chargement...</div>
 

@@ -641,7 +641,7 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 - [ ] Décomposer `UserActivityButton.tsx` (320 lignes)
 - [x] Décomposer `TorrentRow.tsx` (300 -> 75 lignes) -> `TorrentRowHeader` + `TorrentRowFooter`
 - [x] Décomposer `TorrentManager.tsx` (298 -> 195 lignes) -> `useTorrentManagerActions.ts`
-- [ ] Décomposer `LinkedAccounts.tsx` (297 lignes)
+- [x] Décomposer `LinkedAccounts.tsx` (297 -> 157 lignes) -> `useLinkedAccounts.ts` (TQ + mutations)
 - [ ] Décomposer `InteractiveSearch.tsx` (287 lignes)
 
 ### Phase 4 : Polish (Semaine 4)
