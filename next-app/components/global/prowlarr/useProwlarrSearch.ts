@@ -62,7 +62,7 @@ export function useProwlarrSearch(): UseProwlarrSearchResult {
         queryKey: ['prowlarr', 'indexers'] as const,
         queryFn: async () => {
             const res = await getProwlarrIndexers()
-            return (res.indexers || []).filter((i: any) => i.enable) as ProwlarrIndexer[]
+            return (res.indexers || []).filter((i: ProwlarrIndexer) => i.enable)
         },
         staleTime: Infinity,
     })

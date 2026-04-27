@@ -5,6 +5,19 @@ import { getSonarrEpisodes } from '@/app/dashboard/media/[id]/prowlarr-actions'
 import { getSeasonDetails } from '@/app/dashboard/media/[id]/actions'
 import type { ProwlarrEpisode } from './prowlarr-types'
 
+interface SonarrEpisode {
+    id: number
+    seasonNumber: number
+    episodeNumber: number
+    title: string
+    overview?: string
+    hasFile: boolean
+}
+
+interface SeasonDetailsResponse {
+    episodes?: ProwlarrEpisode[]
+}
+
 export interface UseProwlarrEpisodesResult {
     episodes: ProwlarrEpisode[]
     loading: boolean
@@ -30,23 +43,23 @@ export function useProwlarrEpisodes(
 
             const sonarrRes = await getSonarrEpisodes(tmdbId)
             if (sonarrRes.episodes) {
-                const seasonEpisodes = sonarrRes.episodes
-                    .filter((e: any) => e.seasonNumber === selectedSeason)
-                    .sort((a: any, b: any) => a.episodeNumber - b.episodeNumber)
+                const seasonEpisodes = (sonarrRes.episodes as SonarrEpisode[])
+                    .filter(e => e.seasonNumber === selectedSeason)
+                    .sort((a, b) => a.episodeNumber - b.episodeNumber)
                 if (seasonEpisodes.length > 0) {
-                    return seasonEpisodes.map((e: any) => ({
+                    return seasonEpisodes.map(e => ({
                         id: e.id,
                         episode_number: e.episodeNumber,
                         name: e.title,
                         overview: e.overview,
                         hasFile: e.hasFile,
-                    })) as ProwlarrEpisode[]
+                    }))
                 }
             }
 
-            const tmdbData = await getSeasonDetails(tmdbId, selectedSeason)
-            if ((tmdbData as any)?.episodes) {
-                return (tmdbData as any).episodes as ProwlarrEpisode[]
+            const tmdbData = await getSeasonDetails(tmdbId, selectedSeason) as SeasonDetailsResponse
+            if (tmdbData.episodes) {
+                return tmdbData.episodes
             }
             return []
         },
