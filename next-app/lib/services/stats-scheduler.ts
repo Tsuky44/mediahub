@@ -3,6 +3,16 @@ import { prisma } from '@/lib/prisma'
 
 const INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
+interface MediaRequestLite {
+  id: number
+  tmdbId: string | number
+  mediaType: string
+  title?: string | null
+  metadata?: string | null
+  requesterName?: string | null
+  userId?: number | null
+}
+
 // Use a global variable to prevent multiple schedulers in dev mode
 const globalForScheduler = global as unknown as { statsSchedulerStarted: boolean }
 
@@ -276,10 +286,10 @@ async function checkCompletedDownloads() {
 
             // Primary: hash map from Grab webhook (exact match via Radarr/Sonarr)
             const hashEntry = hashMap[hashKey]
-            let matchingRequests: any[] = []
+            let matchingRequests: MediaRequestLite[] = []
 
             if (hashEntry) {
-                matchingRequests = recentRequests.filter((req: any) =>
+                matchingRequests = (recentRequests as MediaRequestLite[]).filter((req) =>
                     req.tmdbId === hashEntry.tmdbId && req.mediaType === hashEntry.mediaType
                 )
                 if (matchingRequests.length === 0) {
