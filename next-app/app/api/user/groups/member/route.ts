@@ -10,8 +10,7 @@ export async function POST(req: Request) {
         return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const canManage = (session.user as any).role === 'admin'
+    const canManage = (session.user as { role?: string }).role === 'admin'
 
     if (!canManage) {
         return new NextResponse('Forbidden', { status: 403 })
@@ -37,8 +36,7 @@ export async function POST(req: Request) {
         })
 
         await logAction(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            parseInt((session.user as any).id),
+            parseInt(String((session.user as { id?: string | number }).id)),
             'ADD_MEMBER',
             'UserGroup',
             userGroupId,
@@ -46,9 +44,8 @@ export async function POST(req: Request) {
         )
 
         return NextResponse.json(member)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-        if (error.code === 'P2002') {
+    } catch (error) {
+        if ((error as { code?: string }).code === 'P2002') {
             return new NextResponse('User already in a group', { status: 409 })
         }
         console.error('[UserGroups] Error adding member:', error)
@@ -62,8 +59,7 @@ export async function DELETE(req: Request) {
         return new NextResponse('Unauthorized', { status: 401 })
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const canManage = (session.user as any).role === 'admin'
+    const canManage = (session.user as { role?: string }).role === 'admin'
 
     if (!canManage) {
         return new NextResponse('Forbidden', { status: 403 })
@@ -80,8 +76,7 @@ export async function DELETE(req: Request) {
         })
 
         await logAction(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            parseInt((session.user as any).id),
+            parseInt(String((session.user as { id?: string | number }).id)),
             'REMOVE_MEMBER',
             'UserGroupMember',
             memberId,
