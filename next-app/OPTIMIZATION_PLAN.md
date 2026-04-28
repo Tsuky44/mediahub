@@ -651,7 +651,7 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 - [x] Ajouter `React.memo` sur `TorrentRow` (principale ligne de liste torrents)
 - [x] Lazy-load les modales (FilterModal, SearchModal, ShareLimitModal dans TorrentManager)
 - [ ] Virtualiser les grandes listes
-- [ ] Audit complet `any` restants (objectif : < 50) -> En cours (~120 après corrections sonarr.ts, calendar.ts, settings/actions.ts, emby-tracker.ts, radarr/sonarr webhooks)
+- [ ] Audit complet `any` restants (objectif : < 50) -> En cours (~649 occurrences dans 161 fichiers après corrections radarr/sonarr webhooks, admin routes, request route, user groups)
 - [x] Config ESLint : `@typescript-eslint/no-explicit-any` (warn), `no-restricted-syntax` pour `fetch` hors `lib/api-client.ts`
 
 ---
