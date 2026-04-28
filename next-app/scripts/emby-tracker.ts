@@ -682,7 +682,7 @@ async function handleSessionsUpdate(sessions: EmbySessionItem[]) {
         // Filter out irrelevant sessions
         if (!s.NowPlayingItem) continue;
 
-        const sessionKey = s.Id;
+        const sessionKey = String(s.Id);
         activeIds.add(sessionKey);
 
         const existing = activeSessions.get(sessionKey);

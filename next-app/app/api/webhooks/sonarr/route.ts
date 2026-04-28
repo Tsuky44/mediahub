@@ -45,7 +45,7 @@ export async function POST(req: Request) {
             // Handle multiple episodes if present
             const episodeList = episodes || [];
             const episodeText = episodeList.length > 0 
-                ? episodeList.map((ep: any) => `S${ep.seasonNumber}E${ep.episodeNumber}`).join(', ')
+                ? episodeList.map((ep: Record<string, unknown>) => `S${ep.seasonNumber as number}E${ep.episodeNumber as number}`).join(', ')
                 : 'Nouveaux épisodes';
 
             // 1. Find requesters
@@ -120,7 +120,7 @@ export async function POST(req: Request) {
                         overview = mediaInfo.overview
                         rating = mediaInfo.vote_average?.toFixed(1)
                         if (mediaInfo.genres) {
-                            genres = mediaInfo.genres.map((g: any) => g.name).join(', ')
+                            genres = mediaInfo.genres.map((g: Record<string, unknown>) => g.name as string).join(', ')
                         }
                     }
                 }
@@ -191,7 +191,7 @@ export async function POST(req: Request) {
 
             try {
                 const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-                await ExternalNotificationService.send(mhEvent as any, {
+                await ExternalNotificationService.send(mhEvent, {
                     title: titlePrefix,
                     message: messageText,
                     data: {
@@ -216,8 +216,8 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
-        console.error('[SonarrWebhook] Error:', error.message);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error) {
+        console.error('[SonarrWebhook] Error:', (error as Error).message);
+        return NextResponse.json({ error: (error as Error).message }, { status: 500 });
     }
 }
