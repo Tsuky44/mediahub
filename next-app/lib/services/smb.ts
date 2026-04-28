@@ -4,9 +4,9 @@ import path from 'path';
 import archiver from 'archiver';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export async function getSmbService() {
@@ -86,8 +86,8 @@ export class SmbService {
         }
     }
 
-    private async withRetry<T>(operation: (client: any) => Promise<T>, retries = 3): Promise<T> {
-        let lastError: any;
+    private async withRetry<T>(operation: (client: SMB2) => Promise<T>, retries = 3): Promise<T> {
+        let lastError: Error | null = null;
         for (let i = 0; i < retries; i++) {
             try {
                 // Proactively check and reconnect if needed
@@ -107,15 +107,16 @@ export class SmbService {
                         setTimeout(() => reject(new Error('Operation timeout')), 30000)
                     )
                 ]);
-            } catch (err: any) {
-                lastError = err;
-                error(`[SMB] Operation failed (attempt ${i + 1}/${retries}):`, err.message || err);
+            } catch (err) {
+                const smbErr = err as Error & { code?: string }
+                lastError = smbErr;
+                error(`[SMB] Operation failed (attempt ${i + 1}/${retries}):`, smbErr.message || smbErr);
                 
                 // If it's a connection error, disconnect to force a fresh connection on next attempt
-                if (err.code === 'STATUS_CONNECTION_DISCONNECTED' || 
-                    err.code === 'STATUS_FILE_CLOSED' ||
-                    err.message?.includes('socket') ||
-                    err.message?.includes('connection')) {
+                if (smbErr.code === 'STATUS_CONNECTION_DISCONNECTED' || 
+                    smbErr.code === 'STATUS_FILE_CLOSED' ||
+                    smbErr.message?.includes('socket') ||
+                    smbErr.message?.includes('connection')) {
                     await this.disconnect();
                 }
                 
@@ -417,9 +418,10 @@ export class SmbService {
                                 else resolve(data || []);
                             });
                         });
-                    } catch (err: any) {
-                        if (err.code === 'STATUS_ACCESS_DENIED') throw err;
-                        error(`[SMB] Failed to readdir ${currentPath}:`, err.message);
+                    } catch (err) {
+                        const smbErr = err as Error & { code?: string }
+                        if (smbErr.code === 'STATUS_ACCESS_DENIED') throw smbErr;
+                        error(`[SMB] Failed to readdir ${currentPath}:`, smbErr.message);
                     }
 
                     for (const file of files) {
