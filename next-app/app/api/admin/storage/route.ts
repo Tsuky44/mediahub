@@ -8,16 +8,16 @@ import { getSetting } from '@/lib/settings'
 import { defineAbilityFor } from '@/lib/ability'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    const user = await getRealUser() as any
+    const user = await getRealUser() as { role: string }
     const ability = defineAbilityFor(user)
 
     if (!user || (!ability.can('manage_storage', 'Stats') && user?.role !== 'admin')) {
@@ -34,11 +34,11 @@ export async function GET(request: Request) {
     const embyService = new EmbyService(embyUrl, embyApiKey)
 
     const items = await embyService.getStorageItems()
-    const activeSessions: any[] = []
+    const activeSessions: Array<Record<string, unknown>> = []
 
     // 3. Process and Group items
-    const movies: any[] = []
-    const seriesMap = new Map<string, any>()
+    const movies: Array<Record<string, unknown>> = []
+    const seriesMap = new Map<string, Record<string, unknown>>()
 
     // First pass: Initialize Series
     for (const item of items) {
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
     for (const item of items) {
       let size = 0
       if (item.MediaSources && item.MediaSources.length > 0) {
-        size = item.MediaSources.reduce((acc: number, src: any) => acc + (src.Size || 0), 0)
+        size = item.MediaSources.reduce((acc: number, src: Record<string, unknown>) => acc + ((src.Size as number) || 0), 0)
       }
 
       const activeSession = activeSessions.find(s => s.itemId === item.Id || (item.Type === 'Episode' && s.itemId === item.Id))
@@ -104,8 +104,9 @@ export async function GET(request: Request) {
              seriesMap.set(seriesId, series)
         }
 
-        series.size += size
-        series.episodesCount += 1
+        const typedSeries = series as { size: number; episodesCount: number }
+        typedSeries.size += size
+        typedSeries.episodesCount += 1
         
         if (isPlaying) {
           series.isPlaying = true
@@ -115,18 +116,18 @@ export async function GET(request: Request) {
     }
 
     const series = Array.from(seriesMap.values())
-    const allItems = [...movies, ...series].sort((a, b) => b.size - a.size)
+    const allItems = [...movies, ...series].sort((a, b) => ((b as { size?: number }).size || 0) - ((a as { size?: number }).size || 0))
 
     return NextResponse.json(allItems)
-  } catch (error: any) {
-    error('Storage API Error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (err) {
+    error('Storage API Error:', err)
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const user = await getRealUser() as any
+    const user = await getRealUser() as { role: string }
     const ability = defineAbilityFor(user)
 
     if (!user || (!ability.can('delete_media', 'Stats') && user?.role !== 'admin')) {
@@ -239,9 +240,9 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true })
 
-  } catch (error: any) {
-    error('Storage Delete API Error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (err) {
+    error('Storage Delete API Error:', err)
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }
 
