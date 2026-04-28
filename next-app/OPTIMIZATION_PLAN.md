@@ -651,7 +651,7 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 - [x] Ajouter `React.memo` sur `TorrentRow` (principale ligne de liste torrents)
 - [x] Lazy-load les modales (FilterModal, SearchModal, ShareLimitModal dans TorrentManager)
 - [ ] Virtualiser les grandes listes
-- [ ] Audit complet `any` restants (objectif : < 50) -> En cours (322 -> 192 après corrections ftp.ts)
+- [ ] Audit complet `any` restants (objectif : < 50) -> En cours (322 -> 186 après corrections system-update.ts)
 - [x] Config ESLint : `@typescript-eslint/no-explicit-any` (warn), `no-restricted-syntax` pour `fetch` hors `lib/api-client.ts`
 
 ---

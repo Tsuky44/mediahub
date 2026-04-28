@@ -330,8 +330,8 @@ export async function scrapeC411Playwright(username: string, password: string, h
       bonus: 0 // C411 has no bonus system
     }
 
-  } catch (e: any) {
-    error('[C411-Playwright] Error:', e.message)
+  } catch (e) {
+    error('[C411-Playwright] Error:', (e as Error).message)
     return null
   } finally {
     if (browser) {
@@ -532,8 +532,8 @@ async function torr9GetFreshToken(page: Page, username: string, password: string
     log('[Torr9] localStorage keys found:', localStorageKeys.join(',') || '(none)')
     
     return null
-  } catch (e: any) {
-    error('[Torr9] Login failed with error:', e.message)
+  } catch (e) {
+    error('[Torr9] Login failed with error:', (e as Error).message)
     return null
   }
 }
@@ -608,9 +608,9 @@ export async function scrapeTorr9Playwright(username: string, password: string, 
       return null
     }
     
-    let apiData: any
+    let apiData: Record<string, unknown>
     try {
-      apiData = await response.json()
+      apiData = await response.json() as Record<string, unknown>
       log('[Torr9] API response keys:', Object.keys(apiData).join(','))
     } catch (e) {
       error('[Torr9] Failed to parse API response:', (e as Error).message)
@@ -618,15 +618,15 @@ export async function scrapeTorr9Playwright(username: string, password: string, 
     }
     
     // Parse stats with fallbacks
-    const bonusUp = parseFloat(apiData.bonus_uploaded || apiData.bonusUploaded || 0) || 0
-    const bonusDown = parseFloat(apiData.bonus_downloaded || apiData.bonusDownloaded || 0) || 0
-    const totalUp = parseFloat(apiData.total_uploaded_bytes || apiData.totalUploaded || apiData.uploaded || 0) || 0
-    const totalDown = parseFloat(apiData.total_downloaded_bytes || apiData.totalDownloaded || apiData.downloaded || 0) || 0
+    const bonusUp = parseFloat(String(apiData.bonus_uploaded || apiData.bonusUploaded || 0)) || 0
+    const bonusDown = parseFloat(String(apiData.bonus_downloaded || apiData.bonusDownloaded || 0)) || 0
+    const totalUp = parseFloat(String(apiData.total_uploaded_bytes || apiData.totalUploaded || apiData.uploaded || 0)) || 0
+    const totalDown = parseFloat(String(apiData.total_downloaded_bytes || apiData.totalDownloaded || apiData.downloaded || 0)) || 0
     
     const uploaded = Math.floor(totalUp + bonusUp)
     const downloaded = Math.floor(totalDown + bonusDown)
     const ratio = downloaded > 0 ? uploaded / downloaded : (uploaded > 0 ? 999 : 0)
-    const bonus = parseFloat(apiData.jeton_balance || apiData.jetons || apiData.tokens || 0) || 0
+    const bonus = parseFloat(String(apiData.jeton_balance || apiData.jetons || apiData.tokens || 0)) || 0
     
     log('[Torr9] Stats extracted:', { 
       uploadedBytes: uploaded, 
@@ -637,8 +637,8 @@ export async function scrapeTorr9Playwright(username: string, password: string, 
     log('[Torr9] ==========================================')
     
     return { uploaded, downloaded, ratio, bonus }
-  } catch (e: any) {
-    error('[Torr9] Fatal error:', e.message)
+  } catch (e) {
+    error('[Torr9] Fatal error:', (e as Error).message)
     return null
   } finally {
     if (browser) {
@@ -805,8 +805,8 @@ export async function scrapeLaCalePlaywright(username: string, password: string,
       bonus
     }
 
-  } catch (e: any) {
-    error('[LaCale-Playwright] Error:', e.message)
+  } catch (e) {
+    error('[LaCale-Playwright] Error:', (e as Error).message)
     return null
   } finally {
     if (browser) {
@@ -892,8 +892,8 @@ export async function scrapeGemini(apiToken: string): Promise<PlaywrightStats | 
       ratio,
       bonus
     }
-  } catch (e: any) {
-    error('[Gemini] Error:', e.message)
+  } catch (e) {
+    error('[Gemini] Error:', (e as Error).message)
     return null
   }
 }
@@ -1048,8 +1048,8 @@ export async function scrapeAbnormalPlaywright(username: string, password: strin
     }
     
     return { uploaded, downloaded, ratio, bonus }
-  } catch (e: any) {
-    error('[Abnormal-Playwright] Error:', e.message)
+  } catch (e) {
+    error('[Abnormal-Playwright] Error:', (e as Error).message)
     return null
   } finally {
     if (browser) {
@@ -1144,21 +1144,22 @@ export async function scrapeTOS(apiToken: string, baseUrl: string = 'https://the
         
         log('[TOS] All values zero, trying next endpoint...')
         break // Values are zero, don't retry this endpoint
-      } catch (e: any) {
+      } catch (e) {
         // Transient network error - retry with exponential backoff
-        const isTransient = e.message?.includes('fetch failed') || 
-                            e.message?.includes('timeout') || 
-                            e.message?.includes('ECONNRESET') ||
-                            e.message?.includes('ETIMEDOUT')
+        const err = e as Error
+        const isTransient = err.message?.includes('fetch failed') || 
+                            err.message?.includes('timeout') || 
+                            err.message?.includes('ECONNRESET') ||
+                            err.message?.includes('ETIMEDOUT')
         
         if (isTransient && attempt < MAX_RETRIES) {
           const delay = 2000 * attempt
-          log(`[TOS] Transient error: ${e.message}, retrying in ${delay}ms...`)
+          log(`[TOS] Transient error: ${err.message}, retrying in ${delay}ms...`)
           await new Promise(r => setTimeout(r, delay))
           continue
         }
         
-        log('[TOS] Endpoint error:', e.message)
+        log('[TOS] Endpoint error:', err.message)
         break // Try next endpoint
       }
     }
