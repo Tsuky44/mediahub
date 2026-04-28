@@ -654,6 +654,7 @@ interface EmbyNowPlayingItem {
   MediaSources?: Array<Record<string, unknown>>
   MediaStreams?: Array<Record<string, unknown>>
   Path?: string
+  [key: string]: unknown
 }
 
 interface EmbySessionItem {

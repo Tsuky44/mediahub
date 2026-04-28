@@ -6,9 +6,9 @@ import { getEmbyServiceForUser, getPlexServiceForUser, getJellyfinServiceForUser
 import { logAction } from '@/lib/audit'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export async function POST(req: Request) {
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const isSuperAdmin = (session.user as any).role === 'admin'
+  const isSuperAdmin = (session.user as { role?: string }).role === 'admin'
   
   if (!isSuperAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
                     }
                   })
                   
-                  await logAction(parseInt((session.user as any).id), 'CREATE', 'User', newUser.id.toString(), {
+                  await logAction(parseInt(String((session.user as { id?: string | number }).id)), 'CREATE', 'User', newUser.id.toString(), {
                     provider: 'Emby',
                     userName: newUser.name,
                     userEmail: newUser.email
@@ -155,9 +155,9 @@ export async function POST(req: Request) {
                   activeUserIds.add(newUser.id.toString())
                   createdCount++
                 }
-              } catch (err: any) {
+              } catch (err) {
                 error(`[SyncUsers] Failed to process Emby user ${u.Name}:`, err)
-                details.push(`Emby user ${u.Name}: ${err.message}`)
+                details.push(`Emby user ${u.Name}: ${(err as Error).message}`)
               }
             }
           } else {
@@ -220,7 +220,7 @@ export async function POST(req: Request) {
                                 }
                             })
                             
-                                await logAction(parseInt((session.user as any).id), 'CREATE', 'User', newUser.id.toString(), {
+                                await logAction(parseInt(String((session.user as { id?: string | number }).id)), 'CREATE', 'User', newUser.id.toString(), {
                                   provider: 'Plex',
                                   userName: newUser.name,
                                   userEmail: newUser.email
@@ -238,18 +238,18 @@ export async function POST(req: Request) {
                                 activeUserIds.add(newUser.id.toString())
                                 createdCount++
                             }
-                        } catch (err: any) {
+                        } catch (err) {
                             error(`[SyncUsers] Failed to process Plex user ${u.Name}:`, err)
-                            details.push(`Plex user ${u.Name}: ${err.message}`)
+                            details.push(`Plex user ${u.Name}: ${(err as Error).message}`)
                         }
                     }
                 } else {
                     warn('[SyncUsers] Plex returned 0 users. Skipping cleanup for Plex.')
                     details.push('Plex: 0 users found (cleanup skipped)')
                 }
-            } catch (e: any) {
+            } catch (e) {
                 error(`[SyncUsers] Plex sync failed:`, e)
-                details.push(`Plex sync failed: ${e.message}`)
+                details.push(`Plex sync failed: ${(e as Error).message}`)
             }
         }
     }
@@ -297,7 +297,7 @@ export async function POST(req: Request) {
                                 }
                             })
                             
-                            await logAction(parseInt((session.user as any).id), 'CREATE', 'User', newUser.id.toString(), {
+                            await logAction(parseInt(String((session.user as { id?: string | number }).id)), 'CREATE', 'User', newUser.id.toString(), {
                               provider: 'Jellyfin',
                               userName: newUser.name,
                               userEmail: newUser.email
@@ -333,7 +333,7 @@ export async function POST(req: Request) {
     
     // Get all users
     const allUsers = await prisma.user.findMany()
-    const currentUserId = (session.user as any).id
+    const currentUserId = String((session.user as { id?: string | number }).id)
 
     // Pre-calculate counts and protection flags to optimize loop
     const existingEmbyCount = allUsers.filter(u => u.embyUserId).length
@@ -442,7 +442,7 @@ export async function POST(req: Request) {
     }
 
     await logAction(
-      parseInt((session.user as any).id),
+      parseInt(String((session.user as { id?: string | number }).id)),
       'SYNC',
       'User',
       'Batch',
@@ -459,8 +459,8 @@ export async function POST(req: Request) {
       jellyfin: jellyfinSyncSuccess,
       details
     })
-  } catch (error: any) {
-    error('[SyncUsers] Error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (syncError) {
+    error('[SyncUsers] Error:', syncError)
+    return NextResponse.json({ error: (syncError as Error).message }, { status: 500 })
   }
 }
