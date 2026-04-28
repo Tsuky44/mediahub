@@ -12,14 +12,14 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const isSuperAdmin = (session.user as any).role === 'admin'
+  const isSuperAdmin = (session.user as { role?: string }).role === 'admin'
   const hasAccess = isSuperAdmin 
   
   if (!hasAccess) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const users = await (prisma as any).user.findMany({
+  const users = await prisma.user.findMany({
     orderBy: { name: 'asc' },
     include: { roleRef: true }
   })
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const isSuperAdmin = (session.user as any).role === 'admin'
+  const isSuperAdmin = (session.user as { role?: string }).role === 'admin'
   if (!isSuperAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     })
 
     await logAction(
-      parseInt((session.user as any).id),
+      parseInt(String((session.user as { id?: string | number }).id)),
       'CREATE',
       'User',
       newUser.id.toString(),
@@ -101,9 +101,9 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(newUser)
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating user:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
   }
 }
 
@@ -114,7 +114,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const isSuperAdmin = (session.user as any).role === 'admin'
+  const isSuperAdmin = (session.user as { role?: string }).role === 'admin'
   const hasAccess = isSuperAdmin
 
   if (!hasAccess) {
@@ -127,7 +127,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
   }
 
-  const userToUpdate = await (prisma as any).user.findUnique({
+  const userToUpdate = await prisma.user.findUnique({
     where: { 
       id: parseInt(id)
     }
@@ -137,7 +137,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 })
   }
 
-  const dataToUpdate: any = {}
+  const dataToUpdate: Record<string, unknown> = {}
   if (role !== undefined) dataToUpdate.role = role
   if (roleId !== undefined) dataToUpdate.roleId = roleId
   if (whatsappNumber !== undefined) dataToUpdate.whatsappNumber = whatsappNumber || null
@@ -146,14 +146,14 @@ export async function PATCH(request: Request) {
   if (discordWebhook !== undefined) dataToUpdate.discordWebhook = discordWebhook || null
   if (customWebhook !== undefined) dataToUpdate.customWebhook = customWebhook || null
 
-  const updatedUser = await (prisma as any).user.update({
+  const updatedUser = await prisma.user.update({
     where: { id: parseInt(id) },
     data: dataToUpdate,
     include: { roleRef: true }
   })
 
   await logAction(
-    parseInt((session.user as any).id),
+    parseInt(String((session.user as { id?: string | number }).id)),
     'UPDATE',
     'User',
     id.toString(),
