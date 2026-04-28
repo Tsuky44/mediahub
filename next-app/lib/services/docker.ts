@@ -40,9 +40,9 @@ export class DockerService {
     
             this.instance = new Docker(options);
             return this.instance;
-        } catch (e: any) {
+        } catch (e) {
             error('[DockerService] Failed to initialize Docker client:', e);
-            throw new Error(`Failed to initialize Docker client: ${e.message}`);
+            throw new Error(`Failed to initialize Docker client: ${(e as Error).message}`);
         }
     }
 
@@ -57,9 +57,9 @@ export class DockerService {
             if (action === 'start') {
                 try {
                     await container.start();
-                } catch (err: any) {
+                } catch (err) {
                     // If 304, it means already started. We still want to verify.
-                    if (err.statusCode !== 304) {
+                    if ((err as { statusCode?: number }).statusCode !== 304) {
                         error(`[DockerService] Start failed for ${id}:`, err);
                         throw err;
                     }
@@ -76,16 +76,16 @@ export class DockerService {
                         const errorMsg = info.State.Error || `ExitCode: ${info.State.ExitCode}, Status: ${info.State.Status}`;
                         throw new Error(`Container started but immediately exited (${errorMsg}). Check container logs.`);
                     }
-                } catch (inspectErr: any) {
+                } catch (inspectErr) {
                     error(`[DockerService] Failed to inspect container ${id} after start:`, inspectErr);
-                    throw new Error(`Container started but failed to verify status: ${inspectErr.message}`);
+                    throw new Error(`Container started but failed to verify status: ${(inspectErr as Error).message}`);
                 }
             } else if (action === 'stop') {
                 try {
                     await container.stop();
-                } catch (err: any) {
+                } catch (err) {
                     // If container is already stopped, Docker returns 304 Not Modified
-                    if (err.statusCode !== 304) throw err;
+                    if ((err as { statusCode?: number }).statusCode !== 304) throw err;
                 }
             } else if (action === 'restart') {
                 try {
@@ -99,14 +99,15 @@ export class DockerService {
                     if (!info.State.Running) {
                         throw new Error(`Container restarted but immediately exited (ExitCode: ${info.State.ExitCode})`);
                     }
-                } catch (err: any) {
+                } catch (err) {
                     // Sometimes restart fails if container is paused or in weird state
                     // Try force stop then start
-                    warn(`[DockerService] Restart failed, trying stop-then-start: ${err.message}`);
+                    warn(`[DockerService] Restart failed, trying stop-then-start: ${(err as Error).message}`);
                     try {
                         await container.stop();
-                    } catch (e: any) { 
-                        if (e.statusCode !== 304 && e.statusCode !== 404) warn('Stop failed during restart fallback:', e.message); 
+                    } catch (e) { 
+                        const dockerErr = e as { statusCode?: number; message?: string }
+                        if (dockerErr.statusCode !== 304 && dockerErr.statusCode !== 404) warn('Stop failed during restart fallback:', dockerErr.message); 
                     }
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     await container.start();
@@ -123,16 +124,17 @@ export class DockerService {
             }
             
             return { success: true };
-        } catch (error: any) {
-            error(`[DockerService] Error performing ${action} on ${containerId}:`, error.message);
+        } catch (err) {
+            const dockerErr = err as Error & { statusCode?: number }
+            error(`[DockerService] Error performing ${action} on ${containerId}:`, dockerErr.message);
             
             // Retry with leading slash if it was missing and error is 404
-            if (error.statusCode === 404 && !containerId.startsWith('/')) {
+            if (dockerErr.statusCode === 404 && !containerId.startsWith('/')) {
                 log(`[DockerService] Retrying ${action} with leading slash for ${containerId}`);
                 return this.containerAction('/' + containerId, action);
             }
             
-            return { success: false, error: error.message || `Failed to ${action} container` };
+            return { success: false, error: dockerErr.message || `Failed to ${action} container` };
         }
     }
 
@@ -177,8 +179,8 @@ export class DockerService {
                 },
                 pids: stats.pids_stats?.current || 0
             };
-        } catch (error: any) {
-            error(`[DockerService] Error getting stats for ${containerId}:`, error.message);
+        } catch (err) {
+            error(`[DockerService] Error getting stats for ${containerId}:`, (err as Error).message);
             return null;
         }
     }
@@ -221,9 +223,10 @@ export class DockerService {
                 created: info.Created,
                 platform: info.Platform
             };
-        } catch (error: any) {
-            const statusCode = error.statusCode || 500;
-            const msg = error.json?.message || error.message;
+        } catch (err) {
+            const dockerErr = error as { statusCode?: number; json?: { message?: string }; message?: string }
+            const statusCode = dockerErr.statusCode || 500;
+            const msg = dockerErr.json?.message || dockerErr.message;
             
             // Detailed logging for proxy troubleshooting
             if (statusCode === 403) {
@@ -268,8 +271,8 @@ export class DockerService {
                     icon: icon
                 };
             });
-        } catch (error: any) {
-            error('[DockerService] Error listing containers:', error.message);
+        } catch (err) {
+            error('[DockerService] Error listing containers:', (err as Error).message);
             return null;
         }
     }
