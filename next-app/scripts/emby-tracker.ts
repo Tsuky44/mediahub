@@ -9,21 +9,19 @@ import { getPrisma } from '../lib/prisma';
 import { Server } from 'socket.io';
 import http from 'http';
 import Docker from 'dockerode';
-import { Writable } from 'stream';
+import { Writable, Readable, Duplex } from 'stream';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const dockerOptions: any = {};
+const dockerOptions: Record<string, string> = {};
 let docker: Docker;
 
 function initDocker(host?: string) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const options: any = {};
+  const options: Record<string, string> = {};
   const dockerHost = host || process.env.DOCKER_HOST;
 
   if (dockerHost) {
@@ -137,7 +135,7 @@ io.on('connection', (socket) => {
   });
 
   // Server Broadcast Handler
-  socket.on('server_broadcast_notification', (data: { userIds: (string|number)[], notification: any }) => {
+  socket.on('server_broadcast_notification', (data: { userIds: (string|number)[], notification: Record<string, unknown> }) => {
     log(`[Tracker] Broadcasting notification to users: ${data.userIds.join(', ')}`);
     data.userIds.forEach(uid => {
         const uidStr = String(uid);
@@ -151,26 +149,26 @@ io.on('connection', (socket) => {
   });
 
   // Docker Logs Handling
-  let logStream: any = null;
+  let logStream: unknown = null;
   let logWritable: Writable | null = null;
   // Docker Terminal Handling
-  let terminalStream: any = null;
-  let terminalExec: any = null;
+  let terminalStream: unknown = null;
+  let terminalExec: unknown = null;
 
-  socket.on('start_terminal_session', async (rawContainerId: any) => {
+  socket.on('start_terminal_session', async (rawContainerId: unknown) => {
     try {
       const containerId = String(rawContainerId).trim();
       log(`[Tracker] Client ${socket.id} requested terminal for container: "${containerId}"`);
 
       // Cleanup existing session if any
       if (terminalStream) {
-        terminalStream.end();
-        terminalStream.destroy();
+        (terminalStream as { end: () => void }).end();
+        (terminalStream as { destroy: () => void }).destroy();
         terminalStream = null;
       }
 
       // Re-initialize docker (reuse logic from logs)
-      const prisma = getPrisma() as any;
+      const prisma = getPrisma();
       if (!process.env.DOCKER_HOST) {
           // Check Settings model
           if (prisma.setting) {
@@ -225,43 +223,43 @@ io.on('connection', (socket) => {
         terminalStream = null;
       });
 
-      stream.on('error', (err: any) => {
-        error(`[Tracker] Terminal stream error: ${err.message}`);
-        socket.emit('terminal_error', err.message);
+      stream.on('error', (err: Error) => {
+        error(`[Tracker] Terminal stream error: ${(err as Error).message}`);
+        socket.emit('terminal_error', (err as Error).message);
       });
 
       log(`[Tracker] Terminal session started for ${containerId}`);
 
-    } catch (err: any) {
-      error(`[Tracker] Error starting terminal: ${err.message}`);
-      socket.emit('terminal_error', err.message);
+    } catch (err) {
+      error(`[Tracker] Error starting terminal: ${(err as Error).message}`);
+      socket.emit('terminal_error', (err as Error).message);
     }
   });
 
   socket.on('terminal_input', (data: string) => {
     if (terminalStream) {
-      terminalStream.write(data);
+      (terminalStream as { write: (data: string) => void }).write(data);
     }
   });
 
   socket.on('terminal_resize', (size: { cols: number, rows: number }) => {
     if (terminalExec) {
-      terminalExec.resize({ h: size.rows, w: size.cols });
+      (terminalExec as { resize: (opts: { h: number; w: number }) => void }).resize({ h: size.rows, w: size.cols });
     }
   });
 
-  socket.on('subscribe_docker_logs', async (rawContainerId: any) => {
+  socket.on('subscribe_docker_logs', async (rawContainerId: unknown) => {
     try {
       const containerId = String(rawContainerId).trim();
       log(`[Tracker] Client ${socket.id} subscribed to logs for container: "${containerId}"`);
 
       if (logStream) {
-        logStream.destroy();
+        (logStream as { destroy: () => void }).destroy();
         logStream = null;
       }
       
       // Re-initialize docker before using it to ensure we have the latest host
-      const prisma = getPrisma() as any;
+      const prisma = getPrisma();
       if (!process.env.DOCKER_HOST) {
         // Check Settings model
         if (prisma.setting) {
@@ -300,21 +298,21 @@ io.on('connection', (socket) => {
         socket.emit('docker_log_end');
       });
 
-      stream.on('error', (err: any) => {
-        error(`[Tracker] Log stream error: ${err.message}`);
-        socket.emit('docker_log_error', err.message);
+      stream.on('error', (err: Error) => {
+        error(`[Tracker] Log stream error: ${(err as Error).message}`);
+        socket.emit('docker_log_error', (err as Error).message);
       });
 
-    } catch (err: any) {
-      error(`[Tracker] Error streaming logs: ${err.message}`);
-      socket.emit('docker_log_error', err.message);
+    } catch (err) {
+      error(`[Tracker] Error streaming logs: ${(err as Error).message}`);
+      socket.emit('docker_log_error', (err as Error).message);
     }
   });
 
   socket.on('unsubscribe_docker_logs', () => {
     log(`[Tracker] Client ${socket.id} unsubscribed from logs`);
     if (logStream) {
-      logStream.destroy();
+      (logStream as { destroy: () => void }).destroy();
       logStream = null;
     }
     if (logWritable) {
@@ -335,7 +333,7 @@ io.on('connection', (socket) => {
     }
 
     if (logStream) {
-      logStream.destroy();
+      (logStream as { destroy: () => void }).destroy();
     }
     log(`[Tracker] Frontend client disconnected: ${socket.id}`);
   });
@@ -376,7 +374,7 @@ interface SessionState {
   client: string;
   device: string;
   deviceId: string;
-  mediaInfo: any;
+  mediaInfo: Record<string, unknown>;
   seriesName?: string;
   seasonName?: string;
   episodeIndex?: number;
@@ -402,7 +400,7 @@ let currentServiceType: 'emby' | 'jellyfin' | 'plex' = 'emby';
 async function startTracker() {
   log('--- Emby Mono-Instance Tracker Starting ---');
   
-  const p = getPrisma() as any;
+  const p = getPrisma();
   
   // Try to find a Docker Host in settings if not in ENV
   if (!process.env.DOCKER_HOST) {
@@ -440,9 +438,9 @@ async function startTracker() {
   // Load existing live sessions from DB to memory to persist accumulatedDuration across tracker restarts
   const loadExistingSessions = async () => {
     try {
-        const p = getPrisma() as any;
+        const p = getPrisma();
 
-        if ((p as any).embyLiveSession) {
+        if ((p as unknown as Record<string, unknown>).embyLiveSession) {
             // DISABLED: embyLiveSession model removed
             /*
             const existing = await p.embyLiveSession.findMany();
@@ -531,7 +529,7 @@ async function startTracker() {
                 mediaInfo: session.mediaInfo,
                 source: session.source,
                 isLive: true,
-                tmdbId: session.mediaInfo?.ProviderIds?.Tmdb ? String(session.mediaInfo.ProviderIds.Tmdb) : null,
+                tmdbId: ((session.mediaInfo?.ProviderIds as Record<string, unknown> | undefined)?.Tmdb) ? String((session.mediaInfo?.ProviderIds as Record<string, unknown>)?.Tmdb) : null,
                 seasonIndex: session.seasonIndex,
                 episodeIndex: session.episodeIndex
              }
@@ -546,7 +544,7 @@ async function startTracker() {
 }
 
 async function getSetting(key: string): Promise<string | null> {
-    const p = getPrisma() as any;
+    const p = getPrisma();
     // 1. Env
     const envKey = key.toUpperCase();
     if (process.env[envKey]) return process.env[envKey]!;
@@ -643,7 +641,40 @@ async function refreshConnection() {
     }
 }
 
-async function handleSessionsUpdate(sessions: any[]) {
+interface EmbyNowPlayingItem {
+  Id?: string | number
+  Name?: string
+  SeriesName?: string
+  SeasonName?: string
+  IndexNumber?: number
+  ParentIndexNumber?: number
+  Type?: string
+  RunTimeTicks?: number
+  ProviderIds?: Record<string, unknown>
+  MediaSources?: Array<Record<string, unknown>>
+  MediaStreams?: Array<Record<string, unknown>>
+  Path?: string
+}
+
+interface EmbySessionItem {
+  Id?: string | number
+  IsPaused?: boolean
+  PositionTicks?: number
+  DeviceName?: string
+  DeviceId?: string
+  Client?: string
+  UserId?: string | number
+  UserName?: string
+  PlayState?: { IsPaused?: boolean; PositionTicks?: number }
+  NowPlayingItem?: EmbyNowPlayingItem
+}
+
+interface SessionEndedData {
+  Id?: string | number
+  SessionId?: string | number
+}
+
+async function handleSessionsUpdate(sessions: EmbySessionItem[]) {
     const now = Date.now();
     const activeIds = new Set<string>();
 
@@ -824,7 +855,7 @@ async function handleSessionsUpdate(sessions: any[]) {
             try {
                 // DISABLED: embyLiveSession model removed
                 /*
-                const p = getPrisma() as any;
+                const p = getPrisma();
                 await p.embyLiveSession.upsert({
                     where: { sessionId: s.Id },
                     create: {
@@ -871,10 +902,10 @@ async function handleSessionsUpdate(sessions: any[]) {
     broadcastSessions();
 }
 
-async function handleSessionEnded(data: any) {
+async function handleSessionEnded(data: SessionEndedData) {
     // Emby sends SessionEnded with some data, but we might have already marked it for cleanup
     // We can force cleanup here
-    const sessionId = data.Id || data.SessionId;
+    const sessionId = data.Id ? String(data.Id) : data.SessionId ? String(data.SessionId) : null;
     if (sessionId && activeSessions.has(sessionId)) {
         await finalizeSession(sessionId);
     }
@@ -894,7 +925,7 @@ async function saveWatchEvent(session: SessionState) {
     if (session.accumulatedDuration <= 10) return null; // Only save if played > 10s
 
     try {
-        const p = getPrisma() as any;
+        const p = getPrisma();
 
         // Find internal user to link
         const user = await p.user.findUnique({
@@ -902,7 +933,7 @@ async function saveWatchEvent(session: SessionState) {
         });
 
         // Extract TmdbId from mediaInfo if available
-        let tmdbId = session.mediaInfo?.ProviderIds?.Tmdb || null;
+        let tmdbId = (session.mediaInfo?.ProviderIds as Record<string, unknown> | undefined)?.Tmdb || null;
         if (tmdbId) tmdbId = String(tmdbId);
 
         const event = await p.watchEvent.create({
@@ -978,7 +1009,7 @@ async function finalizeSession(sessionId: string) {
     try {
         // DISABLED: embyLiveSession model removed
         /*
-        const p = getPrisma() as any;
+        const p = getPrisma();
         await p.embyLiveSession.delete({
             where: { sessionId: sessionId }
         });
