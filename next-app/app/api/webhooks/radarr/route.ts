@@ -103,7 +103,7 @@ export async function POST(req: Request) {
                         overview = mediaInfo.overview
                         rating = mediaInfo.vote_average?.toFixed(1)
                         if (mediaInfo.genres) {
-                            genres = mediaInfo.genres.map((g: any) => g.name).join(', ')
+                            genres = mediaInfo.genres.map((g: Record<string, unknown>) => g.name as string).join(', ')
                         }
                     }
                 }
@@ -172,7 +172,7 @@ export async function POST(req: Request) {
 
             try {
                 const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-                await ExternalNotificationService.send(mhEvent as any, {
+                await ExternalNotificationService.send(mhEvent, {
                     title: titlePrefix,
                     message: messageText,
                     data: {
@@ -200,8 +200,8 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({ success: true });
-    } catch (error: any) {
-        console.error('[RadarrWebhook] Error:', error.message);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (error) {
+        console.error('[RadarrWebhook] Error:', (error as Error).message);
+        return NextResponse.json({ error: (error as Error).message }, { status: 500 });
     }
 }
