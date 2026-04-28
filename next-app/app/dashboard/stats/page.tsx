@@ -101,7 +101,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     const { hourlyActivity, orderedDailyActivity, monthlyActivity } = computeActivityHistograms(historyArray, period)
 
     // No live sessions support yet in this version
-    const embySessions: any[] = []
+    const embySessions: unknown[] = []
     const aggregatedHistory = consolidateHistory(historyArray, [], itemDurations)
 
     const { userStatsMap, totalWatchTimeSeconds } = computeUserStats(

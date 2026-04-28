@@ -2,9 +2,9 @@ import axios from 'axios'
 import https from 'https'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export class EmbyService {
@@ -64,8 +64,8 @@ export class EmbyService {
         throw new Error('Received HTML instead of JSON (likely a redirect to login)')
       }
       return response.data
-    } catch (e: any) {
-      error(`[EmbyService] getSystemInfo failed at ${this.baseUrl}:`, e.message)
+    } catch (e) {
+      error(`[EmbyService] getSystemInfo failed at ${this.baseUrl}:`, (e as Error).message)
       return null
     }
   }
@@ -94,30 +94,30 @@ export class EmbyService {
         const response = await performAuth(this.baseUrl);
         log(`[EmbyService] Auth success for ${username}`)
         return response.data
-    } catch (e: any) {
+    } catch (e) {
         // Auto-retry with host.docker.internal if localhost fails (Docker on Windows/Mac fix)
         if ((this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1')) && 
-            (e.code === 'ECONNREFUSED' || e.code === 'ETIMEDOUT' || e.code === 'EHOSTUNREACH')) {
+            ((e as { code?: string }).code === 'ECONNREFUSED' || (e as { code?: string }).code === 'ETIMEDOUT' || (e as { code?: string }).code === 'EHOSTUNREACH')) {
             
-            warn(`[EmbyService] Connection to ${this.baseUrl} failed (${e.code}). Retrying with host.docker.internal...`)
+            warn(`[EmbyService] Connection to ${this.baseUrl} failed (${(e as { code?: string }).code}). Retrying with host.docker.internal...`)
             try {
                 const newUrl = this.baseUrl.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
                 const response = await performAuth(newUrl);
                 log(`[EmbyService] Auth success using host.docker.internal`)
                 return response.data
-            } catch (retryError: any) {
-                error(`[EmbyService] Retry failed:`, retryError.message)
+            } catch (retryError) {
+                error(`[EmbyService] Retry failed:`, (retryError as Error).message)
             }
         }
 
-        const errorStatus = e.response?.status
-        const errorData = e.response?.data
-        error(`[EmbyService] Auth failed for ${username} (Status: ${errorStatus}):`, errorData || e.message)
+        const errorStatus = (e as { response?: { status?: number } }).response?.status
+        const errorData = (e as { response?: { data?: unknown } }).response?.data
+        error(`[EmbyService] Auth failed for ${username} (Status: ${errorStatus}):`, errorData || (e as Error).message)
         
         if (errorStatus === 401) {
             throw new Error("Identifiants incorrects sur Emby")
         }
-        throw new Error(`Erreur Emby (${errorStatus || e.code || 'Unknown'}): ${e.message}`)
+        throw new Error(`Erreur Emby (${errorStatus || (e as { code?: string }).code || 'Unknown'}): ${(e as Error).message}`)
     }
   }
 
@@ -148,8 +148,8 @@ export class EmbyService {
         throw new Error('Received HTML instead of JSON')
       }
       return response.data
-    } catch (e: any) {
-      error(`[EmbyService] getSessions failed at ${this.baseUrl}:`, e.message)
+    } catch (e) {
+      error(`[EmbyService] getSessions failed at ${this.baseUrl}:`, (e as Error).message)
       return []
     }
   }
@@ -195,9 +195,11 @@ export class EmbyService {
       
       const durations: Record<string, number> = {}
       if (response.data && response.data.Items) {
-        response.data.Items.forEach((item: any) => {
-          if (item.RunTimeTicks) {
-            durations[item.Id] = item.RunTimeTicks / 10000000
+        response.data.Items.forEach((item: Record<string, unknown>) => {
+          const rt = item.RunTimeTicks as number | undefined
+          const id = item.Id as string | undefined
+          if (rt && id) {
+            durations[id] = rt / 10000000
           }
         })
       }
@@ -208,13 +210,13 @@ export class EmbyService {
     }
   }
 
-  async getPlaybackReport(params: any = {}) {
+  async getPlaybackReport(params: Record<string, unknown> = {}) {
     try {
       const client = await this.getClient()
       const response = await client.get('/PlaybackReporting/Report', { params })
       return response.data
-    } catch (e: any) {
-      if (e.response?.status === 404) {
+    } catch (e) {
+      if ((e as { response?: { status?: number } }).response?.status === 404) {
         // Fallback to ActivityLog if Report is not available
         try {
           const response = await (await this.getClient()).get('/PlaybackReporting/ActivityLog', {
@@ -225,12 +227,12 @@ export class EmbyService {
             }
           })
           return response.data
-        } catch (e2: any) {
-          error(`[EmbyService] getPlaybackReport ActivityLog fallback failed:`, e2.message)
+        } catch (e2) {
+          error(`[EmbyService] getPlaybackReport ActivityLog fallback failed:`, (e2 as Error).message)
           throw e2
         }
       }
-      error(`[EmbyService] getPlaybackReport failed:`, e.message)
+      error(`[EmbyService] getPlaybackReport failed:`, (e as Error).message)
       throw e
     }
   }
@@ -242,8 +244,8 @@ export class EmbyService {
         CustomQueryString: query
       })
       return response.data
-    } catch (e: any) {
-      error(`[EmbyService] getCustomQuery failed:`, e.message)
+    } catch (e) {
+      error(`[EmbyService] getCustomQuery failed:`, (e as Error).message)
       throw e
     }
   }
@@ -251,17 +253,18 @@ export class EmbyService {
   async createUser(name: string, connectUserName?: string) {
     try {
         const client = await this.getClient(10000)
-        const payload: any = { Name: name }
+        const payload: Record<string, unknown> = { Name: name }
         // Some Emby versions might accept this on creation
         if (connectUserName) {
             payload.ConnectUserName = connectUserName
         }
         const response = await client.post('/Users/New', payload)
         return response.data
-    } catch (e: any) {
-        const errorDetails = e.response?.data ? JSON.stringify(e.response.data) : e.message
+    } catch (e) {
+        const errResponse = (e as { response?: { data?: unknown } }).response
+        const errorDetails = errResponse?.data ? JSON.stringify(errResponse.data) : (e as Error).message
         error(`[EmbyService] Failed to create user ${name}:`, errorDetails)
-        throw new Error(`${e.message} ${errorDetails !== e.message ? `(${errorDetails})` : ''}`)
+        throw new Error(`${(e as Error).message} ${errorDetails !== (e as Error).message ? `(${errorDetails})` : ''}`)
     }
   }
 
@@ -270,9 +273,9 @@ export class EmbyService {
         const client = await this.getClient(5000)
         const response = await client.get(`/Users/${id}`)
         return response.data
-    } catch (e: any) {
-        error(`[EmbyService] Failed to get user ${id}:`, e.message)
-        throw new Error(`Erreur lors de la récupération de l'utilisateur Emby: ${e.message}`)
+    } catch (e) {
+        error(`[EmbyService] Failed to get user ${id}:`, (e as Error).message)
+        throw new Error(`Erreur lors de la récupération de l'utilisateur Emby: ${(e as Error).message}`)
     }
   }
 
@@ -286,7 +289,7 @@ export class EmbyService {
                 ConnectUsername: connectUsername
             }
         })
-    } catch (e: any) {
+    } catch (e) {
         // Fallback: Try sending in body if query param failed (some versions differ)
         try {
             const client = await this.getClient(5000)
@@ -294,40 +297,40 @@ export class EmbyService {
                 ConnectUsername: connectUsername
             })
         } catch (retryError) {
-            error(`[EmbyService] Failed to link user ${id} to Connect:`, e.message)
-            throw new Error(`Erreur lors de la liaison Emby Connect: ${e.message}`)
+            error(`[EmbyService] Failed to link user ${id} to Connect:`, (e as Error).message)
+            throw new Error(`Erreur lors de la liaison Emby Connect: ${(e as Error).message}`)
         }
     }
   }
 
-  async updateUserPolicy(id: string, policy: any) {
+  async updateUserPolicy(id: string, policy: Record<string, unknown>) {
     try {
         const client = await this.getClient(5000)
         await client.post(`/Users/${id}/Policy`, policy)
-    } catch (e: any) {
-        error(`[EmbyService] Failed to update policy for user ${id}:`, e.message)
-        throw new Error(`Erreur lors de la mise à jour des droits Emby: ${e.message}`)
+    } catch (e) {
+        error(`[EmbyService] Failed to update policy for user ${id}:`, (e as Error).message)
+        throw new Error(`Erreur lors de la mise à jour des droits Emby: ${(e as Error).message}`)
     }
   }
 
-  async updateUserConfiguration(id: string, config: any) {
+  async updateUserConfiguration(id: string, config: Record<string, unknown>) {
     try {
         const client = await this.getClient(5000)
         await client.post(`/Users/${id}/Configuration`, config)
-    } catch (e: any) {
-        error(`[EmbyService] Failed to update configuration for user ${id}:`, e.message)
-        throw new Error(`Erreur lors de la mise à jour de la configuration Emby: ${e.message}`)
+    } catch (e) {
+        error(`[EmbyService] Failed to update configuration for user ${id}:`, (e as Error).message)
+        throw new Error(`Erreur lors de la mise à jour de la configuration Emby: ${(e as Error).message}`)
     }
   }
   
-  async updateUser(user: any) {
+  async updateUser(user: Record<string, unknown>) {
     try {
         const client = await this.getClient(5000)
         // Emby updates user details via POST /Users/{Id}
-        await client.post(`/Users/${user.Id}`, user)
-    } catch (e: any) {
-        error(`[EmbyService] Failed to update user ${user.Id}:`, e.message)
-        throw new Error(`Erreur lors de la mise à jour de l'utilisateur Emby: ${e.message}`)
+        await client.post(`/Users/${String(user.Id)}`, user)
+    } catch (e) {
+        error(`[EmbyService] Failed to update user ${String(user.Id)}:`, (e as Error).message)
+        throw new Error(`Erreur lors de la mise à jour de l'utilisateur Emby: ${(e as Error).message}`)
     }
   }
 
@@ -462,9 +465,10 @@ export class EmbyService {
           Limit: 1000
       })
       
-      const match = allItems.Items?.find((i: any) => 
-          (i.ProviderIds?.Tmdb && String(i.ProviderIds.Tmdb) === String(tmdbId))
-      )
+      const match = allItems.Items?.find((i: Record<string, unknown>) => {
+          const providerIds = i.ProviderIds as Record<string, string> | undefined
+          return providerIds?.Tmdb && String(providerIds.Tmdb) === String(tmdbId)
+      })
       
       return match || null
   }
@@ -486,7 +490,7 @@ export class EmbyService {
   }
 
   async getEpisodes(userId: string, seriesId: string, seasonNumber?: number) {
-      const filters: any = {
+      const filters: Record<string, unknown> = {
           ParentId: seriesId,
           IncludeItemTypes: 'Episode',
           Recursive: true,
@@ -529,8 +533,8 @@ export class EmbyService {
       const client = await this.getClient()
       await client.delete(`/Items/${itemId}`)
       return true
-    } catch (e: any) {
-      error(`[EmbyService] deleteItem failed for ${itemId}:`, e.message)
+    } catch (e) {
+      error(`[EmbyService] deleteItem failed for ${itemId}:`, (e as Error).message)
       throw e
     }
   }
@@ -548,8 +552,8 @@ export class EmbyService {
         }
       })
       return true
-    } catch (e: any) {
-      error(`[EmbyService] refreshItem failed for ${itemId}:`, e.message)
+    } catch (e) {
+      error(`[EmbyService] refreshItem failed for ${itemId}:`, (e as Error).message)
       return false
     }
   }
@@ -568,7 +572,7 @@ export class EmbyService {
       
       const episodes = response.data.Items || []
       // Filter strictly by season number
-      const targetEpisodes = episodes.filter((e: any) => e.ParentIndexNumber === seasonNumber)
+      const targetEpisodes = episodes.filter((ep: Record<string, unknown>) => (ep as { ParentIndexNumber?: number }).ParentIndexNumber === seasonNumber)
       
       log(`[EmbyService] Deleting ${targetEpisodes.length} episodes for Season ${seasonNumber} of Series ${seriesId}`)
       
@@ -576,12 +580,12 @@ export class EmbyService {
       const chunkSize = 5
       for (let i = 0; i < targetEpisodes.length; i += chunkSize) {
         const chunk = targetEpisodes.slice(i, i + chunkSize)
-        await Promise.all(chunk.map((ep: any) => this.deleteItem(ep.Id)))
+        await Promise.all(chunk.map((ep: Record<string, unknown>) => this.deleteItem(String(ep.Id))))
       }
       
       return true
-    } catch (e: any) {
-      error(`[EmbyService] deleteEpisodesBySeasonNumber failed:`, e.message)
+    } catch (e) {
+      error(`[EmbyService] deleteEpisodesBySeasonNumber failed:`, (e as Error).message)
       return false
     }
   }
@@ -591,18 +595,18 @@ export class EmbyService {
       const users = await this.getUsers()
       
       // Run in parallel
-      const promises = users.map(async (user: any) => {
+      const promises = users.map(async (user: Record<string, unknown>) => {
         try {
-            const item = await this.getItemDetails(itemId, user.Id)
+            const item = await this.getItemDetails(itemId, String(user.Id))
             
             if (!item) return null
 
-            let stat: any = null
+            let stat: Record<string, unknown> | null = null
 
             if (item.Type === 'Series') {
                 // Fetch all episodes for this user to get accurate stats
                 const client = await this.getClient()
-                const episodesRes = await client.get(`/Users/${user.Id}/Items`, {
+                const episodesRes = await client.get(`/Users/${String(user.Id)}/Items`, {
                     params: {
                         ParentId: itemId,
                         Recursive: true,
@@ -717,8 +721,8 @@ export class EmbyService {
       const results = await Promise.all(promises)
       return results.filter(r => r !== null)
 
-    } catch (e: any) {
-      error(`[EmbyService] getItemStateForAllUsers failed for ${itemId}:`, e.message)
+    } catch (e) {
+      error(`[EmbyService] getItemStateForAllUsers failed for ${itemId}:`, (e as Error).message)
       return []
     }
   }
@@ -785,7 +789,7 @@ export class EmbyService {
           
           let size = 0
           if (ep.MediaSources && ep.MediaSources.length > 0) {
-              size = ep.MediaSources.reduce((acc: number, src: any) => acc + (src.Size || 0), 0)
+              size = ep.MediaSources.reduce((acc: number, src: Record<string, unknown>) => acc + ((src as { Size?: number }).Size || 0), 0)
           }
           
           season.size += size
@@ -794,8 +798,8 @@ export class EmbyService {
       
       return Array.from(seasonsMap.values()).sort((a, b) => a.index - b.index)
       
-    } catch (e: any) {
-       error(`[EmbyService] getSeasonDetails failed for ${seriesId}:`, e.message)
+    } catch (e) {
+       error(`[EmbyService] getSeasonDetails failed for ${seriesId}:`, (e as Error).message)
        return []
     }
   }
@@ -869,12 +873,12 @@ export class EmbyService {
         })
         
         return response.data?.Items || []
-    } catch (e: any) {
-        if (e.response?.status === 404) {
+    } catch (e) {
+        if ((e as { response?: { status?: number } }).response?.status === 404) {
             // Plugin not installed, just return empty list
             return []
         }
-        warn('[EmbyService] Playback Reporting plugin error:', e.message)
+        warn('[EmbyService] Playback Reporting plugin error:', (e as Error).message)
         return []
     }
   }
@@ -927,11 +931,11 @@ export class EmbyService {
         }
         
         return []
-    } catch (e: any) {
-        if (e.response?.status === 404) {
+    } catch (e) {
+        if ((e as { response?: { status?: number } }).response?.status === 404) {
             return []
         }
-        warn('[EmbyService] Statistics plugin error:', e.message)
+        warn('[EmbyService] Statistics plugin error:', (e as Error).message)
         return []
     }
   }
@@ -976,7 +980,7 @@ export class EmbyService {
             }
         }
       } catch (e) {
-        error(`Failed to fetch stats for user ${user.Id}`, e)
+        error(`Failed to fetch stats for user ${String(user.Id)}`, e)
       }
     }
 

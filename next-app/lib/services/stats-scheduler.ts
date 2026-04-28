@@ -270,8 +270,8 @@ async function checkCompletedDownloads() {
             where: {
                 status: { lt: 5 },
                 requestedAt: { gte: cutoffDate }
-            } as any,
-            orderBy: { requestedAt: 'desc' } as any,
+            },
+            orderBy: { requestedAt: 'desc' },
             take: 300
         })
 
@@ -309,7 +309,7 @@ async function checkCompletedDownloads() {
                 }
             } else {
                 // Fallback: title matching
-                matchingRequests = recentRequests.filter((req: any) =>
+                matchingRequests = (recentRequests as MediaRequestLite[]).filter((req) =>
                     titleMatchesTorrent(req.title || '', torrent.name)
                 )
                 if (matchingRequests.length === 0) {
@@ -317,7 +317,7 @@ async function checkCompletedDownloads() {
                 }
             }
 
-            for (const req of matchingRequests as any[]) {
+            for (const req of matchingRequests) {
                 let posterPath = ''
                 let overview = ''
                 let year = ''

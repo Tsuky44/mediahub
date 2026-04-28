@@ -165,8 +165,8 @@ export async function scrapeC411(config: ScraperConfig): Promise<TrackerStats | 
       ratio,
       lastUpdated: Date.now()
     } as TrackerStats
-  } catch (e: any) {
-    error('[C411] Scrape failed:', e.message)
+  } catch (e) {
+    error('[C411] Scrape failed:', (e as Error).message)
     error('[C411] Full error:', e)
     return null
   }
