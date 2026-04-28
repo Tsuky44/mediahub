@@ -291,7 +291,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
   try {
     const sonarr = await getSonarrService()
     if (sonarr) {
-      const episodes = await sonarr.getCalendar(start, end)
+      const episodes = (await sonarr.getCalendar(start, end)) as unknown as SonarrCalendarEpisode[]
       log(`[Calendar] Found ${episodes.length} Sonarr episodes`)
       
       // Group episodes by seriesId + seasonNumber + airDate
