@@ -20,9 +20,9 @@ const requestBodySchema = z.object({
 })
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export async function POST(request: NextRequest) {
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
     const { tmdbId, mediaType, title, posterPath, seasons: requestedSeasonIds } = parsed.data
 
-    let result: { success: boolean; message?: string; data?: any } = { success: false, message: 'Unknown error' }
+    let result: { success: boolean; message?: string; data?: unknown } = { success: false, message: 'Unknown error' }
     let externalId: string | undefined
 
     // Variables hoistées pour réutilisation après le bloc TV (Patch 3: évite double fetch)
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
 
         // Hoisté pour réutilisation plus bas sans re-fetch (Patch 3)
         capturedTvdbId = tvdbId
-        capturedLookupSeasons = lookup.seasons.map((s: any) => s.seasonNumber)
+        capturedLookupSeasons = lookup.seasons.map((s: { seasonNumber: number }) => s.seasonNumber)
 
         let seasonsToRequest = [...capturedLookupSeasons]
         
@@ -146,10 +146,10 @@ export async function POST(request: NextRequest) {
                 })
                 
                 const seasonsFromRequests = new Set<number>(requestedSeasons)
-                activeRequests.forEach((req: any) => {
+                activeRequests.forEach((req: Record<string, unknown>) => {
                     try {
-                        const metadata = req.metadata ? JSON.parse(req.metadata) : {}
-                        const seasons = (metadata as any).seasons || []
+                        const metadata = req.metadata ? JSON.parse(req.metadata as string) : {}
+                        const seasons = (metadata as { seasons?: number[] }).seasons || []
                         seasons.forEach((s: number) => seasonsFromRequests.add(s))
                     } catch (e) {}
                 })
@@ -314,7 +314,7 @@ export async function POST(request: NextRequest) {
             try {
                 const tmdbService = await getTmdbService()
                 if (tmdbService) {
-                    const details = await tmdbService.getDetails(tmdbId, mediaType as any)
+                    const details = await tmdbService.getDetails(tmdbId, mediaType as 'movie' | 'tv')
                     if (details) {
                         overview = details.overview || ''
                         rating = details.vote_average?.toFixed(1) || ''
@@ -322,7 +322,7 @@ export async function POST(request: NextRequest) {
                             ? (details.release_date?.substring(0, 4) || '')
                             : (details.first_air_date?.substring(0, 4) || '')
                         if (details.genres) {
-                            genres = details.genres.map((g: any) => g.name).join(', ')
+                            genres = details.genres.map((g: Record<string, unknown>) => g.name as string).join(', ')
                         }
                         if (!notifPosterPath && details.poster_path) {
                             notifPosterPath = details.poster_path
@@ -370,7 +370,7 @@ export async function POST(request: NextRequest) {
                         id: dbUser.id,
                         name: dbUser.name ?? undefined,
                         email: dbUser.email ?? undefined,
-                        whatsappNumber: (dbUser as any).whatsappNumber ?? undefined,
+                        whatsappNumber: (dbUser as Record<string, unknown>).whatsappNumber as string | undefined,
                     } : undefined
                 )
             } catch (v2Err) {
@@ -385,8 +385,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: result.message }, { status: 500 })
     }
 
-  } catch (e: any) {
+  } catch (e) {
     error('Request failed', e)
-    return NextResponse.json({ error: e.message || 'Internal Server Error' }, { status: 500 })
+    return NextResponse.json({ error: (e as Error).message || 'Internal Server Error' }, { status: 500 })
   }
 }
