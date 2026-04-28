@@ -6,6 +6,12 @@ const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
 const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
 const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
+interface AppError extends Error {
+  response?: {
+    data?: unknown
+  }
+}
+
 
 export async function getRadarrService() {
   const url = await getSetting('radarr_url')
@@ -128,9 +134,9 @@ export class RadarrService {
         ...params
       })
       return { success: true, data: response.data }
-    } catch (e: any) {
-      error(`[Radarr] Failed to send command ${name}:`, e.message)
-      return { success: false, error: e.message }
+    } catch (e) {
+      error(`[Radarr] Failed to send command ${name}:`, (e as AppError).message)
+      return { success: false, error: (e as AppError).message }
     }
   }
 
@@ -144,8 +150,8 @@ export class RadarrService {
         }
       })
       return (response.data.records || response.data) as RadarrQueueItem[]
-    } catch (e: any) {
-      error('[Radarr] Failed to fetch queue:', e.message)
+    } catch (e) {
+      error('[Radarr] Failed to fetch queue:', (e as AppError).message)
       return []
     }
   }
@@ -155,8 +161,8 @@ export class RadarrService {
     try {
       const response = await client.get('/qualityprofile')
       return response.data
-    } catch (e: any) {
-      error('[Radarr] Failed to fetch profiles:', e.message)
+    } catch (e) {
+      error('[Radarr] Failed to fetch profiles:', (e as AppError).message)
       return []
     }
   }
@@ -166,8 +172,8 @@ export class RadarrService {
     try {
       const response = await client.get('/rootfolder')
       return response.data
-    } catch (e: any) {
-      error('[Radarr] Failed to fetch root folders:', e.message)
+    } catch (e) {
+      error('[Radarr] Failed to fetch root folders:', (e as AppError).message)
       return []
     }
   }
@@ -177,8 +183,8 @@ export class RadarrService {
     try {
       const response = await client.get('/movie')
       return response.data as RadarrMovie[]
-    } catch (e: any) {
-      error('[Radarr] Failed to fetch movies:', e.message)
+    } catch (e) {
+      error('[Radarr] Failed to fetch movies:', (e as AppError).message)
       return []
     }
   }
@@ -204,15 +210,15 @@ export class RadarrService {
           if (fullResponse.data) {
             return fullResponse.data
           }
-        } catch (e: any) {
-          error(`[Radarr] Failed to fetch full movie data for ${movie.id}:`, e.message)
+        } catch (e) {
+          error(`[Radarr] Failed to fetch full movie data for ${movie.id}:`, (e as AppError).message)
           // Fallback to lookup data if full fetch fails
         }
       }
       
       return movie
-    } catch (e: any) {
-      error(`[Radarr] Failed to lookup movie ${tmdbId}:`, e.message)
+    } catch (e) {
+      error(`[Radarr] Failed to lookup movie ${tmdbId}:`, (e as AppError).message)
       return null
     }
   }
@@ -267,11 +273,11 @@ export class RadarrService {
       const response = await client.post('/movie', payload)
       return { success: true, movie: response.data }
 
-    } catch (e: any) {
-      const errorMsg = e.response?.data?.message || e.message
+    } catch (e) {
+      const errorMsg = ((e as AppError).response?.data as { message?: string } | undefined)?.message || (e as AppError).message
       // Only log full error if it's not a known "already exists" which we handle above usually
-      if (!Array.isArray(e.response?.data) || e.response.data[0]?.errorCode !== 'MovieExistsValidator') {
-         error(`[Radarr] Failed to add movie ${options.tmdbId}:`, JSON.stringify(e.response?.data || errorMsg))
+      if (!Array.isArray((e as AppError).response?.data) || ((e as AppError).response?.data as Array<{ errorCode?: string }> | undefined)?.[0]?.errorCode !== 'MovieExistsValidator') {
+         error(`[Radarr] Failed to add movie ${options.tmdbId}:`, JSON.stringify((e as AppError).response?.data || errorMsg))
       }
       return { success: false, message: errorMsg }
     }
@@ -289,8 +295,8 @@ export class RadarrService {
             }
         });
         return { success: true };
-    } catch (e: any) {
-        const errorMsg = e.response?.data?.message || e.message;
+    } catch (e) {
+        const errorMsg = ((e as AppError).response?.data as { message?: string } | undefined)?.message || (e as AppError).message;
         error(`[Radarr] Failed to delete movie ${radarrId}:`, errorMsg);
         return { success: false, message: errorMsg };
     }
@@ -311,9 +317,9 @@ export class RadarrService {
       movie.monitored = false
       const response = await client.put(`/movie/${movie.id}`, movie)
       return { success: true, movie: response.data }
-    } catch (e: any) {
-      error(`[Radarr] Failed to unmonitor movie ${tmdbId}:`, e.message)
-      return { success: false, message: e.message }
+    } catch (e) {
+      error(`[Radarr] Failed to unmonitor movie ${tmdbId}:`, (e as AppError).message)
+      return { success: false, message: (e as AppError).message }
     }
   }
 
@@ -324,8 +330,8 @@ export class RadarrService {
         params: { movieId }
       })
       return response.data
-    } catch (e: any) {
-      error(`[Radarr] Failed to fetch releases for movie ${movieId}:`, e.message)
+    } catch (e) {
+      error(`[Radarr] Failed to fetch releases for movie ${movieId}:`, (e as AppError).message)
       return []
     }
   }
@@ -338,8 +344,8 @@ export class RadarrService {
         indexerId
       })
       return { success: true, data: response.data }
-    } catch (e: any) {
-      const errorMsg = e.response?.data?.message || e.message
+    } catch (e) {
+      const errorMsg = ((e as AppError).response?.data as { message?: string } | undefined)?.message || (e as AppError).message
       error(`[Radarr] Failed to download release ${guid}:`, errorMsg)
       return { success: false, message: errorMsg }
     }
@@ -350,8 +356,8 @@ export class RadarrService {
     try {
       const response = await client.post('/release/push', release)
       return { success: true, data: response.data }
-    } catch (e: any) {
-      const errorMsg = e.response?.data?.message || e.message
+    } catch (e) {
+      const errorMsg = ((e as AppError).response?.data as { message?: string } | undefined)?.message || (e as AppError).message
       error(`[Radarr] Failed to push release:`, errorMsg)
       return { success: false, message: errorMsg }
     }
@@ -371,8 +377,8 @@ export class RadarrService {
         }
       })
       return response.data as RadarrMovie[]
-    } catch (e: any) {
-      error('[Radarr] Failed to fetch calendar:', e.message)
+    } catch (e) {
+      error('[Radarr] Failed to fetch calendar:', (e as AppError).message)
       return []
     }
   }
