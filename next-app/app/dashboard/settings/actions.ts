@@ -10,15 +10,15 @@ import { UnraidService } from '@/lib/services/unraid'
 import { QBittorrentService } from '@/lib/services/qbittorrent'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export async function testQBittorrentConnectionAction(url: string, username?: string, password?: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as any).role !== 'admin') {
+        if (!user || (user as { role?: string }).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -30,8 +30,8 @@ export async function testQBittorrentConnectionAction(url: string, username?: st
         } else {
             return { success: false, message: `Échec de la connexion : ${result.error}` }
         }
-    } catch (error: any) {
-        return { success: false, message: error.message }
+    } catch (error) {
+        return { success: false, message: (error as Error).message }
     }
 }
 
@@ -40,7 +40,7 @@ import { EmbyService } from '@/lib/services/emby'
 export async function approveAccountRequestAction(requestId: string, templateUserId?: string, customName?: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as any).role !== 'admin') {
+        if (!user || (user as { role?: string }).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -77,14 +77,14 @@ export async function approveAccountRequestAction(requestId: string, templateUse
         
         try {
             // Fetch Emby settings
-            const settings = await (prisma as any).setting.findMany({
+            const settings = await prisma.setting.findMany({
                 where: {
                     key: { in: ['emby_url', 'emby_api_key'] }
                 }
             });
             
-            const embyUrl = settings.find((s: any) => s.key === 'emby_url')?.value;
-            const embyApiKey = settings.find((s: any) => s.key === 'emby_api_key')?.value;
+            const embyUrl = settings.find((s: Record<string, unknown>) => s.key === 'emby_url')?.value;
+            const embyApiKey = settings.find((s: Record<string, unknown>) => s.key === 'emby_api_key')?.value;
 
             if (embyUrl && embyApiKey) {
                 const embyService = new EmbyService(embyUrl, embyApiKey)
@@ -95,13 +95,13 @@ export async function approveAccountRequestAction(requestId: string, templateUse
                 let newEmbyUser;
                 try {
                     newEmbyUser = await embyService.createUser(newUserName)
-                } catch (e: any) {
+                } catch (e) {
                         // If creation fails, try to find existing user
                         console.error("Emby create user failed:", e)
                         const users = await embyService.getUsers()
-                        newEmbyUser = users.find((u: any) => u.Name === newUserName)
+                        newEmbyUser = users.find((u: Record<string, unknown>) => u.Name === newUserName)
                         if (!newEmbyUser) {
-                             embyMessage = ` (Échec création Emby: ${e.message})`
+                             embyMessage = ` (Échec création Emby: ${(e as Error).message})`
                              // Don't throw, proceed with just approval
                         }
                 }
@@ -132,15 +132,15 @@ export async function approveAccountRequestAction(requestId: string, templateUse
                         try {
                             await embyService.linkUserToConnect(newEmbyUser.Id, request.email)
                             embyMessage = ' Utilisateur Emby créé et lié (invitation envoyée).'
-                        } catch (e: any) {
-                            embyMessage = ` (Attention: Erreur liaison Emby Connect - ${e.message})`
+                        } catch (e) {
+                            embyMessage = ` (Attention: Erreur liaison Emby Connect - ${(e as Error).message})`
                         }
                     }
                 }
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error("Emby automation failed:", error)
-            embyMessage = ` (Attention: Erreur Emby - ${error.message})`
+            embyMessage = ` (Attention: Erreur Emby - ${(error as Error).message})`
         }
 
 
@@ -153,7 +153,7 @@ export async function approveAccountRequestAction(requestId: string, templateUse
         try {
             const { logAction } = await import('@/lib/audit')
             await logAction(
-                parseInt((user as any).id),
+                parseInt((user as { id?: string | number }).id as string),
                 'ACCOUNT_REQUEST_APPROVE',
                 'AccountRequest',
                 requestId,
@@ -172,15 +172,15 @@ export async function approveAccountRequestAction(requestId: string, templateUse
 
         revalidatePath('/dashboard/settings')
         return { success: true, message: `Demande approuvée.${embyMessage}` }
-    } catch (error: any) {
-        return { success: false, message: error.message }
+    } catch (error) {
+        return { success: false, message: (error as Error).message }
     }
 }
 
 export async function rejectAccountRequestAction(requestId: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as any).role !== 'admin') {
+        if (!user || (user as { role?: string }).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -192,7 +192,7 @@ export async function rejectAccountRequestAction(requestId: string) {
         try {
             const { logAction } = await import('@/lib/audit')
             await logAction(
-                parseInt((user as any).id),
+                parseInt((user as { id?: string | number }).id as string),
                 'ACCOUNT_REQUEST_REJECT',
                 'AccountRequest',
                 requestId,
@@ -204,15 +204,15 @@ export async function rejectAccountRequestAction(requestId: string) {
 
         revalidatePath('/dashboard/settings')
         return { success: true, message: 'Demande rejetée.' }
-    } catch (error: any) {
-        return { success: false, message: error.message }
+    } catch (error) {
+        return { success: false, message: (error as Error).message }
     }
 }
 
 export async function deleteAccountRequestAction(requestId: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as any).role !== 'admin') {
+        if (!user || (user as { role?: string }).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -223,7 +223,7 @@ export async function deleteAccountRequestAction(requestId: string) {
         try {
             const { logAction } = await import('@/lib/audit')
             await logAction(
-                parseInt((user as any).id),
+                parseInt((user as { id?: string | number }).id as string),
                 'ACCOUNT_REQUEST_DELETE',
                 'AccountRequest',
                 requestId,
@@ -235,26 +235,26 @@ export async function deleteAccountRequestAction(requestId: string) {
 
         revalidatePath('/dashboard/settings')
         return { success: true, message: 'Demande supprimée.' }
-    } catch (error: any) {
-        return { success: false, message: error.message }
+    } catch (error) {
+        return { success: false, message: (error as Error).message }
     }
 }
 
 export async function testUnraidDebugAction() {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as any).role !== 'admin') {
+        if (!user || (user as { role?: string }).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
-        const settings = await (prisma as any).setting.findMany({
+        const settings = await prisma.setting.findMany({
             where: {
                 key: { in: ['unraid_url', 'unraid_api_key'] }
             }
         });
 
-        const url = settings.find((s: any) => s.key === 'unraid_url')?.value;
-        const apiKey = settings.find((s: any) => s.key === 'unraid_api_key')?.value;
+        const url = settings.find((s: Record<string, unknown>) => s.key === 'unraid_url')?.value;
+        const apiKey = settings.find((s: Record<string, unknown>) => s.key === 'unraid_api_key')?.value;
 
         if (!url || !apiKey) {
             return { success: false, message: 'Configuration Unraid manquante dans la DB.' };
@@ -272,22 +272,22 @@ export async function testUnraidDebugAction() {
         }
 
         return { success: false, message: 'Échec de la récupération des stats. Vérifiez les logs serveur.' };
-    } catch (error: any) {
-        error('[testUnraidDebugAction] Error:', error);
-        return { success: false, message: error.message };
+    } catch (err) {
+        error('[testUnraidDebugAction] Error:', err);
+        return { success: false, message: (err as Error).message };
     }
 }
 
 export async function importPlexHistoryAction() {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as any).role !== 'admin') {
+        if (!user || (user as { role?: string }).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
         log(`[Action] Starting Plex history import`)
         
-        const result = await importPlexHistory(prisma as any)
+        const result = await importPlexHistory(prisma)
         
         revalidatePath('/dashboard/settings')
         revalidatePath('/dashboard')
@@ -296,11 +296,11 @@ export async function importPlexHistoryAction() {
             success: true, 
             message: `Import réussi : ${result.imported} nouveaux éléments, ${result.skipped} ignorés.` 
         }
-    } catch (error: any) {
-        error('[importPlexHistoryAction] Error:', error)
+    } catch (err) {
+        error('[importPlexHistoryAction] Error:', err)
         return { 
             success: false, 
-            message: error.message || 'Erreur lors de l\'importation' 
+            message: (err as Error).message || 'Erreur lors de l\'importation' 
         }
     }
 }
@@ -308,7 +308,7 @@ export async function importPlexHistoryAction() {
 export async function testJellyseerrConnectionAction(url: string, key: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as any).role !== 'admin') {
+        if (!user || (user as { role?: string }).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -319,15 +319,15 @@ export async function testJellyseerrConnectionAction(url: string, key: string) {
             success, 
             message: success ? 'Connexion réussie !' : 'Échec de la connexion. Vérifiez l\'URL et la clé API.' 
         }
-    } catch (error: any) {
-        return { success: false, message: error.message }
+    } catch (error) {
+        return { success: false, message: (error as Error).message }
     }
 }
 
 export async function testProwlarrConnectionAction(url: string, key: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as any).role !== 'admin') {
+        if (!user || (user as { role?: string }).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -341,15 +341,15 @@ export async function testProwlarrConnectionAction(url: string, key: string) {
             success, 
             message: success ? `Connexion réussie ! ${indexers.length} indexeurs trouvés.` : 'Échec de la connexion. Vérifiez l\'URL et la clé API.' 
         }
-    } catch (error: any) {
-        return { success: false, message: error.message }
+    } catch (error) {
+        return { success: false, message: (error as Error).message }
     }
 }
 
 export async function fixMissingTitlesAction() {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as any).role !== 'admin') {
+        if (!user || (user as { role?: string }).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -358,7 +358,7 @@ export async function fixMissingTitlesAction() {
             throw new Error('Clé API TMDB manquante (vérifiez la configuration).')
         }
         
-        const requests = await (prisma as any).mediaRequest.findMany({})
+        const requests = await prisma.mediaRequest.findMany({})
 
         let fixed = 0
         log(`[fixMissingTitlesAction] Checking ${requests.length} requests`)
@@ -381,7 +381,7 @@ export async function fixMissingTitlesAction() {
             if (details) {
                 const title = req.mediaType === 'movie' ? details.title : details.name
                 if (title) {
-                    await (prisma as any).mediaRequest.update({
+                    await prisma.mediaRequest.update({
                         where: { id: req.id },
                         data: { title }
                     })
@@ -396,23 +396,23 @@ export async function fixMissingTitlesAction() {
             success: true, 
             message: `${fixed} titres de demandes ont été corrigés.` 
         }
-    } catch (error: any) {
-        return { success: false, message: error.message }
+    } catch (error) {
+        return { success: false, message: (error as Error).message }
     }
 }
 
 export async function importJellyseerrRequestsAction() {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as any).role !== 'admin') {
+        if (!user || (user as { role?: string }).role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
         // Delete all existing requests first as requested
         log(`[Action] Deleting all requests`)
-        await (prisma as any).mediaRequest.deleteMany({})
+        await prisma.mediaRequest.deleteMany({})
 
-        const result = await importJellyseerrRequests(prisma as any)
+        const result = await importJellyseerrRequests(prisma)
         
         // After import, run the fix titles action automatically
         log(`[Action] Fixing missing titles`)
@@ -425,7 +425,7 @@ export async function importJellyseerrRequestsAction() {
             success: true, 
             message: `Import réussi : ${result.imported} demandes importées.` 
         }
-    } catch (error: any) {
-        return { success: false, message: error.message }
+    } catch (error) {
+        return { success: false, message: (error as Error).message }
     }
 }
