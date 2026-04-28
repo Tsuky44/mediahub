@@ -1,19 +1,19 @@
 import { sanitizePlaybackDuration } from './stats-sanitize'
 
 export interface HistoryItem {
-    Id?: any
-    ItemId?: any
-    NowPlayingItemId?: any
-    UserId?: any
+    Id?: string | number
+    ItemId?: string | number
+    NowPlayingItemId?: string | number
+    UserId?: string | number
     UserName?: string
     Name?: string
     SeriesName?: string
-    SeriesId?: any
-    TmdbId?: any
+    SeriesId?: string | number
+    TmdbId?: string | number
     SeasonName?: string
     IndexNumber?: number
     ParentIndexNumber?: number
-    mediaInfo?: any
+    mediaInfo?: Record<string, unknown>
     Type?: string
     Client?: string
     DeviceName?: string
@@ -21,18 +21,17 @@ export interface HistoryItem {
     DateCreated?: string
     PlaybackDuration?: number
     RunTimeTicks?: number
-    imageItemId?: any
+    imageItemId?: string | number
     source?: string
-    tmdbId?: any
+    tmdbId?: string | number
     mediaType?: string
-    [key: string]: any
 }
 
 export interface AggregatedMedia extends HistoryItem {
     count: number
     totalDuration: number
     lastView: Date
-    imageItemId: any
+    imageItemId?: string | number
     mediaType: 'tv' | 'movie'
 }
 
@@ -88,8 +87,8 @@ export function normalizeWatchEvents(historyRaw: any[]): HistoryItem[] {
 export function computeItemDurations(historyArray: HistoryItem[]): Record<string, number> {
     const durations: Record<string, number> = {}
     historyArray.forEach(item => {
-        if (item.RunTimeTicks) {
-            durations[item.ItemId] = Math.round(item.RunTimeTicks / 10000000)
+        if (item.RunTimeTicks && item.ItemId !== undefined) {
+            durations[String(item.ItemId)] = Math.round(item.RunTimeTicks / 10000000)
         }
     })
     return durations
@@ -97,7 +96,7 @@ export function computeItemDurations(historyArray: HistoryItem[]): Record<string
 
 /** Remplit SeriesName manquant dans les items a partir de la map deduite. */
 export function backfillSeriesInfo(historyArray: HistoryItem[]): void {
-    const seriesInfoMap = new Map<string, { name: string; id?: string }>()
+    const seriesInfoMap = new Map<string, { name: string; id?: string | number }>()
     historyArray.forEach(item => {
         if (item.SeriesName && (item.SeriesId || item.imageItemId)) {
             if (item.SeriesId) seriesInfoMap.set(String(item.SeriesId), { name: item.SeriesName, id: item.SeriesId })
@@ -124,7 +123,7 @@ export function aggregateMostViewed(
 ): { mostViewedMovies: AggregatedMedia[]; mostViewedSeries: AggregatedMedia[] } {
     const mostViewedMoviesMap = new Map<string, AggregatedMedia>()
     const mostViewedSeriesMap = new Map<string, AggregatedMedia>()
-    const seriesInfoMap = new Map<string, { name: string; id?: string }>()
+    const seriesInfoMap = new Map<string, { name: string; id?: string | number }>()
     historyArray.forEach(item => {
         if (item.SeriesName && (item.SeriesId || item.imageItemId)) {
             if (item.SeriesId) seriesInfoMap.set(String(item.SeriesId), { name: item.SeriesName, id: item.SeriesId })
@@ -137,7 +136,7 @@ export function aggregateMostViewed(
         const targetMap = isSeries ? mostViewedSeriesMap : mostViewedMoviesMap
         const type = isSeries ? 'Episode' : (item.Type || 'Movie')
         const itemId = item.NowPlayingItemId || item.ItemId
-        const actualDuration = itemDurations[itemId]
+        const actualDuration = itemId !== undefined ? itemDurations[String(itemId)] : undefined
         const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration)
 
         let seriesName = item.SeriesName
@@ -159,10 +158,10 @@ export function aggregateMostViewed(
             }
         }
 
-        const key = isSeries ? (seriesId || seriesName || itemId) : (itemId || item.Id)
-        const imageItemId = isSeries ? (seriesId || item.imageItemId || itemId) : itemId
-
-        if (!key) return
+        const rawKey = isSeries ? (seriesId || seriesName || itemId) : (itemId || item.Id)
+        if (rawKey === undefined) return
+        const key = String(rawKey)
+        const imageItemId = (isSeries ? (seriesId || item.imageItemId || itemId) : itemId) ?? item.ItemId
 
         if (!targetMap.has(key)) {
             targetMap.set(key, {
@@ -176,15 +175,17 @@ export function aggregateMostViewed(
                 mediaType: isSeries ? 'tv' : 'movie',
             })
         } else {
-            const existing = targetMap.get(key)!
-            existing.count += 1
-            existing.totalDuration += sanitizedDuration
-            if (!existing.tmdbId && item.TmdbId) existing.tmdbId = item.TmdbId
-            if (isSeries && existing.imageItemId === existing.ItemId && item.SeriesId) {
-                existing.imageItemId = item.SeriesId
+            const existing = targetMap.get(key)
+            if (existing) {
+                existing.count += 1
+                existing.totalDuration += sanitizedDuration
+                if (!existing.tmdbId && item.TmdbId) existing.tmdbId = item.TmdbId
+                if (isSeries && existing.imageItemId === existing.ItemId && item.SeriesId) {
+                    existing.imageItemId = item.SeriesId
+                }
+                const currentDate = new Date(item.ActivityDateInserted || item.DateCreated || '')
+                if (currentDate > existing.lastView) existing.lastView = currentDate
             }
-            const currentDate = new Date(item.ActivityDateInserted || item.DateCreated || '')
-            if (currentDate > existing.lastView) existing.lastView = currentDate
         }
     })
 
@@ -241,11 +242,11 @@ export function computeActivityHistograms(
  */
 export function consolidateHistory(
     historyArray: HistoryItem[],
-    liveItems: any[],
+    liveItems: HistoryItem[],
     itemDurations: Record<string, number>
-): any[] {
-    const aggregatedHistory: any[] = [...liveItems]
-    const historyMap = new Map<string, any>()
+): HistoryItem[] {
+    const aggregatedHistory: HistoryItem[] = [...liveItems]
+    const historyMap = new Map<string, HistoryItem>()
 
     historyArray.forEach(item => {
         const itemId = item.NowPlayingItemId || item.ItemId
@@ -254,7 +255,7 @@ export function consolidateHistory(
         const key = `${itemId}-${userId}`
 
         const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie')
-        const actualDuration = itemDurations[itemId]
+        const actualDuration = itemId !== undefined ? itemDurations[String(itemId)] : undefined
         const sanitizedDuration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration)
 
         const isSeries = item.Type === 'Episode' || !!item.SeriesName
@@ -262,18 +263,20 @@ export function consolidateHistory(
 
         if (historyMap.has(key)) {
             const existing = historyMap.get(key)
-            const existingDate = new Date(existing.ActivityDateInserted || existing.DateCreated)
-            const diffDays = Math.abs(date.getTime() - existingDate.getTime()) / (1000 * 60 * 60 * 24)
+            if (existing) {
+                const existingDate = new Date(existing.ActivityDateInserted || existing.DateCreated || '')
+                const diffDays = Math.abs(date.getTime() - existingDate.getTime()) / (1000 * 60 * 60 * 24)
 
-            if (diffDays <= 7) {
-                existing.PlaybackDuration = (existing.PlaybackDuration || 0) + sanitizedDuration
-                if (date > existingDate) {
-                    existing.ActivityDateInserted = item.ActivityDateInserted
-                    existing.DateCreated = item.DateCreated
-                    existing.Client = item.Client
-                    existing.DeviceName = item.DeviceName
+                if (diffDays <= 7) {
+                    existing.PlaybackDuration = (existing.PlaybackDuration || 0) + sanitizedDuration
+                    if (date > existingDate) {
+                        existing.ActivityDateInserted = item.ActivityDateInserted
+                        existing.DateCreated = item.DateCreated
+                        existing.Client = item.Client
+                        existing.DeviceName = item.DeviceName
+                    }
+                    return
                 }
-                return
             }
         }
 
@@ -289,8 +292,8 @@ export function consolidateHistory(
     })
 
     aggregatedHistory.sort((a, b) => {
-        const dateA = new Date(a.ActivityDateInserted || a.DateCreated).getTime()
-        const dateB = new Date(b.ActivityDateInserted || b.DateCreated).getTime()
+        const dateA = new Date(a.ActivityDateInserted || a.DateCreated || '').getTime()
+        const dateB = new Date(b.ActivityDateInserted || b.DateCreated || '').getTime()
         return dateB - dateA
     })
 
@@ -312,14 +315,16 @@ export function computeUserStats(
     const totalWatchTimeSeconds = historyArray.reduce((acc, item) => {
         const type = (item.Type === 'Episode' || !!item.SeriesName) ? 'Episode' : (item.Type || 'Movie')
         const itemId = item.NowPlayingItemId || item.ItemId
-        const actualDuration = itemDurations[itemId]
+        const actualDuration = itemId !== undefined ? itemDurations[String(itemId)] : undefined
         const duration = sanitizePlaybackDuration(item.PlaybackDuration || 0, type, actualDuration)
 
         const rawUserKey = item.UserId || item.UserName
-        const localUserName = providerIdToLocalUserMap.get(rawUserKey)
-        const group = userGroupMap.get(`${rawUserKey}`)
+        if (rawUserKey === undefined) return acc + duration
+        const userKeyStr = String(rawUserKey)
+        const localUserName = providerIdToLocalUserMap.get(userKeyStr)
+        const group = userGroupMap.get(userKeyStr)
 
-        let userKey = rawUserKey
+        let userKey = userKeyStr
         let userName = item.UserName || 'Inconnu'
 
         if (group) {
@@ -330,13 +335,11 @@ export function computeUserStats(
             userName = localUserName
         }
 
-        if (userKey) {
-            const existing = userStatsMap.get(userKey) || { name: userName, duration: 0, plays: 0 }
-            if (group) existing.name = group.name
-            existing.duration += duration
-            existing.plays += 1
-            userStatsMap.set(userKey, existing)
-        }
+        const existing = userStatsMap.get(userKey) || { name: userName, duration: 0, plays: 0 }
+        if (group) existing.name = group.name
+        existing.duration += duration
+        existing.plays += 1
+        userStatsMap.set(userKey, existing)
 
         return acc + duration
     }, 0)
