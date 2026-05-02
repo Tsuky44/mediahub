@@ -17,6 +17,9 @@ export class TemplateRenderer {
   }
 
   private static buildVars(p: NotificationEventPayload): Record<string, string> {
+    const progress = p.download?.progress
+    const progressPercent = progress != null ? Math.round(progress * 100) + '%' : 'N/A'
+
     return {
       title: String(p.media.title ?? ''),
       year: p.media.year != null ? String(p.media.year) : '',
@@ -25,11 +28,19 @@ export class TemplateRenderer {
       genres: String(p.media.genres ?? '') || 'N/A',
       rating: p.media.rating != null ? String(p.media.rating) : 'N/A',
       user: p.requester?.name || p.requester?.email || 'inconnu',
+      userEmail: p.requester?.email ?? '',
+      userWhatsapp: p.requester?.whatsappNumber ?? '',
       quality: p.download?.quality ?? 'N/A',
       size: p.download?.size ?? 'N/A',
       release: p.download?.releaseName ?? '',
+      releaseName: p.download?.releaseName ?? '',
+      progress: progressPercent,
+      progressRaw: progress != null ? String(progress) : 'N/A',
       reason: p.failure?.reason ?? '',
+      stage: p.failure?.stage ?? '',
       correlationId: p.correlationId,
+      event: p.event,
+      timestamp: p.timestamp,
     }
   }
 

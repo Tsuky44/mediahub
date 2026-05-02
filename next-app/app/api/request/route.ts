@@ -354,8 +354,9 @@ export async function POST(request: NextRequest) {
 
             // Notifications V2 — independent module, coexists with legacy
             try {
+                console.log(`[Request API] Emitting NotificationsV2 MEDIA_REQUESTED for "${title}" (TMDB ${tmdbId})`)
                 const { Notify } = await import('@/lib/notifications-v2')
-                Notify.mediaRequested(
+                await Notify.mediaRequested(
                     {
                         tmdbId: String(tmdbId),
                         mediaType: mediaType as 'movie' | 'tv',

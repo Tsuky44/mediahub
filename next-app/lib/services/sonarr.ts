@@ -120,6 +120,8 @@ export interface SonarrQueueItem {
   estimatedCompletionTime: string;
   status: string;
   trackedDownloadStatus: string;
+  /** e.g. "downloading" | "importPending" | "importing" | "completed" | "failed" */
+  trackedDownloadState?: string;
   title: string;
   seriesId?: number; // Added seriesId
   downloadId?: string; // Added downloadId (hash)
@@ -175,7 +177,8 @@ export class SonarrService {
       const response = await client.get('/queue', {
         params: {
           pageSize: 1000,
-          includeUnknownSeriesItems: true
+          includeUnknownSeriesItems: true,
+          includeSeries: true,
         }
       })
       return (response.data.records || response.data) as SonarrQueueItem[]

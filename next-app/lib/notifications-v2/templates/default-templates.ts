@@ -20,6 +20,28 @@ export const DEFAULT_TEMPLATES: Record<NotificationEvent, string> = {
     '📌 *{title}* ({year})\n' +
     '👤 {user}',
 
+  [NOTIFICATION_EVENTS.MEDIA_GRABBED]:
+    '🎯 *Release trouvée*\n\n' +
+    '📌 *{title}* ({year})\n' +
+    '🏷️ Qualité : {quality}\n' +
+    '💾 Taille : {size}\n' +
+    '📦 {release}\n\n' +
+    '_Téléchargement va démarrer..._',
+
+  [NOTIFICATION_EVENTS.MEDIA_DOWNLOADING]:
+    '⬇️ *Téléchargement en cours*\n\n' +
+    '📌 *{title}* ({year})\n' +
+    '🏷️ Qualité : {quality}\n' +
+    '💾 Taille : {size}\n' +
+    '📦 {release}',
+
+  [NOTIFICATION_EVENTS.MEDIA_DOWNLOAD_COMPLETE]:
+    '✅ *Téléchargement terminé*\n\n' +
+    '📌 *{title}* ({year})\n' +
+    '🏷️ Qualité : {quality}\n' +
+    '💾 Taille : {size}\n\n' +
+    "_En attente de l'import..._",
+
   [NOTIFICATION_EVENTS.MEDIA_IMPORTING]:
     '📥 *Téléchargement terminé*\n\n' +
     '📌 *{title}* ({year})\n' +

@@ -24,7 +24,7 @@ export function StreamingCard({
   onRegionChange,
   providers,
   loadingProviders,
-  selectedProviders,
+  selectedProviders = [],
   onToggleProvider,
   showAllProviders,
   onToggleShowAllProviders,

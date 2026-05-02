@@ -1,24 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import dynamic from 'next/dynamic'
 import { useVisibleColumns } from '../_hooks/useVisibleColumns'
 import { useTorrents } from '../_hooks/useTorrents'
 import { useTorrentFilters, TorrentSortBy } from '../_hooks/useTorrentFilters'
 import { useTorrentSelection } from '../_hooks/useTorrentSelection'
 import { useTorrentManagerActions } from '../_hooks/useTorrentManagerActions'
-import { SORT_OPTIONS } from '../_constants/torrent-options'
-import { AddTorrentModal } from './torrent/AddTorrentModal'
-import { DeleteTorrentModal } from './torrent/DeleteTorrentModal'
 import { BatchActionsBar } from './torrent/BatchActionsBar'
-import { TorrentRow } from './torrent/TorrentRow'
+import { TorrentList } from './torrent/TorrentList'
 import { TorrentFiltersBar } from './torrent/TorrentFiltersBar'
+import { TorrentModals } from './TorrentModals'
 
-const FilterModal = dynamic(() => import('./torrent/FilterModal').then(m => m.FilterModal), { ssr: false })
-const SearchModal = dynamic(() => import('./torrent/SearchModal').then(m => m.SearchModal), { ssr: false })
-const ShareLimitModal = dynamic(() => import('./torrent/ShareLimitModal').then(m => m.ShareLimitModal), { ssr: false })
-
-export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boolean, canManage: boolean, canSearch: boolean }) {
+export function TorrentManager({ canAdd, canManage }: { canAdd: boolean, canManage: boolean }) {
     const [filter, setFilter] = useState('all')
 
     // Column Visibility (persisted via localStorage in the hook)
@@ -97,81 +90,21 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
                     onOpenAddModal={() => actions.setIsAddModalOpen(true)}
                 />
 
-                {/* Torrent List */}
-                <div className="w-full">
-                    {loading && torrents.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">Chargement...</div>
-                    ) : filteredTorrents.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">
-                            {searchQuery ? 'Aucun torrent trouvé pour cette recherche' : 'Aucun torrent trouvé'}
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 gap-3">
-                            {filteredTorrents.map((torrent) => (
-                                <TorrentRow
-                                    key={torrent.hash}
-                                    torrent={torrent}
-                                    isSelected={selectedTorrents.includes(torrent.hash)}
-                                    visibleColumns={visibleColumns}
-                                    canManage={canManage}
-                                    onToggleSelect={handleSelect}
-                                    onDelete={actions.handleDeleteClick}
-                                    onPause={actions.handlePause}
-                                    onResume={actions.handleResume}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </div>
+                <TorrentList
+                    torrents={torrents}
+                    filteredTorrents={filteredTorrents}
+                    loading={loading}
+                    searchQuery={searchQuery}
+                    selectedTorrents={selectedTorrents}
+                    visibleColumns={visibleColumns}
+                    canManage={canManage}
+                    onToggleSelect={handleSelect}
+                    onDelete={actions.handleDeleteClick}
+                    onPause={actions.handlePause}
+                    onResume={actions.handleResume}
+                />
             </div>
 
-            {/* Add Torrent Modal */}
-            <AddTorrentModal
-                isOpen={actions.isAddModalOpen}
-                onClose={() => actions.setIsAddModalOpen(false)}
-                onSubmit={actions.handleAddTorrent}
-                addMode={actions.addMode}
-                onAddModeChange={actions.setAddMode}
-                newTorrentUrl={actions.newTorrentUrl}
-                onNewTorrentUrlChange={actions.setNewTorrentUrl}
-                torrentFiles={actions.torrentFiles}
-                onTorrentFilesChange={actions.setTorrentFiles}
-            />
-
-            {/* Delete Confirmation Modal */}
-            <DeleteTorrentModal
-                isOpen={actions.isDeleteModalOpen}
-                torrent={actions.torrentToDelete}
-                onConfirm={actions.confirmDelete}
-                onCancel={() => {
-                    actions.setIsDeleteModalOpen(false)
-                    actions.setTorrentToDelete(null)
-                }}
-            />
-
-            {/* Advanced Filters Modal */}
-            <FilterModal
-                isOpen={actions.isFilterModalOpen}
-                onClose={() => actions.setIsFilterModalOpen(false)}
-                sortBy={sortBy}
-                onSortByChange={(id) => setSortBy(id as TorrentSortBy)}
-                sortOptions={SORT_OPTIONS}
-                trackers={trackers}
-                selectedTrackers={selectedTrackers}
-                onSelectedTrackersChange={setSelectedTrackers}
-                tags={tags}
-                selectedTags={selectedTags}
-                onSelectedTagsChange={setSelectedTags}
-                dateFrom={dateFrom}
-                onDateFromChange={setDateFrom}
-                onReset={resetFilters}
-            />
-            {/* Search Modal */}
-            <SearchModal
-                isOpen={actions.isSearchOpen}
-                onClose={() => actions.setIsSearchOpen(false)}
-            />
-            {/* Batch Actions Floating Bar */}
             <BatchActionsBar
                 selectedCount={selectedTorrents.length}
                 onBatchAction={(action) => actions.handleBatchAction(action, selectedTorrents)}
@@ -180,18 +113,22 @@ export function TorrentManager({ canAdd, canManage, canSearch }: { canAdd: boole
             />
         </div>
 
-            {/* Share Limit Modal */}
-            <ShareLimitModal
-                isOpen={actions.isShareLimitModalOpen}
-                onClose={() => actions.setIsShareLimitModalOpen(false)}
-                onApply={() => actions.handleShareLimit(selectedTorrents)}
-                shareLimitTime={actions.shareLimitTime}
-                onShareLimitTimeChange={actions.setShareLimitTime}
-                shareLimitUnit={actions.shareLimitUnit}
-                onShareLimitUnitChange={actions.setShareLimitUnit}
-                shareLimitType={actions.shareLimitType}
-                onShareLimitTypeChange={actions.setShareLimitType}
-            />
+        <TorrentModals
+            actions={actions}
+            sortBy={sortBy}
+            setSortBy={setSortBy}
+            trackers={trackers}
+            selectedTrackers={selectedTrackers}
+            setSelectedTrackers={setSelectedTrackers}
+            tags={tags}
+            selectedTags={selectedTags}
+            setSelectedTags={setSelectedTags}
+            dateFrom={dateFrom}
+            setDateFrom={setDateFrom}
+            resetFilters={resetFilters}
+            selectedTorrents={selectedTorrents}
+            clearSelection={clearSelection}
+        />
         </>
     )
 }

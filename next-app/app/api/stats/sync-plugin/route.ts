@@ -3,20 +3,69 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { defineAbilityFor } from '@/lib/ability';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { EmbyService } from '@/lib/services/emby';
 import { PlexService } from '@/lib/services/plex';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
+
+// External API item shapes (asserted at runtime from JSON responses)
+interface PlexHistoryItem {
+    viewedAt: number;
+    duration?: number;
+    accountID?: string | number;
+    ratingKey: string | number;
+    title?: string;
+    type?: string;
+    user?: string;
+    User?: { title?: string };
+    player?: { product?: string; title?: string };
+    grandparentTitle?: string;
+    parentTitle?: string;
+    index?: number;
+    parentIndex?: number;
+}
+
+interface EmbyHistoryItem {
+    DateCreated: string;
+    PlayDuration?: number;
+    UserId: string;
+    ItemId: string;
+    ItemType: string;
+    ItemName?: string;
+    UserName?: string;
+    Client?: string;
+    ClientName?: string;
+    DeviceName?: string;
+    SeriesName?: string;
+    SeasonName?: string;
+    IndexNumber?: number;
+    ParentIndexNumber?: number;
+}
+
+interface JellyfinPlayedItem {
+    Id: string;
+    Name?: string;
+    Type?: string;
+    SeriesName?: string;
+    SeasonName?: string;
+    IndexNumber?: number;
+    ParentIndexNumber?: number;
+    RunTimeTicks?: number;
+    UserData?: {
+        LastPlayedDate?: string;
+    };
+}
 
 
 const BATCH_SIZE = 1000;
 const SAFETY_LIMIT = 50000;
 
 // Helper: Batch process and insert/update logs
-async function batchProcess(source: string, items: any[], userMap: Map<string, string>, localUserMap: Map<string, number>) {
+async function batchProcess(source: string, items: Array<Record<string, unknown>>, userMap: Map<string, string>, localUserMap: Map<string, number>) {
     if (items.length === 0) return 0;
 
     // 1. Normalize items to WatchEvent schema
@@ -36,41 +85,43 @@ async function batchProcess(source: string, items: any[], userMap: Map<string, s
         let seasonNumber: number | null = null;
 
         if (source === 'plex') {
-            startTime = new Date(item.viewedAt * 1000);
-            playDuration = Math.round((item.duration || 1800000) / 1000);
-            embyUserId = String(item.accountID || 'unknown');
-            itemId = String(item.ratingKey);
-            itemName = item.title || 'Unknown';
-            itemType = item.type === 'episode' ? 'Episode' : (item.type === 'movie' ? 'Movie' : 'Unknown');
-            userName = item.user || item.User?.title || userMap.get(embyUserId) || 'Plex User';
-            client = item.player?.product || 'Plex';
-            device = item.player?.title || 'Plex Device';
+            const plexItem = item as unknown as PlexHistoryItem;
+            startTime = new Date(plexItem.viewedAt * 1000);
+            playDuration = Math.round((plexItem.duration || 1800000) / 1000);
+            embyUserId = String(plexItem.accountID || 'unknown');
+            itemId = String(plexItem.ratingKey);
+            itemName = plexItem.title || 'Unknown';
+            itemType = plexItem.type === 'episode' ? 'Episode' : (plexItem.type === 'movie' ? 'Movie' : 'Unknown');
+            userName = plexItem.user || plexItem.User?.title || userMap.get(embyUserId) || 'Plex User';
+            client = plexItem.player?.product || 'Plex';
+            device = plexItem.player?.title || 'Plex Device';
             
-            seriesName = item.grandparentTitle || null;
-            seasonName = item.parentTitle || null;
-            episodeNumber = item.index || null;
-            seasonNumber = item.parentIndex || null;
+            seriesName = plexItem.grandparentTitle || null;
+            seasonName = plexItem.parentTitle || null;
+            episodeNumber = plexItem.index || null;
+            seasonNumber = plexItem.parentIndex || null;
         } else {
             // Emby/Jellyfin
-            startTime = new Date(item.DateCreated);
-            playDuration = Math.round(item.PlayDuration || 0);
-            embyUserId = String(item.UserId);
-            itemId = String(item.ItemId);
-            itemName = item.ItemName || 'Unknown';
-            itemType = item.ItemType;
-            userName = item.UserName;
+            const embyItem = item as unknown as EmbyHistoryItem;
+            startTime = new Date(embyItem.DateCreated);
+            playDuration = Math.round(embyItem.PlayDuration || 0);
+            embyUserId = String(embyItem.UserId);
+            itemId = String(embyItem.ItemId);
+            itemName = embyItem.ItemName || 'Unknown';
+            itemType = embyItem.ItemType;
+            userName = embyItem.UserName || 'Unknown';
             if (!userName || userName === 'Unknown' || userName.includes('User')) {
                 userName = userMap.get(embyUserId) || userName || (source === 'emby' ? 'Emby User' : 'Jellyfin User');
             }
-            client = item.Client || item.ClientName || (source === 'emby' ? 'Emby' : 'Jellyfin');
-            device = item.DeviceName || (source === 'emby' ? 'Emby Device' : 'Jellyfin Device');
+            client = embyItem.Client || embyItem.ClientName || (source === 'emby' ? 'Emby' : 'Jellyfin');
+            device = embyItem.DeviceName || (source === 'emby' ? 'Emby Device' : 'Jellyfin Device');
             
-            seriesName = item.SeriesName || null;
-            seasonName = item.SeasonName || null;
+            seriesName = embyItem.SeriesName || null;
+            seasonName = embyItem.SeasonName || null;
             // Emby usually provides IndexNumber and ParentIndexNumber but logic might vary
             // Assuming standard Emby structure if available, otherwise null
-            episodeNumber = item.IndexNumber || null;
-            seasonNumber = item.ParentIndexNumber || null;
+            episodeNumber = embyItem.IndexNumber || null;
+            seasonNumber = embyItem.ParentIndexNumber || null;
         }
 
         // Try to link to local user
@@ -118,8 +169,8 @@ async function batchProcess(source: string, items: any[], userMap: Map<string, s
         }
     });
 
-    const toCreate: any[] = [];
-    const toUpdate: any[] = [];
+    const toCreate: Prisma.WatchEventCreateManyInput[] = [];
+    const toUpdate: Array<{ id: number; userName: string }> = [];
 
     // 3. Filter duplicates and identify updates
     for (const cand of candidates) {
@@ -163,7 +214,7 @@ async function batchProcess(source: string, items: any[], userMap: Map<string, s
     return createdCount;
 }
 
-async function syncPlex(settings: any[], getSetting: (k: string) => string | null | undefined, localUserMap: Map<string, number>) {
+async function syncPlex(settings: Array<Record<string, unknown>>, getSetting: (k: string) => string | null | undefined, localUserMap: Map<string, number>) {
     const plexUrl = getSetting('plex_url');
     const plexToken = getSetting('plex_token');
     if (!plexUrl || !plexToken) throw new Error('Plex not configured');
@@ -175,7 +226,7 @@ async function syncPlex(settings: any[], getSetting: (k: string) => string | nul
     let userMap = new Map<string, string>();
     try {
         const plexUsers = await plex.getUsers();
-        userMap = new Map(plexUsers.map((u: any) => [u.Id, u.Name]));
+        userMap = new Map(plexUsers.map((u: Record<string, unknown>) => [String(u.Id), String(u.Name)]));
     } catch (e) { warn('Failed to fetch Plex users', e); }
 
     let syncedCount = 0;
@@ -208,7 +259,7 @@ async function syncPlex(settings: any[], getSetting: (k: string) => string | nul
     return syncedCount;
 }
 
-async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSetting: (k: string) => string | null | undefined, localUserMap: Map<string, number>) {
+async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: Array<Record<string, unknown>>, getSetting: (k: string) => string | null | undefined, localUserMap: Map<string, number>) {
     const isEmby = source === 'emby';
     const targetUrl = isEmby ? getSetting('emby_url') : getSetting('jellyfin_url');
     const targetKey = isEmby ? getSetting('emby_api_key') : getSetting('jellyfin_api_key');
@@ -221,7 +272,7 @@ async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSet
     let userMap = new Map<string, string>();
     try {
         const users = await service.getUsers();
-        userMap = new Map(users.map((u: any) => [String(u.Id), u.Name]));
+        userMap = new Map(users.map((u: Record<string, unknown>) => [String(u.Id), String(u.Name)]));
     } catch (e) { warn(`Failed to fetch ${source} users`, e); }
 
     let syncedCount = 0;
@@ -250,8 +301,8 @@ async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSet
                 if (totalFetched >= SAFETY_LIMIT || items.length < BATCH_SIZE) hasMore = false;
             }
         }
-    } catch (err: any) {
-        error(`[SyncPlugin] ${source} PlaybackReporting failed:`, err.message);
+    } catch (err) {
+        error(`[SyncPlugin] ${source} PlaybackReporting failed:`, (err as Error).message);
         
         // Fallback for Emby: Custom Query (Statistics Plugin / Direct DB)
         if (isEmby && syncedCount === 0) {
@@ -262,7 +313,7 @@ async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSet
                  const response = await service.getCustomQuery(query);
                  
                  if (response && response.results) {
-                     const history = response.results.map((item: any[]) => ({
+                     const history = response.results.map((item: Array<unknown>) => ({
                          DateCreated: item[1],
                          UserId: item[2],
                          ItemId: item[3],
@@ -276,8 +327,8 @@ async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSet
                      }));
                      syncedCount += await batchProcess(source, history, userMap, localUserMap);
                  }
-             } catch (fbErr: any) {
-                 throw new Error(`${err.message} | Fallback: ${fbErr.message}`);
+             } catch (fbErr) {
+                 throw new Error(`${(err as Error).message} | Fallback: ${(fbErr as Error).message}`);
              }
         } 
         // Fallback for Jellyfin: User Played Items (Standard API)
@@ -290,28 +341,31 @@ async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSet
                      const playedItems = await service.getUserPlayedItems(user.Id);
                      
                      if (playedItems && playedItems.Items) {
-                         const history = playedItems.Items.map((item: any) => ({
-                             DateCreated: item.UserData?.LastPlayedDate || new Date().toISOString(),
-                             UserId: user.Id,
-                             ItemId: item.Id,
-                             ItemType: item.Type,
-                             ItemName: item.Name,
-                             PlaybackMethod: 'Unknown',
-                             Client: 'Jellyfin',
-                             DeviceName: 'Unknown',
-                             PlayDuration: item.RunTimeTicks ? Math.round(item.RunTimeTicks / 10000000) : 0,
-                             UserName: user.Name,
-                             SeriesName: item.SeriesName,
-                             SeasonName: item.SeasonName,
-                             IndexNumber: item.IndexNumber,
-                             ParentIndexNumber: item.ParentIndexNumber
-                         }));
+                         const history = playedItems.Items.map((item: Record<string, unknown>) => {
+                             const ji = item as unknown as JellyfinPlayedItem;
+                             return {
+                                 DateCreated: ji.UserData?.LastPlayedDate || new Date().toISOString(),
+                                 UserId: user.Id,
+                                 ItemId: ji.Id,
+                                 ItemType: ji.Type,
+                                 ItemName: ji.Name,
+                                 PlaybackMethod: 'Unknown',
+                                 Client: 'Jellyfin',
+                                 DeviceName: 'Unknown',
+                                 PlayDuration: ji.RunTimeTicks ? Math.round(ji.RunTimeTicks / 10000000) : 0,
+                                 UserName: user.Name,
+                                 SeriesName: ji.SeriesName,
+                                 SeasonName: ji.SeasonName,
+                                 IndexNumber: ji.IndexNumber,
+                                 ParentIndexNumber: ji.ParentIndexNumber
+                             };
+                         });
                          
                          syncedCount += await batchProcess(source, history, userMap, localUserMap);
                      }
                  }
-             } catch (fbErr: any) {
-                 throw new Error(`${err.message} | Jellyfin Fallback: ${fbErr.message}`);
+             } catch (fbErr) {
+                 throw new Error(`${(err as Error).message} | Jellyfin Fallback: ${(fbErr as Error).message}`);
              }
         } else {
             throw err;
@@ -323,7 +377,7 @@ async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: any[], getSet
 
 export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions);
-    const user = session?.user as any;
+    const user = session?.user as { role: string } | undefined;
     const ability = defineAbilityFor(user);
     const isAdmin = user?.role === 'admin';
 
@@ -362,8 +416,8 @@ export async function POST(req: NextRequest) {
         if (source === 'all' || source === 'plex') {
             try {
                 totalSynced += await syncPlex(settings, getSetting, localUserMap);
-            } catch (e: any) {
-                if (source === 'plex') errors.push(e.message);
+            } catch (e) {
+                if (source === 'plex') errors.push((e as Error).message);
                 error('[SyncPlugin] Plex error:', e);
             }
         }
@@ -371,8 +425,8 @@ export async function POST(req: NextRequest) {
         if (source === 'all' || source === 'emby') {
             try {
                 totalSynced += await syncEmbyLike('emby', settings, getSetting, localUserMap);
-            } catch (e: any) {
-                if (source === 'emby') errors.push(e.message);
+            } catch (e) {
+                if (source === 'emby') errors.push((e as Error).message);
                 error('[SyncPlugin] Emby error:', e);
             }
         }
@@ -380,11 +434,11 @@ export async function POST(req: NextRequest) {
         if (source === 'all' || source === 'jellyfin') {
             try {
                 totalSynced += await syncEmbyLike('jellyfin', settings, getSetting, localUserMap);
-            } catch (e: any) {
+            } catch (e) {
                 // Only error if explicitly requested or if it's the only source? 
                 // For 'all', we might ignore if not configured.
-                if (source === 'jellyfin') errors.push(e.message);
-                else if (e.message.includes('not configured')) { /* ignore */ }
+                if (source === 'jellyfin') errors.push((e as Error).message);
+                else if ((e as Error).message.includes('not configured')) { /* ignore */ }
                 else error('[SyncPlugin] Jellyfin error:', e);
             }
         }
@@ -399,8 +453,8 @@ export async function POST(req: NextRequest) {
             errors: errors.length > 0 ? errors : undefined
         });
 
-    } catch (error: any) {
-        error('Plugin sync error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    } catch (err) {
+        error('Plugin sync error:', err);
+        return NextResponse.json({ error: (err as Error).message }, { status: 500 });
     }
 }

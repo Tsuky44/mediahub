@@ -9,6 +9,7 @@ const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 export interface IndexerField {
   name: string
   value?: string | number | boolean
+  [key: string]: unknown
 }
 
 export async function getProwlarrService() {

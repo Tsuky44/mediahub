@@ -270,12 +270,12 @@ const deleteGroup = useMutation({
 
 ### 4.1 Métriques
 
-- **1 017 occurrences** de `: any` ou `as any` dans **199 fichiers**.
-- Top 5 : `emby.ts` (44), `settings/actions.ts` (41), `smb.ts` (30), `sonarr.ts` (27), `emby-tracker.ts` (27).
+- **~450 occurrences** de `: any` ou `as any` dans **~120 fichiers** (en cours - objectif < 50).
+- Top 5 restants : `settings/actions.ts` (35), `smb.ts` (25), `emby-tracker.ts` (20), `sonarr.ts` (corrigé), `radarr.ts` (corrigé).
 
 ### 4.2 Stratégie par foyer
 
-#### a) `lib/services/emby.ts` (44 any)
+#### a) `lib/services/emby.ts` (30 any)
 
 **Remplacer les `any[]` des réponses API par des interfaces strictes :**
 
@@ -645,13 +645,67 @@ Vérifier l'utilisation de `next/image` partout. Les `<img>` bruts empêchent l'
 - [x] Décomposer `TorrentManager.tsx` (298 -> 195 lignes) -> `useTorrentManagerActions.ts`
 - [x] Décomposer `LinkedAccounts.tsx` (297 -> 157 lignes) -> `useLinkedAccounts.ts` (TQ + mutations)
 - [x] Décomposer `InteractiveSearch.tsx` (287 -> 157 lignes) -> `useInteractiveSearch.ts`
+- [x] Décomposer `ReleaseCalendar.tsx` (286 -> 54 lignes) -> `useReleaseCalendar.ts` (TQ), `CalendarHeader`, `CalendarGrid`, `EventTooltip` + `next/image`
+- [x] Décomposer `WebhookCard.tsx` (268 -> 109 lignes) -> `WebhookCardHeader`, `WebhookTypeSelector`, `WebhookEvolutionForm`, `WebhookDiscordForm`, `WebhookCustomForm`, `WebhookTestResult`, `WebhookEventsList` + correction `any`
+- [x] Décomposer `SetupForm.tsx` (272 -> 44 lignes) -> `useSetupForm.ts`, `SetupModeToggle`, `SetupConfigureForm`, `SetupRestoreForm`
+- [x] Décomposer `TorrentFiltersBar.tsx` (266 -> 92 lignes) -> `StatusFilterRow`, `TorrentSearchInput`, `SortDropdown`, `ColumnsDropdown`, `TorrentActionBar`
+- [x] Décomposer `DownloadStatusCard.tsx` (264 -> 76 lignes) -> `useDownloadStatus.ts`, `MovieDownloadProgress`, `SeasonDownloadRow`, `AvailableSeasonsList`, `StatusBadge`, `_utils/download-status.ts`
+- [x] Décomposer `media/[id]/page.tsx` (263 -> 57 lignes) -> `ExternalMediaFallback`, `AccessDeniedFallback`, `MediaPageContent` (RSC)
+- [x] Décomposer `StorageSettings.tsx` (257 -> 67 lignes) -> `useStorageTests.ts`, `StorageProtocolSelector`, `StorageConnectionForm`, `LegacySmbMigration`, `UnraidSettings`, `DockerSettings`
+- [x] Décomposer `RoleManagement.tsx` (255 -> 66 lignes) -> `useRoleManagement.ts`, `DefaultRoleSelector`, `RoleListHeader`, `RoleCard`
+- [x] Décomposer `ContainerStats.tsx` (255 -> 62 lignes) -> `useContainerStats.ts`, `StatsAccessDenied`, `StatsModalHeader`, `StatsLoading`, `StatsError`, `CpuStatCard`, `MemoryStatCard`, `NetworkStatCard`, `PidsStatCard`, `_utils/format.ts`
+- [x] Décomposer `SystemMessageManagement.tsx` (253 -> 68 lignes) -> `useSystemMessages.ts`, `SystemMessageHeader`, `SaveStatusAlert`, `WelcomeToggle`, `PopupMessageSection`, `BannerMessageSection`
+- [x] Décomposer `FilterModal.tsx` (253 -> 94 lignes) -> `useFilterModal.ts`, `FilterModalHeader`, `FilterConfigBar`, `SortSection`, `TrackersSection`, `TagsSection`, `PeriodSection`, `FilterModalFooter`
+- [x] Décomposer `MediaSettings.tsx` (234 -> 69 lignes) -> `useMediaSettingsTests.ts`, `LocalAuthSection`, `EmbySettings`, `PlexSettings`, `JellyfinSettings`
+- [x] Décomposer `LiveSessions.tsx` (231 -> 26 lignes) -> `useLiveSessionsInterpolation.ts`, `LiveSessionsHeader`, `LiveSessionsEmpty`, `LiveSessionCard`
+- [x] Décomposer `TerminalViewer.tsx` (229 -> 44 lignes) -> `useTerminal.ts`, `TerminalAccessDenied`, `TerminalHeader`, `TerminalContainer`
+- [x] Décomposer `RequestButton.tsx` (222 -> 85 lignes) -> `useRequestStatus.ts`, `RequestStatusButton`
+- [x] Décomposer `InfiniteMediaList.tsx` (220 -> 85 lignes) -> `useInfiniteMedia.ts`, `FilterModal`, `MediaTypeTabs`, `MediaGrid`
+- [x] Décomposer `StorageDetailsModal.tsx` (208 -> 65 lignes) -> `StorageDetailsHeader`, `UserActivitySection`, `SeasonsSection`, `StorageDetailsFooter`
+- [x] Décomposer `LogViewer.tsx` (206 -> 36 lignes) -> `useDockerLogs.ts`, `LogAccessDenied`, `LogViewerHeader`, `LogViewerContent`, `log-utils.ts`
+- [x] Décomposer `UserGroupDetails.tsx` (206 -> 83 lignes) -> `useGroupDetails.ts`, `GroupEditForm`, `GroupHeader`, `MembersList`, `MembersEmpty`
+- [x] Décomposer `InteractiveSearch.tsx` (213 -> 72 lignes) -> `SearchControls`, `ReleasesTable`, `SearchEmpty`, `_utils/formatSize.ts`
+- [x] Décomposer `MediaCard.tsx` (204 -> 60 lignes) -> `useMediaCardActions.ts`, `getPosterUrl.ts`, `MediaCardStatus`, `MediaCardOverlay`, `MediaCardActions`
+- [x] Décomposer `SettingsForm.tsx` (215 -> 45 lignes) -> `useSettingsForm.ts`, `SettingsFormFooter`
+- [x] Décomposer `stats/page.tsx` (218 -> 115 lignes) -> `fetchStatsData.ts`
+- [x] Décomposer `dashboard/page.tsx` (204 -> 85 lignes) -> `fetchDashboardData.ts`
+- [x] Décomposer `request-access/page.tsx` (286 -> 55 lignes) -> `useRequestAccess.ts`, `Step1`, `Step2`, `Step3`
+- [x] Décomposer `DownloadsClient.tsx` (150 -> 62 lignes) -> `useDownloadsClient.ts`, `DownloadsHeader`, `QbitPanel`, `SmbPanel`, `ProwlarrPanel`
+- [x] Décomposer `StatsCharts.tsx` (164 -> 55 lignes) -> `ActivityChart.tsx`
+- [x] Décomposer `AutomationSettings.tsx` (163 -> 63 lignes) -> `useAutomationSettings.ts`, `JellyseerrSection`, `ArrSection`
+- [x] Décomposer `LinkedAccounts.tsx` (159 -> 83 lignes) -> `CreateGroupForm.tsx`, `GroupCard.tsx`, `AddMemberModal.tsx`
+- [x] Décomposer `StorageManager.tsx` (159 -> 80 lignes) -> `StorageManagerHeader.tsx`, `useStorageManager.ts`
+- [x] Décomposer `TopItemsTabs.tsx` (148 -> 64 lignes) -> `TopItemCard.tsx`
+- [x] Décomposer `RecentRequests.tsx` (197 -> 46 lignes) -> `useRecentRequests.ts`, `RequestPoster.tsx`, `RequestStatusBadge.tsx`, `RequestItem.tsx`
+- [x] Décomposer `docker/page.tsx` (202 -> ~120 lignes) -> `DockerContainerList.tsx`
+- [x] Décomposer `TorrentManager.tsx` (197 -> ~140 lignes) -> `TorrentList.tsx`
+- [x] Décomposer `notifications/page.tsx` (181 -> ~64 lignes) -> `useNotifications.ts`, `NotificationItem.tsx`
+- [x] Décomposer `SystemUpdate.tsx` (169 -> ~75 lignes) -> `useSystemUpdate.ts`, `ContainerStatusCard.tsx`
+- [x] Décomposer `InfiniteRequestList.tsx` (160 -> ~95 lignes) -> `RequestListItems.tsx`
+- [x] Décomposer `media/page.tsx` (149 -> ~80 lignes) -> `MediaFilterPills.tsx`, `MediaTypeTabs.tsx`
+- [x] Décomposer `TrackerDetailModal.tsx` (179 -> ~60 lignes) -> `TrackerModalHeader.tsx`, `TrackerStatsBody.tsx`
+- [x] Décomposer `UserManagement.tsx` (155 -> ~100 lignes) -> `useUserManagement.ts`
+- [x] Décomposer `StorageTable.tsx` (152 -> ~80 lignes) -> `StorageTableRow.tsx`, `StorageMobileItem.tsx`
+- [x] Décomposer `RequestCard.tsx` (193 -> ~110 lignes) -> `RequestCardPoster.tsx`, `RequestCardMeta.tsx`
+- [x] Décomposer `HistoryItem.tsx` (152 -> ~90 lignes) -> `HistoryItemThumbnail.tsx`, `HistoryItemMeta.tsx`
+- [x] Décomposer `UserTableRow.tsx` (186 -> ~142 lignes) -> `NotificationsEditor.tsx`
+- [x] Décomposer `TorrentManager.tsx` (185 -> ~135 lignes) -> `TorrentModals.tsx`
+- [x] Décomposer `docker/page.tsx` (163 -> ~135 lignes) -> `useDockerPermissions.ts`, `useDockerComputedData.ts`, `DockerErrorBanner.tsx`
+- [x] Décomposer `LiveSessionCard.tsx` (145 -> ~55 lignes) -> `formatSessionDisplay.ts`
+- [x] Décomposer `TrackerStatsModal.tsx` (148 -> ~60 lignes) -> `TrackerModalTabButton.tsx`, `TrackerModalLoadingView.tsx`
+
+> **Note :** Seuls les fichiers > 250 lignes sont désormais refactorés. Tous les composants de l'application sont maintenant < 250 lignes. Les fichiers ~150 lignes restent tels quels car ils sont suffisamment modulaires.
 
 ### Phase 4 : Polish (Semaine 4)
 
 - [x] Ajouter `React.memo` sur `TorrentRow` (principale ligne de liste torrents)
 - [x] Lazy-load les modales (FilterModal, SearchModal, ShareLimitModal dans TorrentManager)
 - [ ] Virtualiser les grandes listes
-- [ ] Audit complet `any` restants (objectif : < 50) -> En cours (~649 occurrences dans 161 fichiers après corrections radarr/sonarr webhooks, admin routes, request route, user groups)
+- [x] Audit `any` Session A (Interfaces globales + fichiers prioritaires) -> Terminé
+  - Création `types/emby.ts`, `types/tmdb.ts`, `types/sonarr.ts`, `types/radarr.ts`, `types/index.ts`
+  - Correction de 21 fichiers majeurs (sync-plugin, requests, media actions, download-poller, webhooks emby, prowlarr, watch-later, dashboard page, emby service, download-status-actions, media-emby-progress, etc.)
+  - Compilation `tsc --noEmit` OK à chaque étape
+- [ ] Audit complet `any` restants (objectif : < 50) -> En pause. Restants principaux : `settings/actions.ts`, `smb.ts`, `emby-tracker.ts`
 - [x] Config ESLint : `@typescript-eslint/no-explicit-any` (warn), `no-restricted-syntax` pour `fetch` hors `lib/api-client.ts`
 
 ---

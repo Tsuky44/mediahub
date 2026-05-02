@@ -1,13 +1,15 @@
 'use server'
 
-import { getRadarrServiceForUser, getSonarrServiceForUser, getQBittorrentServiceForUser } from '@/lib/auth'
+import { getRadarrServiceForUser, getSonarrServiceForUser } from '@/lib/auth'
+import { QBittorrentCache } from '@/lib/services/qbittorrent-cache'
 import { RadarrQueueItem } from '@/lib/services/radarr'
 import { SonarrQueueItem, SonarrSeries, SonarrSeason } from '@/lib/services/sonarr'
+import { Torrent } from '@/lib/services/qbittorrent'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export interface SeasonInfo {
@@ -116,9 +118,9 @@ export async function checkDownloadStatus(
                 let qbitStats = null
                 
                 try {
-                    const qbit = await getQBittorrentServiceForUser()
-                    if (qbit) {
-                        const torrents = await qbit.getTorrents()
+                    const qbit = await QBittorrentCache.getInstance().getTorrents('all')
+                    if (qbit && qbit.length > 0) {
+                        const torrents = qbit
                         
                         // 1. Try match by hash (downloadId)
                         if (item.downloadId) {
@@ -309,13 +311,10 @@ export async function checkDownloadStatus(
                 })
 
                 // Pre-fetch qBittorrent data if needed
-                let qbitTorrents: any[] = []
+                let qbitTorrents: Torrent[] = []
                 if (downloadingSeasons.size > 0) {
                      try {
-                         const qbit = await getQBittorrentServiceForUser()
-                         if (qbit) {
-                             qbitTorrents = await qbit.getTorrents()
-                         }
+                         qbitTorrents = QBittorrentCache.getInstance().getTorrents('all')
                      } catch (e) {
                          error('Failed to fetch qbit stats for TV:', e)
                      }
@@ -341,7 +340,7 @@ export async function checkDownloadStatus(
                             let qbitStats = null
                             if (downloadingItem.downloadId) {
                                 const downloadId = downloadingItem.downloadId
-                                const torrent = qbitTorrents.find((t: any) => t.hash.toLowerCase() === downloadId.toLowerCase())
+                                const torrent = qbitTorrents.find((t) => t.hash.toLowerCase() === downloadId.toLowerCase())
                                 if (torrent) {
                                     qbitStats = {
                                         progress: torrent.progress * 100,
@@ -356,7 +355,7 @@ export async function checkDownloadStatus(
                             // Fallback: Match by title
                             if (!qbitStats && downloadingItem.title) {
                                 const titleToMatch = normalize(downloadingItem.title)
-                                const torrent = qbitTorrents.find((t: any) => {
+                                const torrent = qbitTorrents.find((t) => {
                                     const tName = normalize(t.name)
                                     return tName.includes(titleToMatch) || titleToMatch.includes(tName)
                                 })
@@ -452,7 +451,7 @@ export async function checkDownloadStatus(
                         let qbitStats = null
                         if (downloadingItem.downloadId) {
                             const downloadId = downloadingItem.downloadId
-                            const torrent = qbitTorrents.find((t: any) => t.hash.toLowerCase() === downloadId.toLowerCase())
+                            const torrent = qbitTorrents.find((t) => t.hash.toLowerCase() === downloadId.toLowerCase())
                             if (torrent) {
                                 qbitStats = {
                                     progress: torrent.progress * 100,
@@ -467,7 +466,7 @@ export async function checkDownloadStatus(
                         // Fallback: Match by title
                         if (!qbitStats && downloadingItem.title) {
                             const titleToMatch = normalize(downloadingItem.title)
-                            const torrent = qbitTorrents.find((t: any) => {
+                            const torrent = qbitTorrents.find((t) => {
                                 const tName = normalize(t.name)
                                 return tName.includes(titleToMatch) || titleToMatch.includes(tName)
                             })

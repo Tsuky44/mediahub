@@ -4,10 +4,12 @@ import { getWatchLaterList, isInWatchLater } from './watch-later-actions'
 import { getCurrentUser, getEmbyServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { EmbyItem } from '@/types/emby'
+import { TmdbMovie, TmdbTvShow } from '@/types/tmdb'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
 const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 
@@ -64,21 +66,21 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
         const items = Array.isArray(data.Items) ? data.Items : []
         
         // Fetch TMDB poster paths in parallel for the current page
-        const enrichedItems = await Promise.all(items.map(async (item: any) => {
+        const enrichedItems = await Promise.all(items.map(async (item: EmbyItem) => {
             const tmdbId = item.ProviderIds?.Tmdb
             const itemType = item.Type === 'Movie' ? 'movie' : 'tv'
             let poster_path = null
             
             if (tmdbId && tmdbService) {
-                poster_path = await tmdbService.getPosterPath(parseInt(tmdbId), itemType)
+                poster_path = await tmdbService.getPosterPath(parseInt(String(tmdbId)), itemType)
             }
 
             // Fallback to Emby image if TMDB image is not available
-            if (!poster_path) {
-                poster_path = embyService.getItemImageUrl(item.Id)
+            if (!poster_path && item.Id != null) {
+                poster_path = embyService.getItemImageUrl(String(item.Id))
             }
 
-            const isWatchLaterItem = await isInWatchLater(item.Id, itemType)
+            const isWatchLaterItem = item.Id != null ? await isInWatchLater(String(item.Id), itemType) : false
 
             return {
                 id: item.Id,
@@ -133,7 +135,7 @@ export async function fetchRecentlyWatchedItems() {
         const allItems = Array.isArray(data.Items) ? data.Items : []
         
         // Group items by SeriesId (for episodes) or Id (for movies)
-        const uniqueItems: any[] = []
+        const uniqueItems: EmbyItem[] = []
         const seenIds = new Set<string>()
 
         for (const item of allItems) {
@@ -151,31 +153,31 @@ export async function fetchRecentlyWatchedItems() {
         log('[fetchRecentlyWatchedItems] Found unique items count:', uniqueItems.length)
         
         // Optimisation : Utiliser un cache local pour les détails des séries afin d'éviter les appels redondants
-        const seriesDetailsCache = new Map<string, any>()
+        const seriesDetailsCache = new Map<string, EmbyItem | undefined>()
         
-        const enrichedItems = await Promise.all(uniqueItems.map(async (item: any) => {
+        const enrichedItems = await Promise.all(uniqueItems.map(async (item: EmbyItem) => {
             let tmdbId = item.ProviderIds?.Tmdb
             const itemType = item.Type === 'Movie' ? 'movie' : (item.Type === 'Series' ? 'tv' : 'tv')
             
             let poster_path = null
             if (item.Type === 'Episode' && item.SeriesId) {
-                let series = seriesDetailsCache.get(item.SeriesId)
+                let series = seriesDetailsCache.get(String(item.SeriesId))
                 if (!series) {
-                    series = await embyService.getItemDetails(item.SeriesId, userId)
-                    seriesDetailsCache.set(item.SeriesId, series)
+                    series = await embyService.getItemDetails(String(item.SeriesId), userId)
+                    seriesDetailsCache.set(String(item.SeriesId), series)
                 }
                 const seriesTmdbId = series?.ProviderIds?.Tmdb
                 if (seriesTmdbId && tmdbService) {
-                    poster_path = await tmdbService.getPosterPath(parseInt(seriesTmdbId), 'tv')
+                    poster_path = await tmdbService.getPosterPath(parseInt(String(seriesTmdbId)), 'tv')
                     tmdbId = seriesTmdbId
                 }
             } else if (tmdbId && tmdbService) {
-                poster_path = await tmdbService.getPosterPath(parseInt(tmdbId), itemType)
+                poster_path = await tmdbService.getPosterPath(parseInt(String(tmdbId)), itemType)
             }
 
             // Fallback to Emby image
-            if (!poster_path) {
-                poster_path = embyService.getItemImageUrl(item.Type === 'Episode' ? item.SeriesId : item.Id)
+            if (!poster_path && item.Id != null) {
+                poster_path = embyService.getItemImageUrl(item.Type === 'Episode' && item.SeriesId != null ? String(item.SeriesId) : String(item.Id))
             }
 
             const lastPlayedDate = item.UserData?.LastPlayedDate 
@@ -192,7 +194,7 @@ export async function fetchRecentlyWatchedItems() {
                 name: item.Name,
                 seriesName: item.SeriesName,
                 poster_path: poster_path,
-                media_type: item.Type.toLowerCase(),
+                media_type: item.Type?.toLowerCase() ?? '',
                 type: item.Type,
                 overview: item.Overview,
                 emby_id: item.Id,
@@ -230,7 +232,7 @@ export async function fetchUserRecommendations(page: number = 1) {
         if (!dbUser) return { results: [], total_pages: 0 }
 
         // 1. Get user's recent watch history from Emby
-        let history: any[] = []
+        let history: EmbyItem[] = []
         if (dbUser.embyUserId && embyService) {
             const data = await embyService.getRecentlyPlayedItems(dbUser.embyUserId, 15)
             history = Array.isArray(data.Items) ? data.Items : []
@@ -258,12 +260,12 @@ export async function fetchUserRecommendations(page: number = 1) {
                 const type = item.Type === 'Movie' ? 'movie' : (item.Type === 'Series' || item.Type === 'Episode' ? 'tv' : null)
                 
                 if (item.Type === 'Episode' && item.SeriesId && dbUser.embyUserId && embyService) {
-                    const series = await embyService.getItemDetails(item.SeriesId, dbUser.embyUserId)
+                    const series = await embyService.getItemDetails(String(item.SeriesId), dbUser.embyUserId)
                     tmdbId = series?.ProviderIds?.Tmdb
                 }
 
                 if (tmdbId && type) {
-                    return { id: parseInt(tmdbId), type }
+                    return { id: parseInt(String(tmdbId)), type }
                 }
                 return null
             }))
@@ -291,7 +293,7 @@ export async function fetchUserRecommendations(page: number = 1) {
             const trending = await tmdbService.getTrending('movie', page)
             const trendingResults = Array.isArray(trending.results) ? trending.results : []
             return {
-                results: trendingResults.map((m: any) => ({
+                results: trendingResults.map((m: TmdbMovie | TmdbTvShow) => ({
                     ...m,
                     media_type: 'movie',
                     id: m.id.toString(),
@@ -310,7 +312,7 @@ export async function fetchUserRecommendations(page: number = 1) {
         // 4. Flatten, deduplicate and shuffle
         const combinedResults = allRecommendations.flatMap((res, index) => {
             const results = Array.isArray(res.results) ? res.results : []
-            return results.map((item: any) => ({
+            return results.map((item: TmdbMovie | TmdbTvShow) => ({
                 ...item,
                 media_type: seeds[index].type,
                 id: item.id.toString(),
@@ -391,7 +393,7 @@ export async function fetchServerTrends(page: number = 1) {
         const topRequestedArray = Array.isArray(topRequested) ? topRequested : []
 
         // 3. Unify and enrich
-        const trendItems: any[] = []
+        const trendItems: Array<Record<string, unknown>> = []
         const seenTmdbIds = new Set<string>()
 
         // Process watched items first
@@ -404,14 +406,14 @@ export async function fetchServerTrends(page: number = 1) {
                     
                     if (tmdbId) {
                         seenTmdbIds.add(tmdbId)
-                        const poster_path = await tmdbService.getPosterPath(parseInt(tmdbId), mediaType)
+                        const poster_path = await tmdbService.getPosterPath(parseInt(String(tmdbId)), mediaType)
                         trendItems.push({
                             id: watch.itemId,
                             title: watch.itemName || watch.seriesName,
                             name: watch.itemName || watch.seriesName,
                             poster_path,
                             media_type: mediaType,
-                            tmdbId: parseInt(tmdbId),
+                            tmdbId: parseInt(String(tmdbId)),
                             trendingReason: 'Populaire sur le serveur'
                         })
                     }

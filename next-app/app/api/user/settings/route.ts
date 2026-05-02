@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
         qbittorrent_url, 
         qbittorrent_username, 
         qbittorrent_password,
+        qbittorrent_poll_interval,
         smb_host,
         smb_username,
         smb_password,
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest) {
     await updateSetting('qbittorrent_url', qbittorrent_url)
     await updateSetting('qbittorrent_username', qbittorrent_username)
     await updateSetting('qbittorrent_password', qbittorrent_password)
+    await updateSetting('qbittorrent_poll_interval', qbittorrent_poll_interval)
     
     await updateSetting('smb_host', smb_host)
     await updateSetting('smb_username', smb_username)

@@ -16,12 +16,14 @@ interface EventsSectionProps {
     event: NotificationEvent,
     patch: Partial<EventRouteConfig>
   ) => void
+  onTestEvent: (event: NotificationEvent, mediaType: 'movie' | 'tv') => void
 }
 
 export default function EventsSection({
   events,
   users,
   onEventChange,
+  onTestEvent,
 }: EventsSectionProps) {
   return (
     <section>
@@ -34,6 +36,7 @@ export default function EventsSection({
             route={events[ev]}
             users={users}
             onChange={(patch) => onEventChange(ev, patch)}
+            onTest={(mediaType) => onTestEvent(ev, mediaType)}
           />
         ))}
       </div>

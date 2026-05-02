@@ -410,7 +410,7 @@ export class EmbyService {
     })
   }
 
-  async getUserItems(userId: string, filters: any = {}) {
+  async getUserItems(userId: string, filters: Record<string, unknown> = {}) {
     try {
       const client = await this.getClient(4000)
       const params = {
@@ -631,7 +631,7 @@ export class EmbyService {
                      }
                 }
 
-                let lastPlayedEpisode: any = null
+                let lastPlayedEpisode: Record<string, unknown> | null = null
                 
                 const seasonStats = new Map<number, { total: number, played: number }>()
 
@@ -692,7 +692,7 @@ export class EmbyService {
                         seasons: seasons,
                         playedEpisodes: playedCount,
                         totalEpisodes: episodes.length,
-                        episodeIds: episodes.map((e: any) => e.Id)
+                        episodeIds: episodes.map((e: Record<string, unknown>) => e.Id)
                     }
                 }
 
@@ -756,11 +756,11 @@ export class EmbyService {
       const episodes = episodesResponse.data.Items || []
       
       // Group episodes by season
-      const seasonsMap = new Map<string, any>()
+      const seasonsMap = new Map<string, Record<string, unknown>>()
       
       // Initialize seasons from season items
-      seasons.forEach((s: any) => {
-          seasonsMap.set(s.Id, {
+      seasons.forEach((s: Record<string, unknown>) => {
+          seasonsMap.set(String(s.Id), {
               id: s.Id,
               name: s.Name,
               index: s.IndexNumber,
@@ -770,8 +770,8 @@ export class EmbyService {
           })
       })
       
-      episodes.forEach((ep: any) => {
-          const seasonId = ep.SeasonId
+      episodes.forEach((ep: Record<string, unknown>) => {
+          const seasonId = String(ep.SeasonId)
           let season = seasonsMap.get(seasonId)
           
           if (!season) {
@@ -788,15 +788,17 @@ export class EmbyService {
           }
           
           let size = 0
-          if (ep.MediaSources && ep.MediaSources.length > 0) {
-              size = ep.MediaSources.reduce((acc: number, src: Record<string, unknown>) => acc + ((src as { Size?: number }).Size || 0), 0)
+          const mediaSources = ep.MediaSources as unknown[] | undefined
+          if (Array.isArray(mediaSources) && mediaSources.length > 0) {
+              size = mediaSources.reduce((acc: number, src: unknown) => acc + (((src as Record<string, unknown>).Size as number | undefined) || 0), 0)
           }
           
-          season.size += size
-          season.episodesCount += 1
+          const s = season as Record<string, unknown> & { size: number; episodesCount: number }
+          s.size += size
+          s.episodesCount += 1
       })
       
-      return Array.from(seasonsMap.values()).sort((a, b) => a.index - b.index)
+      return Array.from(seasonsMap.values()).sort((a: Record<string, unknown>, b: Record<string, unknown>) => (a.index as number) - (b.index as number))
       
     } catch (e) {
        error(`[EmbyService] getSeasonDetails failed for ${seriesId}:`, (e as Error).message)
@@ -828,7 +830,7 @@ export class EmbyService {
             })
             if (pbQueryResponse.data && pbQueryResponse.data.results && pbQueryResponse.data.results.length > 0) {
                 log(`[EmbyService] Custom query returned ${pbQueryResponse.data.results.length} rows`)
-                return pbQueryResponse.data.results.map((item: any[]) => ({
+                return pbQueryResponse.data.results.map((item: Array<unknown>) => ({
                     Id: item[0],
                     DateCreated: item[1],
                     UserId: item[2],
@@ -846,7 +848,7 @@ export class EmbyService {
             }
         } catch (e) {
             // Ignore custom query error and continue to official endpoints
-            warn('[EmbyService] Custom query failed, falling back to endpoints:', (e as any).message)
+            warn('[EmbyService] Custom query failed, falling back to endpoints:', (e as Error).message)
         }
 
         // 1. Try the Report endpoint
@@ -912,7 +914,7 @@ export class EmbyService {
             // Map the array of arrays to objects
             // Mapping for user_usage_stats plugin: 
             // 0:rowid, 1:DateCreated, 2:UserId, 3:ItemId, 4:ItemType, 5:ItemName, 6:PlaybackMethod, 7:ClientName, 8:DeviceName, 9:PlayDuration
-            return response.data.results.map((item: any[]) => ({
+            return response.data.results.map((item: Array<unknown>) => ({
                 Id: item[0],
                 DateCreated: item[1],
                 UserId: item[2],

@@ -10,6 +10,9 @@
 export const NOTIFICATION_EVENTS = {
   MEDIA_REQUESTED: 'MEDIA_REQUESTED',
   MEDIA_APPROVED: 'MEDIA_APPROVED',
+  MEDIA_GRABBED: 'MEDIA_GRABBED',
+  MEDIA_DOWNLOADING: 'MEDIA_DOWNLOADING',
+  MEDIA_DOWNLOAD_COMPLETE: 'MEDIA_DOWNLOAD_COMPLETE',
   MEDIA_IMPORTING: 'MEDIA_IMPORTING',
   MEDIA_AVAILABLE: 'MEDIA_AVAILABLE',
   MEDIA_FAILED: 'MEDIA_FAILED',
@@ -92,6 +95,8 @@ export interface EventRouteConfig {
   targetNumbers: string[]
   /** If true, notify the requester on their whatsappNumber (if set on their user profile). */
   notifyRequester: boolean
+  /** If true, send the movie/series poster as an image with caption. */
+  includePoster: boolean
 }
 
 export interface NotificationsV2Config {

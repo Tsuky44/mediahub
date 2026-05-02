@@ -27,19 +27,28 @@ import { NOTIFICATION_EVENTS } from './types'
 import type { MediaInfo, RequesterInfo, DownloadContext, FailureContext } from './types'
 
 export const Notify = {
-  mediaRequested(media: MediaInfo, requester?: RequesterInfo) {
-    notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_REQUESTED, { media, requester })
+  async mediaRequested(media: MediaInfo, requester?: RequesterInfo) {
+    await notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_REQUESTED, { media, requester })
   },
-  mediaApproved(media: MediaInfo, requester?: RequesterInfo) {
-    notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_APPROVED, { media, requester })
+  async mediaApproved(media: MediaInfo, requester?: RequesterInfo) {
+    await notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_APPROVED, { media, requester })
   },
-  mediaImporting(media: MediaInfo, download?: DownloadContext, requester?: RequesterInfo) {
-    notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_IMPORTING, { media, download, requester })
+  async mediaGrabbed(media: MediaInfo, download?: DownloadContext, requester?: RequesterInfo) {
+    await notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_GRABBED, { media, download, requester })
   },
-  mediaAvailable(media: MediaInfo, requester?: RequesterInfo) {
-    notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_AVAILABLE, { media, requester })
+  async mediaDownloading(media: MediaInfo, download?: DownloadContext, requester?: RequesterInfo) {
+    await notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_DOWNLOADING, { media, download, requester })
   },
-  mediaFailed(media: MediaInfo, failure: FailureContext, requester?: RequesterInfo) {
-    notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_FAILED, { media, failure, requester })
+  async mediaDownloadComplete(media: MediaInfo, download?: DownloadContext, requester?: RequesterInfo) {
+    await notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_DOWNLOAD_COMPLETE, { media, download, requester })
+  },
+  async mediaImporting(media: MediaInfo, download?: DownloadContext, requester?: RequesterInfo) {
+    await notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_IMPORTING, { media, download, requester })
+  },
+  async mediaAvailable(media: MediaInfo, requester?: RequesterInfo) {
+    await notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_AVAILABLE, { media, requester })
+  },
+  async mediaFailed(media: MediaInfo, failure: FailureContext, requester?: RequesterInfo) {
+    await notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_FAILED, { media, failure, requester })
   },
 }

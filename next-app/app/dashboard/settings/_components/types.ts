@@ -2,6 +2,7 @@ export interface SettingsFormData {
     qbittorrent_url: string
     qbittorrent_username: string
     qbittorrent_password: string
+    qbittorrent_poll_interval: string
     prowlarr_url: string
     prowlarr_api_key: string
     // Storage settings (SMB or FTP)
@@ -38,6 +39,7 @@ export interface SettingsFormData {
     unraid_url: string
     unraid_api_key: string
     docker_host: string
+    request_all_seasons_enabled: boolean
 }
 
 export type TabType = 'media' | 'downloads' | 'automation' | 'storage' | 'maintenance'

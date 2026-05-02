@@ -5,9 +5,9 @@ import { getCurrentUser } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export interface WatchLaterItem {
@@ -32,12 +32,13 @@ export async function toggleWatchLater(params: {
     try {
         log('[WatchLater] Toggling:', params.title, params.mediaId);
         const user = await getCurrentUser()
-        if (!user || !(user as any).id) {
+        const userIdRaw = (user as { id?: string | number }).id
+        if (!user || !userIdRaw) {
             error('[WatchLater] Unauthorized');
             return { success: false, error: 'Vous devez être connecté pour faire cela.' }
         }
 
-        const userId = parseInt((user as any).id)
+        const userId = parseInt(String(userIdRaw))
         
         // Verify if user exists in DB before creating relation (in case of DB reset)
         const userExists = await prisma.user.findUnique({ 
@@ -107,9 +108,10 @@ export async function toggleWatchLater(params: {
 export async function getWatchLaterList() {
     try {
         const user = await getCurrentUser()
-        if (!user || !(user as any).id) return []
+        const userIdRaw = (user as { id?: string | number }).id
+        if (!user || !userIdRaw) return []
 
-        const userId = parseInt((user as any).id)
+        const userId = parseInt(String(userIdRaw))
 
         const items = await prisma.watchLater.findMany({
             where: {
@@ -130,9 +132,10 @@ export async function getWatchLaterList() {
 export async function isInWatchLater(mediaId: string, mediaType: string): Promise<boolean> {
     try {
         const user = await getCurrentUser()
-        if (!user || !(user as any).id) return false
+        const userIdRaw = (user as { id?: string | number }).id
+        if (!user || !userIdRaw) return false
 
-        const userId = parseInt((user as any).id)
+        const userId = parseInt(String(userIdRaw))
         
         const existing = await prisma.watchLater.findFirst({
             where: {
@@ -155,9 +158,10 @@ export async function isInWatchLater(mediaId: string, mediaType: string): Promis
 export async function areInWatchLater(items: { id: string, mediaType: string }[]) {
     try {
         const user = await getCurrentUser()
-        if (!user || !(user as any).id) return []
+        const userIdRaw = (user as { id?: string | number }).id
+        if (!user || !userIdRaw) return []
 
-        const userId = parseInt((user as any).id)
+        const userId = parseInt(String(userIdRaw))
         
         if (!items || items.length === 0) return []
 

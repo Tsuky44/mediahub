@@ -84,6 +84,15 @@ export const DownloadSettings = ({ formData, updateField, readOnly }: Props) => 
                             type="password"
                         />
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <InputField 
+                            label="Intervalle de rafraîchissement (sec)" 
+                            value={formData.qbittorrent_poll_interval} 
+                            onChange={(v) => updateField('qbittorrent_poll_interval', v)}
+                            type="number"
+                            placeholder="5"
+                        />
+                    </div>
                 </div>
                 <TestButton 
                     onClick={handleTestQBittorrent} 

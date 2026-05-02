@@ -1,7 +1,7 @@
 'use server'
 
-import { getQBittorrentServiceForUser } from '@/lib/auth'
 import { getQBittorrentService } from '@/lib/services/qbittorrent'
+import { QBittorrentCache } from '@/lib/services/qbittorrent-cache'
 import { getTmdbService } from '@/lib/services/tmdb'
 import { getIGDBService } from '@/lib/services/igdb'
 import { getProwlarrService } from '@/lib/services/prowlarr'
@@ -137,15 +137,9 @@ export async function getTorrentDetails(hash: string): Promise<EnrichedTorrentIn
     // Check permissions
     await checkAccess('downloads.view')
 
-    // Get qBittorrent service
-    const qbtService = await getQBittorrentServiceForUser()
-    if (!qbtService) {
-      throw new Error('Service QBittorrent non configuré')
-    }
-
-    // Get all torrents and find the one we need
-    const torrents = await qbtService.getTorrents()
-    const torrent = torrents.find(t => t.hash.toLowerCase() === hash.toLowerCase())
+    // Get torrent from cache
+    const torrents = QBittorrentCache.getInstance().getTorrents('all')
+    const torrent = torrents.find((t: Torrent) => t.hash.toLowerCase() === hash.toLowerCase())
 
     if (!torrent) {
       return null

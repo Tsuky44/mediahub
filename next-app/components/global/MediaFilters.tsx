@@ -15,9 +15,10 @@ import type {
 interface MediaFiltersProps {
   type: MediaFiltersType
   onFilterChange: (filters: MediaFiltersValue) => void
+  initialFilters?: MediaFiltersValue
 }
 
-export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
+export function MediaFilters({ type, onFilterChange, initialFilters }: MediaFiltersProps) {
   const {
     filters,
     genres,
@@ -29,7 +30,7 @@ export function MediaFilters({ type, onFilterChange }: MediaFiltersProps) {
     toggleGenre,
     toggleProvider,
     resetFilters,
-  } = useMediaFilters({ type, onFilterChange })
+  } = useMediaFilters({ type, onFilterChange, initialFilters })
 
   return (
     <div className="space-y-8 pb-10">

@@ -29,6 +29,7 @@ export interface MediaPageData {
   credits: NormalizedCredits
   meta: MediaDerivedMeta
   progress: MediaEmbyProgress
+  requestAllSeasonsEnabled: boolean
 }
 
 export type MediaPageDataResult =
@@ -78,6 +79,7 @@ export async function loadMediaPageData(params: {
     details,
   })
   const embyUrl = await getSetting('emby_url')
+  const requestAllSeasonsEnabled = await getSetting('request_all_seasons_enabled')
 
   return {
     kind: 'ok',
@@ -92,6 +94,7 @@ export async function loadMediaPageData(params: {
       credits,
       meta,
       progress,
+      requestAllSeasonsEnabled: requestAllSeasonsEnabled === 'true',
     },
   }
 }

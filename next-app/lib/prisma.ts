@@ -18,9 +18,16 @@ if (!(BigInt.prototype as any).toJSON) {
 
 const prismaClientSingleton = () => {
   log('[Prisma] Creating new PrismaClient instance')
-  return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  })
+  // Par défaut en dev: seulement error/warn pour ne pas polluer le terminal.
+  // Pour activer les logs SQL: DEBUG_PRISMA=true (ou DEBUG_PRISMA=query).
+  const debugPrisma = process.env.DEBUG_PRISMA
+  const logLevels: Array<'query' | 'error' | 'warn' | 'info'> =
+    debugPrisma === 'true' || debugPrisma === 'query'
+      ? ['query', 'error', 'warn']
+      : process.env.NODE_ENV === 'development'
+      ? ['error', 'warn']
+      : ['error']
+  return new PrismaClient({ log: logLevels })
 }
 
 declare global {

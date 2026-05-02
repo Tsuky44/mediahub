@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useInView } from 'react-intersection-observer'
 import { Loader2, Info } from 'lucide-react'
 
 import { useInfiniteRequests } from './_hooks/useInfiniteRequests'
 import { useRequestSelection } from './_hooks/useRequestSelection'
+import { useRequestFilters } from './_hooks/useRequestFilters'
 import { RequestListToolbar } from './_components/RequestListToolbar'
-import { RequestCard } from './_components/RequestCard'
+import { RequestFilters } from './_components/RequestFilters'
+import { RequestListItems } from './_components/RequestListItems'
 
 interface InfiniteRequestListProps {
     initialData: {
@@ -38,13 +38,18 @@ export function InfiniteRequestList({
         deleteBulk,
     } = useRequestSelection(canDelete)
 
-    const { ref, inView } = useInView()
+    const {
+        mediaType,
+        ownership,
+        searchQuery,
+        setMediaType,
+        setOwnership,
+        setSearchQuery,
+        filteredItems,
+        activeFilterCount,
+    } = useRequestFilters()
 
-    useEffect(() => {
-        if (inView && hasMore && !loading) {
-            loadMore()
-        }
-    }, [inView, hasMore, loading, loadMore])
+    const visibleItems = filteredItems(items)
 
     const handleBulkDelete = async () => {
         const { successCount } = await deleteBulk(items)
@@ -70,59 +75,50 @@ export function InfiniteRequestList({
 
     return (
         <div className="space-y-6">
-            <RequestListToolbar
-                canSync={canSync}
-                canDelete={canDelete}
-                selectedCount={selectedIds.length}
-                totalCount={items.length}
-                allSelected={selectedIds.length === items.length}
-                isBulkDeleting={isBulkDeleting}
-                isSyncing={isSyncing}
-                onToggleSelectAll={() => toggleSelectAll(items.map(i => i.id))}
-                onClearSelection={clearSelection}
-                onBulkDelete={handleBulkDelete}
-                onSync={sync}
-                onRefresh={refresh}
-            />
-
-            <div className="grid grid-cols-1 gap-6">
-                {items.map((request: any) => (
-                    <RequestCard
-                        key={request.id}
-                        request={request}
-                        isSelected={selectedIds.includes(request.id)}
-                        canDelete={canDelete}
-                        isDeleting={deletingId === request.id}
-                        onToggleSelect={() => toggleSelection(request.id)}
-                        onDelete={(e) => handleDeleteOne(e, request)}
-                    />
-                ))}
+            <div className="space-y-4">
+                <RequestFilters
+                    mediaType={mediaType}
+                    ownership={ownership}
+                    searchQuery={searchQuery}
+                    activeCount={activeFilterCount}
+                    onMediaTypeChange={setMediaType}
+                    onOwnershipChange={setOwnership}
+                    onSearchChange={setSearchQuery}
+                    onClearFilters={() => {
+                        setMediaType('all')
+                        setOwnership('all')
+                        setSearchQuery('')
+                    }}
+                />
+                <RequestListToolbar
+                    canSync={canSync}
+                    canDelete={canDelete}
+                    selectedCount={selectedIds.length}
+                    totalCount={visibleItems.length}
+                    allSelected={selectedIds.length === visibleItems.length}
+                    isBulkDeleting={isBulkDeleting}
+                    isSyncing={isSyncing}
+                    onToggleSelectAll={() => toggleSelectAll(visibleItems.map((i: any) => i.id))}
+                    onClearSelection={clearSelection}
+                    onBulkDelete={handleBulkDelete}
+                    onSync={sync}
+                    onRefresh={refresh}
+                />
             </div>
 
-            {hasMore && (
-                <div ref={ref} className="flex justify-center py-8">
-                    {loading && <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />}
-                </div>
-            )}
-
-            {!hasMore && items.length > 0 && (
-                <p className="text-center text-zinc-500 py-8 text-sm font-medium">
-                    Toutes vos demandes ont été chargées
-                </p>
-            )}
-
-            {items.length === 0 && !isSyncing && (
-                <div className="text-center py-20 bg-zinc-900/30 rounded-3xl border border-dashed border-zinc-800">
-                    <Info className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
-                    <p className="text-zinc-400 text-sm font-medium">Aucune demande trouvée</p>
-                    <button
-                        onClick={refresh}
-                        className="text-indigo-400 mt-2 text-sm font-bold hover:text-indigo-300 transition-colors"
-                    >
-                        Actualiser
-                    </button>
-                </div>
-            )}
+            <RequestListItems
+                visibleItems={visibleItems}
+                hasMore={hasMore}
+                loading={loading}
+                isSyncing={isSyncing}
+                selectedIds={selectedIds}
+                deletingId={deletingId}
+                canDelete={canDelete}
+                onToggleSelect={toggleSelection}
+                onDelete={handleDeleteOne}
+                onLoadMore={loadMore}
+                onRefresh={refresh}
+            />
         </div>
     )
 }

@@ -42,6 +42,42 @@ export async function getSetting(key: string, defaultValue: string = ''): Promis
   return defaultValue
 }
 
+// Helper for retry with exponential backoff
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  operationName: string,
+  maxRetries = 3,
+  baseDelay = 100
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (e: unknown) {
+      lastError = e;
+      const errorMessage = e instanceof Error ? e.message : String(e);
+
+      // Only retry on timeout or database locked errors
+      const isRetryable =
+        errorMessage.includes('timed out') ||
+        errorMessage.includes('database is locked') ||
+        errorMessage.includes('busy') ||
+        errorMessage.includes('timeout');
+
+      if (!isRetryable || attempt === maxRetries) {
+        throw e;
+      }
+
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      console.warn(`[setSetting] ${operationName} failed (attempt ${attempt}/${maxRetries}): ${errorMessage}. Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
 export async function setSetting(key: string, value: string | null): Promise<void> {
   if (!prisma) {
     console.error(`[setSetting] Prisma client not available`);
@@ -49,26 +85,20 @@ export async function setSetting(key: string, value: string | null): Promise<voi
   }
 
   // Invalider le cache immédiatement sur écriture
-  settingsCache.delete(key)
-  
+  settingsCache.delete(key);
+
   // Ensure value is a string or null
   const safeValue = value === undefined ? null : value;
-  
-  const existing = await prisma.setting.findUnique({
-    where: { key },
-    select: { id: true }
-  })
 
-  if (existing) {
-    await prisma.setting.update({
-      where: { id: existing.id },
-      data: { value: safeValue },
-      select: { id: true }
-    })
-  } else {
-    await prisma.setting.create({
-      data: { key, value: safeValue },
-      select: { id: true }
-    })
-  }
+  // Use upsert with retry for atomic operation
+  await withRetry(
+    () => prisma.setting.upsert({
+      where: { key },
+      update: { value: safeValue },
+      create: { key, value: safeValue },
+    }),
+    `upsert setting "${key}"`,
+    5,  // max 5 retries
+    200 // base delay 200ms
+  );
 }

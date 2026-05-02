@@ -41,29 +41,53 @@ export class EvolutionListener {
   }
 
   private async handle(payload: NotificationEventPayload): Promise<void> {
+    const tag = `[NotificationsV2][EvolutionListener][${payload.correlationId}]`
     let config
     try {
       config = await ConfigStore.load()
     } catch (err) {
-      console.error('[NotificationsV2][EvolutionListener] Failed to load config:', err)
+      console.error(`${tag} Failed to load config:`, err)
       return
     }
 
-    if (!config.enabled) return
+    if (!config.enabled) {
+      console.warn(`${tag} ⚠️ Notifications V2 disabled (config.enabled=false). Event ${payload.event} dropped.`)
+      return
+    }
 
     const route = config.events[payload.event]
-    if (!route || !route.enabled) return
+    if (!route) {
+      console.warn(`${tag} ⚠️ No route config for ${payload.event}. Event dropped.`)
+      return
+    }
+    if (!route.enabled) {
+      console.warn(`${tag} ⚠️ Route disabled for ${payload.event}. Event dropped.`)
+      return
+    }
+
+    console.log(
+      `${tag} Handling ${payload.event} | route: targetUserIds=${JSON.stringify(route.targetUserIds)}, targetNumbers=${JSON.stringify(route.targetNumbers)}, notifyRequester=${route.notifyRequester}`
+    )
 
     const recipients = await this.resolveRecipients(route, config.evolution.defaultNumber, payload)
     if (recipients.size === 0) {
-      console.log(
-        `[NotificationsV2][EvolutionListener] No recipients for ${payload.event} (${payload.correlationId})`
+      console.warn(
+        `${tag} ⚠️ No recipients resolved for ${payload.event}. Check route config + user.whatsappNumber + evolution.defaultNumber.`
       )
       return
     }
 
+    console.log(`${tag} Resolved ${recipients.size} recipient(s): ${Array.from(recipients).join(', ')}`)
+
     const text = TemplateRenderer.render(payload, route.template)
-    const mediaUrl = buildPosterUrl(payload.media.posterPath)
+    const mediaUrl = route.includePoster ? buildPosterUrl(payload.media.posterPath) : undefined
+
+    if (!config.evolution.apiUrl || !config.evolution.apiKey || !config.evolution.instance) {
+      console.error(
+        `${tag} ❌ Evolution config incomplete: apiUrl=${!!config.evolution.apiUrl}, apiKey=${!!config.evolution.apiKey}, instance=${!!config.evolution.instance}`
+      )
+      return
+    }
 
     const provider: MessageProvider = new EvolutionProvider(config.evolution, config.retry)
 

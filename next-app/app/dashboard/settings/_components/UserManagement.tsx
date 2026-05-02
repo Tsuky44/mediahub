@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import type { User, UserRole, ProviderFilter } from '../_types/user'
+import type { User, UserRole } from '../_types/user'
 import { useUsers } from '../_hooks/useUsers'
+import { useUserManagement } from './users/useUserManagement'
 import { UserSyncButtons } from './users/UserSyncButtons'
 import { ProviderFilterTabs } from './users/ProviderFilterTabs'
 import { UserBulkActionBar } from './users/UserBulkActionBar'
@@ -28,48 +28,23 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
         syncProvider,
     } = useUsers(initialUsers)
 
-    const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
-    const [filterProvider, setFilterProvider] = useState<ProviderFilter>('all')
-    const [bulkRole, setBulkRole] = useState<string>('')
-    const [showCreateModal, setShowCreateModal] = useState(false)
-    const [editingNotifsId, setEditingNotifsId] = useState<number | null>(null)
-
-    const filteredUsers = users.filter(user => {
-        if (filterProvider === 'all') return true
-        if (filterProvider === 'emby') return !!user.embyUserId
-        if (filterProvider === 'plex') return !!user.plexUserId
-        if (filterProvider === 'jellyfin') return !!user.jellyfinUserId
-        if (filterProvider === 'local') return !user.embyUserId && !user.plexUserId && !user.jellyfinUserId
-        return true
-    })
-
-    const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.checked) setSelectedUserIds(filteredUsers.map(u => u.id))
-        else setSelectedUserIds([])
-    }
-
-    const handleToggleSelect = (userId: number) => {
-        setSelectedUserIds(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId])
-    }
-
-    const handleBulkApplyRole = async () => {
-        if (selectedUserIds.length === 0 || !bulkRole) return
-        if (!confirm(`Voulez-vous vraiment changer le rôle de ${selectedUserIds.length} utilisateurs ?`)) return
-        const count = await bulkUpdateRole(selectedUserIds, bulkRole)
-        if (count !== null) {
-            setSelectedUserIds([])
-            setBulkRole('')
-        }
-    }
-
-    const handleBulkDelete = async () => {
-        if (selectedUserIds.length === 0) return
-        if (!confirm(`Voulez-vous vraiment supprimer ces ${selectedUserIds.length} utilisateurs ?`)) return
-        const count = await bulkDelete(selectedUserIds)
-        if (count !== null) setSelectedUserIds([])
-    }
-
-    const showBulkBar = selectedUserIds.length > 0 && !readOnly
+    const {
+        selectedUserIds,
+        filterProvider,
+        setFilterProvider,
+        bulkRole,
+        setBulkRole,
+        showCreateModal,
+        setShowCreateModal,
+        editingNotifsId,
+        setEditingNotifsId,
+        filteredUsers,
+        handleSelectAll,
+        handleToggleSelect,
+        handleBulkApplyRole,
+        handleBulkDelete,
+        showBulkBar,
+    } = useUserManagement(users, readOnly)
 
     return (
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden">
@@ -92,8 +67,8 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
                             roles={roles}
                             bulkRole={bulkRole}
                             onBulkRoleChange={setBulkRole}
-                            onApplyRole={handleBulkApplyRole}
-                            onDelete={handleBulkDelete}
+                            onApplyRole={() => handleBulkApplyRole(bulkUpdateRole)}
+                            onDelete={() => handleBulkDelete(bulkDelete)}
                         />
                     )}
                 </div>

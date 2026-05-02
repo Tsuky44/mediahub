@@ -9,13 +9,34 @@ import type {
 } from '../_types/media-page'
 
 const isDev = process.env.NODE_ENV === 'development'
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const log = (...args: any[]) => {
+const log = (...args: unknown[]) => {
   if (isDev) console.log(...args)
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const errorLog = (...args: any[]) => {
+const errorLog = (...args: unknown[]) => {
   if (isDev) console.error(...args)
+}
+
+interface EmbyApiItem {
+  ServerId?: string;
+  Id?: string;
+  UserData?: {
+    Played?: boolean;
+    PlayedPercentage?: number;
+    UnplayedItemCount?: number;
+    PlaybackPositionTicks?: number;
+  };
+  RecursiveItemCount?: number;
+}
+
+interface EmbyApiEpisode {
+  ParentIndexNumber?: number;
+  UserData?: {
+    Played?: boolean;
+  };
+}
+
+interface EmbyApiSystemInfo {
+  Id?: string;
 }
 
 const EMPTY_PROGRESS: MediaEmbyProgress = {
@@ -35,20 +56,17 @@ export async function fetchMediaEmbyProgress(params: {
   userEmail: string | null | undefined
   tmdbId: number
   mediaType: MediaType
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  details: any
+  details: Record<string, unknown>
 }): Promise<MediaEmbyProgress> {
   const { userEmail, tmdbId, mediaType, details } = params
   if (!userEmail) return EMPTY_PROGRESS
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dbUser = await (prisma as any).user.findUnique({
+  const dbUser = await prisma.user.findUnique({
     where: { email: userEmail },
   })
   if (!dbUser) return EMPTY_PROGRESS
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const calendarEvent = await (prisma as any).userCalendarEvent.findUnique({
+  const calendarEvent = await prisma.userCalendarEvent.findUnique({
     where: {
       userId_tmdbId_mediaType: {
         userId: dbUser.id,
@@ -68,33 +86,32 @@ export async function fetchMediaEmbyProgress(params: {
     return { ...EMPTY_PROGRESS, isInCalendar, embyUserId: dbUser.embyUserId }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let embyItem: any = null
+  let embyItem: EmbyApiItem | null = null
   let embyServerId: string | null = null
   let userProgress: UserProgress | null = null
   let seasonProgress: SeasonProgressEntry[] = []
 
   try {
-    embyItem = await embyService.getItemByTmdbId(
+    embyItem = (await embyService.getItemByTmdbId(
       dbUser.embyUserId,
       tmdbId,
       mediaType === 'movie' ? 'Movie' : 'Series'
-    )
+    )) as EmbyApiItem | null
 
     if (embyItem?.ServerId) {
       embyServerId = embyItem.ServerId
     } else {
-      const sysInfo = await embyService.getSystemInfo()
-      if (sysInfo) embyServerId = sysInfo.Id
+      const sysInfo = (await embyService.getSystemInfo()) as EmbyApiSystemInfo | null
+      if (sysInfo) embyServerId = sysInfo.Id || null
     }
 
     if (embyItem) {
       if (embyItem.UserData) {
         userProgress = {
-          played: embyItem.UserData.Played,
-          playedPercentage: embyItem.UserData.PlayedPercentage,
-          unplayedItemCount: embyItem.UserData.UnplayedItemCount,
-          playbackPositionTicks: embyItem.UserData.PlaybackPositionTicks,
+          played: embyItem.UserData.Played ?? false,
+          playedPercentage: embyItem.UserData.PlayedPercentage ?? 0,
+          unplayedItemCount: embyItem.UserData.UnplayedItemCount ?? 0,
+          playbackPositionTicks: embyItem.UserData.PlaybackPositionTicks ?? 0,
           totalEpisodes:
             mediaType === 'tv' && embyItem.RecursiveItemCount
               ? embyItem.RecursiveItemCount
@@ -102,22 +119,22 @@ export async function fetchMediaEmbyProgress(params: {
         }
       }
 
-      if (mediaType === 'tv') {
+      if (mediaType === 'tv' && embyItem.Id) {
         log(`[MediaDetails] Fetching episodes for series ${embyItem.Id}`)
-        const allEpisodes = await embyService.getEpisodes(
+        const allEpisodes = (await embyService.getEpisodes(
           dbUser.embyUserId,
           embyItem.Id
-        )
+        )) as EmbyApiEpisode[]
         log(`[MediaDetails] Found ${allEpisodes.length} episodes`)
 
         if (userProgress && allEpisodes.length > 0) {
           const playedCount = allEpisodes.filter(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (e: any) => e.UserData?.Played
+            (e: EmbyApiEpisode) => e.UserData?.Played
           ).length
+          const detailsEpisodes = details.number_of_episodes as number | undefined
           const totalEpisodes =
-            details.number_of_episodes && details.number_of_episodes > 0
-              ? details.number_of_episodes
+            typeof detailsEpisodes === 'number' && detailsEpisodes > 0
+              ? detailsEpisodes
               : allEpisodes.length
 
           userProgress.playedPercentage = Math.min(
@@ -136,7 +153,7 @@ export async function fetchMediaEmbyProgress(params: {
           { played: number; total: number }
         >()
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        allEpisodes.forEach((ep: any) => {
+        allEpisodes.forEach((ep: EmbyApiEpisode) => {
           const seasonNum = ep.ParentIndexNumber
           if (seasonNum === undefined) return
           if (!progressMap.has(seasonNum)) {

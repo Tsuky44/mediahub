@@ -32,7 +32,7 @@ export async function getConfiguredTrackers(): Promise<{ configs: TrackerConfig[
       passkey: c.passkey ? '***hidden***' : undefined
     }))
     return { configs: sanitizedConfigs }
-  } catch (e: any) {
+  } catch (e) {
     console.error('[TrackerStats] Failed to get trackers:', e)
     return { configs: [] }
   }
@@ -78,9 +78,9 @@ export async function addTrackerConfig(
         passkey: newConfig.passkey ? '***hidden***' : undefined
       }
     }
-  } catch (e: any) {
+  } catch (e) {
     console.error('[TrackerStats] Failed to add tracker:', e)
-    return { success: false, error: e.message }
+    return { success: false, error: (e as Error).message }
   }
 }
 
@@ -118,9 +118,9 @@ export async function updateTrackerConfig(
     revalidatePath('/dashboard/settings')
     
     return { success: true }
-  } catch (e: any) {
+  } catch (e) {
     console.error('[TrackerStats] Failed to update tracker:', e)
-    return { success: false, error: e.message }
+    return { success: false, error: (e as Error).message }
   }
 }
 
@@ -145,9 +145,9 @@ export async function deleteTrackerConfig(id: string): Promise<{ success: boolea
     revalidatePath('/dashboard/settings')
     
     return { success: true }
-  } catch (e: any) {
+  } catch (e) {
     console.error('[TrackerStats] Failed to delete tracker:', e)
-    return { success: false, error: e.message }
+    return { success: false, error: (e as Error).message }
   }
 }
 
@@ -223,9 +223,9 @@ export async function testTrackerConnection(
       }
       return { success: false, error: errorMsg }
     }
-  } catch (e: any) {
+  } catch (e) {
     console.error('[TrackerStats] Connection test failed:', e)
-    return { success: false, error: `Erreur: ${e.message}` }
+    return { success: false, error: `Erreur: ${(e as Error).message}` }
   }
 }
 
@@ -286,7 +286,7 @@ export async function getAllTrackerStats(force: boolean = false): Promise<{
     })
 
     return { stats, configs, formatted, cache: getTrackerStatsCacheInfo() }
-  } catch (e: any) {
+  } catch (e) {
     console.error('[TrackerStats] Failed to get stats:', e)
     return { stats: new Map(), configs: [], formatted: [], cache: { cached: false } }
   }
@@ -378,9 +378,9 @@ export async function importTrackersFromProwlarr(): Promise<{
       imported: count,
       configs: importedConfigs
     }
-  } catch (e: any) {
+  } catch (e) {
     console.error('[TrackerStats] Failed to import from Prowlarr:', e)
-    return { success: false, error: e.message, imported: 0, configs: [] }
+    return { success: false, error: (e as Error).message, imported: 0, configs: [] }
   }
 }
 
@@ -390,9 +390,9 @@ export async function importTrackersFromProwlarr(): Promise<{
 export async function debugProwlarrData(): Promise<{
   success: boolean
   error?: string
-  indexerStats?: any
-  sampleIndexer?: any
-  allIndexerFields?: any[]
+  indexerStats?: unknown
+  sampleIndexer?: unknown
+  allIndexerFields?: Array<unknown>
 }> {
   if (!await hasTrackerAccess()) {
     return { success: false, error: 'Permission denied' }
@@ -413,14 +413,14 @@ export async function debugProwlarrData(): Promise<{
     const indexers = await prowlarr.getIndexers()
     
     // Get detailed config for first indexer to see fields
-    const allIndexerFields: any[] = []
+    const allIndexerFields: Array<Record<string, unknown>> = []
     for (const indexer of indexers.slice(0, 5)) {
       const details = await prowlarr.getIndexerDetails(indexer.id)
       if (details) {
         allIndexerFields.push({
           name: details.name,
           implementation: details.implementation,
-          fields: (details.fields || []).map((f: any) => ({
+          fields: (details.fields || []).map((f: Record<string, unknown>) => ({
             name: f.name,
             label: f.label,
             type: f.type,
@@ -437,8 +437,8 @@ export async function debugProwlarrData(): Promise<{
       sampleIndexer: indexers[0],
       allIndexerFields
     }
-  } catch (e: any) {
+  } catch (e) {
     console.error('[TrackerStats] Debug failed:', e)
-    return { success: false, error: e.message }
+    return { success: false, error: (e as Error).message }
   }
 }

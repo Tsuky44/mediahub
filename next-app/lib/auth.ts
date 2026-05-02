@@ -537,7 +537,38 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   session: {
-    strategy: "jwt"
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  cookies: {
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+        maxAge: 30 * 24 * 60 * 60, // 30 days
+      },
+    },
+    callbackUrl: {
+      name: `__Secure-next-auth.callback-url`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+      },
+    },
+    csrfToken: {
+      name: `__Host-next-auth.csrf-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+      },
+    },
   },
   pages: {
     signIn: '/login',
@@ -772,11 +803,6 @@ export async function getSonarrServiceForUser() {
   return await getSonarrService()
 }
 
-export async function getQBittorrentServiceForUser() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user) return null
-  return getQBittorrentService()
-}
 
 export async function getStorageServiceForUser() {
   const session = await getServerSession(authOptions)

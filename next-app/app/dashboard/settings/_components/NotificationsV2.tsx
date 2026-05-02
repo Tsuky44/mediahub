@@ -20,6 +20,7 @@ export default function NotificationsV2Settings() {
     updateEventRoute,
     handleSave,
     handleTest,
+    handleTestEvent,
   } = useNotificationsV2()
 
   if (loading) return <div className="p-4">Chargement...</div>
@@ -40,6 +41,7 @@ export default function NotificationsV2Settings() {
         events={config.events}
         users={users}
         onEventChange={updateEventRoute}
+        onTestEvent={handleTestEvent}
       />
       <NotificationsActionsBar
         saving={saving}

@@ -19,6 +19,7 @@ interface MediaPrimaryActionsProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   trailer: any
   ability: ReturnType<typeof defineAbilityFor>
+  requestAllSeasonsEnabled: boolean
 }
 
 export default function MediaPrimaryActions({
@@ -32,6 +33,7 @@ export default function MediaPrimaryActions({
   embyUrl,
   trailer,
   ability,
+  requestAllSeasonsEnabled,
 }: MediaPrimaryActionsProps) {
   return (
     <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-white/5">
@@ -43,6 +45,7 @@ export default function MediaPrimaryActions({
         seasons={details.seasons}
         seasonStatuses={availability.seasons || []}
         canRequest={ability.can('create', 'MediaRequest')}
+        requestAllSeasonsEnabled={requestAllSeasonsEnabled}
       />
       {embyItem && embyServerId && embyUrl && (
         <PlayButton

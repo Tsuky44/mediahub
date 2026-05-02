@@ -5,6 +5,7 @@ import {
   getNotificationsV2Config,
   saveNotificationsV2Config,
   testNotificationsV2,
+  testEventNotification,
   getUsersForNotifications,
 } from '../notifications-v2-actions'
 import type { NotificationsV2Config, NotificationEvent } from '@/lib/notifications-v2'
@@ -25,6 +26,7 @@ interface UseNotificationsV2Result {
   ) => void
   handleSave: () => Promise<void>
   handleTest: () => Promise<void>
+  handleTestEvent: (event: NotificationEvent, mediaType: 'movie' | 'tv') => Promise<void>
 }
 
 export function useNotificationsV2(): UseNotificationsV2Result {
@@ -117,6 +119,16 @@ export function useNotificationsV2(): UseNotificationsV2Result {
     }
   }, [])
 
+  const handleTestEvent = useCallback(async (event: NotificationEvent, mediaType: 'movie' | 'tv') => {
+    try {
+      const res = await testEventNotification(event, mediaType)
+      setMessage(res.message)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setMessage(`❌ ${msg}`)
+    }
+  }, [])
+
   return {
     config,
     users,
@@ -129,5 +141,6 @@ export function useNotificationsV2(): UseNotificationsV2Result {
     updateEventRoute,
     handleSave,
     handleTest,
+    handleTestEvent,
   }
 }

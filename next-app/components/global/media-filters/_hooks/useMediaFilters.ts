@@ -16,6 +16,7 @@ import type {
 export interface UseMediaFiltersOptions {
   type: MediaFiltersType
   onFilterChange: (filters: MediaFiltersValue) => void
+  initialFilters?: MediaFiltersValue
 }
 
 export interface UseMediaFiltersResult {
@@ -37,14 +38,29 @@ export interface UseMediaFiltersResult {
 export function useMediaFilters({
   type,
   onFilterChange,
+  initialFilters,
 }: UseMediaFiltersOptions): UseMediaFiltersResult {
   const [genres, setGenres] = useState<Genre[]>([])
   const [providers, setProviders] = useState<WatchProvider[]>([])
   const [showAllProviders, setShowAllProviders] = useState(false)
   const [loadingProviders, setLoadingProviders] = useState(false)
+  const mergeWithDefaults = (filters?: MediaFiltersValue): MediaFiltersValue => ({
+    ...DEFAULT_MEDIA_FILTERS,
+    ...filters,
+    genres: filters?.genres ?? [],
+    watch_providers: filters?.watch_providers ?? [],
+  })
+
   const [filters, setFilters] = useState<MediaFiltersValue>(
-    DEFAULT_MEDIA_FILTERS
+    mergeWithDefaults(initialFilters)
   )
+
+  // Sync filters when initialFilters changes (e.g., when modal reopens)
+  useEffect(() => {
+    if (initialFilters) {
+      setFilters(mergeWithDefaults(initialFilters))
+    }
+  }, [initialFilters])
 
   // Load genres on `type` change (also seeds providers).
   useEffect(() => {

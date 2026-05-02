@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
 import { getSetting } from '../settings'
+import { CookieJar } from 'tough-cookie'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
@@ -7,13 +8,29 @@ const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
 const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
+let _cachedService: QBittorrentService | null = null
+let _cachedUrl: string | undefined
+let _cachedUsername: string | undefined
+
 export async function getQBittorrentService() {
   const url = await getSetting('qbittorrent_url')
   const username = await getSetting('qbittorrent_username')
   const password = await getSetting('qbittorrent_password')
-  
-  if (!url) return null
-  return new QBittorrentService(url, username, password)
+
+  if (!url) {
+    _cachedService = null
+    _cachedUrl = undefined
+    _cachedUsername = undefined
+    return null
+  }
+
+  if (!_cachedService || _cachedUrl !== url || _cachedUsername !== username) {
+    _cachedService = new QBittorrentService(url, username, password)
+    _cachedUrl = url
+    _cachedUsername = username
+  }
+
+  return _cachedService
 }
 
 export interface Torrent {
@@ -47,6 +64,7 @@ export interface Torrent {
 
 export class QBittorrentService {
   private client: AxiosInstance | null = null
+  private cookieJar: CookieJar
   private baseUrl: string
   private username?: string
   private password?: string
@@ -55,6 +73,11 @@ export class QBittorrentService {
     this.baseUrl = baseUrl.replace(/\/$/, '')
     this.username = username
     this.password = password
+    this.cookieJar = new CookieJar()
+  }
+
+  async reinit(): Promise<void> {
+    return this.init(true)
   }
 
   private async init(force: boolean = false) {
@@ -64,12 +87,48 @@ export class QBittorrentService {
 
     const client = axios.create({
       baseURL: this.baseUrl,
+      timeout: 10_000,
+      withCredentials: true,
+      responseType: 'text',
+      transformResponse: (v) => v,
       headers: {
         'Referer': refererUrl,
-        'Origin': this.baseUrl,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
+      },
     })
+
+    client.interceptors.request.use(async (config) => {
+      const url = (config.url?.startsWith('http') ? config.url : `${config.baseURL}${config.url}`) || this.baseUrl
+      const cookieString = await this.cookieJar.getCookieString(url)
+      if (cookieString) {
+        config.headers = config.headers || {}
+        config.headers['Cookie'] = cookieString
+      }
+      return config
+    })
+
+    client.interceptors.response.use(
+      async (response) => {
+        const setCookie = response.headers['set-cookie']
+        if (setCookie) {
+          const url = (response.config.url?.startsWith('http') ? response.config.url : `${response.config.baseURL}${response.config.url}`) || this.baseUrl
+          for (const cookie of setCookie) {
+            await this.cookieJar.setCookie(cookie, url)
+          }
+        }
+        return response
+      },
+      async (error) => {
+        if (error.response?.headers?.['set-cookie']) {
+          const url = (error.config?.url?.startsWith('http') ? error.config.url : `${error.config?.baseURL}${error.config?.url}`) || this.baseUrl
+          for (const cookie of error.response.headers['set-cookie']) {
+            await this.cookieJar.setCookie(cookie, url)
+          }
+        }
+        throw error
+      }
+    )
+
+    client.defaults.headers.common['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
     // Authenticate
     if (this.username && this.password) {
@@ -85,16 +144,9 @@ export class QBittorrentService {
             }
         })
         
-        // Setup cookie for subsequent requests
-        const setCookie = response.headers['set-cookie']
-        if (setCookie) {
-            const cookie = Array.isArray(setCookie) ? setCookie[0] : setCookie
-            // Some qBittorrent versions return cookie with HttpOnly; etc.
-            // We need the SID part.
-            const sid = cookie.split(';')[0]
-            if (sid) {
-                client.defaults.headers.common['Cookie'] = sid
-            }
+        // Cookie automatically stored by response interceptor
+        if (response.data === 'Ok.') {
+          // Cookie automatically stored by response interceptor
         } else if (response.data === "Ok.") {
              // Some versions/configs might return Ok without cookie if already auth or local bypass
              // But usually they return a cookie. 
@@ -153,7 +205,16 @@ export class QBittorrentService {
           await this.init()
           if (!this.client) throw new Error('Client not initialized')
           const response = await this.client.request(config)
-          return response.data
+          let data = response.data
+          // Axios responseType is 'text' to handle plain-text responses (e.g. login "Ok.").
+          // Parse JSON strings automatically for API endpoints that return JSON.
+          if (typeof data === 'string') {
+              const trimmed = data.trim()
+              if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && trimmed.length > 1) {
+                  try { data = JSON.parse(data) } catch { /* keep raw string */ }
+              }
+          }
+          return data as T
       } catch (error) {
           if (retry && axios.isAxiosError(error) && (error.response?.status === 403 || error.response?.status === 401)) {
               log('[qBittorrent] Session expired or unauthorized, retrying...')
@@ -211,6 +272,23 @@ export class QBittorrentService {
         method: 'GET',
         url: '/api/v2/torrents/info',
         params: { filter }
+    })
+  }
+
+  /**
+   * Incremental sync — returns deltas since last `rid`.
+   * Used by NotificationsV2 realtime layer for near-zero-cost change detection.
+   */
+  async getSyncMainData(rid: number = 0) {
+    return this.request<{
+      rid: number
+      full_update?: boolean
+      torrents?: Record<string, Partial<Torrent>>
+      torrents_removed?: string[]
+    }>({
+        method: 'GET',
+        url: '/api/v2/sync/maindata',
+        params: { rid }
     })
   }
 

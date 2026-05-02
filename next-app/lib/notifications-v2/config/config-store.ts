@@ -29,6 +29,7 @@ const DEFAULT_CONFIG: NotificationsV2Config = {
       targetUserIds: [],
       targetNumbers: [],
       notifyRequester: true,
+      includePoster: true,
     }
     return acc
   }, {} as Record<NotificationEvent, any>),

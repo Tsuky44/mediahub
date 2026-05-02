@@ -97,6 +97,8 @@ export interface RadarrQueueItem {
   estimatedCompletionTime: string;
   status: string;
   trackedDownloadStatus: string;
+  /** e.g. "downloading" | "importPending" | "importing" | "completed" | "failed" */
+  trackedDownloadState?: string;
   title: string;
   movieId?: number; // Added movieId
   downloadId?: string; // Added downloadId (hash)
@@ -146,7 +148,8 @@ export class RadarrService {
       const response = await client.get('/queue', {
         params: {
           pageSize: 1000,
-          includeUnknownMovieItems: true
+          includeUnknownMovieItems: true,
+          includeMovie: true,
         }
       })
       return (response.data.records || response.data) as RadarrQueueItem[]

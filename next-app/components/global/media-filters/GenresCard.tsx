@@ -10,7 +10,7 @@ interface GenresCardProps {
   onToggle: (id: number) => void
 }
 
-export function GenresCard({ genres, selected, onToggle }: GenresCardProps) {
+export function GenresCard({ genres, selected = [], onToggle }: GenresCardProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-2">

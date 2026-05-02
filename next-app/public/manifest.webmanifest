@@ -1,0 +1,19 @@
+{
+  "name": "MediaHub",
+  "short_name": "MediaHub",
+  "description": "Media Dashboard for managing requests and downloads",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

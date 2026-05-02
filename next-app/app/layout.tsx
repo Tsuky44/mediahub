@@ -18,7 +18,9 @@ export const metadata: Metadata = {
   description: "Next.js Media Dashboard",
   icons: {
     icon: "/logo.png",
+    apple: "/logo.png",
   },
+  manifest: "/manifest.webmanifest",
 };
 
 import { ImpersonationBanner } from "@/components/global/ImpersonationBanner";

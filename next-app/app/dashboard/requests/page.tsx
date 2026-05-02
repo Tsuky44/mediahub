@@ -10,7 +10,7 @@ import { defineAbilityFor } from '@/lib/ability'
 
 export const dynamic = 'force-dynamic'
 
-export default async function DiscoverPage({ searchParams }: { searchParams: Promise<{ q?: string; filter?: string }> }) {
+export default async function DiscoverPage({ searchParams }: { searchParams: Promise<{ q?: string; filter?: string; sort_by?: string; start_date?: string; end_date?: string; genres?: string; language?: string; watch_region?: string; watch_providers?: string }> }) {
   const session = await getServerSession(authOptions)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const user = session?.user as any
@@ -23,9 +23,30 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
       redirect('/dashboard')
   }
 
-  const { q: rawQuery, filter } = await searchParams
+  const { 
+    q: rawQuery, 
+    filter,
+    sort_by,
+    start_date,
+    end_date,
+    genres,
+    language,
+    watch_region,
+    watch_providers,
+  } = await searchParams
   // Only allow query if view permission is present
   const query = canView ? rawQuery : undefined
+
+  // Build filters from URL params
+  const initialFilters = {
+    ...(sort_by && { sort_by }),
+    ...(start_date && { start_date }),
+    ...(end_date && { end_date }),
+    ...(genres && { genres: genres.split(',').map(Number).filter(Boolean) }),
+    ...(language && { language }),
+    ...(watch_region && { watch_region }),
+    ...(watch_providers && { watch_providers: watch_providers.split(',').map(Number).filter(Boolean) }),
+  }
 
   let recommendationData: { results: any[]; total_pages: number } = { results: [], total_pages: 0 }
   let results: any[] = []
@@ -45,7 +66,7 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
           title = 'Recommandés pour vous'
       } else {
           // Use fetchMedia to get enriched data (with status)
-          const data = await fetchMedia(1, currentType as any, query)
+          const data = await fetchMedia(1, currentType as any, query, initialFilters)
           results = data.results || []
 
           if (query) {
@@ -98,7 +119,8 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
               <InfiniteMediaList 
                   initialItems={results} 
                   initialType={currentType as any} 
-                  initialSearch={query} 
+                  initialSearch={query}
+                  initialFilters={initialFilters}
               />
             </Suspense>
         )}

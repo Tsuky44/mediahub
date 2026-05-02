@@ -1,5 +1,6 @@
 import { getServerSession } from 'next-auth'
-import { authOptions, getQBittorrentServiceForUser, getSmbServiceForUser, getProwlarrServiceForUser } from '@/lib/auth'
+import { authOptions, getSmbServiceForUser, getProwlarrServiceForUser } from '@/lib/auth'
+import { getQBittorrentService } from '@/lib/services/qbittorrent'
 import { AlertCircle, Settings } from 'lucide-react'
 import Link from 'next/link'
 import DownloadsClient from './_components/DownloadsClient'
@@ -45,12 +46,12 @@ export default async function DownloadsPage() {
 
   // Check services
   log('Debug Services:', {
-    hasQbt: typeof getQBittorrentServiceForUser,
+    hasQbt: typeof getQBittorrentService,
     hasSmb: typeof getSmbServiceForUser,
     hasProwlarr: typeof getProwlarrServiceForUser
   })
 
-  const qbtService = await getQBittorrentServiceForUser()
+  const qbtService = await getQBittorrentService()
   const smbService = await getSmbServiceForUser()
   const prowlarrService = typeof getProwlarrServiceForUser === 'function' ? await getProwlarrServiceForUser() : null
 

@@ -1,13 +1,14 @@
 'use server'
 
-import { getQBittorrentServiceForUser, getProwlarrServiceForUser, getRadarrServiceForUser, getSonarrServiceForUser, getCurrentUser } from '@/lib/auth'
+import { getProwlarrServiceForUser, getRadarrServiceForUser, getSonarrServiceForUser, getCurrentUser } from '@/lib/auth'
+import { getQBittorrentService } from '@/lib/services/qbittorrent'
 import { getTmdbServiceForUser } from '@/lib/auth'
 import { defineAbilityFor, Actions, Subjects } from '@/lib/ability'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 async function checkPermission(action: Actions, subject: Subjects) {
@@ -49,9 +50,9 @@ export async function getSonarrEpisodes(tmdbId: number) {
 
         const episodes = await sonarr.getEpisodes(series.id)
         return { episodes }
-    } catch (error: any) {
-        error('Get Sonarr episodes error:', error)
-        return { error: error.message }
+    } catch (err) {
+        error('Get Sonarr episodes error:', err)
+        return { error: (err as Error).message }
     }
 }
 
@@ -63,9 +64,9 @@ export async function searchProwlarr(query: string, indexerIds?: number[], categ
 
         const results = await prowlarrService.search(query, indexerIds, categories, limit, offset)
         return { results }
-    } catch (error: any) {
-        error('Search prowlarr error:', error)
-        return { error: error.message }
+    } catch (err) {
+        error('Search prowlarr error:', err)
+        return { error: (err as Error).message }
     }
 }
 
@@ -77,23 +78,23 @@ export async function getProwlarrIndexers() {
 
         const indexers = await prowlarrService.getIndexers()
         return { indexers }
-    } catch (error: any) {
-        error('Get prowlarr indexers error:', error)
-        return { error: error.message }
+    } catch (err) {
+        error('Get prowlarr indexers error:', err)
+        return { error: (err as Error).message }
     }
 }
 
 export async function downloadTorrent(url: string) {
     try {
         await checkPermission('interactive_search', 'Media')
-        const qbtService = await getQBittorrentServiceForUser()
+        const qbtService = await getQBittorrentService()
         if (!qbtService) return { error: 'QBittorrent non configuré' }
 
         await qbtService.addTorrent(url, [])
         return { success: true }
-    } catch (error: any) {
-        error('Download torrent error:', error)
-        return { error: error.message }
+    } catch (err) {
+        error('Download torrent error:', err)
+        return { error: (err as Error).message }
     }
 }
 
@@ -156,7 +157,7 @@ export async function searchMediaReleases(
         const results = await prowlarr.search(query, undefined, categories)
         
         return { 
-            results: results.map((r: any) => ({
+            results: results.map((r) => ({
                 guid: r.guid,
                 title: r.title,
                 size: r.size,
@@ -173,9 +174,9 @@ export async function searchMediaReleases(
                 rejections: [] // Not available from Prowlarr directly
             }))
         }
-    } catch (error: any) {
-        error('Search media releases error:', error)
-        return { error: error.message }
+    } catch (err) {
+        error('Search media releases error:', err)
+        return { error: (err as Error).message }
     }
 }
 
@@ -247,8 +248,8 @@ export async function downloadMediaRelease(
         }
         
         return { error: 'Type de média non supporté' }
-    } catch (error: any) {
-        error('Download media release error:', error)
-        return { error: error.message }
+    } catch (err) {
+        error('Download media release error:', err)
+        return { error: (err as Error).message }
     }
 }

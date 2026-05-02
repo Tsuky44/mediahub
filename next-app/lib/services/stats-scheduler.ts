@@ -1,4 +1,4 @@
-import { getQBittorrentService } from './qbittorrent'
+import { QBittorrentCache } from './qbittorrent-cache'
 import { prisma } from '@/lib/prisma'
 
 const INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
@@ -34,18 +34,15 @@ export function startStatsScheduler() {
 
 async function syncDailyStats() {
     try {
-        const qbt = await getQBittorrentService()
-        if (!qbt) {
-            // Only log sparingly
-            return
-        }
+        const cache = QBittorrentCache.getInstance()
+        if (cache.getLastUpdate() === 0) return // cache not yet initialized
 
         // --- NEW: Global Stats Sync (User Logic) ---
         try {
-            const transferInfo = await qbt.getTransferInfo()
+            const transferInfo = cache.getGlobalStats()
             if (transferInfo) {
-                const totalUp = BigInt(Math.floor(transferInfo.up_info_data))
-                const totalDl = BigInt(Math.floor(transferInfo.dl_info_data))
+                const totalUp = BigInt(Math.floor(Number(transferInfo.up_info_data ?? 0)))
+                const totalDl = BigInt(Math.floor(Number(transferInfo.dl_info_data ?? 0)))
                 const tracker = 'GLOBAL'
 
                 // Find last log for GLOBAL to calculate diff
@@ -91,7 +88,7 @@ async function syncDailyStats() {
         }
         // -------------------------------------------
 
-        const torrents = await qbt.getTorrents('all')
+        const torrents = cache.getTorrents('all')
         if (!Array.isArray(torrents)) return
 
         const today = new Date()
@@ -228,10 +225,8 @@ let downloadCheckIsFirstRun = true
 
 async function checkCompletedDownloads() {
     try {
-        const qbt = await getQBittorrentService()
-        if (!qbt) return
-
-        const torrents = await qbt.getTorrents('all')
+        const cache = QBittorrentCache.getInstance()
+        const torrents = cache.getTorrents('all')
         if (!Array.isArray(torrents)) return
 
         const completedTorrents = torrents.filter(t => t.progress === 1 && t.completion_on > 0)

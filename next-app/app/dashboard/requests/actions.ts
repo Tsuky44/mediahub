@@ -5,7 +5,7 @@ import { getWatchLaterList, areInWatchLater } from '../media/watch-later-actions
 import { fetchUserRecommendations, fetchServerTrends } from '../media/actions'
 import { getMediaAvailability } from '@/lib/services/media-status'
 
-export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations' | 'trends', search?: string, filters?: any) {
+export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations' | 'trends', search?: string, filters?: Record<string, unknown>) {
   try {
     const tmdbService = await getTmdbServiceForUser()
     if (!tmdbService) {
@@ -20,7 +20,7 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
           const { logAction } = await import('@/lib/audit')
           const user = await import('@/lib/auth').then(m => m.getCurrentUser())
           if (user) {
-            const dbUser = await import('@/lib/prisma').then(m => (m.prisma as any).user.findFirst({ where: { email: user.email || '' } }))
+            const dbUser = await import('@/lib/prisma').then(m => m.prisma.user.findFirst({ where: { email: user.email || '' } }))
             await logAction(dbUser?.id || null, 'MEDIA_SEARCH', 'Search', '', { query: search, type })
           }
         } catch (e) {
@@ -67,16 +67,16 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
   if (data.results && data.results.length > 0) {
       // Pre-check watch later in batch
       const itemsToCheck = data.results
-          .map((item: any) => ({
-              id: item.id.toString(),
+          .map((item: { id?: number; media_type?: string }) => ({
+              id: String(item.id),
               mediaType: item.media_type || (type === 'all' ? undefined : type)
           }))
-          .filter((i: any) => i.mediaType === 'movie' || i.mediaType === 'tv')
+          .filter((i: { mediaType?: string }) => i.mediaType === 'movie' || i.mediaType === 'tv')
 
       const watchLaterStatuses = await areInWatchLater(itemsToCheck)
       const watchLaterSet = new Set(watchLaterStatuses)
 
-      const enrichedResults = await Promise.all(data.results.map(async (item: any) => {
+      const enrichedResults = await Promise.all(data.results.map(async (item: Record<string, unknown>) => {
           const mediaType = item.media_type || (type === 'all' ? undefined : type)
           if (!mediaType || (mediaType !== 'movie' && mediaType !== 'tv')) {
               return item
@@ -84,7 +84,7 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
           
           try {
               // Availability check (cached)
-              const availability = await getMediaAvailability(item.id, mediaType)
+              const availability = await getMediaAvailability(item.id as number, mediaType)
               const isWatchLater = watchLaterSet.has(`${mediaType}:${item.id}`)
               return { ...item, media_status: availability, isWatchLater }
           } catch (e) {
@@ -123,10 +123,10 @@ export async function getFilterOptions(type: 'all' | 'movie' | 'tv') {
             // TMDB ignores invalid genre IDs usually.
             
             const genreMap = new Map()
-            movieGenres.forEach((g: any) => genreMap.set(g.id, g))
-            tvGenres.forEach((g: any) => genreMap.set(g.id, g))
+            movieGenres.forEach((g: { id: number; name: string }) => genreMap.set(g.id, g))
+            tvGenres.forEach((g: { id: number; name: string }) => genreMap.set(g.id, g))
             
-            return { genres: Array.from(genreMap.values()).sort((a: any, b: any) => a.name.localeCompare(b.name)) }
+            return { genres: Array.from(genreMap.values()).sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)) }
         }
         const genres = await tmdbService.getGenres(type)
         return { genres }
@@ -147,10 +147,10 @@ export async function getWatchProviders(type: 'all' | 'movie' | 'tv', region: st
             ])
             
             const providerMap = new Map()
-            movieProviders.forEach((p: any) => providerMap.set(p.provider_id, p))
-            tvProviders.forEach((p: any) => providerMap.set(p.provider_id, p))
+            movieProviders.forEach((p: { provider_id: number; provider_name: string }) => providerMap.set(p.provider_id, p))
+            tvProviders.forEach((p: { provider_id: number; provider_name: string }) => providerMap.set(p.provider_id, p))
             
-            return Array.from(providerMap.values()).sort((a: any, b: any) => a.provider_name.localeCompare(b.provider_name))
+            return Array.from(providerMap.values()).sort((a: { provider_name: string }, b: { provider_name: string }) => a.provider_name.localeCompare(b.provider_name))
         }
         return await tmdbService.getWatchProviders(type, region)
     } catch (e) {

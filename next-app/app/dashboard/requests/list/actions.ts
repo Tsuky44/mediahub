@@ -10,9 +10,9 @@ import { getMediaAvailability } from '@/lib/services/media-status'
 import { defineAbilityFor } from '@/lib/ability'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export async function forceSyncRequests() {
@@ -37,7 +37,7 @@ export async function forceSyncRequests() {
             const missingMovies = movies.filter(m => m.monitored && !m.hasFile)
             
             for (const movie of missingMovies) {
-                const existing = await (prisma as any).mediaRequest.findFirst({
+                const existing = await prisma.mediaRequest.findFirst({
                     where: { 
                         mediaType: 'movie',
                         tmdbId: movie.tmdbId.toString()
@@ -45,7 +45,7 @@ export async function forceSyncRequests() {
                 })
                 
                 // Get correct poster from TMDB if possible
-                let posterPath = movie.images?.find((i: any) => i.coverType === 'poster')?.url
+                let posterPath = movie.images?.find((i: { coverType: string; url: string }) => i.coverType === 'poster')?.url
                 try {
                     const tmdbDetails = await tmdbService.getDetails(movie.tmdbId, 'movie')
                     if (tmdbDetails && tmdbDetails.poster_path) {
@@ -56,7 +56,7 @@ export async function forceSyncRequests() {
                 }
 
                 if (!existing) {
-                    await (prisma as any).mediaRequest.create({
+                    await prisma.mediaRequest.create({
                         data: {
                             mediaType: 'movie',
                             tmdbId: movie.tmdbId.toString(),
@@ -76,7 +76,7 @@ export async function forceSyncRequests() {
                     // Update metadata if poster is missing or different (optional, but good for fixing broken images)
                     const currentMeta = existing.metadata ? JSON.parse(existing.metadata) : {}
                     if (!currentMeta.posterPath || (posterPath && posterPath.startsWith('/') && !currentMeta.posterPath.startsWith('/'))) {
-                         await (prisma as any).mediaRequest.update({
+                         await prisma.mediaRequest.update({
                             where: { id: existing.id },
                             data: {
                                 metadata: JSON.stringify({
@@ -130,7 +130,7 @@ export async function forceSyncRequests() {
                  }
                  
                  if (tmdbId) {
-                    const existing = await (prisma as any).mediaRequest.findFirst({
+                    const existing = await prisma.mediaRequest.findFirst({
                         where: { 
                             mediaType: 'tv',
                             tmdbId: tmdbId
@@ -154,7 +154,7 @@ export async function forceSyncRequests() {
                             .filter(s => s.monitored && s.statistics && s.statistics.percentOfEpisodes < 100)
                             .map(s => s.seasonNumber)
 
-                        await (prisma as any).mediaRequest.create({
+                        await prisma.mediaRequest.create({
                             data: {
                                 mediaType: 'tv',
                                 tmdbId: tmdbId,
@@ -175,7 +175,7 @@ export async function forceSyncRequests() {
                          // Update metadata if poster is missing or different
                          const currentMeta = existing.metadata ? JSON.parse(existing.metadata) : {}
                          if (!currentMeta.posterPath || (posterPath && posterPath.startsWith('/') && !currentMeta.posterPath.startsWith('/'))) {
-                              await (prisma as any).mediaRequest.update({
+                              await prisma.mediaRequest.update({
                                  where: { id: existing.id },
                                  data: {
                                      metadata: JSON.stringify({
@@ -191,7 +191,7 @@ export async function forceSyncRequests() {
         }
         
         // Clear cache
-        const requests = await (prisma as any).mediaRequest.findMany({})
+        const requests = await prisma.mediaRequest.findMany({})
         const { forget } = await import('@/lib/cache')
         for (const req of requests) {
             forget(`media_availability_${req.mediaType}_${req.tmdbId}`)
@@ -214,7 +214,7 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
     const user = await getCurrentUser()
     if (!user || !user.email) return { results: [], total: 0, totalPages: 0 }
 
-    const dbUser = await (prisma as any).user.findFirst({
+    const dbUser = await prisma.user.findFirst({
       where: { email: user.email }
     })
     
@@ -227,29 +227,29 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
     
     // Read from local DB instead of Jellyseerr API
     const [requests, total] = await Promise.all([
-        (prisma as any).mediaRequest.findMany({
+        prisma.mediaRequest.findMany({
             orderBy: { requestedAt: 'desc' },
             skip,
             take: pageSize
         }),
-        (prisma as any).mediaRequest.count()
+        prisma.mediaRequest.count()
     ])
 
     // Map DB format to the format expected by the UI
-    const enrichedRequests = await Promise.all(requests.map(async (req: any) => {
-        let metadata: any = {}
+    const enrichedRequests = await Promise.all(requests.map(async (req: Record<string, unknown>) => {
+        let metadata: Record<string, unknown> = {}
         try {
-            metadata = req.metadata ? JSON.parse(req.metadata) : {}
+            metadata = req.metadata ? JSON.parse(req.metadata as string) : {}
         } catch (e) {}
 
-        let status = req.status;
+        let status = req.status as number;
         
         // Fix posterPath - same logic as dashboard
-        let posterPath = metadata.posterPath;
-        const tmdbIdNum = parseInt(req.tmdbId);
+        let posterPath = metadata.posterPath as string | undefined | null;
+        const tmdbIdNum = parseInt(String(req.tmdbId));
         
         // If posterPath is missing or looks like a local Sonarr/Radarr path, try to get from TMDB
-        if ((!posterPath || posterPath.includes('MediaCover') || posterPath === 'null' || posterPath === 'undefined') && !isNaN(tmdbIdNum) && tmdbService) {
+        if ((!posterPath || (typeof posterPath === 'string' && posterPath.includes('MediaCover')) || posterPath === 'null' || posterPath === 'undefined') && !isNaN(tmdbIdNum) && tmdbService) {
             try {
                 const details = await tmdbService.getDetails(tmdbIdNum, req.mediaType as 'movie' | 'tv');
                 if (details && details.poster_path) {
@@ -301,7 +301,7 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
             // Update DB if status changed
             if (status !== req.status) {
                 await prisma.mediaRequest.update({
-                    where: { id: req.id },
+                    where: { id: req.id as number },
                     data: { status }
                 });
                 // Send notification when media first becomes available
@@ -309,19 +309,19 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
                     try {
                         const { ExternalNotificationService } = await import('@/lib/services/external-notification-service');
                         await ExternalNotificationService.send('media_available', {
-                            title: req.title,
-                            message: `${req.title} est maintenant disponible sur le serveur.`,
+                            title: req.title as string,
+                            message: `${req.title as string} est maintenant disponible sur le serveur.`,
                             data: {
-                                tmdbId: req.tmdbId,
-                                mediaType: req.mediaType,
-                                title: req.title,
-                                year: metadata.year || '',
-                                overview: metadata.overview || '',
-                                posterPath: metadata.posterPath || '',
-                                genres: metadata.genres || '',
-                                user: req.requesterName || ''
+                                tmdbId: req.tmdbId as string,
+                                mediaType: req.mediaType as string,
+                                title: req.title as string,
+                                year: (metadata.year as string | undefined) || '',
+                                overview: (metadata.overview as string | undefined) || '',
+                                posterPath: (metadata.posterPath as string | undefined) || '',
+                                genres: (metadata.genres as string | undefined) || '',
+                                user: (req.requesterName as string | undefined) || ''
                             }
-                        }, req.userId ?? undefined);
+                        }, typeof req.userId === 'number' ? req.userId : undefined);
                     } catch (notifErr) {
                         error(`[FetchRequests] Failed to send media_available notification for ${req.title}:`, notifErr);
                     }

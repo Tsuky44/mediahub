@@ -2,49 +2,15 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
-import { useTrackerStatsModal, type TrackerStatsTab } from '../../_hooks/useTrackerStatsModal'
+import { useTrackerStatsModal } from '../../_hooks/useTrackerStatsModal'
 import { TrackerStatsSessionView } from './TrackerStatsSessionView'
 import { TrackerStatsHistoryView } from './TrackerStatsHistoryView'
+import { TrackerModalTabButton } from './TrackerModalTabButton'
+import { TrackerModalLoadingView } from './TrackerModalLoadingView'
 
 interface TrackerStatsModalProps {
     isOpen: boolean
     onClose: () => void
-}
-
-interface TabButtonProps {
-    label: string
-    target: TrackerStatsTab
-    active: TrackerStatsTab
-    onClick: (t: TrackerStatsTab) => void
-}
-
-function TabButton({ label, target, active, onClick }: TabButtonProps) {
-    const isActive = active === target
-    return (
-        <button
-            onClick={() => onClick(target)}
-            className={`flex-1 p-4 text-sm font-bold transition-colors border-b-2 ${
-                isActive
-                    ? 'text-purple-400 border-purple-400'
-                    : 'text-gray-400 border-transparent hover:text-white hover:bg-white/5'
-            }`}
-        >
-            {label}
-        </button>
-    )
-}
-
-interface LoadingViewProps {
-    message: string
-}
-
-function LoadingView({ message }: LoadingViewProps) {
-    return (
-        <div className="flex flex-col items-center justify-center py-12 gap-4">
-            <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-sm text-gray-400 animate-pulse">{message}</p>
-        </div>
-    )
 }
 
 /** Modal avec onglets Session/Historique pour les stats par tracker. */
@@ -80,8 +46,8 @@ export function TrackerStatsModal({ isOpen, onClose }: TrackerStatsModalProps) {
                         className="relative w-full max-w-2xl bg-[#0f172a] border border-white/10 rounded-3xl shadow-2xl overflow-hidden"
                     >
                         <div className="flex border-b border-white/5 relative">
-                            <TabButton label="Session Actuelle" target="session" active={activeTab} onClick={setActiveTab} />
-                            <TabButton label="Historique" target="history" active={activeTab} onClick={setActiveTab} />
+                            <TrackerModalTabButton label="Session Actuelle" target="session" active={activeTab} onClick={setActiveTab} />
+                            <TrackerModalTabButton label="Historique" target="history" active={activeTab} onClick={setActiveTab} />
                             <button
                                 onClick={onClose}
                                 className="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-white/10 rounded-xl transition-colors text-gray-400 hover:text-white"
@@ -121,9 +87,9 @@ export function TrackerStatsModal({ isOpen, onClose }: TrackerStatsModalProps) {
 
                         <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
                             {loadingTrackers && activeTab === 'session' ? (
-                                <LoadingView message="Récupération des données..." />
+                                <TrackerModalLoadingView message="Récupération des données..." />
                             ) : loadingHistory && activeTab === 'history' ? (
-                                <LoadingView message="Analyse de l'historique..." />
+                                <TrackerModalLoadingView message="Analyse de l'historique..." />
                             ) : activeTab === 'session' ? (
                                 <TrackerStatsSessionView trackerStats={trackerStats} />
                             ) : (

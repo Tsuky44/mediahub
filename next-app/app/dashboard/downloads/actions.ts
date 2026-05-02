@@ -1,9 +1,11 @@
 'use server'
 
 import { Torrent } from '@/lib/services/qbittorrent'
+import { QBittorrentCache } from '@/lib/services/qbittorrent-cache'
 import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
-import { authOptions, getQBittorrentServiceForUser, getStorageServiceForUser } from '@/lib/auth'
+import { authOptions, getStorageServiceForUser } from '@/lib/auth'
+import { getQBittorrentService } from '@/lib/services/qbittorrent'
 import { prisma } from '@/lib/prisma'
 
 import { defineAbilityFor } from '@/lib/ability'
@@ -53,12 +55,10 @@ export async function checkAccess(permission?: string) {
 export async function getTorrents(filter: string = 'all'): Promise<Torrent[]> {
   try {
     await checkAccess('downloads.view')
-    const qbtService = await getQBittorrentServiceForUser()
-    if (!qbtService) return []
-    const torrents = await qbtService.getTorrents(filter)
-    return Array.isArray(torrents) ? torrents : []
+    const cache = QBittorrentCache.getInstance()
+    return cache.getTorrents(filter)
   } catch (e) {
-    console.error('Failed to get torrents', e)
+    console.error('Failed to get torrents from cache', e)
     return []
   }
 }
@@ -66,11 +66,10 @@ export async function getTorrents(filter: string = 'all'): Promise<Torrent[]> {
 export async function getGlobalStats() {
   try {
     await checkAccess('downloads.view')
-    const qbtService = await getQBittorrentServiceForUser()
-    if (!qbtService) return null
-    return await qbtService.getServerState()
+    const cache = QBittorrentCache.getInstance()
+    return cache.getGlobalStats()
   } catch (e) {
-    console.error('Failed to get global stats', e)
+    console.error('Failed to get global stats from cache', e)
     return null
   }
 }
@@ -78,10 +77,8 @@ export async function getGlobalStats() {
 export async function getSessionTrackerStats() {
   try {
     await checkAccess('downloads.view')
-    const qbtService = await getQBittorrentServiceForUser()
-    if (!qbtService) return []
-    
-    const torrents = await qbtService.getTorrents('all')
+    const cache = QBittorrentCache.getInstance()
+    const torrents = cache.getTorrents('all')
     const trackerStats: Record<string, { uploaded: number, downloaded: number, count: number }> = {}
 
     if (Array.isArray(torrents)) {
@@ -323,7 +320,7 @@ export async function getTrackerHistory(startDate?: string, endDate?: string) {
 export async function addTorrent(formData: FormData) {
   try {
     await checkAccess('downloads.add')
-    const qbtService = await getQBittorrentServiceForUser()
+    const qbtService = await getQBittorrentService()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
     
     const urls = formData.get('urls') as string | null
@@ -349,7 +346,7 @@ export async function addTorrent(formData: FormData) {
 export async function deleteTorrents(hashes: string[], deleteFiles: boolean) {
   try {
     await checkAccess('downloads.manage_torrents')
-    const qbtService = await getQBittorrentServiceForUser()
+    const qbtService = await getQBittorrentService()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
 
     await qbtService.deleteTorrents(hashes, deleteFiles)
@@ -364,7 +361,7 @@ export async function deleteTorrents(hashes: string[], deleteFiles: boolean) {
 export async function pauseTorrents(hashes: string[]) {
   try {
     await checkAccess('downloads.manage_torrents')
-    const qbtService = await getQBittorrentServiceForUser()
+    const qbtService = await getQBittorrentService()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
 
     await qbtService.pauseTorrents(hashes)
@@ -379,7 +376,7 @@ export async function pauseTorrents(hashes: string[]) {
 export async function resumeTorrents(hashes: string[]) {
   try {
     await checkAccess('downloads.manage_torrents')
-    const qbtService = await getQBittorrentServiceForUser()
+    const qbtService = await getQBittorrentService()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
 
     await qbtService.resumeTorrents(hashes)
@@ -394,7 +391,7 @@ export async function resumeTorrents(hashes: string[]) {
 export async function setPriority(hashes: string[], action: 'top' | 'up' | 'down' | 'bottom') {
   try {
     await checkAccess('downloads.manage_torrents')
-    const qbtService = await getQBittorrentServiceForUser()
+    const qbtService = await getQBittorrentService()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
 
     if (action === 'top') await qbtService.topPriority(hashes)
@@ -413,7 +410,7 @@ export async function setPriority(hashes: string[], action: 'top' | 'up' | 'down
 export async function reannounceTorrents(hashes: string[]) {
   try {
     await checkAccess('downloads.manage_torrents')
-    const qbtService = await getQBittorrentServiceForUser()
+    const qbtService = await getQBittorrentService()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
 
     await qbtService.reannounceTorrents(hashes)
@@ -428,7 +425,7 @@ export async function reannounceTorrents(hashes: string[]) {
 export async function setShareLimits(hashes: string[], ratioLimit: number, seedingTimeLimit: number, inactiveSeedingTimeLimit: number = -1) {
   try {
     await checkAccess('downloads.manage_torrents')
-    const qbtService = await getQBittorrentServiceForUser()
+    const qbtService = await getQBittorrentService()
     if (!qbtService) return { success: false, error: 'Service QBittorrent non configuré' }
 
     await qbtService.setShareLimits(hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
@@ -444,11 +441,10 @@ export async function setShareLimits(hashes: string[], ratioLimit: number, seedi
 export async function getCategories() {
   try {
     await checkAccess('downloads.view')
-    const qbtService = await getQBittorrentServiceForUser()
-    if (!qbtService) return {}
-    return await qbtService.getCategories()
+    const cache = QBittorrentCache.getInstance()
+    return cache.getCategories()
   } catch (e) {
-    console.error('Failed to get categories', e)
+    console.error('Failed to get categories from cache', e)
     return {}
   }
 }
@@ -456,11 +452,10 @@ export async function getCategories() {
 export async function getTags() {
   try {
     await checkAccess('downloads.view')
-    const qbtService = await getQBittorrentServiceForUser()
-    if (!qbtService) return []
-    return await qbtService.getTags()
+    const cache = QBittorrentCache.getInstance()
+    return cache.getTags()
   } catch (e) {
-    console.error('Failed to get tags', e)
+    console.error('Failed to get tags from cache', e)
     return []
   }
 }

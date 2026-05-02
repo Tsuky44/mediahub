@@ -6,13 +6,13 @@ import {
     Square,
     Film,
     Tv,
-    User as UserIcon,
     Trash2,
     Loader2,
 } from 'lucide-react'
-import { MediaPoster } from './MediaPoster'
 import { getStatusInfo } from '../_utils/request-status'
 import { resolvePosterUrls } from '../_utils/request-poster'
+import { RequestCardPoster } from './RequestCardPoster'
+import { RequestCardMeta } from './RequestCardMeta'
 
 interface RequestCardProps {
     request: any
@@ -74,26 +74,13 @@ export function RequestCard({
             )}
 
             <div className="flex flex-col md:flex-row">
-                <Link
-                    href={`/dashboard/media/${tmdbId}?type=${mediaType}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="relative w-full md:w-40 aspect-[2/3] md:aspect-auto overflow-hidden bg-zinc-800 flex items-center justify-center"
-                >
-                    <MediaPoster
-                        src={posterPath}
-                        fallbackSrc={fallbackPosterPath}
-                        alt={media.title || 'Unknown'}
-                        placeholder={
-                            <div className="flex flex-col items-center justify-center p-4 text-center">
-                                <Film className="w-8 h-8 text-zinc-700 mb-2" />
-                                <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider line-clamp-2">
-                                    {media.title || 'Sans titre'}
-                                </span>
-                            </div>
-                        }
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent md:hidden" />
-                </Link>
+                <RequestCardPoster
+                    tmdbId={tmdbId}
+                    mediaType={mediaType}
+                    posterPath={posterPath}
+                    fallbackPosterPath={fallbackPosterPath}
+                    title={media.title}
+                />
 
                 <div className="flex-1 p-6 flex flex-col justify-between">
                     <div className="space-y-4">
@@ -130,44 +117,12 @@ export function RequestCard({
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-y-2 gap-x-4">
-                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${currentStatus.bg} ${currentStatus.border} ${currentStatus.color}`}>
-                                <StatusIcon className="w-4 h-4" />
-                                <span className="text-sm font-bold uppercase tracking-wide">
-                                    {currentStatus.label}
-                                </span>
-                            </div>
-
-                            {request.type === 'tv' && request.media?.seasons && request.media.seasons.length > 0 && (
-                                <div className="flex items-center gap-3 bg-indigo-500/5 px-3 py-1.5 rounded-xl border border-indigo-500/20 max-w-full">
-                                    <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 flex-shrink-0">
-                                        <Tv className="w-4 h-4" />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-[10px] text-indigo-400/60 uppercase font-bold leading-none">
-                                            Saisons demandées
-                                        </p>
-                                        <p className="text-sm font-bold text-indigo-300 break-words line-clamp-2">
-                                            {request.media.seasons.join(', ')}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="flex items-center gap-3 bg-zinc-800/30 px-3 py-1.5 rounded-xl border border-zinc-700/30 max-w-full">
-                                <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 flex-shrink-0">
-                                    <UserIcon className="w-4 h-4" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-[10px] text-zinc-500 uppercase font-bold leading-none">
-                                        Demandé par
-                                    </p>
-                                    <p className="text-sm font-medium text-zinc-200 truncate max-w-[150px]">
-                                        {requesterName}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
+                        <RequestCardMeta
+                            mediaType={mediaType}
+                            statusInfo={currentStatus}
+                            seasons={request.media?.seasons}
+                            requesterName={requesterName}
+                        />
                     </div>
 
                     <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-4 border-t border-zinc-800/50 text-[11px] text-zinc-500 font-medium">

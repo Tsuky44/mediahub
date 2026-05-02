@@ -32,6 +32,7 @@ const nextConfig: NextConfig = {
     ];
   },
   experimental: {
+    serverComponentsExternalPackages: ['ws', '@microsoft/signalr'],
   },
 };
 

@@ -42,6 +42,7 @@ WORKDIR /app
 # Install OpenSSL for Prisma, global prisma CLI, and Playwright dependencies
 RUN apk add --no-cache \
   openssl \
+  sqlite \
   chromium \
   nss \
   freetype \

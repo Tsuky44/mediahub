@@ -74,5 +74,9 @@ else
     fi
 fi
 
+# Enable WAL mode for better SQLite concurrency
+echo "Enabling SQLite WAL mode for better concurrency..."
+node scripts/enable-wal.js || echo "Warning: Failed to enable WAL mode, continuing anyway..."
+
 echo "Starting application server..."
 exec node server.js

@@ -78,7 +78,7 @@ export class AvailabilityPoller {
         }
       }
 
-      notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_AVAILABLE, {
+      await notificationBus.emit(NOTIFICATION_EVENTS.MEDIA_AVAILABLE, {
         media: {
           tmdbId: req.tmdbId,
           mediaType: req.mediaType,

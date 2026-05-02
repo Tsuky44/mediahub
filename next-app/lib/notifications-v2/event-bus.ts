@@ -44,7 +44,7 @@ class NotificationEventBus {
    * Emit an event. Fire-and-forget: handlers run async, errors are caught per-handler
    * so a broken handler cannot crash the emitter.
    */
-  emit(event: NotificationEvent, payload: Omit<NotificationEventPayload, 'event' | 'timestamp' | 'correlationId'> & Partial<Pick<NotificationEventPayload, 'correlationId' | 'timestamp'>>): void {
+  async emit(event: NotificationEvent, payload: Omit<NotificationEventPayload, 'event' | 'timestamp' | 'correlationId'> & Partial<Pick<NotificationEventPayload, 'correlationId' | 'timestamp'>>): Promise<void> {
     const fullPayload: NotificationEventPayload = {
       event,
       timestamp: payload.timestamp ?? new Date().toISOString(),
@@ -57,13 +57,23 @@ class NotificationEventBus {
 
     // Delegate to Node EventEmitter; wrap async handlers so exceptions are isolated.
     const listeners = this.emitter.listeners(event) as Handler[]
-    for (const listener of listeners) {
-      Promise.resolve()
-        .then(() => listener(fullPayload))
-        .catch((err) => {
-          console.error(`[NotificationsV2][EventBus] Handler error for ${event}:`, err)
-        })
+    console.log(
+      `[NotificationsV2][EventBus] emit ${event} (cid=${fullPayload.correlationId}) → ${listeners.length} listener(s) | media="${fullPayload.media?.title}"`
+    )
+    if (listeners.length === 0) {
+      console.warn(
+        `[NotificationsV2][EventBus] ⚠️ No listener registered for ${event}. Did startNotificationsV2() run? (process.env.NEXT_RUNTIME=${process.env.NEXT_RUNTIME})`
+      )
     }
+    await Promise.all(
+      listeners.map((listener) =>
+        Promise.resolve()
+          .then(() => listener(fullPayload))
+          .catch((err) => {
+            console.error(`[NotificationsV2][EventBus] Handler error for ${event}:`, err)
+          })
+      )
+    )
   }
 
   removeAllListeners(): void {

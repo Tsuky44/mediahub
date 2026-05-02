@@ -14,5 +14,8 @@ export async function register() {
 
     const { startNotificationsV2 } = await import('@/lib/notifications-v2');
     startNotificationsV2();
+
+    const { QBittorrentCache } = await import('@/lib/services/qbittorrent-cache');
+    QBittorrentCache.getInstance().start();
   }
 }
