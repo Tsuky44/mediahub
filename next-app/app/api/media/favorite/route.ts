@@ -1,6 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { getEmbyServiceForUser, getCurrentUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
     try {
@@ -15,8 +19,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Emby service unavailable' }, { status: 503 })
     }
 
-    const dbUser = await prisma.user.findUnique({
-        where: { email: user.email }
+    const dbUser = await db.query.users.findFirst({
+        where: eq(users.email, user.email)
     })
 
     if (!dbUser || !dbUser.embyUserId) {

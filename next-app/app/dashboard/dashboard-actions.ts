@@ -8,15 +8,12 @@ import { UnraidService } from '@/lib/services/unraid'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { mediaRequests } from '@/lib/db/schema'
+import { desc } from 'drizzle-orm'
 import { getTmdbService } from '@/lib/services/tmdb'
-import { getMediaAvailability } from '@/lib/services/media-status'
 import { remember } from '@/lib/cache'
-
-const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
-const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
+import { logger } from '@/lib/logger'
 
 interface MediaRequestLite {
   id: number
@@ -26,6 +23,7 @@ interface MediaRequestLite {
   metadata?: string | null
   title?: string | null
   requesterName?: string | null
+  requesterEmail?: string | null
   userId?: number | null
 }
 
@@ -47,9 +45,9 @@ export async function getRecentRequests() {
     return []
   }
 
-  const requestsRes = await prisma.mediaRequest.findMany({
-    orderBy: { requestedAt: 'desc' },
-    take: 20
+  const requestsRes = await db.query.mediaRequests.findMany({
+    orderBy: [desc(mediaRequests.requestedAt)],
+    limit: 20
   })
 
   const tmdbService = await getTmdbService()
@@ -62,62 +60,7 @@ export async function getRecentRequests() {
 
     let posterPath = metadata.posterPath as string | undefined
     
-    // Check availability if not already marked as available
-    let status = req.status
-    if (status !== 5 && req.tmdbId) {
-       try {
-         const availability = await getMediaAvailability(parseInt(req.tmdbId), req.mediaType as 'movie' | 'tv')
-         
-         // log(`[Dashboard] Checking status for ${req.title} (${req.tmdbId}):`, availability)
-
-         let newStatus = status
-         if (availability.status === 'available') {
-            newStatus = 5
-         } else if (availability.status === 'partial') {
-            newStatus = 4
-         } else if (availability.status === 'pending' && status !== 3) {
-            // If it's pending in Sonarr/Radarr, make sure we aren't overwriting a 'processing' status (3)
-            // unless we want to revert to pending. But usually 3 is set by manual approval or something.
-            // If it is 2 (approved), we might want to keep it 2 until it starts downloading.
-            // But 'pending' in MediaAvailability means 'monitored but no files'.
-            // Let's stick to upgrading to 3 or 5.
-         }
-
-         // Update DB if status changed
-         if (newStatus !== status) {
-            log(`[Dashboard] Updating status for ${req.title} (${req.tmdbId}) from ${status} to ${newStatus}`)
-            await prisma.mediaRequest.update({
-                where: { id: req.id },
-                data: { status: newStatus }
-            })
-            // Send media_available notification when media first becomes available
-            if (newStatus === 5) {
-                try {
-                    const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-                    await ExternalNotificationService.send('media_available', {
-                        title: req.title ?? 'Média',
-                        message: `${req.title ?? 'Média'} est maintenant disponible sur le serveur.`,
-                        data: {
-                            tmdbId: req.tmdbId,
-                            mediaType: req.mediaType,
-                            title: req.title,
-                            year: metadata.year || '',
-                            overview: metadata.overview || '',
-                            posterPath: posterPath || metadata.posterPath || '',
-                            genres: metadata.genres || '',
-                            user: req.requesterName || ''
-                        }
-                    }, req.userId ?? undefined)
-                } catch (notifErr) {
-                    error(`[Dashboard] Failed to send media_available notification for ${req.title}:`, notifErr)
-                }
-            }
-            status = newStatus
-         }
-       } catch (e) {
-         error(`[Dashboard] Error checking status for ${req.title}:`, e)
-       }
-    }
+    const status = req.status
 
     // Patch 11: Cache TMDB poster 5min pour éviter N appels non cachés au chargement
     if ((!posterPath || posterPath.includes('MediaCover')) && req.tmdbId && tmdbService) {
@@ -145,10 +88,12 @@ export async function getRecentRequests() {
       media: {
         title: req.title,
         posterPath: posterPath,
-        tmdbId: req.tmdbId
+        tmdbId: req.tmdbId,
+        seasons: (metadata.seasons as number[] | undefined) ?? undefined,
       },
       requestedBy: {
-        displayName: req.requesterName || 'Inconnu'
+        displayName: req.requesterName || 'Inconnu',
+        email: req.requesterEmail || '',
       }
     }
   }))
@@ -178,8 +123,10 @@ export async function getDashboardStats() {
     let diskUsage = { total: '0', used: '0', free: '0', percent: 0 }
     
     // Try Unraid first if configured
-    const unraidUrl = await getSetting('unraid_url')
-    const unraidKey = await getSetting('unraid_api_key')
+    const [unraidUrl, unraidKey] = await Promise.all([
+      getSetting('unraid_url'),
+      getSetting('unraid_api_key'),
+    ])
 
     if (unraidUrl && unraidKey) {
       try {
@@ -194,7 +141,7 @@ export async function getDashboardStats() {
           }
         }
       } catch (e) {
-        error('Failed to get Unraid storage stats:', e)
+        logger.error('Failed to get Unraid storage stats:', e)
       }
     }
 
@@ -212,7 +159,7 @@ export async function getDashboardStats() {
           }
         }
       } catch (e) {
-        error('Failed to get local disk usage:', e)
+        logger.error('Failed to get local disk usage:', e)
       }
     }
 
@@ -226,7 +173,7 @@ export async function getDashboardStats() {
     }
     }) // end remember
   } catch (e) {
-    error('Failed to get dashboard stats:', e)
+    logger.error('Failed to get dashboard stats:', e)
     return null
   }
 }
@@ -243,8 +190,10 @@ export async function checkServicesHealth() {
 
     // Patch 10: Cache serveur 20s — évite un appel HTTP Emby toutes les 30s par client connecté
     return await remember('services_health', 20 * 1000, async () => {
-      const embyUrl = await getSetting('emby_url')
-      const embyKey = await getSetting('emby_api_key')
+      const [embyUrl, embyKey] = await Promise.all([
+        getSetting('emby_url'),
+        getSetting('emby_api_key'),
+      ])
 
       const embyRes = embyUrl && embyKey ? await testEmbyConnection(embyUrl, embyKey) : { success: false }
 
@@ -253,7 +202,7 @@ export async function checkServicesHealth() {
       }
     })
   } catch (e) {
-    error('Failed to check services health:', e)
+    logger.error('Failed to check services health:', e)
     return {
       emby: 'offline'
     }
@@ -288,7 +237,7 @@ export async function liveSearch(query: string) {
         poster: item.poster_path ? `https://image.tmdb.org/t/p/w92${item.poster_path}` : null
       }))
   } catch (e) {
-    error('Live search failed:', e)
+    logger.error('Live search failed:', e)
     return []
   }
 }

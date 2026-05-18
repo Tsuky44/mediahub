@@ -1,10 +1,8 @@
-import axios from 'axios'
+import { createAxiosClient } from '@/lib/http-client'
+import { cached } from '@/lib/cache-service'
+import { CACHE_TTL, TIMEOUT } from '@/lib/constants'
+import { logger } from '@/lib/logger'
 import { getSetting } from '../settings'
-
-const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
-const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 interface AppError extends Error {
   response?: {
@@ -110,22 +108,21 @@ export interface RadarrQueueItem {
 }
 
 export class RadarrService {
-  private baseUrl: string
-  private apiKey: string
+  private client: ReturnType<typeof createAxiosClient>
 
   constructor(baseUrl: string, apiKey: string) {
-    this.baseUrl = baseUrl.replace(/\/$/, '')
-    this.apiKey = apiKey
+    const cleanUrl = baseUrl.replace(/\/$/, '')
+    this.client = createAxiosClient({
+      baseURL: `${cleanUrl}/api/v3`,
+      headers: { 'X-Api-Key': apiKey },
+      timeout: TIMEOUT.RADARR,
+      retries: 2,
+      serviceName: 'Radarr',
+    })
   }
 
   private getClient() {
-    return axios.create({
-      baseURL: `${this.baseUrl}/api/v3`,
-      headers: {
-        'X-Api-Key': this.apiKey
-      },
-      timeout: 10000
-    })
+    return this.client
   }
 
   async sendCommand(name: string, params: Record<string, unknown> = {}) {
@@ -137,7 +134,7 @@ export class RadarrService {
       })
       return { success: true, data: response.data }
     } catch (e) {
-      error(`[Radarr] Failed to send command ${name}:`, (e as AppError).message)
+      logger.error(`[Radarr] Failed to send command ${name}:`, (e as AppError).message)
       return { success: false, error: (e as AppError).message }
     }
   }
@@ -154,31 +151,35 @@ export class RadarrService {
       })
       return (response.data.records || response.data) as RadarrQueueItem[]
     } catch (e) {
-      error('[Radarr] Failed to fetch queue:', (e as AppError).message)
+      logger.error('[Radarr] Failed to fetch queue:', (e as AppError).message)
       return []
     }
   }
 
   async getProfiles() {
-    const client = this.getClient()
-    try {
-      const response = await client.get('/qualityprofile')
-      return response.data
-    } catch (e) {
-      error('[Radarr] Failed to fetch profiles:', (e as AppError).message)
-      return []
-    }
+    return cached('radarr:profiles', async () => {
+      const client = this.getClient()
+      try {
+        const response = await client.get('/qualityprofile')
+        return response.data
+      } catch (e) {
+        logger.error('[Radarr] Failed to fetch profiles:', (e as AppError).message)
+        return []
+      }
+    }, { memoryTtl: CACHE_TTL.API_STATIC, tags: ['radarr-static'] })
   }
 
   async getRootFolders() {
-    const client = this.getClient()
-    try {
-      const response = await client.get('/rootfolder')
-      return response.data
-    } catch (e) {
-      error('[Radarr] Failed to fetch root folders:', (e as AppError).message)
-      return []
-    }
+    return cached('radarr:rootfolders', async () => {
+      const client = this.getClient()
+      try {
+        const response = await client.get('/rootfolder')
+        return response.data
+      } catch (e) {
+        logger.error('[Radarr] Failed to fetch root folders:', (e as AppError).message)
+        return []
+      }
+    }, { memoryTtl: CACHE_TTL.API_STATIC, tags: ['radarr-static'] })
   }
 
   async getMovies() {
@@ -187,7 +188,7 @@ export class RadarrService {
       const response = await client.get('/movie')
       return response.data as RadarrMovie[]
     } catch (e) {
-      error('[Radarr] Failed to fetch movies:', (e as AppError).message)
+      logger.error('[Radarr] Failed to fetch movies:', (e as AppError).message)
       return []
     }
   }
@@ -214,14 +215,14 @@ export class RadarrService {
             return fullResponse.data
           }
         } catch (e) {
-          error(`[Radarr] Failed to fetch full movie data for ${movie.id}:`, (e as AppError).message)
+          logger.error(`[Radarr] Failed to fetch full movie data for ${movie.id}:`, (e as AppError).message)
           // Fallback to lookup data if full fetch fails
         }
       }
       
       return movie
     } catch (e) {
-      error(`[Radarr] Failed to lookup movie ${tmdbId}:`, (e as AppError).message)
+      logger.error(`[Radarr] Failed to lookup movie ${tmdbId}:`, (e as AppError).message)
       return null
     }
   }
@@ -280,7 +281,7 @@ export class RadarrService {
       const errorMsg = ((e as AppError).response?.data as { message?: string } | undefined)?.message || (e as AppError).message
       // Only log full error if it's not a known "already exists" which we handle above usually
       if (!Array.isArray((e as AppError).response?.data) || ((e as AppError).response?.data as Array<{ errorCode?: string }> | undefined)?.[0]?.errorCode !== 'MovieExistsValidator') {
-         error(`[Radarr] Failed to add movie ${options.tmdbId}:`, JSON.stringify((e as AppError).response?.data || errorMsg))
+         logger.error(`[Radarr] Failed to add movie ${options.tmdbId}:`, JSON.stringify((e as AppError).response?.data || errorMsg))
       }
       return { success: false, message: errorMsg }
     }
@@ -290,7 +291,7 @@ export class RadarrService {
     const client = this.getClient()
 
     try {
-        log(`[Radarr] Deleting movie ${radarrId} (deleteFiles: ${deleteFiles})`);
+        logger.info(`[Radarr] Deleting movie ${radarrId} (deleteFiles: ${deleteFiles})`);
         await client.delete(`/movie/${radarrId}`, {
             params: {
                 deleteFiles: deleteFiles,
@@ -300,7 +301,7 @@ export class RadarrService {
         return { success: true };
     } catch (e) {
         const errorMsg = ((e as AppError).response?.data as { message?: string } | undefined)?.message || (e as AppError).message;
-        error(`[Radarr] Failed to delete movie ${radarrId}:`, errorMsg);
+        logger.error(`[Radarr] Failed to delete movie ${radarrId}:`, errorMsg);
         return { success: false, message: errorMsg };
     }
   }
@@ -321,7 +322,7 @@ export class RadarrService {
       const response = await client.put(`/movie/${movie.id}`, movie)
       return { success: true, movie: response.data }
     } catch (e) {
-      error(`[Radarr] Failed to unmonitor movie ${tmdbId}:`, (e as AppError).message)
+      logger.error(`[Radarr] Failed to unmonitor movie ${tmdbId}:`, (e as AppError).message)
       return { success: false, message: (e as AppError).message }
     }
   }
@@ -334,7 +335,7 @@ export class RadarrService {
       })
       return response.data
     } catch (e) {
-      error(`[Radarr] Failed to fetch releases for movie ${movieId}:`, (e as AppError).message)
+      logger.error(`[Radarr] Failed to fetch releases for movie ${movieId}:`, (e as AppError).message)
       return []
     }
   }
@@ -349,7 +350,7 @@ export class RadarrService {
       return { success: true, data: response.data }
     } catch (e) {
       const errorMsg = ((e as AppError).response?.data as { message?: string } | undefined)?.message || (e as AppError).message
-      error(`[Radarr] Failed to download release ${guid}:`, errorMsg)
+      logger.error(`[Radarr] Failed to download release ${guid}:`, errorMsg)
       return { success: false, message: errorMsg }
     }
   }
@@ -361,7 +362,7 @@ export class RadarrService {
       return { success: true, data: response.data }
     } catch (e) {
       const errorMsg = ((e as AppError).response?.data as { message?: string } | undefined)?.message || (e as AppError).message
-      error(`[Radarr] Failed to push release:`, errorMsg)
+      logger.error(`[Radarr] Failed to push release:`, errorMsg)
       return { success: false, message: errorMsg }
     }
   }
@@ -381,7 +382,7 @@ export class RadarrService {
       })
       return response.data as RadarrMovie[]
     } catch (e) {
-      error('[Radarr] Failed to fetch calendar:', (e as AppError).message)
+      logger.error('[Radarr] Failed to fetch calendar:', (e as AppError).message)
       return []
     }
   }

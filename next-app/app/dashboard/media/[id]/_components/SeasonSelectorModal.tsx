@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { X, Check, Loader2 } from 'lucide-react'
-import { requestSeason } from '@/app/dashboard/media/[id]/actions'
+import { requestSelectedSeasons } from '@/app/dashboard/media/[id]/actions'
 import clsx from 'clsx'
 
 interface Season {
@@ -65,31 +65,14 @@ export function SeasonSelectorModal({ isOpen, onClose, title, tmdbId, seasons, s
 
         setRequesting(true)
         try {
-            // Request each selected season
-            // Jellyseerr API supports array of seasons in one request usually?
-            // Our action wrapper supports single season currently or we need to update it.
-            // Let's update action to support multiple seasons or loop here.
-            // Jellyseerr API takes `seasons: [1, 2]` array.
-            // We should update `requestSeason` action to accept array.
+            const result = await requestSelectedSeasons(tmdbId, title, selectedSeasons)
             
-            // For now, let's loop or update the action. Ideally update action.
-            // Let's loop for safety if action signature is fixed, but I'll update action below.
-            // Wait, I can't update action here. I'll update the action file in next step.
-            // Assuming I will update it, let's send array.
-            
-            // Actually, let's call the action multiple times for now to be safe without changing backend signature yet,
-            // OR better: create a new action `requestSeasons`?
-            // Or just loop.
-            
-            const results = await Promise.all(selectedSeasons.map(num => requestSeason(tmdbId, num, title)))
-            
-            const allSuccess = results.every(r => r.success)
-            if (allSuccess) {
+            if (result.success) {
                 onSuccess()
                 onClose()
             } else {
-                alert('Certaines demandes ont échoué.')
-                onSuccess() // Close anyway to refresh status
+                alert('Certaines demandes ont échoué : ' + (result.message || 'Erreur inconnue'))
+                onSuccess()
                 onClose()
             }
         } catch (e) {

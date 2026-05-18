@@ -1,4 +1,7 @@
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { settings } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
+import { logger } from '@/lib/logger'
 
 // Cache in-memory pour éviter un hit DB à chaque appel getSetting().
 // TTL: 30 secondes. Invalidé immédiatement lors d'un setSetting().
@@ -20,14 +23,11 @@ export async function getSetting(key: string, defaultValue: string = ''): Promis
 
   // 3. Fallback DB
   try {
-    if (!prisma) {
-      console.warn(`[getSetting] Prisma client not available`);
+    if (!db) {
+      logger.warn(`[getSetting] Database client not available`);
       return defaultValue;
     }
-    const setting = await prisma.setting.findUnique({
-      where: { key },
-      select: { value: true }
-    })
+    const [setting] = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, key))
     
     const value = (setting && setting.value) ? setting.value : defaultValue
     // On cache uniquement les valeurs non-vides
@@ -36,7 +36,7 @@ export async function getSetting(key: string, defaultValue: string = ''): Promis
     }
     return value
   } catch (e) {
-    console.warn(`Failed to fetch setting ${key} from DB`, e)
+    logger.warn(`Failed to fetch setting ${key} from DB`, e)
   }
   
   return defaultValue
@@ -70,7 +70,7 @@ async function withRetry<T>(
       }
 
       const delay = baseDelay * Math.pow(2, attempt - 1);
-      console.warn(`[setSetting] ${operationName} failed (attempt ${attempt}/${maxRetries}): ${errorMessage}. Retrying in ${delay}ms...`);
+      logger.warn(`[setSetting] ${operationName} failed (attempt ${attempt}/${maxRetries}): ${errorMessage}. Retrying in ${delay}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -79,8 +79,8 @@ async function withRetry<T>(
 }
 
 export async function setSetting(key: string, value: string | null): Promise<void> {
-  if (!prisma) {
-    console.error(`[setSetting] Prisma client not available`);
+  if (!db) {
+    logger.error(`[setSetting] Database client not available`);
     return;
   }
 
@@ -90,13 +90,23 @@ export async function setSetting(key: string, value: string | null): Promise<voi
   // Ensure value is a string or null
   const safeValue = value === undefined ? null : value;
 
-  // Use upsert with retry for atomic operation
+  // Use insert or update with retry for atomic operation
   await withRetry(
-    () => prisma.setting.upsert({
-      where: { key },
-      update: { value: safeValue },
-      create: { key, value: safeValue },
-    }),
+    async () => {
+      // Try to update first
+      const result = await db.update(settings)
+        .set({ value: safeValue, updatedAt: new Date() })
+        .where(eq(settings.key, key))
+        .run();
+      
+      // If no rows updated, insert
+      if (result.changes === 0) {
+        await db.insert(settings)
+          .values({ key, value: safeValue })
+          .onConflictDoNothing()
+          .run();
+      }
+    },
     `upsert setting "${key}"`,
     5,  // max 5 retries
     200 // base delay 200ms

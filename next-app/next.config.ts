@@ -31,9 +31,7 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  experimental: {
-    serverComponentsExternalPackages: ['ws', '@microsoft/signalr'],
-  },
+  serverExternalPackages: ['ws', '@microsoft/signalr'],
 };
 
 export default nextConfig;

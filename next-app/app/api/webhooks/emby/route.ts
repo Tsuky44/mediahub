@@ -4,47 +4,14 @@ import { NotificationService } from '@/lib/services/notification-service'
 import { getTmdbService } from '@/lib/services/tmdb'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
-const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
-
-interface EmbyWebhookPayload {
-  Event?: string;
-  User?: {
-    Id?: string;
-    Name?: string;
-  };
-  Item?: {
-    Id?: string;
-    Name?: string;
-    Type?: string;
-    ProviderIds?: Record<string, unknown>;
-    SeriesProviderIds?: Record<string, unknown>;
-    SeriesName?: string;
-    SeasonName?: string;
-    ParentIndexNumber?: number;
-    IndexNumber?: number;
-  };
-  PlaybackInfo?: {
-    PositionTicks?: number;
-    PlayMethod?: string;
-  };
-  Session?: {
-    Id?: string;
-    Client?: string;
-    DeviceName?: string;
-    DeviceId?: string;
-    RemoteEndPoint?: string;
-    PlayState?: {
-      PlayMethod?: string;
-    };
-  };
-}
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 
 export async function POST(req: NextRequest) {
   try {
-    let payload: Record<string, unknown> | null = null
+    let payload: any
 
     // Emby peut envoyer du JSON direct ou du multipart/form-data avec un champ "data"
     const contentType = req.headers.get('content-type') || ''
@@ -63,13 +30,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No payload' }, { status: 400 })
     }
 
-    const p = payload as unknown as EmbyWebhookPayload
-    const eventType = p.Event
-    const embyUserId = p.User?.Id
-    const embyUserName = p.User?.Name
-    const item = p.Item!
-    const playbackInfo = p.PlaybackInfo
-    const session = p.Session
+    const eventType = payload.Event
+    const embyUserId = payload.User?.Id
+    const embyUserName = payload.User?.Name
+    const item = payload.Item
+    const playbackInfo = payload.PlaybackInfo
+    const session = payload.Session
 
     log(`[Webhook] Received event: ${eventType} for ${item?.Name} (User: ${embyUserName})`)
 
@@ -78,7 +44,7 @@ export async function POST(req: NextRequest) {
     // ---------------------------------------------------------
     const normalizedEvent = eventType?.toLowerCase() || '';
     if (normalizedEvent === 'library.new' || normalizedEvent === 'item.created' || normalizedEvent === 'item.added') {
-        const providerIds = (item?.ProviderIds || {}) as Record<string, unknown>;
+        const providerIds = item?.ProviderIds || {};
         // Emby uses mixed casing sometimes
         const tmdbId = providerIds.Tmdb || providerIds.tmdb || providerIds.TMDB;
         const type = item?.Type; // Movie, Episode, Series
@@ -89,16 +55,16 @@ export async function POST(req: NextRequest) {
             let targetTmdbId = tmdbId ? String(tmdbId) : null;
             let targetMediaType = type === 'Movie' ? 'movie' : 'tv';
             let notificationTitle = 'Média disponible';
-            let notificationMessage = `"${item!.Name}" est maintenant disponible sur Emby !`;
+            let notificationMessage = `"${item.Name}" est maintenant disponible sur Emby !`;
             
             // Pour les épisodes, il faut récupérer l'ID de la série si possible
             if (type === 'Episode') {
-                const seriesTmdbId = (item.SeriesProviderIds as Record<string, unknown> | undefined)?.Tmdb || (item.SeriesProviderIds as Record<string, unknown> | undefined)?.tmdb || (item.SeriesProviderIds as Record<string, unknown> | undefined)?.TMDB;
+                const seriesTmdbId = item.SeriesProviderIds?.Tmdb || item.SeriesProviderIds?.tmdb || item.SeriesProviderIds?.TMDB;
                 
                 if (seriesTmdbId) {
                     targetTmdbId = String(seriesTmdbId);
                     notificationTitle = 'Épisode disponible';
-                    notificationMessage = `Nouvel épisode de "${item!.SeriesName}" disponible : ${item!.Name} (S${item!.ParentIndexNumber}E${item!.IndexNumber})`;
+                    notificationMessage = `Nouvel épisode de "${item.SeriesName}" disponible : ${item.Name} (S${item.ParentIndexNumber}E${item.IndexNumber})`;
                 } else {
                     log(`[EmbyWebhook] Episode detected but no Series TMDB ID found.`);
                     // Fallback: Try to find by TVDB if available, or skip
@@ -110,7 +76,7 @@ export async function POST(req: NextRequest) {
             }
 
             if (!targetTmdbId) {
-                warn(`[EmbyWebhook] Skipping notification: No TMDB ID found for ${item!.Name}`);
+                warn(`[EmbyWebhook] Skipping notification: No TMDB ID found for ${item.Name}`);
                 return NextResponse.json({ success: true });
             }
 
@@ -137,15 +103,15 @@ export async function POST(req: NextRequest) {
             // 3. Merge users
             const usersToNotify = new Map<number, { id: number, name: string }>();
             
-            requests.forEach(req => {
+            requests.forEach((req: any) => {
                 if (req.user) usersToNotify.set(req.user.id, req.user);
             });
             
-            subscriptions.forEach(sub => {
+            subscriptions.forEach((sub: any) => {
                 usersToNotify.set(sub.user.id, sub.user);
             });
 
-            log(`[EmbyWebhook] Found ${usersToNotify.size} users to notify for ${item!.Name}`);
+            log(`[EmbyWebhook] Found ${usersToNotify.size} users to notify for ${item.Name}`);
 
             // 4. Send notifications
             const notifyPromises = Array.from(usersToNotify.values()).map(async (user) => {
@@ -173,7 +139,7 @@ export async function POST(req: NextRequest) {
     // On enregistre à l'arrêt OU lors d'une progression significative
     // PlaybackProgress permet d'avoir les stats même si la personne ne "finit" pas l'épisode proprement
     if ((eventType === 'PlaybackStop' || eventType === 'PlaybackProgress') && embyUserId && item) {
-      const itemId = String(item!.Id)
+      const itemId = String(item.Id)
       const playedAt = new Date()
       
       // Calcul de la durée en minutes (ticks -> minutes)
@@ -189,17 +155,16 @@ export async function POST(req: NextRequest) {
       const playMethod = session?.PlayState?.PlayMethod || playbackInfo?.PlayMethod
       
       // Infos média supplémentaires
-      const seasonName = item!.SeasonName
-      const episodeNumber = item!.IndexNumber
-      const seasonNumber = item!.ParentIndexNumber
-      const seriesName = item!.SeriesName
-      let tmdbId = (item!.ProviderIds as Record<string, unknown> | undefined)?.Tmdb || (item!.ProviderIds as Record<string, unknown> | undefined)?.tmdb || (item!.ProviderIds as Record<string, unknown> | undefined)?.TMDB || null;
+      const seasonName = item.SeasonName
+      const episodeNumber = item.IndexNumber
+      const seasonNumber = item.ParentIndexNumber
+      const seriesName = item.SeriesName
+      let tmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.tmdb || item.ProviderIds?.TMDB || null;
 
       // Si pas de tmdbId, on essaie de le récupérer via imdb ou tvdb
       if (!tmdbId && item.ProviderIds) {
-        const providerIdsCast = item!.ProviderIds as Record<string, unknown> | undefined;
-        const imdbId = (providerIdsCast?.Imdb || providerIdsCast?.imdb || providerIdsCast?.IMDB) as string | undefined;
-        const tvdbId = (providerIdsCast?.Tvdb || providerIdsCast?.tvdb || providerIdsCast?.TVDB) as string | undefined;
+        const imdbId = item.ProviderIds.Imdb || item.ProviderIds.imdb || item.ProviderIds.IMDB;
+        const tvdbId = item.ProviderIds.Tvdb || item.ProviderIds.tvdb || item.ProviderIds.TVDB;
         
         if (imdbId || tvdbId) {
           try {
@@ -217,7 +182,7 @@ export async function POST(req: NextRequest) {
               }
             }
           } catch (error) {
-            warn(`[EmbyWebhook] Failed to fetch tmdbId via external ID for ${item!.Name}`, error);
+            warn(`[EmbyWebhook] Failed to fetch tmdbId via external ID for ${item.Name}`, error);
           }
         }
       }
@@ -225,7 +190,7 @@ export async function POST(req: NextRequest) {
       // On n'enregistre que si la durée est significative (ex: > 1 min)
       if (durationMinutes >= 1) {
         // Trouver l'utilisateur local
-        const user = await prisma.user.findFirst({
+        const user = await (prisma as any).user.findFirst({
           where: { 
             embyUserId: embyUserId
           }
@@ -233,7 +198,7 @@ export async function POST(req: NextRequest) {
 
         // On cherche s'il existe déjà un événement récent pour cet item/user pour le mettre à jour
         // au lieu d'en créer un nouveau à chaque "Progress"
-        const existingEvent = await prisma.watchEvent.findFirst({
+        const existingEvent = await (prisma as any).watchEvent.findFirst({
           where: {
             embyUserId,
             itemId,
@@ -246,7 +211,7 @@ export async function POST(req: NextRequest) {
 
         if (existingEvent) {
           // Mise à jour de l'événement existant avec la nouvelle durée et infos
-          await prisma.watchEvent.update({
+          await (prisma as any).watchEvent.update({
             where: { id: existingEvent.id },
             data: {
               durationMinutes: Math.max(existingEvent.durationMinutes, durationMinutes),
@@ -256,16 +221,16 @@ export async function POST(req: NextRequest) {
               seriesName: seriesName || existingEvent.seriesName,
             }
           })
-          log(`[Webhook] Updated playback for ${item!.Name} (${durationMinutes} min)`)
+          log(`[Webhook] Updated playback for ${item.Name} (${durationMinutes} min)`)
         } else {
           // Création d'un nouvel événement
-          await prisma.watchEvent.create({
+          await (prisma as any).watchEvent.create({
             data: {
               embyUserId,
               user: user ? { connect: { id: user.id } } : undefined,
               itemId,
-              itemName: item!.Name,
-              itemType: item!.Type,
+              itemName: item.Name,
+              itemType: item.Type,
               durationMinutes,
               playedAt,
               // providerId field removed as it does not exist in WatchEvent model
@@ -283,13 +248,13 @@ export async function POST(req: NextRequest) {
               tmdbId: tmdbId ? String(tmdbId) : null,
             }
           })
-          log(`[Webhook] Created new playback event for ${item!.Name} (${durationMinutes} min)`)
+          log(`[Webhook] Created new playback event for ${item.Name} (${durationMinutes} min)`)
         }
       }
     }
 
     return NextResponse.json({ success: true })
-  } catch (err) {
+  } catch (err: any) {
     error('[Webhook] Error processing request:', err)
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }

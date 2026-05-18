@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { User, X, Trophy } from 'lucide-react'
 
-interface UserStat {
+export interface UserStat {
   name: string
   duration: number
   plays?: number

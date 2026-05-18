@@ -1,5 +1,7 @@
 import { QBittorrentCache } from './qbittorrent-cache'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { trackerStatsLogs, dailyTrackerStats, settings, mediaRequests } from '@/lib/db/schema'
+import { eq, and, lt, gte, desc } from 'drizzle-orm'
 
 const INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -46,9 +48,9 @@ async function syncDailyStats() {
                 const tracker = 'GLOBAL'
 
                 // Find last log for GLOBAL to calculate diff
-                const lastLog = await prisma.trackerStatsLog.findFirst({
-                    where: { tracker },
-                    orderBy: { timestamp: 'desc' }
+                const lastLog = await db.query.trackerStatsLogs.findFirst({
+                    where: eq(trackerStatsLogs.tracker, tracker),
+                    orderBy: [desc(trackerStatsLogs.timestamp)]
                 })
 
                 let diffUp = BigInt(0)
@@ -73,14 +75,13 @@ async function syncDailyStats() {
 
                 // Only insert if there is activity or it's a heartbeat (every 5 mins is fine)
                 // User wants 5 min logs.
-                await prisma.trackerStatsLog.create({
-                    data: {
-                        tracker,
-                        totalUploaded: totalUp,
-                        totalDownloaded: totalDl,
-                        uploadedDiff: diffUp,
-                        downloadedDiff: diffDl
-                    }
+                await db.insert(trackerStatsLogs).values({
+                    tracker,
+                    totalUploaded: totalUp,
+                    totalDownloaded: totalDl,
+                    uploadedDiff: diffUp,
+                    downloadedDiff: diffDl,
+                    timestamp: new Date()
                 })
             }
         } catch (e) {
@@ -124,9 +125,9 @@ async function syncDailyStats() {
 
             // 1. Log Logic (New - 5 min interval)
             // Find last log for this tracker to calculate diff
-            const lastLog = await prisma.trackerStatsLog.findFirst({
-                where: { tracker },
-                orderBy: { timestamp: 'desc' }
+            const lastLog = await db.query.trackerStatsLogs.findFirst({
+                where: eq(trackerStatsLogs.tracker, tracker),
+                orderBy: [desc(trackerStatsLogs.timestamp)]
             })
 
             let diffUp = BigInt(0)
@@ -143,9 +144,9 @@ async function syncDailyStats() {
             } else {
                 // First run ever for this tracker (or after migration):
                 // Try to bridge with existing DailyTrackerStat to avoid losing progress or zeroing out
-                const lastDaily = await prisma.dailyTrackerStat.findFirst({
-                    where: { tracker },
-                    orderBy: { date: 'desc' }
+                const lastDaily = await db.query.dailyTrackerStats.findFirst({
+                    where: eq(dailyTrackerStats.tracker, tracker),
+                    orderBy: [desc(dailyTrackerStats.date)]
                 })
 
                 if (lastDaily) {
@@ -161,36 +162,37 @@ async function syncDailyStats() {
                 }
             }
 
-            await prisma.trackerStatsLog.create({
-                data: {
-                    tracker,
-                    totalUploaded: totalUp,
-                    totalDownloaded: totalDl,
-                    uploadedDiff: diffUp,
-                    downloadedDiff: diffDl
-                }
+            await db.insert(trackerStatsLogs).values({
+                tracker,
+                totalUploaded: totalUp,
+                totalDownloaded: totalDl,
+                uploadedDiff: diffUp,
+                downloadedDiff: diffDl,
+                timestamp: new Date()
             })
 
             // 2. Daily Logic (Old - keep for compatibility for now)
-            await prisma.dailyTrackerStat.upsert({
-                where: {
-                    date_tracker: {
-                        date: today,
-                        tracker
-                    }
-                },
-                update: {
-                    totalUploaded: totalUp,
-                    totalDownloaded: totalDl,
-                    updatedAt: new Date()
-                },
-                create: {
+            const existingDaily = await db.query.dailyTrackerStats.findFirst({
+                where: and(eq(dailyTrackerStats.date, today), eq(dailyTrackerStats.tracker, tracker))
+            })
+            if (existingDaily) {
+                await db.update(dailyTrackerStats)
+                    .set({
+                        totalUploaded: totalUp,
+                        totalDownloaded: totalDl,
+                        updatedAt: new Date()
+                    })
+                    .where(and(eq(dailyTrackerStats.date, today), eq(dailyTrackerStats.tracker, tracker)))
+            } else {
+                await db.insert(dailyTrackerStats).values({
                     date: today,
                     tracker,
                     totalUploaded: totalUp,
-                    totalDownloaded: totalDl
-                }
-            })
+                    totalDownloaded: totalDl,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                })
+            }
             updatedCount++
         }
         
@@ -237,19 +239,15 @@ async function checkCompletedDownloads() {
             downloadCheckIsFirstRun = false
             const allHashes = completedTorrents.map(t => t.hash.toLowerCase())
             console.log(`[StatsScheduler] Startup: seeding ${allHashes.length} completed hashes silently`)
-            await prisma.setting.upsert({
-                where: { key: 'notified_dl_hashes' },
-                update: { value: JSON.stringify(allHashes.slice(-500)) },
-                create: { key: 'notified_dl_hashes', value: JSON.stringify(allHashes.slice(-500)) }
-            })
+            await upsertSetting('notified_dl_hashes', JSON.stringify(allHashes.slice(-500)))
             return
         }
 
         if (completedTorrents.length === 0) return
 
         const [notifiedSetting, hashMapSetting] = await Promise.all([
-            prisma.setting.findFirst({ where: { key: 'notified_dl_hashes' } }),
-            prisma.setting.findFirst({ where: { key: 'download_hash_map' } })
+            db.query.settings.findFirst({ where: eq(settings.key, 'notified_dl_hashes') }),
+            db.query.settings.findFirst({ where: eq(settings.key, 'download_hash_map') })
         ])
         const hashMap: Record<string, { tmdbId: string; mediaType: string; title: string }> =
             hashMapSetting ? JSON.parse(hashMapSetting.value || '{}') : {}
@@ -261,13 +259,10 @@ async function checkCompletedDownloads() {
 
         // Only match active requests (not yet available) created within the last 60 days
         const cutoffDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
-        const recentRequests = await prisma.mediaRequest.findMany({
-            where: {
-                status: { lt: 5 },
-                requestedAt: { gte: cutoffDate }
-            },
-            orderBy: { requestedAt: 'desc' },
-            take: 300
+        const recentRequests = await db.query.mediaRequests.findMany({
+            where: and(lt(mediaRequests.status, 5), gte(mediaRequests.requestedAt, cutoffDate)),
+            orderBy: [desc(mediaRequests.requestedAt)],
+            limit: 300
         })
 
         const { ExternalNotificationService } = await import('./external-notification-service')
@@ -349,13 +344,18 @@ async function checkCompletedDownloads() {
         }
 
         const trimmed = newNotifiedHashes.slice(-500)
-        await prisma.setting.upsert({
-            where: { key: 'notified_dl_hashes' },
-            update: { value: JSON.stringify(trimmed) },
-            create: { key: 'notified_dl_hashes', value: JSON.stringify(trimmed) }
-        })
+        await upsertSetting('notified_dl_hashes', JSON.stringify(trimmed))
 
     } catch (e) {
         console.error('[StatsScheduler] Error checking completed downloads:', e)
+    }
+}
+
+async function upsertSetting(key: string, value: string) {
+    const existing = await db.query.settings.findFirst({ where: eq(settings.key, key) })
+    if (existing) {
+        await db.update(settings).set({ value, updatedAt: new Date() }).where(eq(settings.key, key))
+    } else {
+        await db.insert(settings).values({ key, value, category: 'system', createdAt: new Date(), updatedAt: new Date() })
     }
 }

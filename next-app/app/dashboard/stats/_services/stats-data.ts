@@ -1,5 +1,7 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { userGroups, users, watchEvents } from '@/lib/db/schema'
+import { eq, and, or, gte, lte, inArray, desc, asc } from 'drizzle-orm'
 
 export interface StatsScopedUser {
     id: number | string
@@ -14,11 +16,11 @@ export interface StatsScopedUser {
  * pour agreger les statistiques par groupe.
  */
 export async function fetchUserGroupMap(): Promise<Map<string, any>> {
-    const userGroups = await prisma.userGroup.findMany({
-        include: { members: true },
+    const groups = await db.query.userGroups.findMany({
+        with: { members: true },
     })
     const map = new Map<string, any>()
-    userGroups.forEach((group: any) => {
+    groups.forEach((group: any) => {
         group.members.forEach((member: any) => {
             map.set(`${member.userId}`, group)
         })
@@ -31,8 +33,8 @@ export async function fetchUserGroupMap(): Promise<Map<string, any>> {
  * pour fusionner les activites d'un meme utilisateur via differents providers.
  */
 export async function fetchProviderIdToLocalUserMap(): Promise<Map<string, string>> {
-    const localUsers = await prisma.user.findMany({
-        select: { id: true, name: true, embyUserId: true, plexUserId: true, jellyfinUserId: true },
+    const localUsers = await db.query.users.findMany({
+        columns: { id: true, name: true, embyUserId: true, plexUserId: true, jellyfinUserId: true },
     })
     const map = new Map<string, string>()
     localUsers.forEach(u => {
@@ -55,34 +57,32 @@ export async function fetchWatchHistory(
     hasGlobalView: boolean,
     hasSelfView: boolean
 ): Promise<any[]> {
-    return prisma.watchEvent.findMany({
-        where: {
-            playedAt: { gte: startDate, lte: endDate },
-            ...(!hasGlobalView && hasSelfView
-                ? {
-                      OR: [
-                          { userId: user.id as any },
-                          {
-                              embyUserId: {
-                                  in: [user.embyUserId, user.plexUserId, user.jellyfinUserId].filter(
-                                      Boolean
-                                  ) as string[],
-                              },
-                          },
-                          { userName: user.name },
-                      ],
-                  }
-                : {}),
-        },
-        orderBy: { playedAt: 'desc' },
+    const baseConditions = [gte(watchEvents.playedAt, startDate), lte(watchEvents.playedAt, endDate)]
+    
+    if (!hasGlobalView && hasSelfView) {
+        const externalIds = [user.embyUserId, user.plexUserId, user.jellyfinUserId].filter(Boolean) as string[]
+        const userConditions = []
+        userConditions.push(eq(watchEvents.userId, user.id as any))
+        if (externalIds.length > 0) {
+            userConditions.push(inArray(watchEvents.embyUserId, externalIds))
+        }
+        if (user.name) {
+            userConditions.push(eq(watchEvents.userName, user.name))
+        }
+        baseConditions.push(or(...userConditions)!)
+    }
+    
+    return db.query.watchEvents.findMany({
+        where: and(...baseConditions),
+        orderBy: [desc(watchEvents.playedAt)],
     })
 }
 
 /** Retourne la plus ancienne entree d'historique pour guider l'utilisateur en cas de vide. */
 export async function fetchOldestWatchEventYear(): Promise<number | null> {
-    const oldestLog = await prisma.watchEvent.findFirst({
-        orderBy: { playedAt: 'asc' },
-        select: { playedAt: true },
+    const oldestLog = await db.query.watchEvents.findFirst({
+        orderBy: [asc(watchEvents.playedAt)],
+        columns: { playedAt: true },
     })
     return oldestLog ? new Date(oldestLog.playedAt).getFullYear() : null
 }

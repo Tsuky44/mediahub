@@ -3,7 +3,6 @@ import { getRealUser } from '@/lib/auth'
 import { EmbyService } from '@/lib/services/emby'
 import { SonarrService } from '@/lib/services/sonarr'
 import { RadarrService } from '@/lib/services/radarr'
-import { prisma } from '@/lib/prisma'
 import { getSetting } from '@/lib/settings'
 import { defineAbilityFor } from '@/lib/ability'
 

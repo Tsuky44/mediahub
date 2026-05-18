@@ -1,5 +1,6 @@
 import { AbilityBuilder, createMongoAbility, MongoAbility } from '@casl/ability';
 import { User } from 'next-auth';
+import { logger } from '@/lib/logger';
 
 export type Actions = 'manage' | 'create' | 'read' | 'update' | 'delete' | 'trigger_search' | 'manage_settings' | 'interactive_search' | 'sync' | 'read_all' | 'import' | 'manage_storage' | 'delete_media' | 'add_torrent' | 'manage_torrents' | 'read_explorer' | 'share_files' | 'delete_files' | 'read_details' | 'manage_containers' | 'manage_groups' | 'read_logs' | 'read_stats' | 'manage_state' | 'access_console';
 export type Subjects = 
@@ -24,7 +25,7 @@ interface PermissionDef {
 
 interface AbilityUser {
   role: string
-  permissions?: Array<{ action: string; subject: string; conditions?: string }>
+  permissions?: Array<{ action: string; subject: string; conditions?: string | null }>
   [key: string]: unknown
 }
 
@@ -50,7 +51,7 @@ export function defineAbilityFor(user?: AbilityUser) {
             const conditions = p.conditions ? JSON.parse(p.conditions) : undefined;
             can(p.action as Actions, p.subject as Subjects, conditions);
           } catch (e) {
-            console.error('Failed to parse permission conditions', e);
+            logger.error('Failed to parse permission conditions', e);
             can(p.action as Actions, p.subject as Subjects);
           }
         });

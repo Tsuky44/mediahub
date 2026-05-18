@@ -1,5 +1,7 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, userCalendarEvents } from '@/lib/db/schema'
+import { eq, and } from 'drizzle-orm'
 import { getEmbyServiceForUser } from '@/lib/auth'
 import type {
   MediaEmbyProgress,
@@ -61,19 +63,17 @@ export async function fetchMediaEmbyProgress(params: {
   const { userEmail, tmdbId, mediaType, details } = params
   if (!userEmail) return EMPTY_PROGRESS
 
-  const dbUser = await prisma.user.findUnique({
-    where: { email: userEmail },
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.email, userEmail),
   })
   if (!dbUser) return EMPTY_PROGRESS
 
-  const calendarEvent = await prisma.userCalendarEvent.findUnique({
-    where: {
-      userId_tmdbId_mediaType: {
-        userId: dbUser.id,
-        tmdbId: tmdbId.toString(),
-        mediaType,
-      },
-    },
+  const calendarEvent = await db.query.userCalendarEvents.findFirst({
+    where: and(
+      eq(userCalendarEvents.userId, dbUser.id),
+      eq(userCalendarEvents.tmdbId, tmdbId.toString()),
+      eq(userCalendarEvents.mediaType, mediaType)
+    ),
   })
   const isInCalendar = !!calendarEvent
 

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getTrackerConfigs, saveTrackerConfigs, fetchAllTrackerStats, TrackerConfig, TrackerStats, formatTrackerBytes, getRatioColor, invalidateTrackerStatsCache } from '@/lib/services/tracker-stats-service'
 import { checkAccess } from '../downloads/actions'
 import { randomUUID } from 'crypto'
+import { logger } from '@/lib/logger'
 
 async function hasTrackerAccess(): Promise<boolean> {
   try {
@@ -33,7 +34,7 @@ export async function getConfiguredTrackers(): Promise<{ configs: TrackerConfig[
     }))
     return { configs: sanitizedConfigs }
   } catch (e) {
-    console.error('[TrackerStats] Failed to get trackers:', e)
+    logger.error('[TrackerStats] Failed to get trackers:', e)
     return { configs: [] }
   }
 }
@@ -79,7 +80,7 @@ export async function addTrackerConfig(
       }
     }
   } catch (e) {
-    console.error('[TrackerStats] Failed to add tracker:', e)
+    logger.error('[TrackerStats] Failed to add tracker:', e)
     return { success: false, error: (e as Error).message }
   }
 }
@@ -119,7 +120,7 @@ export async function updateTrackerConfig(
     
     return { success: true }
   } catch (e) {
-    console.error('[TrackerStats] Failed to update tracker:', e)
+    logger.error('[TrackerStats] Failed to update tracker:', e)
     return { success: false, error: (e as Error).message }
   }
 }
@@ -146,7 +147,7 @@ export async function deleteTrackerConfig(id: string): Promise<{ success: boolea
     
     return { success: true }
   } catch (e) {
-    console.error('[TrackerStats] Failed to delete tracker:', e)
+    logger.error('[TrackerStats] Failed to delete tracker:', e)
     return { success: false, error: (e as Error).message }
   }
 }
@@ -224,7 +225,7 @@ export async function testTrackerConnection(
       return { success: false, error: errorMsg }
     }
   } catch (e) {
-    console.error('[TrackerStats] Connection test failed:', e)
+    logger.error('[TrackerStats] Connection test failed:', e)
     return { success: false, error: `Erreur: ${(e as Error).message}` }
   }
 }
@@ -287,7 +288,7 @@ export async function getAllTrackerStats(force: boolean = false): Promise<{
 
     return { stats, configs, formatted, cache: getTrackerStatsCacheInfo() }
   } catch (e) {
-    console.error('[TrackerStats] Failed to get stats:', e)
+    logger.error('[TrackerStats] Failed to get stats:', e)
     return { stats: new Map(), configs: [], formatted: [], cache: { cached: false } }
   }
 }
@@ -379,7 +380,7 @@ export async function importTrackersFromProwlarr(): Promise<{
       configs: importedConfigs
     }
   } catch (e) {
-    console.error('[TrackerStats] Failed to import from Prowlarr:', e)
+    logger.error('[TrackerStats] Failed to import from Prowlarr:', e)
     return { success: false, error: (e as Error).message, imported: 0, configs: [] }
   }
 }
@@ -438,7 +439,7 @@ export async function debugProwlarrData(): Promise<{
       allIndexerFields
     }
   } catch (e) {
-    console.error('[TrackerStats] Debug failed:', e)
+    logger.error('[TrackerStats] Debug failed:', e)
     return { success: false, error: (e as Error).message }
   }
 }

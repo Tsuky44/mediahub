@@ -4,7 +4,9 @@ import { getCurrentUser, getTmdbServiceForUser, getRadarrServiceForUser, getSona
 import { getRadarrService } from '@/lib/services/radarr'
 import { getSonarrService } from '@/lib/services/sonarr'
 import { getTmdbService } from '@/lib/services/tmdb'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, mediaRequests } from '@/lib/db/schema'
+import { eq, and, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { getMediaAvailability } from '@/lib/services/media-status'
 import { defineAbilityFor } from '@/lib/ability'
@@ -37,11 +39,11 @@ export async function forceSyncRequests() {
             const missingMovies = movies.filter(m => m.monitored && !m.hasFile)
             
             for (const movie of missingMovies) {
-                const existing = await prisma.mediaRequest.findFirst({
-                    where: { 
-                        mediaType: 'movie',
-                        tmdbId: movie.tmdbId.toString()
-                    }
+                const existing = await db.query.mediaRequests.findFirst({
+                    where: and(
+                        eq(mediaRequests.mediaType, 'movie'),
+                        eq(mediaRequests.tmdbId, movie.tmdbId.toString())
+                    )
                 })
                 
                 // Get correct poster from TMDB if possible
@@ -56,35 +58,35 @@ export async function forceSyncRequests() {
                 }
 
                 if (!existing) {
-                    await prisma.mediaRequest.create({
-                        data: {
-                            mediaType: 'movie',
-                            tmdbId: movie.tmdbId.toString(),
-                            title: movie.title,
-                            status: 1, // PENDING
-                            requesterName: 'Imported',
-                            requestedAt: new Date(movie.added),
-                            metadata: JSON.stringify({
-                                year: movie.year,
-                                overview: movie.overview,
-                                posterPath: posterPath
-                            })
-                        }
+                    await db.insert(mediaRequests).values({
+                        mediaType: 'movie',
+                        tmdbId: movie.tmdbId.toString(),
+                        title: movie.title,
+                        status: 1, // PENDING
+                        requesterName: 'Imported',
+                        requestedAt: new Date(movie.added),
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                        metadata: JSON.stringify({
+                            year: movie.year,
+                            overview: movie.overview,
+                            posterPath: posterPath
+                        })
                     })
                     importedCount++
                 } else {
                     // Update metadata if poster is missing or different (optional, but good for fixing broken images)
                     const currentMeta = existing.metadata ? JSON.parse(existing.metadata) : {}
                     if (!currentMeta.posterPath || (posterPath && posterPath.startsWith('/') && !currentMeta.posterPath.startsWith('/'))) {
-                         await prisma.mediaRequest.update({
-                            where: { id: existing.id },
-                            data: {
+                         await db.update(mediaRequests)
+                            .set({
                                 metadata: JSON.stringify({
                                     ...currentMeta,
                                     posterPath: posterPath
-                                })
-                            }
-                         })
+                                }),
+                                updatedAt: new Date()
+                            })
+                            .where(eq(mediaRequests.id, existing.id))
                     }
                 }
             }
@@ -130,11 +132,11 @@ export async function forceSyncRequests() {
                  }
                  
                  if (tmdbId) {
-                    const existing = await prisma.mediaRequest.findFirst({
-                        where: { 
-                            mediaType: 'tv',
-                            tmdbId: tmdbId
-                        }
+                    const existing = await db.query.mediaRequests.findFirst({
+                        where: and(
+                            eq(mediaRequests.mediaType, 'tv'),
+                            eq(mediaRequests.tmdbId, tmdbId)
+                        )
                     })
 
                     // Get correct poster from TMDB if possible
@@ -154,36 +156,36 @@ export async function forceSyncRequests() {
                             .filter(s => s.monitored && s.statistics && s.statistics.percentOfEpisodes < 100)
                             .map(s => s.seasonNumber)
 
-                        await prisma.mediaRequest.create({
-                            data: {
-                                mediaType: 'tv',
-                                tmdbId: tmdbId,
-                                title: series.title,
-                                status: 1, // PENDING
-                                requesterName: 'Imported',
-                                requestedAt: new Date(series.added),
-                                metadata: JSON.stringify({
-                                    year: series.year,
-                                    overview: series.overview,
-                                    posterPath: posterPath,
-                                    seasons: missingSeasons
-                                })
-                            }
+                        await db.insert(mediaRequests).values({
+                            mediaType: 'tv',
+                            tmdbId: tmdbId,
+                            title: series.title,
+                            status: 1, // PENDING
+                            requesterName: 'Imported',
+                            requestedAt: new Date(series.added),
+                            createdAt: new Date(),
+                            updatedAt: new Date(),
+                            metadata: JSON.stringify({
+                                year: series.year,
+                                overview: series.overview,
+                                posterPath: posterPath,
+                                seasons: missingSeasons
+                            })
                         })
                         importedCount++
                     } else {
                          // Update metadata if poster is missing or different
                          const currentMeta = existing.metadata ? JSON.parse(existing.metadata) : {}
                          if (!currentMeta.posterPath || (posterPath && posterPath.startsWith('/') && !currentMeta.posterPath.startsWith('/'))) {
-                              await prisma.mediaRequest.update({
-                                 where: { id: existing.id },
-                                 data: {
+                              await db.update(mediaRequests)
+                                 .set({
                                      metadata: JSON.stringify({
                                          ...currentMeta,
                                          posterPath: posterPath
-                                     })
-                                 }
-                              })
+                                     }),
+                                     updatedAt: new Date()
+                                 })
+                                 .where(eq(mediaRequests.id, existing.id))
                          }
                     }
                  }
@@ -191,7 +193,7 @@ export async function forceSyncRequests() {
         }
         
         // Clear cache
-        const requests = await prisma.mediaRequest.findMany({})
+        const requests = await db.query.mediaRequests.findMany()
         const { forget } = await import('@/lib/cache')
         for (const req of requests) {
             forget(`media_availability_${req.mediaType}_${req.tmdbId}`)
@@ -214,8 +216,8 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
     const user = await getCurrentUser()
     if (!user || !user.email) return { results: [], total: 0, totalPages: 0 }
 
-    const dbUser = await prisma.user.findFirst({
-      where: { email: user.email }
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.email, user.email)
     })
     
     if (!dbUser) return { results: [], total: 0, totalPages: 0 }
@@ -227,12 +229,12 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
     
     // Read from local DB instead of Jellyseerr API
     const [requests, total] = await Promise.all([
-        prisma.mediaRequest.findMany({
-            orderBy: { requestedAt: 'desc' },
-            skip,
-            take: pageSize
+        db.query.mediaRequests.findMany({
+            orderBy: sql`requested_at DESC`,
+            offset: skip,
+            limit: pageSize
         }),
-        prisma.mediaRequest.count()
+        db.$count(mediaRequests)
     ])
 
     // Map DB format to the format expected by the UI
@@ -300,10 +302,9 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
 
             // Update DB if status changed
             if (status !== req.status) {
-                await prisma.mediaRequest.update({
-                    where: { id: req.id as number },
-                    data: { status }
-                });
+                await db.update(mediaRequests)
+                    .set({ status, updatedAt: new Date() })
+                    .where(eq(mediaRequests.id, req.id as number));
                 // Send notification when media first becomes available
                 if (status === 5) {
                     try {

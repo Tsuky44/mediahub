@@ -1,5 +1,7 @@
 import 'server-only'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { watchEvents } from '@/lib/db/schema'
+import { eq, and, or, gte, lte, inArray, desc } from 'drizzle-orm'
 
 export interface MeScopedUser {
     id: number
@@ -16,25 +18,26 @@ export async function fetchMyWatchHistory(
     startDate: Date,
     endDate: Date
 ): Promise<any[]> {
-    const or: any[] = []
+    const orConditions: any[] = []
 
     if (!isNaN(user.id)) {
-        or.push({ userId: user.id })
+        orConditions.push(eq(watchEvents.userId, user.id))
     }
     if (user.externalIds.length > 0) {
-        or.push({ embyUserId: { in: user.externalIds } })
+        orConditions.push(inArray(watchEvents.embyUserId, user.externalIds))
     }
     if (user.name) {
-        or.push({ userName: user.name })
+        orConditions.push(eq(watchEvents.userName, user.name))
     }
 
-    if (or.length === 0) return []
+    if (orConditions.length === 0) return []
 
-    return prisma.watchEvent.findMany({
-        where: {
-            OR: or,
-            playedAt: { gte: startDate, lte: endDate },
-        },
-        orderBy: { playedAt: 'desc' },
+    return db.query.watchEvents.findMany({
+        where: and(
+            or(...orConditions),
+            gte(watchEvents.playedAt, startDate),
+            lte(watchEvents.playedAt, endDate)
+        ),
+        orderBy: [desc(watchEvents.playedAt)],
     })
 }

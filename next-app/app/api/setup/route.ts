@@ -1,14 +1,17 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+﻿import { NextResponse } from 'next/server'
+import { db } from '@/lib/db/drizzle'
+import { settings } from '@/lib/db/schema'
 import { isAppConfigured } from '@/lib/setup'
 import { revalidatePath } from 'next/cache'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   try {
     const configured = await isAppConfigured()
     if (configured) {
       return NextResponse.json(
-        { error: 'L\'application est déjà configurée' },
+        { error: 'L\'application est dÃ©jÃ  configurÃ©e' },
         { status: 403 }
       )
     }
@@ -18,18 +21,16 @@ export async function POST(request: Request) {
 
     if (!emby_url || !emby_api_key) {
       return NextResponse.json(
-        { error: 'Veuillez remplir les champs obligatoires (URL Emby et Clé API)' },
+        { error: 'Veuillez remplir les champs obligatoires (URL Emby et ClÃ© API)' },
         { status: 400 }
       )
     }
 
     // Create Settings
-    await prisma.setting.createMany({
-      data: [
-        { key: 'emby_url', value: emby_url, category: 'emby' },
-        { key: 'emby_api_key', value: emby_api_key, category: 'emby' }
-      ]
-    })
+    await db.insert(settings).values([
+      { key: 'emby_url', value: emby_url, category: 'emby', createdAt: new Date(), updatedAt: new Date() },
+      { key: 'emby_api_key', value: emby_api_key, category: 'emby', createdAt: new Date(), updatedAt: new Date() }
+    ])
 
     revalidatePath('/')
     revalidatePath('/setup')

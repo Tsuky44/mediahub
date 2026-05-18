@@ -2,9 +2,9 @@ import axios from 'axios'
 import https from 'https'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
-const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 
 export class JellyfinService {
@@ -68,23 +68,23 @@ export class JellyfinService {
         const response = await performAuth(this.baseUrl);
         log(`[JellyfinService] Auth success for ${username}`)
         return response.data
-    } catch (e) {
+    } catch (e: any) {
         // Auto-retry with host.docker.internal if localhost fails
         if ((this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1')) && 
-            ((e as { code?: string }).code === 'ECONNREFUSED' || (e as { code?: string }).code === 'ETIMEDOUT' || (e as { code?: string }).code === 'EHOSTUNREACH')) {
+            (e.code === 'ECONNREFUSED' || e.code === 'ETIMEDOUT' || e.code === 'EHOSTUNREACH')) {
             
-            warn(`[JellyfinService] Connection to ${this.baseUrl} failed (${(e as { code?: string }).code}). Retrying with host.docker.internal...`)
+            warn(`[JellyfinService] Connection to ${this.baseUrl} failed (${e.code}). Retrying with host.docker.internal...`)
             try {
                 const newUrl = this.baseUrl.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
                 const response = await performAuth(newUrl);
                 log(`[JellyfinService] Auth success using host.docker.internal`)
                 return response.data
-            } catch (retryError) {
-                error(`[JellyfinService] Retry failed:`, (retryError as Error).message)
+            } catch (retryError: any) {
+                error(`[JellyfinService] Retry failed:`, retryError.message)
                 throw e // Throw original error if retry fails
             }
         }
-        error(`[JellyfinService] Auth failed:`, (e as Error).message)
+        error(`[JellyfinService] Auth failed:`, e.message)
         throw e
     }
   }
@@ -124,8 +124,8 @@ export class JellyfinService {
           }
       })
       return response.data
-    } catch (e) {
-      error('[JellyfinService] getItemDetails failed:', (e as Error).message)
+    } catch (e: any) {
+      error('[JellyfinService] getItemDetails failed:', e.message)
       return null
     }
   }

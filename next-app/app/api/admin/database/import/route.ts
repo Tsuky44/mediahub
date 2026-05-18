@@ -1,9 +1,12 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, settings, notifications, watchLater, accounts, sessions, mediaRequests, watchEvents, auditLogs, userGroups, userGroupMembers } from '@/lib/db/schema'
 import { decryptData } from '@/lib/crypto'
 import { revalidatePath } from 'next/cache'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   try {
@@ -36,74 +39,96 @@ export async function POST(request: Request) {
 
     const dbData = backup.data
 
-    // Execute import in a transaction
+    // Execute import
     // Note: Due to foreign key constraints, deletion order matters (Child -> Parent)
     // And creation order matters (Parent -> Child)
 
-    await prisma.$transaction(async (tx) => {
-      // 1. DELETE ALL EXISTING DATA (Order: Child -> Parent)
-      
-      // Delete most dependent first
-      // Explicit deletion is safer than relying on cascade
-      await tx.userGroupMember.deleteMany()
-      await tx.mediaRequest.deleteMany()
-      await tx.notification.deleteMany()
-      await tx.watchLater.deleteMany()
-      await tx.account.deleteMany()
-      await tx.session.deleteMany()
-      await tx.auditLog.deleteMany()
-      await tx.watchEvent.deleteMany()
-      
-      // Delete Users
-      await tx.user.deleteMany()
+    // 1. DELETE ALL EXISTING DATA (Order: Child -> Parent)
+    await db.delete(userGroupMembers)
+    await db.delete(mediaRequests)
+    await db.delete(notifications)
+    await db.delete(watchLater)
+    await db.delete(accounts)
+    await db.delete(sessions)
+    await db.delete(auditLogs)
+    await db.delete(watchEvents)
+    await db.delete(users)
+    await db.delete(userGroups)
+    await db.delete(settings)
 
-      // Delete Groups
-      await tx.userGroup.deleteMany()
-
-      // Delete Independent tables
-      await tx.setting.deleteMany()
-
-      // 2. RESTORE DATA (Order: Parent -> Child)
-      
-      // Independent
-      if (dbData.settings?.length) await tx.setting.createMany({ data: dbData.settings })
-
-      // Users
-      if (dbData.users?.length) {
-        // We restore users but without role relations/permissions
-        const usersToCreate = dbData.users.map((u: any) => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { roleId, permissions, roleVersion, ...userData } = u
-          
-          // Ensure role is valid string
-          let role = userData.role
-          if (role !== 'admin' && role !== 'user') {
-            role = 'user'
-          }
-
-          return {
-            ...userData,
-            role
-          }
-        })
-        await tx.user.createMany({ data: usersToCreate })
+    // 2. RESTORE DATA (Order: Parent -> Child)
+    
+    // Independent
+    if (dbData.settings?.length) {
+      for (const s of dbData.settings) {
+        await db.insert(settings).values(s)
       }
+    }
 
-      // Groups
-      if (dbData.userGroups?.length) await tx.userGroup.createMany({ data: dbData.userGroups })
+    // Users
+    if (dbData.users?.length) {
+      for (const u of dbData.users) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { roleId, permissions, roleVersion, ...userData } = u
+        
+        // Ensure role is valid string
+        let role = userData.role
+        if (role !== 'admin' && role !== 'user') {
+          role = 'user'
+        }
 
-      // Dependent Data
-      if (dbData.userGroupMembers?.length) await tx.userGroupMember.createMany({ data: dbData.userGroupMembers })
-      
-      if (dbData.accounts?.length) await tx.account.createMany({ data: dbData.accounts })
-      if (dbData.sessions?.length) await tx.session.createMany({ data: dbData.sessions })
-      if (dbData.notifications?.length) await tx.notification.createMany({ data: dbData.notifications })
-      if (dbData.watchLater?.length) await tx.watchLater.createMany({ data: dbData.watchLater })
-      if (dbData.mediaRequests?.length) await tx.mediaRequest.createMany({ data: dbData.mediaRequests })
-      if (dbData.watchEvents?.length) await tx.watchEvent.createMany({ data: dbData.watchEvents })
-      if (dbData.auditLogs?.length) await tx.auditLog.createMany({ data: dbData.auditLogs })
+        await db.insert(users).values({ ...userData, role })
+      }
+    }
 
-    })
+    // Groups
+    if (dbData.userGroups?.length) {
+      for (const g of dbData.userGroups) {
+        await db.insert(userGroups).values(g)
+      }
+    }
+
+    // Dependent Data
+    if (dbData.userGroupMembers?.length) {
+      for (const m of dbData.userGroupMembers) {
+        await db.insert(userGroupMembers).values(m)
+      }
+    }
+    if (dbData.accounts?.length) {
+      for (const a of dbData.accounts) {
+        await db.insert(accounts).values(a)
+      }
+    }
+    if (dbData.sessions?.length) {
+      for (const s of dbData.sessions) {
+        await db.insert(sessions).values(s)
+      }
+    }
+    if (dbData.notifications?.length) {
+      for (const n of dbData.notifications) {
+        await db.insert(notifications).values(n)
+      }
+    }
+    if (dbData.watchLater?.length) {
+      for (const w of dbData.watchLater) {
+        await db.insert(watchLater).values(w)
+      }
+    }
+    if (dbData.mediaRequests?.length) {
+      for (const r of dbData.mediaRequests) {
+        await db.insert(mediaRequests).values(r)
+      }
+    }
+    if (dbData.watchEvents?.length) {
+      for (const e of dbData.watchEvents) {
+        await db.insert(watchEvents).values(e)
+      }
+    }
+    if (dbData.auditLogs?.length) {
+      for (const a of dbData.auditLogs) {
+        await db.insert(auditLogs).values(a)
+      }
+    }
 
     revalidatePath('/', 'layout')
 

@@ -30,7 +30,7 @@ export interface ActivityLog {
     entityId?: string | null
     ipAddress?: string | null
     createdAt: string | Date
-    user: ActivityLogUser | null
+    user?: ActivityLogUser | null
 }
 
 /**

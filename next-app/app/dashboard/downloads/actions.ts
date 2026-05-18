@@ -6,9 +6,12 @@ import { revalidatePath } from 'next/cache'
 import { getServerSession } from 'next-auth'
 import { authOptions, getStorageServiceForUser } from '@/lib/auth'
 import { getQBittorrentService } from '@/lib/services/qbittorrent'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { trackerStatsLogs, dailyTrackerStats } from '@/lib/db/schema'
+import { and, gte, lte, asc } from 'drizzle-orm'
 
 import { defineAbilityFor } from '@/lib/ability'
+import { logger } from '@/lib/logger'
 
 export async function checkAccess(permission?: string) {
   const session = await getServerSession(authOptions)
@@ -58,7 +61,7 @@ export async function getTorrents(filter: string = 'all'): Promise<Torrent[]> {
     const cache = QBittorrentCache.getInstance()
     return cache.getTorrents(filter)
   } catch (e) {
-    console.error('Failed to get torrents from cache', e)
+    logger.error('Failed to get torrents from cache', e)
     return []
   }
 }
@@ -69,7 +72,7 @@ export async function getGlobalStats() {
     const cache = QBittorrentCache.getInstance()
     return cache.getGlobalStats()
   } catch (e) {
-    console.error('Failed to get global stats from cache', e)
+    logger.error('Failed to get global stats from cache', e)
     return null
   }
 }
@@ -115,7 +118,7 @@ export async function getSessionTrackerStats() {
         .map(([tracker, stats]) => ({ tracker, ...stats }))
         .sort((a, b) => b.uploaded - a.uploaded)
   } catch (e) {
-    console.error('Failed to get tracker stats', e)
+    logger.error('Failed to get tracker stats', e)
     return []
   }
 }
@@ -143,14 +146,9 @@ export async function getTrackerHistory(startDate?: string, endDate?: string) {
     dbEnd.setUTCHours(23, 59, 59, 999)
 
     // 1. Fetch Logs (New granular history)
-    const logs = await prisma.trackerStatsLog.findMany({
-        where: {
-            timestamp: {
-                gte: dbStart,
-                lte: dbEnd
-            }
-        },
-        orderBy: { timestamp: 'asc' }
+    const logs = await db.query.trackerStatsLogs.findMany({
+        where: and(gte(trackerStatsLogs.timestamp, dbStart), lte(trackerStatsLogs.timestamp, dbEnd)),
+        orderBy: [asc(trackerStatsLogs.timestamp)]
     })
 
     // 2. Fetch Daily Stats (Fallback for older data)
@@ -158,14 +156,9 @@ export async function getTrackerHistory(startDate?: string, endDate?: string) {
     const dbStartFallback = new Date(startKey)
     dbStartFallback.setDate(dbStartFallback.getDate() - 1)
 
-    const dailyStats = await prisma.dailyTrackerStat.findMany({
-        where: {
-            date: {
-                gte: dbStartFallback,
-                lte: dbEnd
-            }
-        },
-        orderBy: { date: 'asc' }
+    const dailyStats = await db.query.dailyTrackerStats.findMany({
+        where: and(gte(dailyTrackerStats.date, dbStartFallback), lte(dailyTrackerStats.date, dbEnd)),
+        orderBy: [asc(dailyTrackerStats.date)]
     })
 
     // Helper to format date YYYY-MM-DD (UTC)
@@ -312,7 +305,7 @@ export async function getTrackerHistory(startDate?: string, endDate?: string) {
     return result.reverse() // Newest first
 
   } catch (e) {
-    console.error('Failed to get tracker history', e)
+    logger.error('Failed to get tracker history', e)
     return []
   }
 }
@@ -338,7 +331,7 @@ export async function addTorrent(formData: FormData) {
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
-    console.error('Failed to add torrent', e)
+    logger.error('Failed to add torrent', e)
     return { success: false, error: (e as Error).message || 'Failed to add torrent' }
   }
 }
@@ -353,7 +346,7 @@ export async function deleteTorrents(hashes: string[], deleteFiles: boolean) {
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
-    console.error('Failed to delete torrents', e)
+    logger.error('Failed to delete torrents', e)
     return { success: false, error: 'Failed to delete torrents' }
   }
 }
@@ -368,7 +361,7 @@ export async function pauseTorrents(hashes: string[]) {
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
-    console.error('Failed to pause torrents', e)
+    logger.error('Failed to pause torrents', e)
     return { success: false, error: 'Failed to pause torrents' }
   }
 }
@@ -383,7 +376,7 @@ export async function resumeTorrents(hashes: string[]) {
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
-    console.error('Failed to resume torrents', e)
+    logger.error('Failed to resume torrents', e)
     return { success: false, error: 'Failed to resume torrents' }
   }
 }
@@ -402,7 +395,7 @@ export async function setPriority(hashes: string[], action: 'top' | 'up' | 'down
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
-    console.error('Failed to set priority', e)
+    logger.error('Failed to set priority', e)
     return { success: false, error: 'Failed to set priority' }
   }
 }
@@ -417,7 +410,7 @@ export async function reannounceTorrents(hashes: string[]) {
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
-    console.error('Failed to reannounce torrents', e)
+    logger.error('Failed to reannounce torrents', e)
     return { success: false, error: 'Failed to reannounce torrents' }
   }
 }
@@ -432,7 +425,7 @@ export async function setShareLimits(hashes: string[], ratioLimit: number, seedi
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
-    console.error('Failed to set share limits', e)
+    logger.error('Failed to set share limits', e)
     return { success: false, error: 'Failed to set share limits' }
   }
 }
@@ -444,7 +437,7 @@ export async function getCategories() {
     const cache = QBittorrentCache.getInstance()
     return cache.getCategories()
   } catch (e) {
-    console.error('Failed to get categories from cache', e)
+    logger.error('Failed to get categories from cache', e)
     return {}
   }
 }
@@ -455,7 +448,7 @@ export async function getTags() {
     const cache = QBittorrentCache.getInstance()
     return cache.getTags()
   } catch (e) {
-    console.error('Failed to get tags from cache', e)
+    logger.error('Failed to get tags from cache', e)
     return []
   }
 }
@@ -470,7 +463,7 @@ export async function deleteStoragePath(path: string) {
     revalidatePath('/dashboard/downloads')
     return { success: true }
   } catch (e) {
-    console.error('Failed to delete storage path', e)
+    logger.error('Failed to delete storage path', e)
     return { 
       success: false, 
       error: (e as Error).message || 'Erreur lors de la suppression' 

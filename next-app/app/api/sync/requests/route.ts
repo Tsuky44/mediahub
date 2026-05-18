@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { importJellyseerrRequests } from '@/lib/jellyseerr-import'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
+
+export const dynamic = 'force-dynamic'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -14,7 +16,7 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions)
   
-  // Si c'est une requête cron (vérification via header par exemple)
+  // Si c'est une requÃªte cron (vÃ©rification via header par exemple)
   const authHeader = request.headers.get('authorization')
   const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`
 
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
   try {
     // Synchroniser Jellyseerr (configuration globale)
     log(`[Sync] Syncing Jellyseerr requests...`);
-    await importJellyseerrRequests(prisma);
+    await importJellyseerrRequests(db);
 
     revalidatePath('/dashboard/requests/list')
     return NextResponse.json({ 

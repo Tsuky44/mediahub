@@ -1,6 +1,8 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { mediaSubscriptions } from '@/lib/db/schema'
+import { eq, and } from 'drizzle-orm'
 import { getCurrentUser } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
@@ -20,30 +22,25 @@ export async function toggleSubscription(tmdbId: string, mediaType: string, titl
              throw new Error('Invalid User ID')
         }
 
-        const existing = await prisma.mediaSubscription.findUnique({
-            where: {
-                userId_tmdbId_mediaType: {
-                    userId,
-                    tmdbId,
-                    mediaType
-                }
-            }
+        const existing = await db.query.mediaSubscriptions.findFirst({
+            where: and(
+                eq(mediaSubscriptions.userId, userId),
+                eq(mediaSubscriptions.tmdbId, tmdbId),
+                eq(mediaSubscriptions.mediaType, mediaType)
+            )
         })
         console.log(`[toggleSubscription] Existing subscription:`, existing)
 
         if (existing) {
-            await prisma.mediaSubscription.delete({
-                where: { id: existing.id }
-            })
+            await db.delete(mediaSubscriptions).where(eq(mediaSubscriptions.id, existing.id))
             console.log(`[toggleSubscription] Deleted subscription ${existing.id}`)
         } else {
-            await prisma.mediaSubscription.create({
-                data: {
-                    userId,
-                    tmdbId,
-                    mediaType,
-                    title
-                }
+            await db.insert(mediaSubscriptions).values({
+                userId,
+                tmdbId,
+                mediaType,
+                title,
+                createdAt: new Date()
             })
             console.log(`[toggleSubscription] Created new subscription`)
         }
@@ -62,14 +59,12 @@ export async function getSubscriptionStatus(tmdbId: string, mediaType: string) {
     const user = await getCurrentUser()
     if (!user) return false
 
-    const existing = await prisma.mediaSubscription.findUnique({
-        where: {
-            userId_tmdbId_mediaType: {
-                userId: Number(user.id),
-                tmdbId,
-                mediaType
-            }
-        }
+    const existing = await db.query.mediaSubscriptions.findFirst({
+        where: and(
+            eq(mediaSubscriptions.userId, Number(user.id)),
+            eq(mediaSubscriptions.tmdbId, tmdbId),
+            eq(mediaSubscriptions.mediaType, mediaType)
+        )
     })
 
     return !!existing

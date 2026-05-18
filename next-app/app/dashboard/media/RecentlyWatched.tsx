@@ -2,7 +2,7 @@
 
 import { Clock, Play } from 'lucide-react'
 
-interface RecentlyWatchedItem {
+export interface RecentlyWatchedItem {
     id: string
     tmdbId?: string
     title: string

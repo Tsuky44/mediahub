@@ -1,9 +1,14 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+﻿﻿import { NextResponse } from 'next/server'
+import { db } from '@/lib/db/drizzle'
+import { users, roles } from '@/lib/db/schema'
+import { eq, or, asc } from 'drizzle-orm'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
 import bcrypt from 'bcryptjs'
+import { logger } from '@/lib/logger'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -12,18 +17,16 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const isSuperAdmin = (session.user as { role?: string }).role === 'admin'
+  const isSuperAdmin = session.user?.role === 'admin'
   const hasAccess = isSuperAdmin 
   
   if (!hasAccess) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const users = await prisma.user.findMany({
-    orderBy: { name: 'asc' },
-    include: { roleRef: true }
-  })
-  return NextResponse.json(users)
+  const usersList = await db.select().from(users).orderBy(asc(users.name))
+  // TODO: Fetch roles separately if needed
+  return NextResponse.json(usersList)
 }
 
 export async function POST(request: Request) {
@@ -33,7 +36,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const isSuperAdmin = (session.user as { role?: string }).role === 'admin'
+  const isSuperAdmin = session.user?.role === 'admin'
   if (!isSuperAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -46,17 +49,12 @@ export async function POST(request: Request) {
     }
 
     // Check if user exists
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email },
-          { name }
-        ]
-      }
-    })
+    const existingUser = await db.select().from(users).where(
+      or(eq(users.email, email), eq(users.name, name))
+    ).limit(1)
 
-    if (existingUser) {
-      return NextResponse.json({ error: 'Un utilisateur avec cet email ou ce nom existe déjà' }, { status: 409 })
+    if (existingUser && existingUser.length > 0) {
+      return NextResponse.json({ error: 'Un utilisateur avec cet email ou ce nom existe dÃ©jÃ ' }, { status: 409 })
     }
 
     const hashedPassword = await bcrypt.hash(password, 10)
@@ -66,23 +64,20 @@ export async function POST(request: Request) {
     let finalRoleId = roleId
 
     if (roleId) {
-        const role = await prisma.role.findUnique({ where: { id: roleId } })
+        const [role] = await db.select().from(roles).where(eq(roles.id, roleId)).limit(1)
         if (role) roleName = role.name
     }
 
-    const newUser = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-        role: roleName,
-        roleId: finalRoleId || null
-      },
-      include: { roleRef: true }
-    })
+    const [newUser] = await db.insert(users).values({
+      name,
+      email,
+      password: hashedPassword,
+      role: roleName,
+      roleId: finalRoleId || null
+    }).returning()
 
     await logAction(
-      parseInt(String((session.user as { id?: string | number }).id)),
+      parseInt(session.user?.id ?? '0'),
       'CREATE',
       'User',
       newUser.id.toString(),
@@ -93,16 +88,16 @@ export async function POST(request: Request) {
         const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
         await ExternalNotificationService.send('user_created', {
             title: 'Nouvel utilisateur',
-            message: `L'utilisateur ${name} (${email}) a été créé manuellement par un administrateur.`,
+            message: `L'utilisateur ${name} (${email}) a Ã©tÃ© crÃ©Ã© manuellement par un administrateur.`,
             data: { name, email }
         })
     } catch (e) {
-        console.error('Failed to send external notification for user creation:', e)
+        logger.error('Failed to send external notification for user creation:', e)
     }
 
     return NextResponse.json(newUser)
   } catch (error) {
-    console.error('Error creating user:', error)
+    logger.error('Error creating user:', error)
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })
   }
 }
@@ -114,7 +109,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const isSuperAdmin = (session.user as { role?: string }).role === 'admin'
+  const isSuperAdmin = session.user?.role === 'admin'
   const hasAccess = isSuperAdmin
 
   if (!hasAccess) {
@@ -127,33 +122,25 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
   }
 
-  const userToUpdate = await prisma.user.findUnique({
-    where: { 
-      id: parseInt(id)
-    }
-  })
+  const [userToUpdate] = await db.select().from(users).where(eq(users.id, parseInt(id))).limit(1)
 
   if (!userToUpdate) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 })
   }
 
-  const dataToUpdate: Record<string, unknown> = {}
+  const dataToUpdate: Partial<typeof users.$inferInsert> = {}
   if (role !== undefined) dataToUpdate.role = role
-  if (roleId !== undefined) dataToUpdate.roleId = roleId
+  if (roleId !== undefined) dataToUpdate.roleId = roleId ?? null
   if (whatsappNumber !== undefined) dataToUpdate.whatsappNumber = whatsappNumber || null
   if (telegramChatId !== undefined) dataToUpdate.telegramChatId = telegramChatId || null
   if (discordUserId !== undefined) dataToUpdate.discordUserId = discordUserId || null
   if (discordWebhook !== undefined) dataToUpdate.discordWebhook = discordWebhook || null
   if (customWebhook !== undefined) dataToUpdate.customWebhook = customWebhook || null
 
-  const updatedUser = await prisma.user.update({
-    where: { id: parseInt(id) },
-    data: dataToUpdate,
-    include: { roleRef: true }
-  })
+  const [updatedUser] = await db.update(users).set(dataToUpdate).where(eq(users.id, parseInt(id))).returning()
 
   await logAction(
-    parseInt(String((session.user as { id?: string | number }).id)),
+    parseInt(session.user?.id ?? '0'),
     'UPDATE',
     'User',
     id.toString(),

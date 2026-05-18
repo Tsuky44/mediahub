@@ -1,8 +1,12 @@
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { userGroups, userGroupMembers } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 import { logAction } from '@/lib/audit'
+
+export const dynamic = 'force-dynamic'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -27,32 +31,22 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         const { id } = await params
         log(`[UserGroups] Attempting to delete group ${id}`)
 
-        // Use a transaction to ensure both operations succeed or fail together
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await prisma.$transaction(async (tx: any) => {
-            // 1. Delete all members of the group
-            const membersDeleted = await tx.userGroupMember.deleteMany({
-                where: {
-                    userGroupId: id
-                }
-            })
-            log(`[UserGroups] Deleted ${membersDeleted.count} members for group ${id}`)
+        // Delete all members of the group first
+        const membersDeleted = await db.delete(userGroupMembers)
+            .where(eq(userGroupMembers.userGroupId, id))
+            .returning()
+        log(`[UserGroups] Deleted ${membersDeleted.length} members for group ${id}`)
 
-            // 2. Delete the group itself
-            await tx.userGroup.delete({
-                where: {
-                    id
-                }
-            })
-            log(`[UserGroups] Deleted group ${id}`)
-        })
+        // Delete the group itself
+        await db.delete(userGroups).where(eq(userGroups.id, id))
+        log(`[UserGroups] Deleted group ${id}`)
 
         await logAction(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             parseInt((session.user as any).id),
             'DELETE',
             'UserGroup',
-            (await params).id,
+            id,
             null
         )
 

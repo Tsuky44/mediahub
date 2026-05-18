@@ -1,8 +1,12 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+﻿import { NextResponse } from 'next/server'
+import { db } from '@/lib/db/drizzle'
+import { users } from '@/lib/db/schema'
+import { eq, inArray } from 'drizzle-orm'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -31,13 +35,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Cannot delete yourself' }, { status: 400 })
       }
 
-      await prisma.$transaction(
-        userIds.map((id: number) => 
-          prisma.user.delete({
-            where: { id }
-          })
-        )
-      )
+      // Delete users in a loop since Drizzle SQLite doesn't support transaction with multiple deletes easily
+      for (const id of userIds) {
+        await db.delete(users).where(eq(users.id, id))
+      }
 
       await logAction(
         currentUserId,
@@ -54,15 +55,10 @@ export async function POST(request: Request) {
     if (role !== undefined) dataToUpdate.role = role
     if (roleId !== undefined) dataToUpdate.roleId = roleId
 
-    // Update all users in transaction
-    await prisma.$transaction(
-      userIds.map((id: number) => 
-        prisma.user.update({
-          where: { id },
-          data: dataToUpdate
-        })
-      )
-    )
+    // Update all users in a loop
+    for (const id of userIds) {
+      await db.update(users).set({ ...dataToUpdate, updatedAt: new Date() }).where(eq(users.id, id))
+    }
 
     // Log action
     await logAction(

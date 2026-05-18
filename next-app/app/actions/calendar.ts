@@ -1,6 +1,8 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, userCalendarEvents } from '@/lib/db/schema'
+import { eq, and } from 'drizzle-orm'
 import { getCurrentUser } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 import { getRadarrService } from '@/lib/services/radarr'
@@ -89,9 +91,9 @@ export async function getCalendarEvents(start: Date, end: Date) {
     return []
   }
 
-  const dbUser = await prisma.user.findUnique({
-    where: { email: user.email },
-    select: { id: true }
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.email, user.email),
+    columns: { id: true }
   })
 
   if (!dbUser) {
@@ -105,10 +107,8 @@ export async function getCalendarEvents(start: Date, end: Date) {
 
   // 1. Fetch Personal Events (Stored in DB)
   try {
-    const personalEvents = await prisma.userCalendarEvent.findMany({
-        where: {
-        userId: dbUser.id
-        }
+    const personalEvents = await db.query.userCalendarEvents.findMany({
+        where: eq(userCalendarEvents.userId, dbUser.id)
     })
     log(`[Calendar] Found ${personalEvents.length} personal subscriptions`)
 
@@ -401,38 +401,33 @@ export async function addToCalendar(tmdbId: string, mediaType: 'movie' | 'tv', t
   const user = await getCurrentUser()
   if (!user || !user.email) throw new Error('Unauthorized')
 
-  const dbUser = await prisma.user.findUnique({
-    where: { email: user.email },
-    select: { id: true }
-  })
+  const [dbUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, user.email))
 
   if (!dbUser) throw new Error('User not found')
 
   // Check if already exists
-  const existing = await prisma.userCalendarEvent.findFirst({
-    where: {
-      userId: dbUser.id,
-      tmdbId: tmdbId.toString(),
-      mediaType
-    }
+  const existing = await db.query.userCalendarEvents.findFirst({
+    where: and(
+      eq(userCalendarEvents.userId, dbUser.id),
+      eq(userCalendarEvents.tmdbId, tmdbId.toString()),
+      eq(userCalendarEvents.mediaType, mediaType)
+    )
   })
 
   if (existing) {
     // Update date if needed
-    await prisma.userCalendarEvent.update({
-      where: { id: existing.id },
-      data: { releaseDate }
-    })
+    await db.update(userCalendarEvents)
+      .set({ releaseDate })
+      .where(eq(userCalendarEvents.id, existing.id))
+      .run()
   } else {
-    await prisma.userCalendarEvent.create({
-      data: {
-        userId: dbUser.id,
-        tmdbId: tmdbId.toString(),
-        mediaType,
-        title,
-        releaseDate
-      }
-    })
+    await db.insert(userCalendarEvents).values({
+      userId: dbUser.id,
+      tmdbId: tmdbId.toString(),
+      mediaType,
+      title,
+      releaseDate
+    }).run()
   }
 
   revalidatePath('/dashboard')
@@ -443,20 +438,17 @@ export async function removeFromCalendar(tmdbId: string, mediaType: 'movie' | 't
   const user = await getCurrentUser()
   if (!user || !user.email) throw new Error('Unauthorized')
 
-  const dbUser = await prisma.user.findUnique({
-    where: { email: user.email },
-    select: { id: true }
-  })
+  const [dbUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, user.email))
 
   if (!dbUser) throw new Error('User not found')
 
-  await prisma.userCalendarEvent.deleteMany({
-    where: {
-      userId: dbUser.id,
-      tmdbId: tmdbId.toString(),
-      mediaType
-    }
-  })
+  await db.delete(userCalendarEvents)
+    .where(and(
+      eq(userCalendarEvents.userId, dbUser.id),
+      eq(userCalendarEvents.tmdbId, tmdbId.toString()),
+      eq(userCalendarEvents.mediaType, mediaType)
+    ))
+    .run()
 
   revalidatePath('/dashboard')
   return { success: true }

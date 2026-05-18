@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+﻿import { NextResponse } from 'next/server'
+import { db } from '@/lib/db/drizzle'
+import { settings, users } from '@/lib/db/schema'
+import { inArray, eq } from 'drizzle-orm'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+
+export const dynamic = 'force-dynamic'
 
 // GET: Get current system message if available and unseen
 export async function GET(req: Request) {
@@ -12,21 +16,17 @@ export async function GET(req: Request) {
   try {
     // BANNER MESSAGE (Pre-login)
     if (type === 'banner') {
-      const settings = await prisma.setting.findMany({
-        where: {
-          key: {
-            in: ['login_banner_content', 'login_banner_enabled', 'login_banner_speed']
-          }
-        },
-        select: {
+      const settingsList = await db.query.settings.findMany({
+        where: inArray(settings.key, ['login_banner_content', 'login_banner_enabled', 'login_banner_speed']),
+        columns: {
           key: true,
           value: true
         }
       })
 
-      const content = settings.find(s => s.key === 'login_banner_content')?.value || ''
-      const enabled = settings.find(s => s.key === 'login_banner_enabled')?.value === 'true'
-      const speed = parseInt(settings.find(s => s.key === 'login_banner_speed')?.value || '20')
+      const content = settingsList.find(s => s.key === 'login_banner_content')?.value || ''
+      const enabled = settingsList.find(s => s.key === 'login_banner_enabled')?.value === 'true'
+      const speed = parseInt(settingsList.find(s => s.key === 'login_banner_speed')?.value || '20')
 
       return NextResponse.json({ 
         show: enabled && !!content, 
@@ -37,21 +37,17 @@ export async function GET(req: Request) {
 
     // POPUP MESSAGE (Post-login)
     // 1. Get system message settings
-    const settings = await prisma.setting.findMany({
-      where: {
-        key: {
-          in: ['system_message_content', 'system_message_enabled', 'system_message_version']
-        }
-      },
-      select: {
+    const settingsList = await db.query.settings.findMany({
+      where: inArray(settings.key, ['system_message_content', 'system_message_enabled', 'system_message_version']),
+      columns: {
         key: true,
         value: true
       }
     })
 
-    const content = settings.find(s => s.key === 'system_message_content')?.value || ''
-    const enabled = settings.find(s => s.key === 'system_message_enabled')?.value === 'true'
-    const currentVersion = settings.find(s => s.key === 'system_message_version')?.value || '0'
+    const content = settingsList.find(s => s.key === 'system_message_content')?.value || ''
+    const enabled = settingsList.find(s => s.key === 'system_message_enabled')?.value === 'true'
+    const currentVersion = settingsList.find(s => s.key === 'system_message_version')?.value || '0'
 
     if (!enabled || !content) {
       return NextResponse.json({ show: false })
@@ -76,9 +72,9 @@ export async function GET(req: Request) {
       })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { lastSeenSystemMessageVersion: true }
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { lastSeenSystemMessageVersion: true }
     })
 
     const lastSeenVersion = user?.lastSeenSystemMessageVersion || '0'
@@ -115,10 +111,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Version is required' }, { status: 400 })
     }
 
-    await prisma.user.update({
-      where: { id: parseInt((session.user as any).id) },
-      data: { lastSeenSystemMessageVersion: version }
-    })
+    await db.update(users)
+      .set({ lastSeenSystemMessageVersion: version, updatedAt: new Date() })
+      .where(eq(users.id, parseInt((session.user as any).id)))
 
     return NextResponse.json({ success: true })
 

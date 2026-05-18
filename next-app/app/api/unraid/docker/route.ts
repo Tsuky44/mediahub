@@ -4,7 +4,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { UnraidService } from '@/lib/services/unraid'
 import { DockerService } from '@/lib/services/docker'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { settings } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 import { defineAbilityFor } from '@/lib/ability'
 
 export const dynamic = 'force-dynamic'
@@ -34,8 +36,8 @@ export async function GET() {
 
     // Fallback to UnraidService
     log('[API] DockerService list failed, falling back to UnraidService');
-    const unraidUrlSetting = await prisma.setting.findFirst({ where: { key: 'unraid_url' }, select: { value: true } })
-    const unraidApiKeySetting = await prisma.setting.findFirst({ where: { key: 'unraid_api_key' }, select: { value: true } })
+    const unraidUrlSetting = await db.query.settings.findFirst({ where: eq(settings.key, 'unraid_url'), columns: { value: true } })
+    const unraidApiKeySetting = await db.query.settings.findFirst({ where: eq(settings.key, 'unraid_api_key'), columns: { value: true } })
 
     if (!unraidUrlSetting?.value || !unraidApiKeySetting?.value) {
       return NextResponse.json({ error: 'Unraid settings not configured' }, { status: 400 })

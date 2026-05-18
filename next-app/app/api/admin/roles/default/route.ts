@@ -1,9 +1,13 @@
-
+﻿
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, roles } from '@/lib/db/schema'
+import { eq, isNull, and } from 'drizzle-orm'
 import { getSetting, setSetting } from '@/lib/settings'
+
+export const dynamic = 'force-dynamic'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -36,22 +40,22 @@ export async function POST(request: NextRequest) {
       let updatedCount = 0
       if (currentDefaultRoleId) {
         log(`[RoleDefault] Removing default role. Migrating users from ${currentDefaultRoleId} to NULL`)
-        const updateResult = await prisma.user.updateMany({
-            where: { roleId: currentDefaultRoleId },
-            data: { roleId: null }
-        })
-        updatedCount = updateResult.count
+        const result = await db.update(users)
+            .set({ roleId: null, updatedAt: new Date() })
+            .where(eq(users.roleId, currentDefaultRoleId))
+            .returning()
+        updatedCount = result.length
       }
       
       return NextResponse.json({ 
         success: true, 
-        message: `Rôle par défaut supprimé. ${updatedCount} utilisateurs mis à jour (aucun rôle).`,
+        message: `RÃ´le par dÃ©faut supprimÃ©. ${updatedCount} utilisateurs mis Ã  jour (aucun rÃ´le).`,
         updatedCount 
       })
     }
 
     // Verify role exists
-    const role = await prisma.role.findUnique({ where: { id: roleId } })
+    const role = await db.query.roles.findFirst({ where: eq(roles.id, roleId) })
     if (!role) {
       return NextResponse.json({ error: 'Role not found' }, { status: 404 })
     }
@@ -65,32 +69,32 @@ export async function POST(request: NextRequest) {
     if (currentDefaultRoleId && currentDefaultRoleId !== roleId) {
       log(`[RoleDefault] Migrating users from role ${currentDefaultRoleId} to ${roleId}`)
       
-      const updateResult = await prisma.user.updateMany({
-        where: { roleId: currentDefaultRoleId },
-        data: { roleId: roleId }
-      })
+      const result = await db.update(users)
+        .set({ roleId: roleId, updatedAt: new Date() })
+        .where(eq(users.roleId, currentDefaultRoleId))
+        .returning()
       
-      updatedCount = updateResult.count
+      updatedCount = result.length
       log(`[RoleDefault] Migrated ${updatedCount} users`)
     } else if (!currentDefaultRoleId) {
       // Previous default was "None" (or basic user), so migrate users with no roleId
       log(`[RoleDefault] Migrating users from NULL role to ${roleId}`)
       
-      const updateResult = await prisma.user.updateMany({
-        where: { 
-            roleId: null,
-            role: 'user' // Only migrate non-admin users
-        },
-        data: { roleId: roleId }
-      })
+      const result = await db.update(users)
+        .set({ roleId: roleId, updatedAt: new Date() })
+        .where(and(
+            isNull(users.roleId),
+            eq(users.role, 'user')
+        ))
+        .returning()
       
-      updatedCount = updateResult.count
+      updatedCount = result.length
       log(`[RoleDefault] Migrated ${updatedCount} users`)
     }
 
     return NextResponse.json({ 
       success: true, 
-      message: `Rôle par défaut mis à jour. ${updatedCount} utilisateurs migrés.`,
+      message: `RÃ´le par dÃ©faut mis Ã  jour. ${updatedCount} utilisateurs migrÃ©s.`,
       updatedCount 
     })
 

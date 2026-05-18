@@ -1,8 +1,12 @@
-import { prisma } from '@/lib/prisma'
+﻿import { db } from '@/lib/db/drizzle'
+import { userGroups, userGroupMembers, users } from '@/lib/db/schema'
+import { eq, sql } from 'drizzle-orm'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 import { logAction } from '@/lib/audit'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
     const session = await getServerSession(authOptions)
@@ -18,18 +22,15 @@ export async function GET() {
     }
 
     try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const groups = await prisma.userGroup.findMany({
-            include: {
+        const groups = await db.query.userGroups.findMany({
+            with: {
                 members: {
-                    include: {
+                    with: {
                         user: true
                     }
                 }
             },
-            orderBy: {
-                name: 'asc'
-            }
+            orderBy: sql`name ASC`
         })
 
         return NextResponse.json(groups)
@@ -59,19 +60,18 @@ export async function POST(req: Request) {
             return new NextResponse('Name is required', { status: 400 })
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const group = await prisma.userGroup.create({
-            data: {
-                name
-            }
-        })
+        const [group] = await db.insert(userGroups).values({
+            name,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        }).returning()
 
         await logAction(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             parseInt((session.user as any).id),
             'CREATE',
             'UserGroup',
-            group.id,
+            group.id.toString(),
             { name }
         )
 

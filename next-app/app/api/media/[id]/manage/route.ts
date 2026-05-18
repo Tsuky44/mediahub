@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server'
 import { getRadarrServiceForUser, getSonarrServiceForUser, getTmdbServiceForUser, getCurrentUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { mediaRequests, settings, notificationEvents, episodeBatches } from '@/lib/db/schema'
+import { eq, desc, and, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { getMediaAvailability } from '@/lib/services/media-status'
 import { forget } from '@/lib/cache'
 import { defineAbilityFor } from '@/lib/ability'
-
-const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: any[]) => { if (isDev) console.log(...args); };
-const error = (...args: any[]) => { if (isDev) console.error(...args); };
-const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+import { logger } from '@/lib/logger'
 
 
 export const dynamic = 'force-dynamic'
@@ -34,10 +32,7 @@ export async function POST(
   try {
     if (action === 'status') {
       // Force status to "Available" (5) in local DB
-      await (prisma as any).mediaRequest.updateMany({
-        where: { tmdbId: tmdbIdStr },
-        data: { status: 5 }
-      })
+      await db.update(mediaRequests).set({ status: 5 }).where(eq(mediaRequests.tmdbId, tmdbIdStr))
       
       forget(`media_availability_movie_${tmdbIdStr}`)
       forget(`media_availability_tv_${tmdbIdStr}`)
@@ -47,9 +42,9 @@ export async function POST(
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
-  } catch (error: any) {
-    error('[API Manage] POST Error:', error)
-    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 })
+  } catch (error) {
+    logger.error('[API Manage] POST Error:', error)
+    return NextResponse.json({ error: (error as Error).message || 'Internal error' }, { status: 500 })
   }
 }
 
@@ -82,47 +77,42 @@ export async function GET(
 
     const availability = await getMediaAvailability(tmdbId, mediaType, refresh)
     
-    if (!availability) {
-        throw new Error('Availability data is null')
-    }
-    
     // Get local requests
-    const requests = await (prisma as any).mediaRequest.findMany({
-        where: { tmdbId: tmdbIdStr },
-        orderBy: { requestedAt: 'desc' }
-    })
+    const requests = await db.select().from(mediaRequests)
+        .where(eq(mediaRequests.tmdbId, tmdbIdStr))
+        .orderBy(desc(mediaRequests.requestedAt))
 
     // Get service URL
     let externalServiceUrl = null
     if (availability && availability.details && availability.details.id) {
         try {
             if (mediaType === 'movie') {
-                const radarrUrl = await (prisma as any).setting.findFirst({ where: { key: 'radarr_url' } })
+                const [radarrUrl] = await db.select().from(settings).where(eq(settings.key, 'radarr_url')).limit(1)
                 if (radarrUrl?.value) {
                     externalServiceUrl = `${radarrUrl.value.replace(/\/$/, '')}/movie/${availability.details.id}`
                 }
             } else {
-                const sonarrUrl = await (prisma as any).setting.findFirst({ where: { key: 'sonarr_url' } })
+                const [sonarrUrl] = await db.select().from(settings).where(eq(settings.key, 'sonarr_url')).limit(1)
                 if (sonarrUrl?.value) {
                     externalServiceUrl = `${sonarrUrl.value.replace(/\/$/, '')}/series/${availability.details.id}`
                 }
             }
         } catch (e) {
-            warn('[API Manage] Failed to build service URL:', e)
+            logger.warn('[API Manage] Failed to build service URL:', e)
         }
     }
     
     return NextResponse.json({
         availability,
-        requests: requests.map((req: any) => {
-            let seasons = []
+        requests: requests.map((req) => {
+            let seasons: number[] = []
             try {
                 if (req.metadata) {
-                    const meta = JSON.parse(req.metadata)
+                    const meta = JSON.parse(req.metadata) as { seasons?: number[] }
                     seasons = meta.seasons || []
                 }
             } catch (e) {
-                warn(`[API Manage] Failed to parse metadata for request ${req.id}:`, e)
+                logger.warn(`[API Manage] Failed to parse metadata for request ${req.id}:`, e)
             }
 
             return {
@@ -138,9 +128,9 @@ export async function GET(
         }),
         externalServiceUrl
     })
-  } catch (error: any) {
-    error('[API Manage] Error:', error)
-    return NextResponse.json({ error: `Failed to fetch media info: ${error.message || 'Unknown error'}` }, { status: 500 })
+  } catch (error) {
+    logger.error('[API Manage] Error:', error)
+    return NextResponse.json({ error: `Failed to fetch media info: ${(error as Error).message || 'Unknown error'}` }, { status: 500 })
   }
 }
 
@@ -207,22 +197,26 @@ export async function DELETE(
         
         if (result.success) {
              // Delete local request
-             await (prisma as any).mediaRequest.deleteMany({
-                 where: { tmdbId: tmdbIdStr }
-             })
-             
+             await db.delete(mediaRequests).where(eq(mediaRequests.tmdbId, tmdbIdStr))
+
+             // Clean up notification dedup keys for this media
+             await db.delete(notificationEvents).where(eq(notificationEvents.tmdbId, tmdbIdStr))
+
+             // Clean up episode batches for this media
+             await db.delete(episodeBatches).where(eq(episodeBatches.tmdbId, tmdbIdStr))
+
              try {
                  const { logAction } = await import('@/lib/audit')
                  await logAction(
-                     parseInt((user as any).id),
-                     'MEDIA_DELETE',
-                     'Media',
-                     tmdbIdStr,
-                     { mediaType, tmdbId, action: 'media', deleteFiles }
-                 )
-             } catch (e) {
-                 console.error('Failed to log media deletion:', e)
-             }
+                    parseInt(user?.id ?? '0'),
+                    'MEDIA_DELETE',
+                    'Media',
+                    tmdbIdStr,
+                    { mediaType, tmdbId, action: 'media', deleteFiles }
+                )
+            } catch (e) {
+                logger.error('Failed to log media deletion:', e)
+            }
         }
     } else if (action === 'request') {
         if (!targetId) return NextResponse.json({ error: 'Missing targetId' }, { status: 400 })
@@ -232,9 +226,7 @@ export async function DELETE(
 
         for (const currentTargetId of targetIds) {
             // Find the request to know what to unmonitor
-            const mediaRequest = await (prisma as any).mediaRequest.findFirst({
-                where: { id: currentTargetId }
-            })
+            const [mediaRequest] = await db.select().from(mediaRequests).where(eq(mediaRequests.id, currentTargetId)).limit(1)
 
             if (!mediaRequest) continue;
 
@@ -244,17 +236,14 @@ export async function DELETE(
                     const seasonsToDelete = metadata.seasons || []
                     
                     // Find all OTHER requests for this series (excluding ALL requests being deleted in this batch)
-                    const otherRequests = await (prisma as any).mediaRequest.findMany({
-                        where: { 
-                            tmdbId: tmdbIdStr, 
-                            id: { notIn: targetIds }
-                        }
-                    })
+                    const otherRequests = await db.select().from(mediaRequests).where(
+                        and(eq(mediaRequests.tmdbId, tmdbIdStr), sql`${mediaRequests.id} NOT IN (${targetIds.join(',')})`)
+                    )
 
                     const stillRequestedSeasons = new Set<number>()
-                    otherRequests.forEach((req: any) => {
+                    otherRequests.forEach((req: { metadata?: string | null }) => {
                         try {
-                            const meta = req.metadata ? JSON.parse(req.metadata) : {}
+                            const meta = req.metadata ? JSON.parse(req.metadata) as { seasons?: number[] } : {}
                             const seasons = meta.seasons || []
                             seasons.forEach((s: number) => stillRequestedSeasons.add(s))
                         } catch (e) {}
@@ -270,11 +259,11 @@ export async function DELETE(
                                 
                                 if (unmonitorResult.success && unmonitorResult.series) {
                                     const series = unmonitorResult.series
-                                    const isAnySeasonMonitored = series.seasons?.some((s: any) => s.seasonNumber > 0 && s.monitored)
+                                    const isAnySeasonMonitored = series.seasons?.some((s: { seasonNumber?: number; monitored?: boolean }) => s.seasonNumber && s.seasonNumber > 0 && s.monitored)
                                     const hasFiles = series.statistics?.episodeFileCount > 0
                                     
                                     if (!isAnySeasonMonitored && !hasFiles && series.id) {
-                                        log(`[API Manage] Auto-deleting series ${series.id} from Sonarr (no monitored seasons and no files)`)
+                                        logger.info(`[API Manage] Auto-deleting series ${series.id} from Sonarr (no monitored seasons and no files)`)
                                         await sonarrService.deleteSeries(series.id, false)
                                     }
                                 }
@@ -282,17 +271,17 @@ export async function DELETE(
                                 // Even if no seasons were unmonitored now, check if we should delete the series
                                 const series = await sonarrService.getSeriesByTvdbId(externalIds.tvdb_id)
                                 if (series && series.id) {
-                                    const isAnySeasonMonitored = series.seasons?.some((s: any) => s.seasonNumber > 0 && s.monitored)
+                                    const isAnySeasonMonitored = series.seasons?.some((s: { seasonNumber?: number; monitored?: boolean }) => s.seasonNumber && s.seasonNumber > 0 && s.monitored)
                                     const hasFiles = series.statistics?.episodeFileCount > 0
                                     
                                     if (!isAnySeasonMonitored && !hasFiles) {
-                                        log(`[API Manage] Auto-deleting empty series ${series.id} from Sonarr`)
+                                        logger.info(`[API Manage] Auto-deleting empty series ${series.id} from Sonarr`)
                                         await sonarrService.deleteSeries(series.id, false)
                                     }
                                 }
                             }
                         } catch (e) {
-                            warn('[API Manage] Sonarr cleanup failed (series might already be gone):', e)
+                            logger.warn('[API Manage] Sonarr cleanup failed (series might already be gone):', e)
                         }
                     }
                 }
@@ -302,7 +291,7 @@ export async function DELETE(
                     if (unmonitorResult.success && unmonitorResult.movie) {
                         const movie = unmonitorResult.movie
                         if (!movie.monitored && !movie.hasFile && movie.id) {
-                            log(`[API Manage] Auto-deleting movie ${movie.id} from Radarr (not monitored and no files)`)
+                            logger.info(`[API Manage] Auto-deleting movie ${movie.id} from Radarr (not monitored and no files)`)
                             await radarrService.deleteMovie(movie.id, false)
                         }
                     }
@@ -310,26 +299,30 @@ export async function DELETE(
             }
 
             // Just delete the local DB entry
-            const deletedRequest = await (prisma as any).mediaRequest.delete({
-                where: { id: currentTargetId }
-            })
-            
+            const [deletedRequest] = await db.delete(mediaRequests).where(eq(mediaRequests.id, currentTargetId)).returning()
+
+            // Clean up notification dedup keys for this media (so re-requesting triggers notifications again)
+            await db.delete(notificationEvents).where(eq(notificationEvents.tmdbId, tmdbIdStr))
+
+            // Clean up episode batches for this media
+            await db.delete(episodeBatches).where(eq(episodeBatches.tmdbId, tmdbIdStr))
+
             try {
                 const { logAction } = await import('@/lib/audit')
                 await logAction(
-                    parseInt((user as any).id),
+                    parseInt(user?.id ?? '0'),
                     'REQUEST_DELETE',
                     'MediaRequest',
                     currentTargetId.toString(),
-                    { 
-                        tmdbId: tmdbIdStr, 
+                    {
+                        tmdbId: tmdbIdStr,
                         mediaType,
                         title: deletedRequest?.title,
                         action: 'request'
                     }
                 )
             } catch (e) {
-                console.error('Failed to log request deletion:', e)
+                logger.error('Failed to log request deletion:', e)
             }
         }
         result = { success: true }
@@ -346,8 +339,8 @@ export async function DELETE(
        return NextResponse.json({ error: result.message || 'Action failed' }, { status: 500 })
     }
 
-  } catch (error: any) {
-    error('[API Manage] Delete Error:', error)
-    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 })
+  } catch (error) {
+    logger.error('[API Manage] Delete Error:', error)
+    return NextResponse.json({ error: (error as Error).message || 'Internal error' }, { status: 500 })
   }
 }

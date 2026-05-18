@@ -33,13 +33,13 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
   const header = (
     <StatsHeader
       periodTitle={data.periodTitle}
-      period={data.period as any}
+      period={data.period}
       totalHours={data.totalHours}
       hasRealData={data.hasRealData}
       sourceFilter={data.sourceFilter}
       canImport={data.canImport}
-      prevHref={data.prevHref as any}
-      nextHref={data.nextHref as any}
+      prevHref={data.prevHref}
+      nextHref={data.nextHref}
     />
   )
 
@@ -66,7 +66,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
     <div className="max-w-7xl mx-auto w-full space-y-8 p-6 pb-20">
       {header}
 
-      <StatsPeriodNav period={data.period as any} />
+      <StatsPeriodNav period={data.period} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -87,15 +87,15 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
           subValue="Dernière session"
           icon={<Activity className="h-5 w-5 text-purple-500" />}
         />
-        <UserStatsCard topUsers={data.topUsers as any} allUsers={data.allUsersPeriod as any} periodLabel={data.topUsersPeriodLabel} />
+        <UserStatsCard topUsers={data.topUsers} allUsers={data.allUsersPeriod} periodLabel={data.topUsersPeriodLabel} />
       </div>
 
       <LiveSessions sessions={data.embySessions} canManage={data.canManage} />
 
       <StatsCharts
-        hourlyActivity={data.hourlyActivity as any}
-        dailyActivity={data.orderedDailyActivity as any}
-        monthlyActivity={data.monthlyActivity as any}
+        hourlyActivity={data.hourlyActivity || []}
+        dailyActivity={data.orderedDailyActivity || []}
+        monthlyActivity={data.monthlyActivity}
       />
 
       <div className="mb-8">

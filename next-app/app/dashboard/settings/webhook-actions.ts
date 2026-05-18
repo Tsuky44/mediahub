@@ -1,6 +1,8 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { settings } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 import { getCurrentUser } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 
@@ -14,9 +16,7 @@ export async function getWebhooks() {
   }
 
   try {
-    const setting = await prisma.setting.findFirst({
-      where: { key: 'external_webhooks' }
-    })
+    const [setting] = await db.select().from(settings).where(eq(settings.key, 'external_webhooks')).limit(1)
     
     if (!setting || !setting.value) {
       return { success: true, webhooks: [] }
@@ -39,11 +39,12 @@ export async function saveWebhooks(webhooks: any[]) {
   }
 
   try {
-    await prisma.setting.upsert({
-      where: { key: 'external_webhooks' },
-      update: { value: JSON.stringify(webhooks), category: 'notifications' },
-      create: { key: 'external_webhooks', value: JSON.stringify(webhooks), category: 'notifications' }
-    })
+    const [existing] = await db.select().from(settings).where(eq(settings.key, 'external_webhooks')).limit(1)
+    if (existing) {
+      await db.update(settings).set({ value: JSON.stringify(webhooks), category: 'notifications' }).where(eq(settings.key, 'external_webhooks'))
+    } else {
+      await db.insert(settings).values({ key: 'external_webhooks', value: JSON.stringify(webhooks), category: 'notifications' })
+    }
     return { success: true }
   } catch (error) {
     console.error('Failed to save webhooks:', error)

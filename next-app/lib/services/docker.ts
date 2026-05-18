@@ -1,5 +1,7 @@
 import Docker from 'dockerode';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/drizzle';
+import { settings } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
@@ -15,9 +17,9 @@ export class DockerService {
         // Always re-check settings to ensure we use the latest host
         let options: Record<string, unknown> = {};
         try {
-            const dockerHostSetting = await prisma.setting.findFirst({
-                where: { key: 'docker_host' },
-                select: { value: true }
+            const dockerHostSetting = await db.query.settings.findFirst({
+                where: eq(settings.key, 'docker_host'),
+                columns: { value: true }
             });
     
             const dockerHost = dockerHostSetting?.value || process.env.DOCKER_HOST;

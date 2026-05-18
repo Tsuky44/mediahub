@@ -2,7 +2,9 @@
 
 import { getWatchLaterList, isInWatchLater } from './watch-later-actions'
 import { getCurrentUser, getEmbyServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, mediaRequests, watchEvents } from '@/lib/db/schema'
+import { eq, or, and, gte, desc, sql, count } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { EmbyItem } from '@/types/emby'
 import { TmdbMovie, TmdbTvShow } from '@/types/tmdb'
@@ -23,10 +25,8 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
         
         if (!embyService) return { results: [], total_pages: 0 }
 
-        const dbUser = await prisma.user.findFirst({
-            where: { 
-                email: user.email
-            }
+        const dbUser = await db.query.users.findFirst({
+            where: eq(users.email, user.email)
         })
         
         if (!dbUser || !dbUser.embyUserId) return { results: [], total_pages: 0 }
@@ -117,10 +117,8 @@ export async function fetchRecentlyWatchedItems() {
         
         if (!embyService) return []
 
-        const dbUser = await prisma.user.findFirst({
-            where: { 
-                email: user.email
-            }
+        const dbUser = await db.query.users.findFirst({
+            where: eq(users.email, user.email)
         })
 
         if (!dbUser || !dbUser.embyUserId) {
@@ -223,10 +221,8 @@ export async function fetchUserRecommendations(page: number = 1) {
         
         if (!tmdbService) return { results: [], total_pages: 0 }
 
-        const dbUser = await prisma.user.findFirst({
-            where: { 
-                email: user.email
-            }
+        const dbUser = await db.query.users.findFirst({
+            where: eq(users.email, user.email)
         })
 
         if (!dbUser) return { results: [], total_pages: 0 }
@@ -239,15 +235,10 @@ export async function fetchUserRecommendations(page: number = 1) {
         }
 
         // 2. Get user's recent requests from local DB
-        const requests = await prisma.mediaRequest.findMany({
-            where: {
-                OR: [
-                    { requesterEmail: user.email },
-                    { userId: dbUser.id }
-                ]
-            },
-            orderBy: { requestedAt: 'desc' },
-            take: 10
+        const requests = await db.query.mediaRequests.findMany({
+            where: or(eq(mediaRequests.requesterEmail, user.email), eq(mediaRequests.userId, dbUser.id)),
+            orderBy: [desc(mediaRequests.requestedAt)],
+            limit: 10
         })
 
         // Combine history and requests to find seed TMDB IDs
@@ -351,44 +342,33 @@ export async function fetchServerTrends(page: number = 1) {
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
         // 1. Get most watched items from WatchEvent
-        const topWatched = await prisma.watchEvent.groupBy({
-            by: ['itemId', 'itemType', 'itemName', 'seriesName'],
-            _count: {
-                itemId: true
-            },
-            where: {
-                playedAt: {
-                    gte: thirtyDaysAgo
-                }
-            },
-            orderBy: {
-                _count: {
-                    itemId: 'desc'
-                }
-            },
-            take: 50
+        const topWatched = await db.select({
+            itemId: watchEvents.itemId,
+            itemType: watchEvents.itemType,
+            itemName: watchEvents.itemName,
+            seriesName: watchEvents.seriesName,
+            count: count(watchEvents.itemId).as('cnt')
         })
+            .from(watchEvents)
+            .where(gte(watchEvents.playedAt, thirtyDaysAgo))
+            .groupBy(watchEvents.itemId, watchEvents.itemType, watchEvents.itemName, watchEvents.seriesName)
+            .orderBy(sql`cnt DESC`)
+            .limit(50)
 
         const topWatchedArray = Array.isArray(topWatched) ? topWatched : []
 
         // 2. Get most requested items from MediaRequest
-        const topRequested = await prisma.mediaRequest.groupBy({
-            by: ['tmdbId', 'mediaType', 'title'],
-            _count: {
-                tmdbId: true
-            },
-            where: {
-                requestedAt: {
-                    gte: thirtyDaysAgo
-                }
-            },
-            orderBy: {
-                _count: {
-                    tmdbId: 'desc'
-                }
-            },
-            take: 50
+        const topRequested = await db.select({
+            tmdbId: mediaRequests.tmdbId,
+            mediaType: mediaRequests.mediaType,
+            title: mediaRequests.title,
+            count: count(mediaRequests.tmdbId).as('cnt')
         })
+            .from(mediaRequests)
+            .where(gte(mediaRequests.requestedAt, thirtyDaysAgo))
+            .groupBy(mediaRequests.tmdbId, mediaRequests.mediaType, mediaRequests.title)
+            .orderBy(sql`cnt DESC`)
+            .limit(50)
 
         const topRequestedArray = Array.isArray(topRequested) ? topRequested : []
 
@@ -462,10 +442,8 @@ export async function toggleFavorite(itemId: string, isFavorite: boolean) {
         const embyService = await getEmbyServiceForUser()
         if (!embyService) return false
 
-        const dbUser = await prisma.user.findFirst({
-            where: { 
-                email: user.email
-            }
+        const dbUser = await db.query.users.findFirst({
+            where: eq(users.email, user.email)
         })
 
         if (!dbUser || !dbUser.embyUserId) return false

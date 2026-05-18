@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
-import { computeStatsPeriod, type StatsPeriodParams } from '../_utils/stats-period'
+import { computeStatsPeriod, type StatsPeriodParams, type StatsPeriod } from '../_utils/stats-period'
 import {
   normalizeWatchEvents,
   computeItemDurations,
@@ -17,6 +17,8 @@ import {
   fetchWatchHistory,
   fetchOldestWatchEventYear,
 } from './stats-data'
+import type { UserStat } from '../_components/UserStatsCard'
+import type { ActivityData } from '../_components/StatsCharts'
 
 export interface StatsDataResult {
   hasGlobalView: boolean
@@ -25,21 +27,21 @@ export interface StatsDataResult {
   canManageStorage: boolean
   canDeleteMedia: boolean
   canManage: boolean
-  period: string
+  period: StatsPeriod
   startDate: Date
   endDate: Date
   periodTitle: string
-  prevHref: string | null
-  nextHref: string | null
+  prevHref: string | undefined
+  nextHref: string | undefined
   subValueLabel: string
   mostViewedMovies: unknown[]
   mostViewedSeries: unknown[]
-  hourlyActivity: any[] | undefined
-  orderedDailyActivity: any[] | undefined
-  monthlyActivity: any[] | undefined
+  hourlyActivity: ActivityData[] | undefined
+  orderedDailyActivity: ActivityData[] | undefined
+  monthlyActivity: ActivityData[] | undefined
   embySessions: unknown[]
-  topUsers: unknown[]
-  allUsersPeriod: unknown[]
+  topUsers: UserStat[]
+  allUsersPeriod: UserStat[]
   totalHours: number
   totalPlays: number
   hasRealData: boolean

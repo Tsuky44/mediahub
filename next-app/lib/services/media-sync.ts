@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/drizzle';
+import { mediaRequests, mediaSubscriptions, notifications } from '@/lib/db/schema';
+import { eq, and, ne, inArray, gte } from 'drizzle-orm';
 import { getMediaAvailability } from '@/lib/services/media-status';
 import { NotificationService } from '@/lib/services/notification-service';
 
@@ -32,15 +34,13 @@ export class MediaSyncService {
         try {
             // 1. Get all pending requests and active subscriptions
             // We want to check anything that users are interested in
-            const requests = await prisma.mediaRequest.findMany({
-                where: {
-                    status: { not: 5 } // Not already AVAILABLE
-                },
-                select: { tmdbId: true, mediaType: true }
+            const requests = await db.query.mediaRequests.findMany({
+                where: ne(mediaRequests.status, 5),
+                columns: { tmdbId: true, mediaType: true }
             });
 
-            const subscriptions = await prisma.mediaSubscription.findMany({
-                select: { tmdbId: true, mediaType: true }
+            const subscriptions = await db.query.mediaSubscriptions.findMany({
+                columns: { tmdbId: true, mediaType: true }
             });
 
             // 2. Create a unique set of items to check
@@ -153,26 +153,25 @@ export class MediaSyncService {
             // FALLBACK LOGIC for MediaRequest only (safe without MediaAvailabilityIndex)
             if (isAvailable) {
                  // Check for pending requests
-                 const pendingRequests = await prisma.mediaRequest.findMany({
-                    where: {
-                        tmdbId: tmdbId,
-                        mediaType: mediaType,
-                        status: { not: 5 }
-                    }
+                 const pendingRequests = await db.query.mediaRequests.findMany({
+                    where: and(
+                        eq(mediaRequests.tmdbId, tmdbId),
+                        eq(mediaRequests.mediaType, mediaType),
+                        ne(mediaRequests.status, 5)
+                    )
                  });
 
                  if (pendingRequests.length > 0) {
                     console.log(`[MediaSync] Item became available for requests: ${mediaType}/${tmdbId}`);
                     
                     // Update Requests
-                    await prisma.mediaRequest.updateMany({
-                        where: {
-                            tmdbId: tmdbId,
-                            mediaType: mediaType,
-                            status: { not: 5 }
-                        },
-                        data: { status: 5 } // Mark as AVAILABLE
-                    });
+                    await db.update(mediaRequests)
+                        .set({ status: 5, updatedAt: new Date() })
+                        .where(and(
+                            eq(mediaRequests.tmdbId, tmdbId),
+                            eq(mediaRequests.mediaType, mediaType),
+                            ne(mediaRequests.status, 5)
+                        ));
 
                     // Notify Users (Requesters + Subscribers)
                     await this.notifyUsers(tmdbId, mediaType, availability);
@@ -186,15 +185,15 @@ export class MediaSyncService {
 
     private static async notifyUsers(tmdbId: string, mediaType: 'movie' | 'tv', availability: any) {
         // Find Requesters
-        const requests = await prisma.mediaRequest.findMany({
-            where: { tmdbId, mediaType },
-            include: { user: true }
+        const requests = await db.query.mediaRequests.findMany({
+            where: and(eq(mediaRequests.tmdbId, tmdbId), eq(mediaRequests.mediaType, mediaType)),
+            with: { user: true }
         });
 
         // Find Subscribers
-        const subscriptions = await prisma.mediaSubscription.findMany({
-            where: { tmdbId, mediaType },
-            include: { user: true }
+        const subscriptions = await db.query.mediaSubscriptions.findMany({
+            where: and(eq(mediaSubscriptions.tmdbId, tmdbId), eq(mediaSubscriptions.mediaType, mediaType)),
+            with: { user: true }
         });
 
         const notifiedUserIds = new Set<number>();
@@ -202,16 +201,14 @@ export class MediaSyncService {
 
         // Check for existing notifications in the last 1 hour to prevent duplicates
         // This handles race conditions between Webhook and Sync
-        const recentNotifications = await prisma.notification.findMany({
-            where: {
-                mediaId: tmdbId,
-                mediaType: mediaType,
-                type: { in: ['request_available', 'media_available'] },
-                createdAt: {
-                    gte: new Date(Date.now() - 60 * 60 * 1000) // Last 1 hour
-                }
-            },
-            select: { userId: true }
+        const recentNotifications = await db.query.notifications.findMany({
+            where: and(
+                eq(notifications.mediaId, tmdbId),
+                eq(notifications.mediaType, mediaType),
+                inArray(notifications.type, ['request_available', 'media_available']),
+                gte(notifications.createdAt, new Date(Date.now() - 60 * 60 * 1000))
+            ),
+            columns: { userId: true }
         });
 
         recentNotifications.forEach(n => notifiedUserIds.add(n.userId));

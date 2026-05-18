@@ -1,5 +1,6 @@
 import { getQBittorrentService, type Torrent } from './qbittorrent'
 import { getSetting } from '../settings'
+import { logger } from '@/lib/logger'
 
 /**
  * qBittorrent's sync/maindata uses snake_case field names,
@@ -95,12 +96,12 @@ export class QBittorrentCache {
     // Fast tick: sync/maindata only (torrent states, speeds, serverState)
     this.fastTick().catch(() => {})
     this.fastTimer = setInterval(() => this.fastTick().catch(() => {}), intervalMs)
-    console.log(`[QBittorrentCache] Fast tick every ${intervalMs}ms (setting: qbittorrent_poll_interval)`)
+    logger.info(`[QBittorrentCache] Fast tick every ${intervalMs}ms (setting: qbittorrent_poll_interval)`)
 
     // Slow tick: tags & categories (rarely change)
     this.slowTick().catch(() => {})
     this.slowTimer = setInterval(() => this.slowTick().catch(() => {}), SLOW_REFRESH_INTERVAL_MS)
-    console.log(`[QBittorrentCache] Slow tick every ${SLOW_REFRESH_INTERVAL_MS}ms`)
+    logger.info(`[QBittorrentCache] Slow tick every ${SLOW_REFRESH_INTERVAL_MS}ms`)
   }
 
   stop(): void {
@@ -177,13 +178,13 @@ export class QBittorrentCache {
 
   private notifyListeners(): void {
     for (const cb of this.listeners) {
-      try { cb() } catch (err) { console.error('[QBittorrentCache] listener error:', err) }
+      try { cb() } catch (err) { logger.error('[QBittorrentCache] listener error:', err) }
     }
   }
 
   private async fastTick(): Promise<void> {
     if (this.isFastTicking) {
-      console.log('[QBittorrentCache] fastTick skipped: already running')
+      logger.info('[QBittorrentCache] fastTick skipped: already running')
       return
     }
     this.isFastTicking = true
@@ -200,22 +201,22 @@ export class QBittorrentCache {
       catch (err) {
         const msg = (err as Error).message
         if (msg.includes('401') || msg.includes('403')) {
-          console.error('[QBittorrentCache] fastTick: session expired, forcing re-init...')
+          logger.error('[QBittorrentCache] fastTick: session expired, forcing re-init...')
           await qbt.reinit()
         } else {
-          console.error('[QBittorrentCache] fastTick error:', msg)
+          logger.error('[QBittorrentCache] fastTick error:', msg)
           this.state.rid = 0
         }
         return
       }
       if (!data) return
       if (typeof data !== 'object') {
-        console.error('[QBittorrentCache] fastTick: unexpected non-object response, resetting rid')
+        logger.error('[QBittorrentCache] fastTick: unexpected non-object response, resetting rid')
         this.state.rid = 0
         return
       }
 
-      try { this.updateMainData(data) } catch (e) { console.error('[QBittorrentCache] updateMainData error:', e) }
+      try { this.updateMainData(data) } catch (e) { logger.error('[QBittorrentCache] updateMainData error:', e) }
       this.state.lastUpdate = Date.now()
       this.notifyListeners()
     } finally {

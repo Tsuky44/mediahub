@@ -26,9 +26,12 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $NextAppPath = Join-Path $ScriptDir "next-app"
 
 # Login
-# Write-Host "1. Connexion à ghcr.io..." -ForegroundColor Yellow
-# docker login ghcr.io -u $GitHubUser
-# Check-Error "Échec de la connexion à GitHub Packages."
+Write-Host "1. Connexion à ghcr.io..." -ForegroundColor Yellow
+Write-Host "Veuillez entrer votre Personal Access Token (PAT) GitHub:"
+$Token = Read-Host -AsSecureString
+$PlainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Token))
+echo $PlainToken | docker login ghcr.io -u $GitHubUser --password-stdin
+Check-Error "Échec de la connexion à GitHub Packages."
 
 # Build & Push App
 Write-Host "2. Build & Push : Application..." -ForegroundColor Yellow

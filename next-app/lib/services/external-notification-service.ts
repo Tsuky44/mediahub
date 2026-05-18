@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, settings } from '@/lib/db/schema'
+import { eq, inArray } from 'drizzle-orm'
 
 interface ExternalNotificationPayload {
   title: string
@@ -7,52 +9,30 @@ interface ExternalNotificationPayload {
   data?: any
 }
 
-interface WebhookConfig {
-  enabled: boolean
-  events: string[]
-  type: string
-  url?: string
-  template?: string
-  targetUsers?: string[]
-  notifyRequester?: boolean
-  botToken?: string
-  chatId?: string
-  evolutionUrl?: string
-  evolutionInstance?: string
-  evolutionApiKey?: string
-  whatsappNumber?: string
-  templates?: Record<string, string | undefined>
-  includeImage?: boolean | Record<string, boolean>
-}
-
 export class ExternalNotificationService {
   /**
    * Envoie une notification externe basée sur les webhooks configurés (Global)
    */
   static async send(event: string, payload: Omit<ExternalNotificationPayload, 'event'>, requesterId?: number) {
     try {
-      const setting = await prisma.setting.findFirst({
-        where: { key: 'external_webhooks' }
-      })
+      const [setting] = await db.select().from(settings).where(eq(settings.key, 'external_webhooks')).limit(1)
 
       if (!setting || !setting.value) return
 
       const webhooks = JSON.parse(setting.value)
       
-      const activeWebhooks = webhooks.filter((w: WebhookConfig) => 
+      const activeWebhooks = webhooks.filter((w: any) => 
         w.enabled && 
         w.events && 
         w.events.includes(event)
       )
-
-      console.log(`[ExternalNotificationService] send('${event}'): ${webhooks.length} total webhooks, ${activeWebhooks.length} active for this event`)
 
       if (activeWebhooks.length === 0) return
 
       const fullPayload = { ...payload, event }
 
       // Gérer l'envoi pour chaque webhook en fonction de ses destinataires
-      const promises = activeWebhooks.map(async (webhook: WebhookConfig) => {
+      const promises = activeWebhooks.map(async (webhook: any) => {
           // Si le webhook n'a pas de cible spécifique, c'est un webhook global (comme un channel Discord général)
           if ((!webhook.targetUsers || webhook.targetUsers.length === 0) && webhook.notifyRequester !== true) {
               return this.dispatchWebhook(webhook, fullPayload);
@@ -63,21 +43,14 @@ export class ExternalNotificationService {
           // 1. Notifier les cibles fixes (targetUsers)
           if (webhook.targetUsers && webhook.targetUsers.length > 0) {
               const targetIds = webhook.targetUsers.map((id: string) => parseInt(id));
-              const users = await prisma.user.findMany({
-                  where: { id: { in: targetIds } }
-              });
+              const targetUsers = await db.select().from(users).where(inArray(users.id, targetIds));
 
-              for (const user of users) {
+              for (const user of targetUsers) {
                   // Cloner le webhook et remplacer les identifiants globaux par ceux de l'utilisateur
                   const userWebhook = { ...webhook };
-                  if (webhook.type === 'evolution') {
-                      // Use user's own number, or fall back to the webhook's global number
-                      const phone = user.whatsappNumber || webhook.whatsappNumber;
-                      console.log(`[ExternalNotificationService] targetUser ${user.id}: whatsappNumber=${user.whatsappNumber}, fallback=${webhook.whatsappNumber}, resolved=${phone}`);
-                      if (phone) {
-                          userWebhook.whatsappNumber = phone;
-                          localPromises.push(this.dispatchWebhook(userWebhook, fullPayload));
-                      }
+                  if (webhook.type === 'evolution' && user.whatsappNumber) {
+                      userWebhook.whatsappNumber = user.whatsappNumber; // On force le numéro
+                      localPromises.push(this.dispatchWebhook(userWebhook, fullPayload));
                   } else if (webhook.type === 'discord' && user.discordWebhook) {
                       userWebhook.url = user.discordWebhook;
                       localPromises.push(this.dispatchWebhook(userWebhook, fullPayload));
@@ -95,7 +68,7 @@ export class ExternalNotificationService {
           if (webhook.notifyRequester === true && requesterId) {
               // Vérifier s'il n'a pas déjà été notifié via les targetUsers
               if (!webhook.targetUsers || !webhook.targetUsers.includes(requesterId.toString())) {
-                  const requester = await prisma.user.findUnique({ where: { id: requesterId } });
+                  const [requester] = await db.select().from(users).where(eq(users.id, requesterId)).limit(1);
                   if (requester) {
                       const userWebhook = { ...webhook };
                       if (webhook.type === 'evolution' && requester.whatsappNumber) {
@@ -126,17 +99,19 @@ export class ExternalNotificationService {
    */
   static async sendToUser(userId: number, event: string, payload: Omit<ExternalNotificationPayload, 'event'>) {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { whatsappNumber: true, telegramChatId: true, discordWebhook: true, customWebhook: true }
-      })
+      const [user] = await db.select({
+        whatsappNumber: users.whatsappNumber,
+        telegramChatId: users.telegramChatId,
+        discordWebhook: users.discordWebhook,
+        customWebhook: users.customWebhook
+      }).from(users).where(eq(users.id, userId)).limit(1)
 
       if (!user) return
 
       const fullPayload = { ...payload, event }
       const promises = []
 
-      const setting = await prisma.setting.findFirst({ where: { key: 'external_webhooks' } })
+      const [setting] = await db.select().from(settings).where(eq(settings.key, 'external_webhooks')).limit(1)
       let webhooks = []
       if (setting && setting.value) {
           webhooks = JSON.parse(setting.value)
@@ -144,31 +119,26 @@ export class ExternalNotificationService {
 
       // WhatsApp via Evolution API
       if (user.whatsappNumber) {
-        const evo = webhooks.find((w: WebhookConfig) => w.type === 'evolution' && w.evolutionUrl && w.enabled && w.events?.includes(event))
+        const evo = webhooks.find((w: any) => w.type === 'evolution' && w.evolutionUrl)
         if (evo) {
             promises.push(this.sendEvolutionApi(evo, user.whatsappNumber, fullPayload))
         }
       }
 
       if (user.telegramChatId) {
-        const telegramBot = webhooks.find((w: WebhookConfig) => w.type === 'telegram' && w.botToken && w.enabled && w.events?.includes(event))
+        const telegramBot = webhooks.find((w: any) => w.type === 'telegram' && w.botToken)
         if (telegramBot) {
             promises.push(this.sendTelegram(telegramBot.botToken, user.telegramChatId, fullPayload))
         }
       }
 
       if (user.discordWebhook) {
-        const discordSettings = webhooks.find((w: WebhookConfig) => w.type === 'discord' && w.enabled && w.events?.includes(event))
-        if (discordSettings) {
-            promises.push(this.sendDiscord({ ...discordSettings, url: user.discordWebhook }, fullPayload))
-        }
+        const discordSettings = webhooks.find((w: any) => w.type === 'discord')
+        promises.push(this.sendDiscord({ url: user.discordWebhook, template: discordSettings?.template }, fullPayload))
       }
 
       if (user.customWebhook) {
-        const customSettings = webhooks.find((w: WebhookConfig) => w.type === 'custom' && w.enabled && w.events?.includes(event))
-        if (customSettings) {
-            promises.push(this.sendCustom(user.customWebhook, fullPayload))
-        }
+        promises.push(this.sendCustom(user.customWebhook, fullPayload))
       }
 
       await Promise.allSettled(promises)
@@ -178,7 +148,7 @@ export class ExternalNotificationService {
     }
   }
 
-  static async testWebhook(webhook: WebhookConfig, testType: 'movie' | 'tv' | 'default' = 'default', eventType: string = 'request_approved', currentUser?: unknown) {
+  static async testWebhook(webhook: any, testType: 'movie' | 'tv' | 'default' = 'default', eventType: string = 'request_approved', currentUser?: any) {
     let payload: ExternalNotificationPayload = {
       title: 'Test de Notification',
       message: 'Ceci est un message de test depuis MediaHub.',
@@ -188,21 +158,21 @@ export class ExternalNotificationService {
 
     // Récupère le pseudo Discord de l'admin s'il existe, sinon utilise '<@123456789012345678>' par défaut
     // S'il y a des cibles spécifiques dans le webhook, on va simuler un ping pour chacune d'elles
-    const currentUserRecord = currentUser as Record<string, unknown> | undefined
-    let discordUser = currentUserRecord?.discordUserId ? `<@${currentUserRecord.discordUserId}>` : (currentUserRecord?.name || currentUserRecord?.email || 'Utilisateur Test')
+    let discordUser = currentUser?.discordUserId ? `<@${currentUser.discordUserId}>` : (currentUser?.name || currentUser?.email || 'Utilisateur Test')
     
     // Si on a des utilisateurs cibles (targetUsers) configurés dans le webhook
     if (webhook.targetUsers && webhook.targetUsers.length > 0) {
         try {
             const targetIds = webhook.targetUsers.map((id: string) => parseInt(id));
-            const users = await prisma.user.findMany({
-                where: { id: { in: targetIds } },
-                select: { discordUserId: true, name: true, email: true }
-            });
+            const targetUsers = await db.select({
+                discordUserId: users.discordUserId,
+                name: users.name,
+                email: users.email
+            }).from(users).where(inArray(users.id, targetIds));
             
-            if (users.length > 0) {
+            if (targetUsers.length > 0) {
                 // On crée une chaîne avec tous les pings ou les noms : "<@ID1>, Nom2"
-                discordUser = users.map(u => u.discordUserId ? `<@${u.discordUserId}>` : (u.name || u.email)).join(', ');
+                discordUser = targetUsers.map(u => u.discordUserId ? `<@${u.discordUserId}>` : (u.name || u.email)).join(', ');
             }
         } catch (e) {
             console.error('[ExternalNotificationService] Failed to fetch target users for test ping:', e);
@@ -256,18 +226,18 @@ export class ExternalNotificationService {
     return this.dispatchWebhook(webhook, payload, true, currentUser)
   }
 
-  private static async dispatchWebhook(webhook: WebhookConfig, payload: ExternalNotificationPayload, isTest = false, currentUser?: unknown): Promise<{success: boolean, error?: string}> {
+  private static async dispatchWebhook(webhook: any, payload: ExternalNotificationPayload, isTest = false, currentUser?: any): Promise<{success: boolean, error?: string}> {
     try {
       if (webhook.type === 'discord') {
         return await this.sendDiscord(webhook, payload)
       } else if (webhook.type === 'telegram') {
-        return await this.sendTelegram(webhook.botToken!, webhook.chatId!, payload)
+        return await this.sendTelegram(webhook.botToken, webhook.chatId, payload)
       } else if (webhook.type === 'evolution') {
         // Envoi global de test (utilise le numéro fourni dans le webhook, ou le numéro de l'utilisateur courant s'il existe)
-        const testPhone = webhook.whatsappNumber || (currentUser as Record<string, unknown>)?.whatsappNumber as string || '33612345678'
+        const testPhone = webhook.whatsappNumber || currentUser?.whatsappNumber || '33612345678'
         return await this.sendEvolutionApi(webhook, testPhone, payload)
       } else if (webhook.type === 'custom') {
-        return await this.sendCustom(webhook.url!, payload)
+        return await this.sendCustom(webhook.url, payload)
       }
       return { success: false, error: 'Type de webhook inconnu' }
     } catch (error: any) {
@@ -279,7 +249,7 @@ export class ExternalNotificationService {
     }
   }
 
-  private static async sendDiscord(webhook: WebhookConfig, payload: ExternalNotificationPayload) {
+  private static async sendDiscord(webhook: any, payload: ExternalNotificationPayload) {
     if (!webhook.url) throw new Error('URL Discord manquante')
 
     // Formater pour Discord
@@ -299,7 +269,7 @@ export class ExternalNotificationService {
         console.log('[Discord Webhook] Resolved Image URL:', imageUrl)
     }
 
-    let embed: Record<string, unknown> & { fields?: Array<Record<string, unknown>> } = {
+    let embed: any = {
       color: color,
       timestamp: new Date().toISOString(),
       footer: {
@@ -385,9 +355,7 @@ export class ExternalNotificationService {
     // Custom override if user provided a template
     // We check webhook.templates[payload.event] specifically, fallback to webhook.template for older setups
     const templateToUse = webhook.templates?.[payload.event] !== undefined ? webhook.templates[payload.event] : webhook.template;
-    const includeImage = typeof webhook.includeImage === 'object' && webhook.includeImage !== null
-        ? (webhook.includeImage as Record<string, boolean>)[payload.event] !== false
-        : webhook.includeImage !== false;
+    const includeImage = webhook.includeImage?.[payload.event] !== false; // True par défaut
 
     if (templateToUse) {
         embed = {
@@ -418,7 +386,7 @@ export class ExternalNotificationService {
         delete embed.thumbnail;
     }
 
-    const discordPayload: Record<string, unknown> = {
+    const discordPayload: any = {
       username: 'MediaHub',
       avatar_url: 'https://raw.githubusercontent.com/walkxhub/Dashboard-Icons/main/png/mediahub.png', // Optional default avatar
       embeds: [embed]
@@ -457,14 +425,15 @@ export class ExternalNotificationService {
         const mentions = cleanUserForTemplate.match(/<@[0-9]+>/g);
         if (mentions) {
             const discordIds = mentions.map((m: string) => m.replace(/[^0-9]/g, ''));
-            const users = await prisma.user.findMany({
-                where: { discordUserId: { in: discordIds } },
-                select: { name: true, email: true, discordUserId: true }
-            });
+            const usersList = await db.select({
+                name: users.name,
+                email: users.email,
+                discordUserId: users.discordUserId
+            }).from(users).where(inArray(users.discordUserId, discordIds));
             
             for (const m of mentions) {
                 const id = m.replace(/[^0-9]/g, '');
-                const u = users.find(user => user.discordUserId === id);
+                const u = usersList.find((user: {discordUserId: string | null}) => user.discordUserId === id);
                 const replacementName = u ? (u.name || u.email || 'Un utilisateur') : 'Un utilisateur';
                 cleanUserForTemplate = cleanUserForTemplate.replace(m, replacementName);
             }
@@ -567,25 +536,7 @@ export class ExternalNotificationService {
     return { success: true }
   }
 
-  private static getDefaultEvolutionTemplate(event: string): string | null {
-    switch (event) {
-      case 'media_request':
-        return "🎬 *Nouvelle Demande de Média*\n\n👤 *Demandé par:* {user}\n📌 *Titre:* {title} ({year})\n🎭 *Genres:* {genres}\n⭐ *Note:* {rating}\n\n📖 *Synopsis:*\n{overview}";
-      case 'media_grabbed':
-        return "🎬 *{title}*\n\n📥 Envoi au téléchargement\n\n*Résumé:*\n{overview}\n\n⭐ *Note:* {rating}\n👤 *Demandé par:* {user}";
-      case 'media_downloaded':
-        return "🎬 *{title}*\n\n✅ Téléchargement terminé\n\nLe fichier est en cours d'importation...";
-      case 'media_available':
-      case 'request_approved':
-        return "🎬 *{title}*\n\n🍿 Disponible sur le serveur !\n\n*Résumé:*\n{overview}\n\n⭐ *Note:* {rating}\n👤 *Demandé par:* {user}\n\n🏷️ *Qualité:* {quality}\n💾 *Taille:* {size}";
-      case 'media_deleted':
-        return "🎬 *{title}*\n\n🗑️ Média Supprimé du serveur.";
-      default:
-        return null;
-    }
-  }
-
-  private static async sendEvolutionApi(webhook: WebhookConfig, phone: string, payload: ExternalNotificationPayload) {
+  private static async sendEvolutionApi(webhook: any, phone: string, payload: ExternalNotificationPayload) {
     if (!webhook.evolutionUrl || !webhook.evolutionInstance || !webhook.evolutionApiKey) {
       throw new Error('Configuration Evolution API incomplète')
     }
@@ -602,14 +553,15 @@ export class ExternalNotificationService {
           const mentions = cleanUserForTemplate.match(/<@[0-9]+>/g);
           if (mentions) {
               const discordIds = mentions.map((m: string) => m.replace(/[^0-9]/g, ''));
-              const users = await prisma.user.findMany({
-                  where: { discordUserId: { in: discordIds } },
-                  select: { name: true, email: true, discordUserId: true }
-              });
+              const usersList = await db.select({
+                  name: users.name,
+                  email: users.email,
+                  discordUserId: users.discordUserId
+              }).from(users).where(inArray(users.discordUserId, discordIds));
               
               for (const m of mentions) {
                   const id = m.replace(/[^0-9]/g, '');
-                  const u = users.find(user => user.discordUserId === id);
+                  const u = usersList.find((user: {discordUserId: string | null}) => user.discordUserId === id);
                   const replacementName = u ? (u.name || u.email || 'Un utilisateur') : 'Un utilisateur';
                   cleanUserForTemplate = cleanUserForTemplate.replace(m, replacementName);
               }
@@ -619,7 +571,7 @@ export class ExternalNotificationService {
       }
 
       // Si on a des données enrichies (comme pour Discord)
-      if (payload.data && ['media_request', 'request_approved', 'media_grabbed', 'media_downloaded', 'media_available', 'media_deleted'].includes(payload.event)) {
+      if (payload.data && ['request_approved', 'media_grabbed', 'media_downloaded', 'media_available', 'media_deleted'].includes(payload.event)) {
         const d = payload.data
         const isMovie = d.mediaType === 'movie'
         
@@ -629,7 +581,6 @@ export class ExternalNotificationService {
 
         let headerStatus = ''
         switch(payload.event) {
-            case 'media_request': headerStatus = '🆕 Nouvelle demande'; break;
             case 'media_grabbed': headerStatus = '📥 Envoi au téléchargement'; break;
             case 'media_downloaded': headerStatus = '✅ Téléchargement terminé'; break;
             case 'media_available': 
@@ -659,15 +610,10 @@ export class ExternalNotificationService {
       }
 
       // Surcharge via template personnalisé si défini
-      // Priorité: 1) template custom sauvegardé, 2) template global webhook, 3) template par défaut intégré
-      const defaultTemplate = this.getDefaultEvolutionTemplate(payload.event);
-      const templateToUse = (webhook.templates?.[payload.event] !== undefined && webhook.templates[payload.event] !== '')
-          ? webhook.templates[payload.event]
-          : (webhook.template || defaultTemplate || null);
-      console.log(`[ExternalNotificationService] Template for '${payload.event}': custom=${!!webhook.templates?.[payload.event]}, global=${!!webhook.template}, default=${!!defaultTemplate}, using=${templateToUse ? 'template' : 'rich format'}`);
+      const templateToUse = webhook.templates?.[payload.event] !== undefined ? webhook.templates[payload.event] : webhook.template;
       if (templateToUse) {
           text = templateToUse
-            .replace(/\{title\}/g, payload.data?.title || payload.title || '')
+            .replace(/\{title\}/g, payload.title || payload.data?.title || '')
             .replace(/\{message\}/g, payload.message || '')
             .replace(/\{year\}/g, payload.data?.year || '')
             .replace(/\{overview\}/g, payload.data?.overview || '')
@@ -688,9 +634,7 @@ export class ExternalNotificationService {
         text: text
       }
 
-      const includeImage = typeof webhook.includeImage === 'object' && webhook.includeImage !== null
-        ? (webhook.includeImage as Record<string, boolean>)[payload.event] !== false
-        : webhook.includeImage !== false;
+      const includeImage = webhook.includeImage?.[payload.event] !== false; // True par défaut
 
       // Si on a une image et que l'option n'est pas désactivée, on l'envoie via sendMedia
       if (payload.data?.posterPath && includeImage) {
@@ -724,11 +668,9 @@ export class ExternalNotificationService {
         const errText = await res.text().catch(() => '')
         throw new Error(`Erreur Evolution API (${res.status}): ${errText}`)
       }
-      const result = await res.json().catch(() => ({}))
-      console.log(`[ExternalNotificationService] Evolution API response: ${res.status}`, JSON.stringify(result).substring(0, 200))
       return { success: true }
     } catch (e: any) {
-      console.error('[ExternalNotificationService] Evolution API Error:', e.message || e)
+      console.error('Evolution API Error:', e)
       throw e
     }
   }

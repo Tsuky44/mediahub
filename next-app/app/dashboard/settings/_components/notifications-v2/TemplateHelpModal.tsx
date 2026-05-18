@@ -8,6 +8,8 @@ const PLACEHOLDERS = [
   { key: 'title', desc: 'Titre du média', example: 'Avatar : La voie de l\'eau' },
   { key: 'year', desc: 'Année de sortie', example: '2024' },
   { key: 'mediaType', desc: 'Type (Film / Série)', example: 'Film' },
+  { key: 'season', desc: 'Numéro de saison (séries seulement)', example: 'S01' },
+  { key: 'seasonNumber', desc: 'Numéro de saison brut (1, 2, 3...)', example: '1' },
   { key: 'overview', desc: 'Synopsis / résumé', example: 'Jake Sully vit avec sa famille...' },
   { key: 'genres', desc: 'Genres du média', example: 'Science-fiction, Aventure' },
   { key: 'rating', desc: 'Note / score', example: '7.8' },

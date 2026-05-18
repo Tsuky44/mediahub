@@ -134,7 +134,7 @@ export async function getMediaAvailability(tmdbId: number, mediaType: 'movie' | 
         forget(cacheKey)
         const freshData = await fetchFreshData()
         // Mettre à jour le cache avec les nouvelles données
-        cache.set(cacheKey, freshData, { ttl: 60 * 1000 })
+        cache.set(cacheKey, freshData as any, { ttl: 60 * 1000 })
         return freshData
     }
     

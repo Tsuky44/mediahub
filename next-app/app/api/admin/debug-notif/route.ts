@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/drizzle';
+import { mediaSubscriptions, mediaRequests } from '@/lib/db/schema';
+import { eq, and } from 'drizzle-orm';
 import { NotificationService } from '@/lib/services/notification-service';
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
     try {
@@ -11,14 +15,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing tmdbId or mediaType' }, { status: 400 });
         }
 
-        const subscriptions = await prisma.mediaSubscription.findMany({
-            where: { tmdbId: String(tmdbId), mediaType },
-            include: { user: true }
+        const subscriptions = await db.query.mediaSubscriptions.findMany({
+            where: and(eq(mediaSubscriptions.tmdbId, String(tmdbId)), eq(mediaSubscriptions.mediaType, mediaType)),
+            with: { user: true }
         });
 
-        const requests = await prisma.mediaRequest.findMany({
-            where: { tmdbId: String(tmdbId), mediaType },
-            include: { user: true }
+        const requests = await db.query.mediaRequests.findMany({
+            where: and(eq(mediaRequests.tmdbId, String(tmdbId)), eq(mediaRequests.mediaType, mediaType)),
+            with: { user: true }
         });
 
         const debugInfo = {

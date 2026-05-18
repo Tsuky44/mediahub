@@ -10,8 +10,8 @@ interface StatsHeaderProps {
     hasRealData: boolean
     sourceFilter: string
     canImport: boolean
-    prevHref: string
-    nextHref: string
+    prevHref: string | undefined
+    nextHref: string | undefined
 }
 
 /** Header de la page stats : titre, filtre source, sync, navigation de periode. */

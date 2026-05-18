@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, roles, userGroups, accountRequests, settings } from '@/lib/db/schema'
+import { sql } from 'drizzle-orm'
 import { getRealUser } from '@/lib/auth'
 import SettingsTabs from './_components/SettingsTabs'
 import { getSetting } from '@/lib/settings'
@@ -33,50 +35,48 @@ export default async function SettingsPage() {
     }
 
     // Fetch users from DB for role management
-    const dbUsers = await prisma.user.findMany({
-      orderBy: { name: 'asc' },
-      include: { roleRef: true }
+    const dbUsers = await db.query.users.findMany({
+      orderBy: sql`name ASC`,
+      with: { roleRef: true }
     })
 
     // Fetch roles
-    const roles = await prisma.role.findMany({
-      orderBy: { name: 'asc' }
+    const rolesList = await db.query.roles.findMany({
+      orderBy: sql`name ASC`
     })
 
     // Fetch user groups
-    const userGroups = await prisma.userGroup.findMany({
-      include: {
+    const userGroupsList = await db.query.userGroups.findMany({
+      with: {
         role: true,
         members: {
-          include: {
+          with: {
             user: true
           }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: sql`created_at DESC`
     })
 
     // Fetch account requests
-    const accountRequests = await prisma.accountRequest.findMany({
-      orderBy: { createdAt: 'desc' }
+    const accountRequestsList = await db.query.accountRequests.findMany({
+      orderBy: sql`created_at DESC`
     })
 
     // Fetch all settings
-    const settingsList = await prisma.setting.findMany({
-      select: { key: true, value: true }
-    })
+    const settingsList = await db.select({ key: settings.key, value: settings.value }).from(settings)
     
-    const settings = settingsList.reduce((acc: any, curr: any) => ({ ...acc, [curr.key]: curr.value }), {})
+    const settingsMap = settingsList.reduce((acc: any, curr: any) => ({ ...acc, [curr.key]: curr.value }), {})
     
     return (
       <AbilityProvider user={user}>
         <SettingsTabs 
             dbUsers={dbUsers}
-            settings={settings}
+            settings={settingsMap}
             userRole={userRole}
-            roles={roles}
-            userGroups={userGroups}
-            accountRequests={accountRequests}
+            roles={rolesList}
+            userGroups={userGroupsList}
+            accountRequests={accountRequestsList}
         />
       </AbilityProvider>
     )

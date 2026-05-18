@@ -1,4 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db/drizzle';
+import { watchEvents } from '@/lib/db/schema';
+import { eq, and } from 'drizzle-orm';
 import { PlexService } from './services/plex';
 import { getSetting } from './settings';
 
@@ -7,8 +9,7 @@ const log = (...args: any[]) => { if (isDev) console.log(...args); };
 const error = (...args: any[]) => { if (isDev) console.error(...args); };
 const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
-
-export async function importPlexHistory(prisma: PrismaClient, progressCallback?: (data: { imported: number, skipped: number, total: number, status: string }) => void) {
+export async function importPlexHistory(drizzleDb: typeof db, progressCallback?: (data: { imported: number, skipped: number, total: number, status: string }) => void) {
   log('--- Robust Plex History Import ---');
 
   const plexUrl = await getSetting('PLEX_URL');
@@ -105,16 +106,17 @@ export async function importPlexHistory(prisma: PrismaClient, progressCallback?:
 
           // Also populate WatchEvent for trends
           try {
-            await prisma.watchEvent.upsert({
-              where: {
-                embyUserId_itemId_playedAt: {
-                  embyUserId: userId,
-                  itemId: itemId,
-                  playedAt: playedAt,
-                }
-              },
-              update: {},
-              create: {
+            // Check if already exists
+            const existing = await drizzleDb.query.watchEvents.findFirst({
+              where: and(
+                eq(watchEvents.embyUserId, userId),
+                eq(watchEvents.itemId, itemId),
+                eq(watchEvents.playedAt, playedAt)
+              )
+            });
+
+            if (!existing) {
+              await drizzleDb.insert(watchEvents).values({
                 embyUserId: userId,
                 userName: item.userTitle || item.User?.title || 'Plex User',
                 itemId: itemId,
@@ -127,8 +129,9 @@ export async function importPlexHistory(prisma: PrismaClient, progressCallback?:
                 seriesName: item.grandparentTitle,
                 seasonName: item.parentTitle,
                 episodeNumber: item.index,
-              }
-            });
+                createdAt: new Date()
+              }).onConflictDoNothing();
+            }
           } catch (e) {
             // WatchEvent might fail due to unique constraint, which is fine
           }

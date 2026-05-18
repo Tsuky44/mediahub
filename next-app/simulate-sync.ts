@@ -63,5 +63,6 @@ async function main() {
 main()
   .catch(console.error)
   .finally(async () => {
-    await prisma.$disconnect();
+    // $disconnect n'existe pas dans notre proxy prisma
+    // await prisma.$disconnect();
   });

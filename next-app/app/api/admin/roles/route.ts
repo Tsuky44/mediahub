@@ -1,6 +1,10 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+﻿﻿import { NextResponse } from 'next/server'
+import { db } from '@/lib/db/drizzle'
+import { roles, permissions, users } from '@/lib/db/schema'
+import { eq, asc, sql } from 'drizzle-orm'
 import { getRealUser } from '@/lib/auth'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const user = await getRealUser()
@@ -9,19 +13,10 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const roles = await (prisma as any).role.findMany({
-    include: {
-      _count: {
-        select: { users: true }
-      },
-      permissions: true
-    },
-    orderBy: {
-      name: 'asc'
-    }
-  })
+  const rolesList = await db.select().from(roles).orderBy(asc(roles.name))
+  // TODO: Fetch permissions and user counts separately if needed
 
-  return NextResponse.json(roles)
+  return NextResponse.json(rolesList)
 }
 
 export async function POST(request: Request) {
@@ -38,22 +33,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
 
-    const role = await (prisma as any).role.create({
-      data: {
-        name,
-        description,
-        permissions: {
-          create: permissions?.map((p: any) => ({
-            action: p.action,
-            subject: p.subject,
-            conditions: p.conditions ? JSON.stringify(p.conditions) : null
-          })) || []
-        }
-      },
-      include: {
-        permissions: true
-      }
-    })
+    const [role] = await db.insert(roles).values({
+      name,
+      description
+    }).returning()
+    
+    // Insert permissions separately
+    if (permissions && permissions.length > 0 && role) {
+      await db.insert(permissions).values(
+        permissions.map((p: any) => ({
+          roleId: role.id,
+          action: p.action,
+          subject: p.subject,
+          conditions: p.conditions ? JSON.stringify(p.conditions) : null
+        }))
+      )
+    }
 
     try {
         const { logAction } = await import('@/lib/audit')

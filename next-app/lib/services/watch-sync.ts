@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, watchEvents } from '@/lib/db/schema'
+import { eq, and, gte, desc } from 'drizzle-orm'
 import { EmbyService } from './emby'
 import { getSetting } from '@/lib/settings'
 
@@ -74,50 +76,43 @@ export async function syncActiveSessions() {
                 if (durationMinutes < 1) continue
 
                 // Trouver l'utilisateur local
-                const user = await prisma.user.findFirst({
-                    where: { 
-                        embyUserId: embyUserId
-                    }
+                const user = await db.query.users.findFirst({
+                    where: eq(users.embyUserId, embyUserId)
                 })
 
                 // Chercher un événement récent (dernières 12h) pour cet item/user
-                const existingEvent = await prisma.watchEvent.findFirst({
-                    where: {
-                        embyUserId,
-                        itemId,
-                        playedAt: {
-                            gte: new Date(Date.now() - 1000 * 60 * 60 * 12)
-                        }
-                    },
-                    orderBy: { playedAt: 'desc' }
+                const existingEvent = await db.query.watchEvents.findFirst({
+                    where: and(
+                        eq(watchEvents.embyUserId, embyUserId),
+                        eq(watchEvents.itemId, itemId),
+                        gte(watchEvents.playedAt, new Date(Date.now() - 1000 * 60 * 60 * 12))
+                    ),
+                    orderBy: [desc(watchEvents.playedAt)]
                 })
 
                 if (existingEvent) {
                     // Si l'événement existe, on met à jour la durée si elle a augmenté
-                    if (durationMinutes > existingEvent.durationMinutes) {
-                        await prisma.watchEvent.update({
-                            where: { id: existingEvent.id },
-                            data: {
+                    if (durationMinutes > (existingEvent.durationMinutes || 0)) {
+                        await db.update(watchEvents)
+                            .set({
                                 durationMinutes: durationMinutes,
-                                playedAt: new Date() // Actualiser pour le "vu récemment"
-                            }
-                        })
+                                playedAt: new Date()
+                            })
+                            .where(eq(watchEvents.id, existingEvent.id))
                         log(`[Sync] Updated ${item.Name} for ${session.UserName} (${durationMinutes} min)`)
                     }
                 } else {
                     // Création d'un nouvel événement
-                    await prisma.watchEvent.create({
-                        data: {
-                            embyUserId,
-                            userId: user?.id,
-                            itemId,
-                            itemType: item.Type,
-                            itemName: item.Name,
-                            seriesName: item.SeriesName,
-                            durationMinutes,
-                            playedAt: new Date(),
-                            plays: 1
-                        }
+                    await db.insert(watchEvents).values({
+                        embyUserId,
+                        userId: user?.id,
+                        itemId,
+                        itemType: item.Type,
+                        itemName: item.Name,
+                        seriesName: item.SeriesName,
+                        durationMinutes,
+                        playedAt: new Date(),
+                        plays: 1
                     })
                     log(`[Sync] Recorded NEW playback for ${item.Name} (${durationMinutes} min)`)
                 }

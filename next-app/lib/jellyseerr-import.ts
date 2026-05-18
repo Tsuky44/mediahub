@@ -1,8 +1,11 @@
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db/drizzle';
+import { mediaRequests, users } from '@/lib/db/schema';
+import { eq, or, and } from 'drizzle-orm';
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { JellyseerrService } from './services/jellyseerr';
 import { getTmdbService } from './services/tmdb';
 
-export async function importJellyseerrRequests(prisma: PrismaClient) {
+export async function importJellyseerrRequests(drizzleDb: typeof db) {
   const jellyseerrUrl = process.env.JELLYSEERR_URL;
   const jellyseerrApiKey = process.env.JELLYSEERR_API_KEY;
 
@@ -22,11 +25,11 @@ export async function importJellyseerrRequests(prisma: PrismaClient) {
   for (const req of requests) {
     try {
       // Check if already exists
-      const existing = await prisma.mediaRequest.findFirst({
-        where: {
-          tmdbId: String(req.media.tmdbId),
-          mediaType: req.type
-        }
+      const existing = await drizzleDb.query.mediaRequests.findFirst({
+        where: and(
+          eq(mediaRequests.tmdbId, String(req.media.tmdbId)),
+          eq(mediaRequests.mediaType, req.type)
+        )
       });
 
       if (existing) {
@@ -56,40 +59,36 @@ export async function importJellyseerrRequests(prisma: PrismaClient) {
       // Find or create user
       let userId = null;
       if (req.requestedBy) {
-        const user = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { email: req.requestedBy.email },
-              { jellyseerrUserId: String(req.requestedBy.id) }
-            ]
-          }
+        const user = await drizzleDb.query.users.findFirst({
+          where: or(
+            eq(users.email, req.requestedBy.email),
+            eq(users.jellyseerrUserId, String(req.requestedBy.id))
+          )
         });
         if (user) {
           userId = user.id;
         }
       }
 
-      await prisma.mediaRequest.create({
-        data: {
-          userId,
-          mediaType: req.type,
-          tmdbId: String(req.media.tmdbId),
-          title: title,
-          status: status,
-          requestedAt: new Date(req.createdAt),
-          createdAt: new Date(req.createdAt),
-          updatedAt: new Date(req.updatedAt),
-          requesterName: req.requestedBy?.displayName || req.requestedBy?.email?.split('@')[0],
-          requesterEmail: req.requestedBy?.email,
-          requesterAvatar: req.requestedBy?.avatar,
-          externalId: String(req.id), // Store Jellyseerr request ID
-          metadata: JSON.stringify({
-            jellyseerrId: req.id,
-            tmdbId: req.media.tmdbId,
-            tvdbId: req.media.tvdbId,
-            imdbId: req.media.imdbId
-          })
-        }
+      await drizzleDb.insert(mediaRequests).values({
+        userId,
+        mediaType: req.type,
+        tmdbId: String(req.media.tmdbId),
+        title: title,
+        status: status,
+        requestedAt: new Date(req.createdAt),
+        createdAt: new Date(req.createdAt),
+        updatedAt: new Date(req.updatedAt),
+        requesterName: req.requestedBy?.displayName || req.requestedBy?.email?.split('@')[0],
+        requesterEmail: req.requestedBy?.email,
+        requesterAvatar: req.requestedBy?.avatar,
+        externalId: String(req.id), // Store Jellyseerr request ID
+        metadata: JSON.stringify({
+          jellyseerrId: req.id,
+          tmdbId: req.media.tmdbId,
+          tvdbId: req.media.tvdbId,
+          imdbId: req.media.imdbId
+        })
       });
 
       imported++;

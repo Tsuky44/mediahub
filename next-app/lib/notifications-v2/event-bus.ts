@@ -8,6 +8,7 @@
  */
 
 import { EventEmitter } from 'events'
+import { logger } from '@/lib/logger'
 import type { NotificationEvent, NotificationEventPayload } from './types'
 import { NOTIFICATION_EVENTS } from './types'
 
@@ -57,12 +58,12 @@ class NotificationEventBus {
 
     // Delegate to Node EventEmitter; wrap async handlers so exceptions are isolated.
     const listeners = this.emitter.listeners(event) as Handler[]
-    console.log(
+    logger.info(
       `[NotificationsV2][EventBus] emit ${event} (cid=${fullPayload.correlationId}) → ${listeners.length} listener(s) | media="${fullPayload.media?.title}"`
     )
     if (listeners.length === 0) {
-      console.warn(
-        `[NotificationsV2][EventBus] ⚠️ No listener registered for ${event}. Did startNotificationsV2() run? (process.env.NEXT_RUNTIME=${process.env.NEXT_RUNTIME})`
+      logger.warn(
+        `[NotificationsV2][EventBus] No listener registered for ${event}. Did startNotificationsV2() run? (process.env.NEXT_RUNTIME=${process.env.NEXT_RUNTIME})`
       )
     }
     await Promise.all(
@@ -70,7 +71,7 @@ class NotificationEventBus {
         Promise.resolve()
           .then(() => listener(fullPayload))
           .catch((err) => {
-            console.error(`[NotificationsV2][EventBus] Handler error for ${event}:`, err)
+            logger.error(`[NotificationsV2][EventBus] Handler error for ${event}:`, err)
           })
       )
     )

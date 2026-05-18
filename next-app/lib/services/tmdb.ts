@@ -1,5 +1,8 @@
-import axios from 'axios'
+import { createAxiosClient } from '@/lib/http-client'
+import { cached } from '@/lib/cache-service'
+import { CACHE_TTL, TIMEOUT } from '@/lib/constants'
 import { getSetting } from '@/lib/settings'
+import { logger } from '@/lib/logger'
 
 export async function getTmdbService() {
   // 1. Primary Hardcoded Key
@@ -33,6 +36,7 @@ interface DiscoverParams {
 
 export class TmdbService {
   private apiKey: string
+  private client: ReturnType<typeof createAxiosClient>
   private static posterPathCache = new Map<string, string>()
 
   constructor(apiKey: string) {
@@ -40,90 +44,83 @@ export class TmdbService {
     if (!this.apiKey) {
       throw new Error('TMDB API Key missing')
     }
-  }
-
-  private async getClient() {
-    return axios.create({
+    this.client = createAxiosClient({
       baseURL: 'https://api.themoviedb.org/3',
-      params: {
-        api_key: this.apiKey,
-        language: 'fr-FR' // Default to French as per user language
-      }
+      timeout: TIMEOUT.TMDB,
+      retries: 2,
+      serviceName: 'TMDB',
+    })
+    this.client.interceptors.request.use((config) => {
+      config.params = { ...config.params, api_key: this.apiKey, language: 'fr-FR' }
+      return config
     })
   }
 
+  private getClient() {
+    return this.client
+  }
+
   async getExternalIds(type: 'movie' | 'tv', id: number) {
-    const client = await this.getClient()
-    if (!client) return null
-    
+    const client = this.getClient()
     try {
-        const response = await client.get(`/${type}/${id}/external_ids`)
-        return response.data
+      const response = await client.get(`/${type}/${id}/external_ids`)
+      return response.data
     } catch (e) {
-        console.error(`[TMDB] Failed to get external IDs for ${type}/${id}`, e)
-        return null
+      logger.error(`[TMDB] Failed to get external IDs for ${type}/${id}`, e)
+      return null
     }
   }
 
   async findByExternalId(externalId: string | number, source: 'imdb_id' | 'tvdb_id') {
-    const client = await this.getClient()
-    if (!client) return null
-    
+    const client = this.getClient()
     try {
-        const response = await client.get(`/find/${externalId}`, {
-            params: { external_source: source }
-        })
-        return response.data
+      const response = await client.get(`/find/${externalId}`, {
+        params: { external_source: source }
+      })
+      return response.data
     } catch (e) {
-        console.error(`[TMDB] Failed to find by external ID ${externalId}`, e)
-        return null
+      logger.error(`[TMDB] Failed to find by external ID ${externalId}`, e)
+      return null
     }
   }
 
   async searchMulti(query: string, page = 1) {
-    const client = await this.getClient()
-    if (!client) return { results: [] }
-    
+    const client = this.getClient()
     const response = await client.get('/search/multi', {
-        params: { query, page }
+      params: { query, page }
     })
     return response.data
   }
 
   async search(type: 'movie' | 'tv', query: string, page = 1) {
-    const client = await this.getClient()
-    if (!client) return { results: [] }
-    
+    const client = this.getClient()
     const response = await client.get(`/search/${type}`, {
-        params: { query, page }
+      params: { query, page }
     })
     return response.data
   }
 
   async getTrending(type: 'all' | 'movie' | 'tv' = 'movie', page = 1) {
-      const client = await this.getClient()
-      if (!client) return { results: [] }
-      
-      try {
-        const response = await client.get(`/trending/${type}/week`, {
-            params: { page }
-        })
-        return response.data
-      } catch (error: any) {
-        console.error(`[TMDB] getTrending failed: ${error.message}`, error.response?.data)
-        return { results: [] }
-      }
+    const client = this.getClient()
+    try {
+      const response = await client.get(`/trending/${type}/week`, {
+        params: { page }
+      })
+      return response.data
+    } catch (error) {
+      const err = error as { message?: string; response?: { data?: unknown } }
+      logger.error(`[TMDB] getTrending failed: ${err.message}`, err.response?.data)
+      return { results: [] }
+    }
   }
 
   async discover(type: 'movie' | 'tv', params: DiscoverParams = {}) {
-    const client = await this.getClient()
-    if (!client) return { results: [] }
-    
-    // Map internal filter names to TMDB API parameters
+    const client = this.getClient()
+
     const queryParams: Record<string, unknown> = {
-        page: params.page || 1,
-        sort_by: params.sort_by || 'popularity.desc',
-        'vote_count.gte': 0,
+      page: params.page || 1,
+      sort_by: params.sort_by || 'popularity.desc',
+      'vote_count.gte': 0,
     }
 
     if (params.start_date) queryParams[type === 'movie' ? 'primary_release_date.gte' : 'first_air_date.gte'] = params.start_date
@@ -138,7 +135,7 @@ export class TmdbService {
     if (params.watch_providers && params.watch_providers.length > 0) queryParams.with_watch_providers = params.watch_providers.join('|')
 
     const response = await client.get(`/discover/${type}`, {
-        params: queryParams
+      params: queryParams
     })
     return response.data
   }
@@ -146,93 +143,88 @@ export class TmdbService {
   async discoverMixed(params: DiscoverParams = {}) {
     const genreIds = params.genres || []
 
-    // Map common genres between Movie and TV
-    // If a Movie genre ID is selected, we map it to the corresponding TV genre ID(s)
-    // If a TV genre ID is selected, we map it to the corresponding Movie genre ID(s)
-    
     const mapToMovie = (id: number) => {
-        if (id === 10759) return [28, 12] // Action & Adventure -> Action, Adventure
-        if (id === 10765) return [878, 14] // Sci-Fi & Fantasy -> Sci-Fi, Fantasy
-        if (id === 10768) return [10752] // War & Politics -> War
-        if (id === 10762) return [] // Kids -> Family (10751)? Maybe not direct.
-        if (id === 10763) return [] // News -> No movie equivalent
-        if (id === 10764) return [] // Reality -> No movie equivalent
-        if (id === 10766) return [] // Soap -> No movie equivalent
-        if (id === 10767) return [] // Talk -> No movie equivalent
-        return [id]
+      if (id === 10759) return [28, 12]
+      if (id === 10765) return [878, 14]
+      if (id === 10768) return [10752]
+      if (id === 10762) return []
+      if (id === 10763) return []
+      if (id === 10764) return []
+      if (id === 10766) return []
+      if (id === 10767) return []
+      return [id]
     }
 
     const mapToTV = (id: number) => {
-        if (id === 28) return [10759] // Action -> Action & Adventure
-        if (id === 12) return [10759] // Adventure -> Action & Adventure
-        if (id === 878) return [10765] // Sci-Fi -> Sci-Fi & Fantasy
-        if (id === 14) return [10765] // Fantasy -> Sci-Fi & Fantasy
-        if (id === 10752) return [10768] // War -> War & Politics
-        return [id]
+      if (id === 28) return [10759]
+      if (id === 12) return [10759]
+      if (id === 878) return [10765]
+      if (id === 14) return [10765]
+      if (id === 10752) return [10768]
+      return [id]
     }
 
     const movieGenres = genreIds.flatMap(mapToMovie)
     const tvGenres = genreIds.flatMap(mapToTV)
 
-    // Parallel fetch with mapped genres
     const [movies, series] = await Promise.all([
-        this.discover('movie', { ...params, genres: movieGenres.length > 0 ? movieGenres : undefined }),
-        this.discover('tv', { ...params, genres: tvGenres.length > 0 ? tvGenres : undefined })
+      this.discover('movie', { ...params, genres: movieGenres.length > 0 ? movieGenres : undefined }),
+      this.discover('tv', { ...params, genres: tvGenres.length > 0 ? tvGenres : undefined })
     ])
 
     const movieResults = (movies.results || []).map((m: Record<string, unknown>) => ({ ...m, media_type: 'movie' }))
     const tvResults = (series.results || []).map((t: Record<string, unknown>) => ({ ...t, media_type: 'tv' }))
 
-    // Combine and sort by sort_by param (default popularity)
     const combined = [...movieResults, ...tvResults]
-    
+
     const sortBy = params.sort_by || 'popularity.desc'
     const [field, direction] = sortBy.split('.')
-    
+
     combined.sort((a, b) => {
-        let valA = a[field]
-        let valB = b[field]
-        
-        // Handle dates
-        if (field === 'release_date' || field === 'primary_release_date') {
-            valA = a.release_date || a.first_air_date || ''
-            valB = b.release_date || b.first_air_date || ''
-        }
-        
-        if (direction === 'desc') {
-            return valA > valB ? -1 : 1
-        }
-        return valA > valB ? 1 : -1
+      let valA = a[field]
+      let valB = b[field]
+
+      if (field === 'release_date' || field === 'primary_release_date') {
+        valA = a.release_date || a.first_air_date || ''
+        valB = b.release_date || b.first_air_date || ''
+      }
+
+      if (direction === 'desc') {
+        return valA > valB ? -1 : 1
+      }
+      return valA > valB ? 1 : -1
     })
 
     return {
-        results: combined,
-        total_pages: Math.max(movies.total_pages || 0, series.total_pages || 0)
+      results: combined,
+      total_pages: Math.max(movies.total_pages || 0, series.total_pages || 0)
     }
   }
 
   async getGenres(type: 'movie' | 'tv') {
-    const client = await this.getClient()
-    if (!client) return []
-    try {
+    return cached(`tmdb:genres:${type}`, async () => {
+      const client = this.getClient()
+      try {
         const response = await client.get(`/genre/${type}/list`)
         return response.data.genres || []
-    } catch (e) {
+      } catch (e) {
         return []
-    }
+      }
+    }, { memoryTtl: CACHE_TTL.API_STATIC, tags: ['tmdb-static'] })
   }
 
   async getWatchProviders(type: 'movie' | 'tv', region: string) {
-    const client = await this.getClient()
-    if (!client) return []
-    try {
+    return cached(`tmdb:providers:${type}:${region}`, async () => {
+      const client = this.getClient()
+      try {
         const response = await client.get(`/watch/providers/${type}`, {
-            params: { watch_region: region }
+          params: { watch_region: region }
         })
         return response.data.results || []
-    } catch (e) {
+      } catch (e) {
         return []
-    }
+      }
+    }, { memoryTtl: CACHE_TTL.API_STATIC, tags: ['tmdb-static'] })
   }
 
   private posterPathCache = new Map<string, string>()
@@ -240,125 +232,111 @@ export class TmdbService {
   async getPosterPath(id: number, type: 'movie' | 'tv') {
     const cacheKey = `${type}-${id}`
     if (this.posterPathCache.has(cacheKey)) {
-        return this.posterPathCache.get(cacheKey)
+      return this.posterPathCache.get(cacheKey)
     }
 
     try {
-        const client = await this.getClient()
-        if (!client) return null
-        const response = await client.get(`/${type}/${id}`)
-        const path = response.data.poster_path
-        if (path) {
-            this.posterPathCache.set(cacheKey, path)
-        }
-        return path
+      const client = this.getClient()
+      const response = await client.get(`/${type}/${id}`)
+      const path = response.data.poster_path
+      if (path) {
+        this.posterPathCache.set(cacheKey, path)
+      }
+      return path
     } catch (e) {
-        return null
+      return null
     }
   }
 
   async getDetails(id: number, type: 'movie' | 'tv') {
-    const client = await this.getClient()
-    if (!client) return null
-    
+    const client = this.getClient()
     try {
-        const response = await client.get(`/${type}/${id}`, {
-            params: {
-                language: 'fr-FR',
-                append_to_response: `videos,${type === 'tv' ? 'aggregate_credits' : 'credits'},watch/providers,keywords,external_ids,recommendations,similar`
-            }
-        })
-        return response.data
+      const response = await client.get(`/${type}/${id}`, {
+        params: {
+          language: 'fr-FR',
+          append_to_response: `videos,${type === 'tv' ? 'aggregate_credits' : 'credits'},watch/providers,keywords,external_ids,recommendations,similar`
+        }
+      })
+      return response.data
     } catch (e) {
-        console.error(`Failed to get ${type} details`, e)
-        return null
+      logger.error(`Failed to get ${type} details`, e)
+      return null
     }
   }
 
   async getSeasonDetails(tvId: number, seasonNumber: number) {
-      const client = await this.getClient()
-      if (!client) return null
-
-      try {
-          const response = await client.get(`/tv/${tvId}/season/${seasonNumber}`, {
-              params: {
-                  language: 'fr-FR'
-              }
-          })
-          return response.data
-      } catch (e) {
-          console.error(`Failed to fetch season ${seasonNumber} for tv ${tvId}`, e)
-          return null
-      }
+    const client = this.getClient()
+    try {
+      const response = await client.get(`/tv/${tvId}/season/${seasonNumber}`, {
+        params: { language: 'fr-FR' }
+      })
+      return response.data
+    } catch (e) {
+      logger.error(`Failed to fetch season ${seasonNumber} for tv ${tvId}`, e)
+      return null
+    }
   }
 
   async getCollectionDetails(collectionId: number) {
-    const client = await this.getClient()
-    if (!client) return null
-
+    const client = this.getClient()
     try {
-        const response = await client.get(`/collection/${collectionId}`)
-        return response.data
+      const response = await client.get(`/collection/${collectionId}`)
+      return response.data
     } catch (e) {
-        console.error(`Failed to fetch collection ${collectionId}`, e)
-        return null
+      logger.error(`Failed to fetch collection ${collectionId}`, e)
+      return null
     }
   }
 
   async getRecommendations(id: number, type: 'movie' | 'tv', page = 1) {
-    const client = await this.getClient()
-    if (!client) return { results: [] }
-    
+    const client = this.getClient()
     try {
-        const response = await client.get(`/${type}/${id}/recommendations`, {
-            params: { page }
-        })
-        return response.data
+      const response = await client.get(`/${type}/${id}/recommendations`, {
+        params: { page }
+      })
+      return response.data
     } catch (e) {
-        console.error(`Failed to get recommendations for ${type} ${id}`, e)
-        return { results: [] }
+      logger.error(`Failed to get recommendations for ${type} ${id}`, e)
+      return { results: [] }
     }
   }
 
   async getSimilar(id: number, type: 'movie' | 'tv', page = 1) {
-    const client = await this.getClient()
-    if (!client) return { results: [] }
-    
+    const client = this.getClient()
     try {
-        const response = await client.get(`/${type}/${id}/similar`, {
-            params: { page }
-        })
-        return response.data
+      const response = await client.get(`/${type}/${id}/similar`, {
+        params: { page }
+      })
+      return response.data
     } catch (e) {
-        console.error(`Failed to get similar for ${type} ${id}`, e)
-        return { results: [] }
+      logger.error(`Failed to get similar for ${type} ${id}`, e)
+      return { results: [] }
     }
   }
 
   async getPersonDetails(id: number) {
-    const client = await this.getClient()
-    if (!client) return null
+    const client = this.getClient()
     try {
-        const response = await client.get(`/person/${id}`, {
-            params: { 
-                append_to_response: 'combined_credits,external_ids,images',
-                language: 'fr-FR'
-            }
-        })
-        return response.data
-    } catch (e: any) {
-        // Si l'erreur est un 404 avec les paramètres, on réessaie sans les paramètres
-        if (e.response?.status === 404) {
-            try {
-                const simpleResponse = await client.get(`/person/${id}`)
-                return simpleResponse.data
-            } catch (innerError) {
-                console.error(`Total failure for person ${id}`, innerError)
-                return null
-            }
+      const response = await client.get(`/person/${id}`, {
+        params: {
+          append_to_response: 'combined_credits,external_ids,images',
+          language: 'fr-FR'
         }
-        console.error(`Failed to get person details for ${id}`, e)
-        return null
+      })
+      return response.data
+    } catch (error) {
+      const e = error as { response?: { status?: number } }
+      if (e.response?.status === 404) {
+        try {
+          const simpleResponse = await client.get(`/person/${id}`)
+          return simpleResponse.data
+        } catch (innerError) {
+          logger.error(`Total failure for person ${id}`, innerError)
+          return null
+        }
+      }
+      logger.error(`Failed to get person details for ${id}`, error)
+      return null
     }
   }
 }

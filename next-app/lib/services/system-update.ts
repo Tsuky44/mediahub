@@ -2,6 +2,7 @@ import Docker from 'dockerode';
 import os from 'os';
 import fs from 'fs';
 import { NotificationService } from './notification-service';
+import { logger } from '@/lib/logger';
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -45,12 +46,12 @@ export class SystemUpdateService {
                         await container.inspect();
                         return id;
                     } catch (e) {
-                         console.warn(`[SystemUpdate] ID found in cgroup (${id}) but not found in Docker.`, e);
+                         logger.warn(`[SystemUpdate] ID found in cgroup (${id}) but not found in Docker.`, e);
                     }
                 }
             }
         } catch (e) {
-            console.warn('[SystemUpdate] Failed to read container ID from /proc/self/cgroup', e);
+            logger.warn('[SystemUpdate] Failed to read container ID from /proc/self/cgroup', e);
         }
         
         // Strategy 2: Check by hostname as ID or Name
@@ -87,12 +88,12 @@ export class SystemUpdateService {
             });
 
             if (appContainer) {
-                console.log(`[SystemUpdate] Found App container by heuristic: ${appContainer.Id} (${appContainer.Names.join(',')})`);
+                logger.info(`[SystemUpdate] Found App container by heuristic: ${appContainer.Id} (${appContainer.Names.join(',')})`);
                 return appContainer.Id;
             }
 
         } catch (e) {
-             console.warn('[SystemUpdate] Failed to list/search containers', e);
+             logger.warn('[SystemUpdate] Failed to list/search containers', e);
         }
 
         return hostname;
@@ -123,11 +124,11 @@ export class SystemUpdateService {
             const imageName = containerInfo.Config.Image; // e.g., "myrepo/myimage:latest"
 
             // Pull the latest image
-            console.log(`[SystemUpdate] Pulling latest image for ${label} (${imageName})...`);
+            logger.info(`[SystemUpdate] Pulling latest image for ${label} (${imageName})...`);
             await new Promise((resolve, reject) => {
-                docker.pull(imageName, (err: Error | null, stream: NodeJS.ReadableStream) => {
+                docker.pull(imageName, (err: unknown, stream: unknown) => {
                     if (err) return reject(err);
-                    docker.modem.followProgress(stream, (err: Error | null) => err ? reject(err) : resolve(true));
+                    docker.modem.followProgress(stream as NodeJS.ReadableStream, (err: unknown) => err ? reject(err) : resolve(true));
                 });
             });
 
@@ -147,7 +148,7 @@ export class SystemUpdateService {
             };
 
         } catch (error) {
-            console.error(`[SystemUpdate] Check failed for ${label}:`, error);
+            logger.error(`[SystemUpdate] Check failed for ${label}:`, error);
             return {
                 name: label,
                 currentVersion: 'error',
@@ -179,10 +180,10 @@ export class SystemUpdateService {
     static initBackgroundCheck() {
         if (this.interval) return;
         
-        console.log('[SystemUpdate] Initializing background update checker (every 5m)...');
+        logger.info('[SystemUpdate] Initializing background update checker (every 5m)...');
         // Run immediately if no cache
         if (!this.cache) {
-            this.checkUpdate().then(status => this.handleUpdateNotification(status)).catch(e => console.error('[SystemUpdate] Initial check failed:', e));
+            this.checkUpdate().then(status => this.handleUpdateNotification(status)).catch(e => logger.error('[SystemUpdate] Initial check failed:', e));
         }
 
         this.interval = setInterval(async () => {
@@ -191,7 +192,7 @@ export class SystemUpdateService {
                 const status = await this.checkUpdate(true);
                 await this.handleUpdateNotification(status);
             } catch (e) {
-                console.error('[SystemUpdate] Background check failed:', e);
+                logger.error('[SystemUpdate] Background check failed:', e);
             }
         }, this.cacheExpiry);
     }
@@ -248,7 +249,7 @@ export class SystemUpdateService {
                 data: { version, container }
             })
         } catch (e) {
-            console.error('[SystemUpdate] Failed to send external notification:', e)
+            logger.error('[SystemUpdate] Failed to send external notification:', e)
         }
     }
 
@@ -354,7 +355,7 @@ export class SystemUpdateService {
         await NotificationService.clearSystemUpdateNotifications();
 
         if (isDev) {
-            console.log('[SystemUpdate] Dev mode: Update simulated.');
+            logger.info('[SystemUpdate] Dev mode: Update simulated.');
             return;
         }
 
@@ -380,14 +381,14 @@ export class SystemUpdateService {
                 containersToUpdate.push(trackerName);
             }
 
-            console.log(`[SystemUpdate] Spawning Watchtower to update: ${containersToUpdate.join(', ')}...`);
+            logger.info(`[SystemUpdate] Spawning Watchtower to update: ${containersToUpdate.join(', ')}...`);
 
             // Pull Watchtower
             const watchtowerImage = 'containrrr/watchtower:latest';
             await new Promise((resolve, reject) => {
-                docker.pull(watchtowerImage, (err: Error | null, stream: NodeJS.ReadableStream) => {
+                docker.pull(watchtowerImage, (err: unknown, stream: unknown) => {
                     if (err) return reject(err);
-                    docker.modem.followProgress(stream, (err: Error | null) => err ? reject(err) : resolve(true));
+                    docker.modem.followProgress(stream as NodeJS.ReadableStream, (err: unknown) => err ? reject(err) : resolve(true));
                 });
             });
 
@@ -405,10 +406,10 @@ export class SystemUpdateService {
             });
 
             await watchtower.start();
-            console.log('[SystemUpdate] Watchtower started.');
+            logger.info('[SystemUpdate] Watchtower started.');
 
         } catch (error) {
-            console.error('[SystemUpdate] Update failed:', error);
+            logger.error('[SystemUpdate] Update failed:', error);
             throw new Error(`Failed to start update process: ${(error as Error).message}`);
         }
     }

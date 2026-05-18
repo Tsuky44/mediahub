@@ -1,9 +1,13 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { settings } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 import { decryptData } from '@/lib/crypto'
 import { revalidatePath } from 'next/cache'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   try {
@@ -35,29 +39,38 @@ export async function POST(request: Request) {
     }
 
     // Upsert settings
-    const operations = config.settings.map((setting: any) => {
-      return prisma.setting.upsert({
-        where: { key: setting.key },
-        update: {
-          value: setting.value,
-          category: setting.category || setting.group || 'general',
-        },
-        create: {
+    let count = 0
+    for (const setting of config.settings) {
+      const existing = await db.query.settings.findFirst({
+        where: eq(settings.key, setting.key)
+      })
+      
+      if (existing) {
+        await db.update(settings)
+          .set({
+            value: setting.value,
+            category: setting.category || setting.group || 'general',
+            updatedAt: new Date()
+          })
+          .where(eq(settings.key, setting.key))
+      } else {
+        await db.insert(settings).values({
           key: setting.key,
           value: setting.value,
           category: setting.category || setting.group || 'general',
-        }
-      })
-    })
-
-    await prisma.$transaction(operations)
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+      }
+      count++
+    }
 
     // Revalidate paths to reflect changes immediately
     revalidatePath('/')
     revalidatePath('/dashboard')
     revalidatePath('/api/settings') 
 
-    return NextResponse.json({ success: true, count: operations.length })
+    return NextResponse.json({ success: true, count })
 
   } catch (error: any) {
     console.error('Import error:', error)

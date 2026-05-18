@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from 'react'
 import { toast } from 'react-hot-toast'
 import { fetchUserRequests, forceSyncRequests } from '../actions'
+import { groupRequests } from '../_utils/group-requests'
 
 export interface UseInfiniteRequestsInit {
     results: any[]
@@ -26,7 +27,7 @@ export interface UseInfiniteRequestsResult {
  * de la liste des demandes (media requests).
  */
 export function useInfiniteRequests(initialData: UseInfiniteRequestsInit): UseInfiniteRequestsResult {
-    const [items, setItems] = useState<any[]>(initialData.results)
+    const [items, setItems] = useState<any[]>(groupRequests(initialData.results))
     const [page, setPage] = useState(1)
     const [hasMore, setHasMore] = useState(initialData.totalPages > 1)
     const [loading, setLoading] = useState(false)
@@ -41,10 +42,11 @@ export function useInfiniteRequests(initialData: UseInfiniteRequestsInit): UseIn
 
         if (data.results.length > 0) {
             setItems(prev => {
+                const existingGroupIds = new Set(prev.flatMap((i: any) => i.groupedIds ?? [i.id]))
                 const newItems = data.results.filter(
-                    (newItem: any) => !prev.some(existingItem => existingItem.id === newItem.id)
+                    (newItem: any) => !existingGroupIds.has(newItem.id)
                 )
-                return [...prev, ...newItems]
+                return groupRequests([...prev, ...newItems])
             })
             setPage(nextPage)
             setHasMore(nextPage < (data.totalPages || 0))
@@ -64,7 +66,7 @@ export function useInfiniteRequests(initialData: UseInfiniteRequestsInit): UseIn
                     toast.success('Synchronisation terminée')
                 }
                 const newData = await fetchUserRequests(1)
-                setItems(newData.results)
+                setItems(groupRequests(newData.results))
                 setPage(1)
                 setHasMore(newData.totalPages > 1)
             } else {
@@ -76,7 +78,7 @@ export function useInfiniteRequests(initialData: UseInfiniteRequestsInit): UseIn
     const refresh = useCallback(() => {
         startSync(async () => {
             const newData = await fetchUserRequests(1)
-            setItems(newData.results)
+            setItems(groupRequests(newData.results))
             setPage(1)
             setHasMore(newData.totalPages > 1)
         })

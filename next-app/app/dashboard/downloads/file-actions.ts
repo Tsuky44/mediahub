@@ -3,26 +3,28 @@
 import { FileInfo, SmbService } from '@/lib/services/smb';
 import { FtpService } from '@/lib/services/ftp';
 import { UnraidService } from '@/lib/services/unraid';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/drizzle';
+import { fileShares } from '@/lib/db/schema';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import https from 'https';
 import { getStorageServiceForUser, authOptions } from '@/lib/auth';
 import { getServerSession } from 'next-auth';
 import { checkAccess } from './actions';
+import { logger } from '@/lib/logger';
 
 export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[]> {
     try {
         await checkAccess('downloads.read_explorer');
-        console.log('[getRemoteFiles] Fetching files for path:', remotePath);
+        logger.info('[getRemoteFiles] Fetching files for path:', remotePath);
         const storageService = await getStorageServiceForUser();
-        console.log('[getRemoteFiles] Got storage service:', storageService?.constructor?.name || 'null');
+        logger.info('[getRemoteFiles] Got storage service:', storageService?.constructor?.name || 'null');
         if (!storageService) return [];
         const files = await storageService.listFiles(remotePath);
-        console.log('[getRemoteFiles] Returned', files?.length || 0, 'files');
+        logger.info('[getRemoteFiles] Returned', files?.length || 0, 'files');
         return Array.isArray(files) ? files : [];
     } catch (e) {
-        console.error('[getRemoteFiles] Failed to list storage files:', e);
+        logger.error('[getRemoteFiles] Failed to list storage files:', e);
         return [];
     }
 }
@@ -38,17 +40,17 @@ export async function createPublicShare(filePath: string, expiresDays?: number) 
         const token = uuidv4();
         const expiresAt = expiresDays ? new Date(Date.now() + Number(expiresDays) * 24 * 60 * 60 * 1000) : null;
         
-        const share = await prisma.fileShare.create({
-            data: {
-                filePath,
-                token,
-                expiresAt
-            }
-        });
+        const inserted = await db.insert(fileShares).values({
+            filePath,
+            token,
+            expiresAt,
+            createdAt: new Date()
+        }).returning();
+        const share = inserted[0];
         
         return { success: true, token: share.token };
     } catch (e) {
-        console.error('Failed to create public share', e);
+        logger.error('Failed to create public share', e);
         return { success: false, error: 'Erreur lors de la création du lien de partage' };
     }
 }
@@ -59,7 +61,7 @@ export async function testSmbConnection(config: { host: string, user: string, pa
         await smbService.testConnection(config);
         return { success: true };
     } catch (e) {
-        console.error('SMB connection test failed:', e);
+        logger.error('SMB connection test failed:', e);
         return { success: false, error: e instanceof Error ? e.message : 'Échec de la connexion' };
     }
 }
@@ -103,7 +105,7 @@ export async function testStorageConnection(config: {
         }
         return { success: true };
     } catch (e) {
-        console.error('Storage connection test failed:', e);
+        logger.error('Storage connection test failed:', e);
         return { success: false, error: e instanceof Error ? e.message : 'Échec de la connexion' };
     }
 }
@@ -123,7 +125,7 @@ export async function testEmbyConnection(url: string, apiKey: string) {
 
         return { success: true };
     } catch (e) {
-        console.error('Emby ping failed:', axios.isAxiosError(e) ? e.message : String(e));
+        logger.error('Emby ping failed:', axios.isAxiosError(e) ? e.message : String(e));
         return { success: false, error: 'Serveur Emby injoignable ou invalide' };
     }
 }
@@ -143,7 +145,7 @@ export async function testPlexConnection(url: string, token: string) {
 
         return { success: true };
     } catch (e) {
-        console.error('Plex ping failed:', axios.isAxiosError(e) ? e.message : String(e));
+        logger.error('Plex ping failed:', axios.isAxiosError(e) ? e.message : String(e));
         return { success: false, error: 'Serveur Plex injoignable ou invalide' };
     }
 }
@@ -162,7 +164,7 @@ export async function testJellyfinConnection(url: string, apiKey: string) {
 
         return { success: true };
     } catch (e) {
-        console.error('Jellyfin ping failed:', axios.isAxiosError(e) ? e.message : String(e));
+        logger.error('Jellyfin ping failed:', axios.isAxiosError(e) ? e.message : String(e));
         return { success: false, error: 'Serveur Jellyfin injoignable ou invalide' };
     }
 }
@@ -176,7 +178,7 @@ export async function testUnraidConnection(url: string, apiKey: string) {
         }
         return { success: false, error: 'Impossible de récupérer les statistiques Unraid' };
     } catch (e) {
-        console.error('Unraid connection test failed:', axios.isAxiosError(e) ? e.message : String(e));
+        logger.error('Unraid connection test failed:', axios.isAxiosError(e) ? e.message : String(e));
         return { success: false, error: 'Serveur Unraid injoignable ou clé API invalide' };
     }
 }

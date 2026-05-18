@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
-  const user = session?.user as { role: string; id?: string | number; name?: string } | undefined
+  const user = session?.user
   const ability = defineAbilityFor(user)
 
   if (!user?.id) {

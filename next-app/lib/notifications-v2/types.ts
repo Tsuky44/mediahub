@@ -15,7 +15,11 @@ export const NOTIFICATION_EVENTS = {
   MEDIA_DOWNLOAD_COMPLETE: 'MEDIA_DOWNLOAD_COMPLETE',
   MEDIA_IMPORTING: 'MEDIA_IMPORTING',
   MEDIA_AVAILABLE: 'MEDIA_AVAILABLE',
+  SEASON_PARTIALLY_AVAILABLE: 'SEASON_PARTIALLY_AVAILABLE',
   MEDIA_FAILED: 'MEDIA_FAILED',
+  SEASON_DOWNLOAD_COMPLETE: 'SEASON_DOWNLOAD_COMPLETE',
+  SEASON_IMPORT_COMPLETE: 'SEASON_IMPORT_COMPLETE',
+  SEASON_AVAILABLE: 'SEASON_AVAILABLE',
 } as const
 
 export type NotificationEvent =
@@ -36,6 +40,10 @@ export interface MediaInfo {
   posterPath?: string
   genres?: string
   rating?: string | number
+  seasonNumber?: number
+  /** Pour les notifs groupées (ex: demande de S1+S2 ensemble). Sert à différencier
+   * la dedup-key des demandes groupées portant sur des saisons différentes. */
+  seasons?: number[]
 }
 
 export interface RequesterInfo {
@@ -87,8 +95,15 @@ export interface RetryConfig {
 
 export interface EventRouteConfig {
   enabled: boolean
-  /** Custom template with placeholders. If empty, fallback to default template. */
+  /**
+   * @deprecated Utiliser `templateMovie` et `templateTv`. Conservé pour rétrocompat.
+   * Si défini, sert de fallback quand `templateMovie`/`templateTv` sont vides.
+   */
   template?: string
+  /** Template personnalisé pour les films. Vide = template par défaut. */
+  templateMovie?: string
+  /** Template personnalisé pour les séries (supporte `{season}`). Vide = template par défaut. */
+  templateTv?: string
   /** User IDs to notify; their `whatsappNumber` is resolved at send time. */
   targetUserIds: number[]
   /** Raw phone numbers (digits only) — for recipients without a user account. */

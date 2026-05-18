@@ -1,11 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { defineAbilityFor } from '@/lib/ability';
-import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
+import { db } from '@/lib/db/drizzle';
+import { watchEvents, settings, users } from '@/lib/db/schema';
+import { eq, inArray, and, gte, lte } from 'drizzle-orm';
 import { EmbyService } from '@/lib/services/emby';
 import { PlexService } from '@/lib/services/plex';
+
+export const dynamic = 'force-dynamic'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
@@ -156,11 +159,9 @@ async function batchProcess(source: string, items: Array<Record<string, unknown>
     const minTime = new Date(Math.min(...startTimes) - 10000); // +/- 10s buffer
     const maxTime = new Date(Math.max(...startTimes) + 10000);
 
-    const existing = await prisma.watchEvent.findMany({
-        where: {
-            playedAt: { gte: minTime, lte: maxTime }
-        },
-        select: {
+    const existing = await db.query.watchEvents.findMany({
+        where: and(gte(watchEvents.playedAt, minTime), lte(watchEvents.playedAt, maxTime)),
+        columns: {
             id: true,
             embyUserId: true,
             itemId: true,
@@ -169,7 +170,7 @@ async function batchProcess(source: string, items: Array<Record<string, unknown>
         }
     });
 
-    const toCreate: Prisma.WatchEventCreateManyInput[] = [];
+    const toCreate: typeof watchEvents.$inferInsert[] = [];
     const toUpdate: Array<{ id: number; userName: string }> = [];
 
     // 3. Filter duplicates and identify updates
@@ -198,17 +199,18 @@ async function batchProcess(source: string, items: Array<Record<string, unknown>
         const chunkSize = 100;
         for (let i = 0; i < toCreate.length; i += chunkSize) {
             const batch = toCreate.slice(i, i + chunkSize);
-            await prisma.watchEvent.createMany({ data: batch });
+            for (const item of batch) {
+                await db.insert(watchEvents).values(item);
+            }
             createdCount += batch.length;
         }
     }
 
     // Updates are rare, sequential is fine
     for (const update of toUpdate) {
-        await prisma.watchEvent.update({
-            where: { id: update.id },
-            data: { userName: update.userName }
-        });
+        await db.update(watchEvents)
+            .set({ userName: update.userName })
+            .where(eq(watchEvents.id, update.id));
     }
 
     return createdCount;
@@ -389,16 +391,14 @@ export async function POST(req: NextRequest) {
         const body = await req.json().catch(() => ({}));
         const source = body.source || 'all';
 
-        const settings = await prisma.setting.findMany({
-            where: {
-                key: { in: ['plex_url', 'plex_token', 'emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key'] }
-            }
+        const settingsList = await db.query.settings.findMany({
+            where: inArray(settings.key, ['plex_url', 'plex_token', 'emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key'])
         });
-        const getSetting = (key: string) => settings.find(s => s.key === key)?.value;
+        const getSetting = (key: string) => settingsList.find(s => s.key === key)?.value;
 
         // Fetch local users to link
-        const localUsers = await prisma.user.findMany({
-            select: { id: true, plexUserId: true, embyUserId: true, jellyfinUserId: true }
+        const localUsers = await db.query.users.findMany({
+            columns: { id: true, plexUserId: true, embyUserId: true, jellyfinUserId: true }
         });
         
         // Map external IDs to local user ID
@@ -415,7 +415,7 @@ export async function POST(req: NextRequest) {
         // Run syncs (sequentially to avoid massive DB locking if run in parallel on SQLite)
         if (source === 'all' || source === 'plex') {
             try {
-                totalSynced += await syncPlex(settings, getSetting, localUserMap);
+                totalSynced += await syncPlex(settingsList, getSetting, localUserMap);
             } catch (e) {
                 if (source === 'plex') errors.push((e as Error).message);
                 error('[SyncPlugin] Plex error:', e);
@@ -424,7 +424,7 @@ export async function POST(req: NextRequest) {
 
         if (source === 'all' || source === 'emby') {
             try {
-                totalSynced += await syncEmbyLike('emby', settings, getSetting, localUserMap);
+                totalSynced += await syncEmbyLike('emby', settingsList, getSetting, localUserMap);
             } catch (e) {
                 if (source === 'emby') errors.push((e as Error).message);
                 error('[SyncPlugin] Emby error:', e);
@@ -433,7 +433,7 @@ export async function POST(req: NextRequest) {
 
         if (source === 'all' || source === 'jellyfin') {
             try {
-                totalSynced += await syncEmbyLike('jellyfin', settings, getSetting, localUserMap);
+                totalSynced += await syncEmbyLike('jellyfin', settingsList, getSetting, localUserMap);
             } catch (e) {
                 // Only error if explicitly requested or if it's the only source? 
                 // For 'all', we might ignore if not configured.
@@ -448,7 +448,7 @@ export async function POST(req: NextRequest) {
         }
 
         return NextResponse.json({ 
-            message: `Synchronisation terminée. ${totalSynced} nouveaux éléments importés.`, 
+            message: `Synchronisation terminÃ©e. ${totalSynced} nouveaux Ã©lÃ©ments importÃ©s.`, 
             syncedCount: totalSynced,
             errors: errors.length > 0 ? errors : undefined
         });

@@ -1,4 +1,7 @@
-import axios from 'axios'
+import { createAxiosClient } from '@/lib/http-client'
+import { cached } from '@/lib/cache-service'
+import { CACHE_TTL, TIMEOUT } from '@/lib/constants'
+import { logger } from '@/lib/logger'
 import { getSetting } from '../settings'
 
 export async function getSonarrService() {
@@ -123,8 +126,10 @@ export interface SonarrQueueItem {
   /** e.g. "downloading" | "importPending" | "importing" | "completed" | "failed" */
   trackedDownloadState?: string;
   title: string;
-  seriesId?: number; // Added seriesId
-  downloadId?: string; // Added downloadId (hash)
+  seriesId?: number;
+  episodeId?: number;
+  seasonNumber?: number;
+  downloadId?: string;
   series?: {
     id: number;
     title: string;
@@ -139,22 +144,21 @@ export interface SonarrQueueItem {
 }
 
 export class SonarrService {
-  private baseUrl: string
-  private apiKey: string
+  private client: ReturnType<typeof createAxiosClient>
 
   constructor(baseUrl: string, apiKey: string) {
-    this.baseUrl = baseUrl.replace(/\/$/, '')
-    this.apiKey = apiKey
+    const cleanUrl = baseUrl.replace(/\/$/, '')
+    this.client = createAxiosClient({
+      baseURL: `${cleanUrl}/api/v3`,
+      headers: { 'X-Api-Key': apiKey },
+      timeout: TIMEOUT.SONARR,
+      retries: 2,
+      serviceName: 'Sonarr',
+    })
   }
 
   private getClient() {
-    return axios.create({
-      baseURL: `${this.baseUrl}/api/v3`,
-      headers: {
-        'X-Api-Key': this.apiKey
-      },
-      timeout: 10000
-    })
+    return this.client
   }
 
   async sendCommand(name: string, params: Record<string, unknown> = {}) {
@@ -166,7 +170,7 @@ export class SonarrService {
       })
       return { success: true, data: response.data }
     } catch (e) {
-      console.error(`[Sonarr] Failed to send command ${name}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to send command ${name}:`, (e as Error).message)
       return { success: false, error: (e as Error).message }
     }
   }
@@ -179,35 +183,40 @@ export class SonarrService {
           pageSize: 1000,
           includeUnknownSeriesItems: true,
           includeSeries: true,
+          includeEpisode: true,
         }
       })
       return (response.data.records || response.data) as SonarrQueueItem[]
     } catch (e) {
-      console.error('[Sonarr] Failed to fetch queue:', (e as Error).message)
+      logger.error('[Sonarr] Failed to fetch queue:', (e as Error).message)
       return []
     }
   }
 
   async getProfiles() {
-    const client = this.getClient()
-    try {
-      const response = await client.get('/qualityprofile')
-      return response.data
-    } catch (e) {
-      console.error('[Sonarr] Failed to fetch profiles:', (e as Error).message)
-      return []
-    }
+    return cached('sonarr:profiles', async () => {
+      const client = this.getClient()
+      try {
+        const response = await client.get('/qualityprofile')
+        return response.data
+      } catch (e) {
+        logger.error('[Sonarr] Failed to fetch profiles:', (e as Error).message)
+        return []
+      }
+    }, { memoryTtl: CACHE_TTL.API_STATIC, tags: ['sonarr-static'] })
   }
 
   async getLanguageProfiles() {
-    const client = this.getClient()
-    try {
-      const response = await client.get('/languageprofile')
-      return response.data
-    } catch (e) {
-      console.error('[Sonarr] Failed to fetch language profiles:', (e as Error).message)
-      return []
-    }
+    return cached('sonarr:languageprofiles', async () => {
+      const client = this.getClient()
+      try {
+        const response = await client.get('/languageprofile')
+        return response.data
+      } catch (e) {
+        logger.error('[Sonarr] Failed to fetch language profiles:', (e as Error).message)
+        return []
+      }
+    }, { memoryTtl: CACHE_TTL.API_STATIC, tags: ['sonarr-static'] })
   }
 
   async getSeries() {
@@ -216,20 +225,22 @@ export class SonarrService {
       const response = await client.get('/series')
       return response.data as SonarrSeries[]
     } catch (e) {
-      console.error('[Sonarr] Failed to fetch series:', (e as Error).message)
+      logger.error('[Sonarr] Failed to fetch series:', (e as Error).message)
       return []
     }
   }
 
   async getRootFolders() {
-    const client = this.getClient()
-    try {
-      const response = await client.get('/rootfolder')
-      return response.data
-    } catch (e) {
-      console.error('[Sonarr] Failed to fetch root folders:', (e as Error).message)
-      return []
-    }
+    return cached('sonarr:rootfolders', async () => {
+      const client = this.getClient()
+      try {
+        const response = await client.get('/rootfolder')
+        return response.data
+      } catch (e) {
+        logger.error('[Sonarr] Failed to fetch root folders:', (e as Error).message)
+        return []
+      }
+    }, { memoryTtl: CACHE_TTL.API_STATIC, tags: ['sonarr-static'] })
   }
 
   async getSeriesByTvdbId(tvdbId: number): Promise<SonarrSeries | null> {
@@ -262,7 +273,7 @@ export class SonarrService {
             return fullResponse.data
           }
         } catch (e) {
-          console.error(`[Sonarr] Failed to fetch full series data for ${series.id}:`, (e as Error).message)
+          logger.error(`[Sonarr] Failed to fetch full series data for ${series.id}:`, (e as Error).message)
           // If 404, it means it's not actually in library despite ID? Unlikely, but safe to fallback or return null.
           // If the ID exists in lookup but not in /series/{id}, it might be a weird state.
           // But usually lookup returns id=0 or undefined if not in library.
@@ -276,7 +287,24 @@ export class SonarrService {
       return null
       
     } catch (e) {
-      console.error(`[Sonarr] Failed to lookup series ${tvdbId}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to lookup series ${tvdbId}:`, (e as Error).message)
+      return null
+    }
+  }
+
+  async lookupSeriesByTvdbId(tvdbId: number): Promise<SonarrSeries | null> {
+    const client = this.getClient()
+    if (!client) return null
+    try {
+      const response = await client.get('/series/lookup', {
+        params: { term: `tvdb:${tvdbId}` }
+      })
+      if (!response.data || response.data.length === 0) {
+        return null
+      }
+      return response.data[0] as SonarrSeries
+    } catch (e) {
+      logger.error(`[Sonarr] Failed to lookup series metadata ${tvdbId}:`, (e as Error).message)
       return null
     }
   }
@@ -289,7 +317,7 @@ export class SonarrService {
       })
       return response.data as SonarrEpisodeFile[]
     } catch (e) {
-      console.error(`[Sonarr] Failed to fetch episode files for series ${seriesId}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to fetch episode files for series ${seriesId}:`, (e as Error).message)
       return []
     }
   }
@@ -308,20 +336,24 @@ export class SonarrService {
     const client = this.getClient()
     try {
       const series = await this.getSeriesByTvdbId(options.tvdbid)
+      let lookupSeries: SonarrSeries | null = null
+
+      if (!series || !series.id) {
+        lookupSeries = await this.lookupSeriesByTvdbId(options.tvdbid)
+      }
 
       if (series && series.id) {
         let seasonsChanged = false;
-        const updatedSeasons = series.seasons.map((season: SonarrSeason) => {
-          if (options.seasons && options.seasons.includes(season.seasonNumber)) {
-            if (!season.monitored) {
-              seasonsChanged = true;
-              return { ...season, monitored: true };
-            }
+        const updatedSeasons = series.seasons.map((season: { seasonNumber: number; monitored: boolean }) => {
+          const shouldMonitor = options.seasons?.includes(season.seasonNumber) ?? false
+          if (season.monitored !== shouldMonitor) {
+            seasonsChanged = true;
+            return { ...season, monitored: shouldMonitor };
           }
           return season;
         });
 
-        // Check if already monitored
+        // Check if already monitored and no seasons changed
         if (series.monitored && !seasonsChanged) {
            return { success: true, message: 'Series already monitored', series }
         }
@@ -343,6 +375,7 @@ export class SonarrService {
       }
 
       // Add new series
+      const seasonList = lookupSeries?.seasons || [];
       const payload = {
         tvdbId: options.tvdbid,
         title: options.title,
@@ -353,7 +386,7 @@ export class SonarrService {
         rootFolderPath: options.rootFolderPath,
         tags: options.tags || [],
         seriesType: options.seriesType,
-        seasons: options.seasons ? this.buildSeasonList(options.seasons, series?.seasons || []) : [],
+        seasons: seasonList.length > 0 ? this.buildSeasonList(options.seasons || [], seasonList) : [],
         addOptions: {
           searchForMissingEpisodes: options.searchNow !== false
         }
@@ -363,11 +396,10 @@ export class SonarrService {
       return { success: true, series: response.data }
 
     } catch (e) {
-      const errResponse = (e as { response?: { data?: unknown } }).response
-      const errData = errResponse?.data
-      const errorMsg = (errData as { message?: string } | undefined)?.message || (e as Error).message
-      if (!Array.isArray(errData) || (errData as Array<Record<string, unknown>>)[0]?.errorCode !== 'SeriesExistsValidator') {
-         console.error(`[Sonarr] Failed to add series ${options.tvdbid}:`, JSON.stringify(errData || errorMsg))
+      const err = e as { response?: { data?: Array<{ errorCode?: string }> | { message?: string } }; message?: string }
+      const errorMsg = (err.response?.data as { message?: string })?.message || err.message
+      if (!Array.isArray(err.response?.data) || (err.response?.data as Array<{ errorCode?: string }>)[0]?.errorCode !== 'SeriesExistsValidator') {
+         logger.error(`[Sonarr] Failed to add series ${options.tvdbid}:`, JSON.stringify(err.response?.data || errorMsg))
       }
       return { success: false, message: errorMsg }
     }
@@ -383,7 +415,7 @@ export class SonarrService {
       })
       return { success: true }
     } catch (e) {
-      console.error(`[Sonarr] Failed to delete series ${seriesId}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to delete series ${seriesId}:`, (e as Error).message)
       return { success: false, error: (e as Error).message }
     }
   }
@@ -394,7 +426,7 @@ export class SonarrService {
       await client.delete(`/episodefile/${episodeFileId}`)
       return { success: true }
     } catch (e) {
-      console.error(`[Sonarr] Failed to delete episode file ${episodeFileId}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to delete episode file ${episodeFileId}:`, (e as Error).message)
       return { success: false, error: (e as Error).message }
     }
   }
@@ -425,7 +457,7 @@ export class SonarrService {
       await client.put(`/series/${seriesId}`, updateData)
       return { success: true }
     } catch (e) {
-      console.error(`[Sonarr] Failed to unmonitor season ${seasonNumber} for series ${seriesId}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to unmonitor season ${seasonNumber} for series ${seriesId}:`, (e as Error).message)
       return { success: false, error: (e as Error).message }
     }
   }
@@ -453,7 +485,7 @@ export class SonarrService {
       const response = await client.put(`/series/${series.id}`, series)
       return { success: true, series: response.data }
     } catch (e) {
-      console.error(`[Sonarr] Failed to monitor season ${seasonNumber} for ${tvdbId}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to monitor season ${seasonNumber} for ${tvdbId}:`, (e as Error).message)
       return { success: false, message: (e as Error).message }
     }
   }
@@ -485,7 +517,7 @@ export class SonarrService {
 
       // Now monitor the specific episode
       const episodes = await this.getEpisodes(series.id)
-      const episode = episodes.find((ep: Record<string, unknown>) => (ep as { seasonNumber?: number }).seasonNumber === seasonNumber && (ep as { episodeNumber?: number }).episodeNumber === episodeNumber)
+      const episode = episodes.find((ep: { seasonNumber?: number; episodeNumber?: number }) => ep.seasonNumber === seasonNumber && ep.episodeNumber === episodeNumber)
       
       if (!episode) {
         return { success: false, message: 'Episode not found in Sonarr' }
@@ -500,7 +532,7 @@ export class SonarrService {
 
       return { success: true }
     } catch (e) {
-      console.error(`[Sonarr] Failed to monitor episode S${seasonNumber}E${episodeNumber} for ${tvdbId}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to monitor episode S${seasonNumber}E${episodeNumber} for ${tvdbId}:`, (e as Error).message)
       return { success: false, message: (e as Error).message }
     }
   }
@@ -536,7 +568,7 @@ export class SonarrService {
       const response = await client.put(`/series/${series.id}`, series)
       return { success: true, series: response.data }
     } catch (e) {
-      console.error(`[Sonarr] Failed to unmonitor seasons for ${tvdbId}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to unmonitor seasons for ${tvdbId}:`, (e as Error).message)
       return { success: false, message: (e as Error).message }
     }
   }
@@ -549,7 +581,7 @@ export class SonarrService {
       })
       return response.data
     } catch (e) {
-      console.error(`[Sonarr] Failed to fetch episodes for series ${seriesId}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to fetch episodes for series ${seriesId}:`, (e as Error).message)
       return []
     }
   }
@@ -560,7 +592,7 @@ export class SonarrService {
       const response = await client.get('/release', { params: { episodeId } })
       return response.data
     } catch (e) {
-      console.error(`[Sonarr] Failed to fetch releases for episode ${episodeId}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to fetch releases for episode ${episodeId}:`, (e as Error).message)
       return []
     }
   }
@@ -571,7 +603,7 @@ export class SonarrService {
       const response = await client.get('/release', { params: { seriesId, seasonNumber } })
       return response.data
     } catch (e) {
-      console.error(`[Sonarr] Failed to fetch releases for series ${seriesId} season ${seasonNumber}:`, (e as Error).message)
+      logger.error(`[Sonarr] Failed to fetch releases for series ${seriesId} season ${seasonNumber}:`, (e as Error).message)
       return []
     }
   }
@@ -585,8 +617,9 @@ export class SonarrService {
       })
       return { success: true, data: response.data }
     } catch (e) {
-      const errorMsg = (e as { response?: { data?: { message?: string } } }).response?.data?.message || (e as Error).message
-      console.error(`[Sonarr] Failed to download release ${guid}:`, errorMsg)
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      const errorMsg = err.response?.data?.message || err.message
+      logger.error(`[Sonarr] Failed to download release ${guid}:`, errorMsg)
       return { success: false, message: errorMsg }
     }
   }
@@ -597,8 +630,9 @@ export class SonarrService {
       const response = await client.post('/release/push', release)
       return { success: true, data: response.data }
     } catch (e) {
-      const errorMsg = (e as { response?: { data?: { message?: string } } }).response?.data?.message || (e as Error).message
-      console.error(`[Sonarr] Failed to push release:`, errorMsg)
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      const errorMsg = err.response?.data?.message || err.message
+      logger.error(`[Sonarr] Failed to push release:`, errorMsg)
       return { success: false, message: errorMsg }
     }
   }
@@ -616,9 +650,9 @@ export class SonarrService {
           includeSeries: true
         }
       })
-      return response.data as Record<string, unknown>[] // Sonarr calendar returns episodes with series info
+      return response.data as unknown[] // Sonarr calendar returns episodes with series info
     } catch (e) {
-      console.error('[Sonarr] Failed to fetch calendar:', (e as Error).message)
+      logger.error('[Sonarr] Failed to fetch calendar:', (e as Error).message)
       return []
     }
   }

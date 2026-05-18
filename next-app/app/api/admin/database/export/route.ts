@@ -1,8 +1,11 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, settings, notifications, watchLater, accounts, sessions, mediaRequests, watchEvents, auditLogs, userGroups, userGroupMembers } from '@/lib/db/schema'
 import { encryptData } from '@/lib/crypto'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   try {
@@ -22,21 +25,21 @@ export async function POST(request: Request) {
     // Fetch all data
     // Note: For explicit relations (Group<->Member), we can fetch the join table directly.
     const [
-      users,
-      settings,
-      notifications,
-      watchLater,
-      accounts,
-      sessions,
-      mediaRequests,
-      watchEvents,
-      auditLogs,
-      userGroups,
-      userGroupMembers
+      usersData,
+      settingsData,
+      notificationsData,
+      watchLaterData,
+      accountsData,
+      sessionsData,
+      mediaRequestsData,
+      watchEventsData,
+      auditLogsData,
+      userGroupsData,
+      userGroupMembersData
     ] = await Promise.all([
-      prisma.user.findMany(),
-      prisma.setting.findMany({
-        select: {
+      db.query.users.findMany(),
+      db.query.settings.findMany({
+        columns: {
           id: true,
           key: true,
           value: true,
@@ -45,15 +48,15 @@ export async function POST(request: Request) {
           updatedAt: true
         }
       }),
-      prisma.notification.findMany(),
-      prisma.watchLater.findMany(),
-      prisma.account.findMany(),
-      prisma.session.findMany(),
-      prisma.mediaRequest.findMany(),
-      prisma.watchEvent.findMany(),
-      prisma.auditLog.findMany(),
-      prisma.userGroup.findMany(),
-      prisma.userGroupMember.findMany(),
+      db.query.notifications.findMany(),
+      db.query.watchLater.findMany(),
+      db.query.accounts.findMany(),
+      db.query.sessions.findMany(),
+      db.query.mediaRequests.findMany(),
+      db.query.watchEvents.findMany(),
+      db.query.auditLogs.findMany(),
+      db.query.userGroups.findMany(),
+      db.query.userGroupMembers.findMany(),
     ])
 
     const dbDump = {
@@ -61,17 +64,17 @@ export async function POST(request: Request) {
       type: 'full_database',
       exportedAt: new Date().toISOString(),
       data: {
-        users,
-        settings,
-        notifications,
-        watchLater,
-        accounts,
-        sessions,
-        mediaRequests,
-        watchEvents,
-        auditLogs,
-        userGroups,
-        userGroupMembers
+        users: usersData,
+        settings: settingsData,
+        notifications: notificationsData,
+        watchLater: watchLaterData,
+        accounts: accountsData,
+        sessions: sessionsData,
+        mediaRequests: mediaRequestsData,
+        watchEvents: watchEventsData,
+        auditLogs: auditLogsData,
+        userGroups: userGroupsData,
+        userGroupMembers: userGroupMembersData
       }
     }
 

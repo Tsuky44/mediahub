@@ -1,6 +1,7 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth'
 import { ConfigStore } from '@/lib/notifications-v2'
 import type { NotificationsV2Config, NotificationEvent } from '@/lib/notifications-v2'
@@ -32,16 +33,70 @@ export async function saveNotificationsV2Config(cfg: NotificationsV2Config) {
 
 export async function getUsersForNotifications() {
   await assertAdmin()
-  const users = await prisma.user.findMany({
-    select: { id: true, name: true, email: true, whatsappNumber: true },
-    orderBy: { name: 'asc' },
+  const usersList = await db.query.users.findMany({
+    columns: { id: true, name: true, email: true, whatsappNumber: true },
+    orderBy: (users, { asc }) => [asc(users.name)],
   })
-  return users.map(u => ({
+  return usersList.map(u => ({
     id: u.id,
     name: u.name ?? '',
     email: u.email ?? '',
     hasWhatsapp: !!(u.whatsappNumber && u.whatsappNumber.trim()),
   }))
+}
+
+export async function pingEvolutionApi(
+  apiUrl: string,
+  apiKey: string,
+  instance: string
+): Promise<{ success: boolean; message: string; latencyMs?: number }> {
+  await assertAdmin()
+
+  if (!apiUrl || !apiKey || !instance) {
+    return { success: false, message: '⚠️ Remplis tous les champs (URL, API Key, Instance) avant de tester.' }
+  }
+
+  const url = apiUrl.replace(/\/$/, '')
+  const start = Date.now()
+
+  try {
+    const res = await fetch(`${url}/instance/connectionState/${encodeURIComponent(instance)}`, {
+      method: 'GET',
+      headers: { apikey: apiKey, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(8_000),
+    })
+
+    const latencyMs = Date.now() - start
+
+    if (res.status === 401 || res.status === 403) {
+      return { success: false, message: `❌ API Key invalide (HTTP ${res.status})`, latencyMs }
+    }
+    if (res.status === 404) {
+      return { success: false, message: `❌ Instance "${instance}" introuvable (HTTP 404)`, latencyMs }
+    }
+    if (!res.ok) {
+      return { success: false, message: `❌ Erreur HTTP ${res.status}`, latencyMs }
+    }
+
+    const data = await res.json().catch(() => ({}))
+    const state: string = data?.instance?.state ?? data?.state ?? 'unknown'
+
+    if (state === 'open') {
+      return { success: true, message: `✅ Connecté — instance "${instance}" en ligne (${latencyMs}ms)`, latencyMs }
+    }
+    return {
+      success: false,
+      message: `⚠️ Connexion API OK mais instance "${instance}" déconnectée (état: ${state}) — ${latencyMs}ms`,
+      latencyMs,
+    }
+  } catch (err: unknown) {
+    const latencyMs = Date.now() - start
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('abort') || msg.includes('timeout')) {
+      return { success: false, message: `❌ Timeout (${latencyMs}ms) — l'URL est-elle accessible depuis ce serveur ?`, latencyMs }
+    }
+    return { success: false, message: `❌ ${msg}`, latencyMs }
+  }
 }
 
 export async function testNotificationsV2() {

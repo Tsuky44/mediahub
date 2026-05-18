@@ -1,223 +1,356 @@
+﻿﻿/**
+ * Sonarr Webhook â€” Notifications V2
+ * ReÃ§oit tous les events de Sonarr et les dispatche via le systÃ¨me V2 (DB + Outbox)
+ * Events supportÃ©s : Grab, Download, Import, Rename, SeriesDelete, EpisodeDelete, Health
+ *
+ * SimplifiÃ© V3: Plus de batch logic, dispatch direct par saison pour les packs complets.
+ * Import gÃ©rÃ© sÃ©parÃ©ment pour dÃ©tecter saison complÃ¨te vs partielle.
+ */
+
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { NotificationService } from '@/lib/services/notification-service';
-import { getTmdbService } from '@/lib/services/tmdb';
+import { db } from '@/lib/db/drizzle';
+import { mediaRequests } from '@/lib/db/schema';
+import { eq, and } from 'drizzle-orm';
+import { dispatch } from '@/lib/notifications-v2/dispatcher';
+import { logger } from '@/lib/logger';
+import { NOTIFICATION_EVENTS, type NotificationEvent } from '@/lib/notifications-v2/types';
+import { getSonarrService } from '@/lib/services/sonarr';
+
+export const dynamic = 'force-dynamic'
+
+// Mapping des events Sonarr vers events V2
+// IMPORTANT: Dans Sonarr, l'event 'Download' = OnImport (fichier importÃ© dans la bibliothÃ¨que)
+// Il est gÃ©rÃ© sÃ©parÃ©ment via handleImportEvent pour dÃ©tecter saison complÃ¨te vs partielle.
+// MEDIA_DOWNLOADING / MEDIA_DOWNLOAD_COMPLETE / MEDIA_IMPORTING sont fournis par le QueuePoller.
+const EVENT_MAP: Record<string, NotificationEvent> = {
+  'Grab': NOTIFICATION_EVENTS.MEDIA_GRABBED,
+  'SeriesDelete': NOTIFICATION_EVENTS.MEDIA_FAILED,
+  'EpisodeDelete': NOTIFICATION_EVENTS.MEDIA_FAILED,
+  // Download (= Import), Rename et Health gÃ©rÃ©s ailleurs
+};
+
+// Helper pour grouper les Ã©pisodes par saison
+function groupEpisodesBySeason(episodes: Array<{ seasonNumber?: number; episodeNumber?: number }>) {
+  const grouped: Record<number, number[]> = {};
+  for (const ep of episodes) {
+    if (ep.seasonNumber != null && ep.episodeNumber != null) {
+      if (!grouped[ep.seasonNumber]) {
+        grouped[ep.seasonNumber] = [];
+      }
+      grouped[ep.seasonNumber].push(ep.episodeNumber);
+    }
+  }
+  return grouped;
+}
+
+// Helper pour gÃ©rer les events Import/Upgrade
+async function handleImportEvent(body: any) {
+  const { series, episodes } = body;
+  // IDs des Ã©pisodes prÃ©sents dans ce webhook (ceux qu'on vient d'importer)
+  const webhookEpisodeIds = new Set<number>(
+    Array.isArray(episodes)
+      ? episodes.map((e: { id?: number }) => e?.id).filter((id): id is number => typeof id === 'number')
+      : []
+  );
+
+  if (!series?.tvdbId) {
+    logger.warn(`[SonarrWebhook V2] Import event missing TVDB ID`);
+    return NextResponse.json({ success: true });
+  }
+
+  // Convertir TVDB ID en TMDB ID
+  const { getTmdbService } = await import('@/lib/services/tmdb');
+  const tmdbService = await getTmdbService();
+  let tmdbId: string | null = null;
+
+  if (tmdbService) {
+    const result = await tmdbService.findByExternalId(series.tvdbId, 'tvdb_id');
+    if (result?.tv_results?.length > 0) {
+      tmdbId = String(result.tv_results[0].id);
+    }
+  }
+
+  if (!tmdbId) {
+    logger.warn(`[SonarrWebhook V2] Import event could not find TMDB ID`);
+    return NextResponse.json({ success: true });
+  }
+
+  const title = series.title || 'SÃ©rie inconnue';
+  const episodeList: Array<{ seasonNumber?: number; episodeNumber?: number }> = episodes || [];
+
+  if (episodeList.length === 0) {
+    return NextResponse.json({ success: true });
+  }
+
+  // RÃ©cupÃ©rer le requester
+  const requests = await db.query.mediaRequests.findMany({
+    where: and(eq(mediaRequests.tmdbId, tmdbId), eq(mediaRequests.mediaType, 'tv')),
+    with: { user: true },
+    limit: 1,
+  });
+
+  const requester = requests[0]?.user ? {
+    id: requests[0].user.id,
+    name: requests[0].user.name || undefined,
+    email: requests[0].user.email || undefined,
+    whatsappNumber: (requests[0].user as Record<string, unknown>).whatsappNumber as string | undefined,
+  } : undefined;
+
+  // RÃ©cupÃ©rer les infos mÃ©dia
+  let posterPath: string | undefined;
+  let overview: string | undefined;
+  try {
+    if (tmdbService) {
+      const mediaInfo = await tmdbService.getDetails(parseInt(tmdbId), 'tv');
+      if (mediaInfo) {
+        posterPath = mediaInfo.poster_path || undefined;
+        overview = mediaInfo.overview || undefined;
+      }
+    }
+  } catch (e) {
+    logger.warn(`[SonarrWebhook V2] Failed to fetch TMDB info:`, e);
+  }
+
+  // Grouper les Ã©pisodes par saison
+  const groupedEpisodes = groupEpisodesBySeason(episodeList);
+
+  // RÃ©cupÃ©rer les stats de la sÃ©rie + la queue Sonarr une seule fois
+  let sonarrSeries: {
+    id?: number;
+    seasons?: Array<{ seasonNumber: number; statistics?: { episodeCount: number; episodeFileCount: number } }>
+  } | null = null;
+  let sonarrQueue: Awaited<ReturnType<NonNullable<Awaited<ReturnType<typeof getSonarrService>>>['getQueue']>> = [];
+  try {
+    const sonarr = await getSonarrService();
+    if (sonarr) {
+      [sonarrSeries, sonarrQueue] = await Promise.all([
+        sonarr.getSeriesByTvdbId(series.tvdbId),
+        sonarr.getQueue().catch(() => []),
+      ]);
+    }
+  } catch (e) {
+    logger.warn(`[SonarrWebhook V2] Failed to fetch series stats / queue:`, e);
+  }
+
+  const seriesIdSonarr = sonarrSeries?.id;
+
+  // Calculer quelles saisons sont encore en queue (hors Ã©pisodes du webhook courant)
+  const pendingQueueSeasons = new Set<number>();
+  for (const q of sonarrQueue) {
+    const qSeriesId = q.seriesId ?? q.series?.id;
+    if (seriesIdSonarr != null && qSeriesId !== seriesIdSonarr) continue;
+    if (seriesIdSonarr == null && q.series?.tvdbId !== series.tvdbId) continue;
+
+    const qSeasonNum = q.episode?.seasonNumber ?? q.seasonNumber;
+    if (qSeasonNum == null) continue;
+
+    const qEpisodeId = q.episodeId ?? q.episode?.id;
+    if (qEpisodeId != null && webhookEpisodeIds.has(qEpisodeId)) continue;
+
+    const tState = (q.trackedDownloadState || '').toLowerCase();
+    if (tState === 'completed' || tState === 'imported' || tState === 'failed') continue;
+
+    pendingQueueSeasons.add(qSeasonNum);
+  }
+
+  // Tenter le dispatch groupÃ© (multi-saisons) — le helper consulte Sonarr lui-même
+  // pour connaître l'état de TOUTES les saisons demandées.
+  const { tryDispatchGroupedAvailability } = await import('@/lib/notifications-v2/utils/grouped-availability');
+  const grouped = await tryDispatchGroupedAvailability({
+    tmdbId,
+    tvdbId: series.tvdbId,
+    title,
+    overview,
+    posterPath,
+    requester,
+    pendingInQueueSeasons: [...pendingQueueSeasons],
+  });
+
+  // Si le helper a gÃ©rÃ© toutes les saisons en mode groupÃ©, on s'arrÃªte
+  if (grouped.dispatched) {
+    return NextResponse.json({ success: true });
+  }
+
+  // Fallback mono-saison : dispatcher individuellement pour chaque saison
+  // (demandes sans seasons[] groupées, ou demande d'une saison unique)
+  for (const [seasonNumber, episodeNumbers] of Object.entries(groupedEpisodes)) {
+    const seasonNum = parseInt(seasonNumber);
+    const importedCount = episodeNumbers.length;
+
+    if (pendingQueueSeasons.has(seasonNum)) {
+      logger.info(`[SonarrWebhook V2] Season ${seasonNum}: still in Sonarr queue â†' skipping`);
+      continue;
+    }
+
+    const seasonStats = sonarrSeries?.seasons?.find((s) => s.seasonNumber === seasonNum)?.statistics;
+    const totalEpisodes = seasonStats?.episodeCount ?? 0;
+    const fileCount = seasonStats?.episodeFileCount ?? 0;
+
+    const isComplete = (totalEpisodes > 0 && fileCount >= totalEpisodes)
+      || (totalEpisodes > 0 && importedCount >= totalEpisodes);
+
+    if (isComplete) {
+      logger.info(`[SonarrWebhook V2] Season ${seasonNum} complete (queue empty) â†' MEDIA_AVAILABLE`);
+      await dispatch(NOTIFICATION_EVENTS.MEDIA_AVAILABLE, {
+        media: { tmdbId, mediaType: 'tv', title: `${title} â€" Saison ${seasonNum}`, overview, posterPath, seasonNumber: seasonNum },
+        requester,
+      });
+    } else {
+      logger.info(`[SonarrWebhook V2] Season ${seasonNum} partial (${fileCount}/${totalEpisodes}) â†' SEASON_PARTIALLY_AVAILABLE`);
+      await dispatch(NOTIFICATION_EVENTS.SEASON_PARTIALLY_AVAILABLE, {
+        media: { tmdbId, mediaType: 'tv', title: `${title} â€" Saison ${seasonNum} (partielle)`, overview, posterPath, seasonNumber: seasonNum },
+        requester,
+      });
+    }
+  }
+
+  return NextResponse.json({ success: true });
+}
 
 export async function POST(req: Request) {
-    try {
-        const body = await req.json();
-        const { eventType, series, episodes } = body;
+  try {
+    const body = await req.json();
+    const { eventType, series, episodes } = body;
 
-        console.log(`[SonarrWebhook] Received event: ${eventType}`);
-        if (series) {
-            console.log(`[SonarrWebhook] Series data: Title="${series.title}", TVDB="${series.tvdbId}"`);
-        } else {
-            console.warn('[SonarrWebhook] No series object in payload');
-        }
+    logger.info(`[SonarrWebhook V2] Received event: ${eventType}`);
 
-        if (eventType === 'Grab' || eventType === 'SeriesDelete' || eventType === 'EpisodeDelete') {
-            const tvdbId = series?.tvdbId;
-            if (!tvdbId) {
-                 console.warn('[SonarrWebhook] No TVDB ID found in payload');
-                 return NextResponse.json({ success: true });
-            }
-
-            // Convert TVDB ID to TMDB ID
-            const tmdbService = await getTmdbService();
-            let tmdbId: string | null = null;
-            
-            if (tmdbService) {
-                // Try to find by external ID
-                const result = await tmdbService.findByExternalId(tvdbId, 'tvdb_id');
-                if (result?.tv_results?.length > 0) {
-                    tmdbId = String(result.tv_results[0].id);
-                }
-            }
-
-            if (!tmdbId) {
-                console.warn(`[SonarrWebhook] Could not find TMDB ID for TVDB ID ${tvdbId}`);
-                return NextResponse.json({ success: true }); 
-            }
-
-            console.log(`[SonarrWebhook] Processing availability for TMDB ID: ${tmdbId} (Type: ${typeof tmdbId})`);
-
-            const title = series.title;
-            // Handle multiple episodes if present
-            const episodeList = episodes || [];
-            const episodeText = episodeList.length > 0 
-                ? episodeList.map((ep: Record<string, unknown>) => `S${ep.seasonNumber as number}E${ep.episodeNumber as number}`).join(', ')
-                : 'Nouveaux épisodes';
-
-            // 1. Find requesters
-            const requests = await prisma.mediaRequest.findMany({
-                where: {
-                    tmdbId: tmdbId,
-                    mediaType: 'tv',
-                },
-                include: { user: true }
-            });
-            console.log(`[SonarrWebhook] Found ${requests.length} requests for TMDB ${tmdbId}`);
-
-            // 2. Find subscribers
-            const subscriptions = await prisma.mediaSubscription.findMany({
-                where: {
-                    tmdbId: tmdbId,
-                    mediaType: 'tv'
-                },
-                include: { user: true }
-            });
-            console.log(`[SonarrWebhook] Found ${subscriptions.length} subscriptions for TMDB ${tmdbId}`);
-
-            if (requests.length === 0 && subscriptions.length === 0) {
-                console.warn(`[SonarrWebhook] No active requests or subscriptions found for TMDB ID: ${tmdbId}`);
-            }
-
-            // 3. Merge users
-            const usersToNotify = new Map<number, { id: number, name: string, email: string, discordUserId?: string | null }>();
-            
-            requests.forEach(req => {
-                if (req.user) {
-                    usersToNotify.set(req.user.id, {
-                        id: req.user.id,
-                        name: req.user.name || '',
-                        email: req.user.email || '',
-                        discordUserId: req.user.discordUserId
-                    });
-                    console.log(`[SonarrWebhook] Adding requester: ${req.user.name} (${req.user.id})`);
-                }
-            });
-            
-            subscriptions.forEach(sub => {
-                usersToNotify.set(sub.user.id, {
-                    id: sub.user.id,
-                    name: sub.user.name || '',
-                    email: sub.user.email || '',
-                    discordUserId: sub.user.discordUserId
-                });
-                console.log(`[SonarrWebhook] Adding subscriber: ${sub.user.name} (${sub.user.id})`);
-            });
-
-            if (usersToNotify.size === 0) {
-                console.log('[SonarrWebhook] No users to notify');
-            } else {
-                console.log(`[SonarrWebhook] Sending notifications to ${usersToNotify.size} users`);
-            }
-
-            let posterPath = undefined
-            let overview = ''
-            let rating = ''
-            let genres = ''
-            let quality = body.episodeFile?.quality || body.release?.quality || 'Inconnu'
-            let size = body.episodeFile?.size ? (body.episodeFile.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB' : (body.release?.size ? (body.release.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB' : 'Inconnu')
-            let release = body.episodeFile?.releaseGroup || body.release?.releaseTitle || 'Inconnu'
-            let indexer = body.episodeFile?.indexerFlags || body.release?.indexer || 'Inconnu'
-
-            try {
-                if (tmdbId && tmdbService) {
-                    const mediaInfo = await tmdbService.getDetails(parseInt(tmdbId), 'tv')
-                    if (mediaInfo) {
-                        posterPath = mediaInfo.poster_path
-                        overview = mediaInfo.overview
-                        rating = mediaInfo.vote_average?.toFixed(1)
-                        if (mediaInfo.genres) {
-                            genres = mediaInfo.genres.map((g: Record<string, unknown>) => g.name as string).join(', ')
-                        }
-                    }
-                }
-            } catch (e) {}
-
-            // Map Sonarr events to MediaHub events
-            let mhEvent = 'media_grabbed';
-            let titlePrefix = 'Épisode en cours de téléchargement';
-            let userTitlePrefix = 'Ton épisode est en cours de téléchargement';
-            let messageText = `Un épisode de "${title}" a été trouvé et est en cours de téléchargement : ${episodeText}`;
-            let userMessageText = `Un épisode de "${title}" que tu as demandé a été trouvé et est en cours de téléchargement : ${episodeText}`;
-
-            // Store hash→tmdbId mapping at Grab time for download completion detection
-            if (eventType === 'Grab' && body.downloadId && tmdbId) {
-                try {
-                    const mapSetting = await prisma.setting.findFirst({ where: { key: 'download_hash_map' } })
-                    const hashMap: Record<string, any> = mapSetting ? JSON.parse(mapSetting.value || '{}') : {}
-                    hashMap[body.downloadId.toLowerCase()] = { tmdbId, mediaType: 'tv', title }
-                    const trimmedKeys = Object.keys(hashMap).slice(-200)
-                    const trimmedMap = Object.fromEntries(trimmedKeys.map(k => [k, hashMap[k]]))
-                    await prisma.setting.upsert({
-                        where: { key: 'download_hash_map' },
-                        update: { value: JSON.stringify(trimmedMap) },
-                        create: { key: 'download_hash_map', value: JSON.stringify(trimmedMap) }
-                    })
-                    console.log(`[SonarrWebhook] Stored hash mapping: ${body.downloadId} → TMDB ${tmdbId}`)
-                } catch (e) {
-                    console.error('[SonarrWebhook] Failed to store hash mapping:', e)
-                }
-            }
-
-            if (eventType === 'SeriesDelete' || eventType === 'EpisodeDelete') {
-                mhEvent = 'media_deleted';
-                titlePrefix = eventType === 'SeriesDelete' ? 'Série supprimée' : 'Épisode supprimé';
-                userTitlePrefix = titlePrefix;
-                messageText = eventType === 'SeriesDelete' 
-                    ? `La série "${title}" a été supprimée du serveur.`
-                    : `L'épisode de "${title}" a été supprimé du serveur : ${episodeText}`;
-                userMessageText = messageText;
-            }
-
-            // 4. Send internal notifications (only for availability)
-            if (mhEvent === 'media_available') {
-                const notifyPromises = Array.from(usersToNotify.values()).map(async (user) => {
-                    await NotificationService.notifyUser(
-                        user.id,
-                        'Épisode disponible',
-                        `Nouvel épisode de "${title}" disponible : ${episodeText}`,
-                        'media_available',
-                        {
-                            mediaId: tmdbId!,
-                            mediaType: 'tv',
-                            posterPath: posterPath,
-                            link: `/dashboard/media/${tmdbId}?type=tv`
-                        }
-                    );
-                });
-                await Promise.all(notifyPromises);
-            }
-
-            // Collect requesters for global notification
-            const requestersList = Array.from(usersToNotify.values())
-                .map(u => u.discordUserId ? `<@${u.discordUserId}>` : (u.name || u.email))
-                .join(', ')
-
-            // Send global notifications for all events, passing the requester ID if there's exactly one
-            const requesterId = usersToNotify.size === 1 ? Array.from(usersToNotify.values())[0].id : undefined;
-
-            try {
-                const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-                await ExternalNotificationService.send(mhEvent, {
-                    title: titlePrefix,
-                    message: messageText,
-                    data: {
-                        tmdbId,
-                        mediaType: 'tv',
-                        title,
-                        episodes: episodeText,
-                        overview,
-                        rating,
-                        posterPath,
-                        genres,
-                        quality,
-                        size,
-                        release,
-                        indexer,
-                        user: requestersList || undefined
-                    }
-                }, requesterId)
-            } catch (extError) {
-                console.error('[SonarrWebhook] Failed to send external notification:', extError)
-            }
-        }
-
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error('[SonarrWebhook] Error:', (error as Error).message);
-        return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    // Sonarr 'Download' = OnImport (fichier importÃ©) â†’ routage spÃ©cial pour dÃ©tecter
+    // saison complÃ¨te vs partielle
+    if (eventType === 'Download' || eventType === 'Import' || eventType === 'Upgrade') {
+      return await handleImportEvent(body);
     }
+
+    // Ignorer les events non mappÃ©s
+    const v2Event = EVENT_MAP[eventType];
+    if (!v2Event) {
+      logger.info(`[SonarrWebhook V2] Event ${eventType} ignored (not mapped)`);
+      return NextResponse.json({ success: true });
+    }
+
+    // VÃ©rifier les donnÃ©es minimales
+    if (!series?.tvdbId) {
+      logger.warn(`[SonarrWebhook V2] Missing TVDB ID for event ${eventType}`);
+      return NextResponse.json({ success: true });
+    }
+
+    // Convertir TVDB ID en TMDB ID
+    const { getTmdbService } = await import('@/lib/services/tmdb');
+    const tmdbService = await getTmdbService();
+    let tmdbId: string | null = null;
+
+    if (tmdbService) {
+      const result = await tmdbService.findByExternalId(series.tvdbId, 'tvdb_id');
+      if (result?.tv_results?.length > 0) {
+        tmdbId = String(result.tv_results[0].id);
+      }
+    }
+
+    if (!tmdbId) {
+      logger.warn(`[SonarrWebhook V2] Could not find TMDB ID for TVDB ID ${series.tvdbId}`);
+      return NextResponse.json({ success: true });
+    }
+
+    const title = series.title || 'SÃ©rie inconnue';
+    const episodeList: Array<{ seasonNumber?: number; episodeNumber?: number }> = episodes || [];
+
+    logger.info(`[SonarrWebhook V2] Processing ${eventType} â†’ ${v2Event} for TMDB ${tmdbId}`);
+
+    // RÃ©cupÃ©rer le requester
+    const requests = await db.query.mediaRequests.findMany({
+      where: and(
+        eq(mediaRequests.tmdbId, tmdbId),
+        eq(mediaRequests.mediaType, 'tv')
+      ),
+      with: { user: true },
+      limit: 1
+    });
+
+    const requester = requests[0]?.user ? {
+      id: requests[0].user.id,
+      name: requests[0].user.name || undefined,
+      email: requests[0].user.email || undefined,
+      whatsappNumber: (requests[0].user as Record<string, unknown>).whatsappNumber as string | undefined,
+    } : undefined;
+
+    // RÃ©cupÃ©rer les infos mÃ©dia
+    let posterPath: string | undefined;
+    let overview: string | undefined;
+    try {
+      if (tmdbService) {
+        const mediaInfo = await tmdbService.getDetails(parseInt(tmdbId), 'tv');
+        if (mediaInfo) {
+          posterPath = mediaInfo.poster_path || undefined;
+          overview = mediaInfo.overview || undefined;
+        }
+      }
+    } catch (e) {
+      logger.warn(`[SonarrWebhook V2] Failed to fetch TMDB info:`, e);
+    }
+
+    let dispatchResult: Awaited<ReturnType<typeof dispatch>>;
+
+    // Pack detection logic for Grab events
+    // On utilise le SeasonGrabBatcher pour regrouper les saisons d'une mÃªme sÃ©rie
+    // mÃªme si elles arrivent dans des webhooks sÃ©parÃ©s (packs diffÃ©rents).
+    if (eventType === 'Grab' && episodeList.length > 0) {
+      const groupedEpisodes = groupEpisodesBySeason(episodeList);
+      const seasonNumbers = Object.keys(groupedEpisodes).map(Number).sort((a, b) => a - b);
+      const download = {
+        quality: body.release?.quality || undefined,
+        size: body.release?.size ? String(body.release.size) : undefined,
+        releaseName: body.release?.releaseTitle || undefined,
+      };
+
+      const { grabBatcher } = await import('@/lib/notifications-v2/utils/grab-batcher');
+      for (const seasonNum of seasonNumbers) {
+        grabBatcher.add(String(tmdbId), seasonNum, {
+          tmdbId: String(tmdbId),
+          title,
+          overview,
+          posterPath,
+          requester,
+          download,
+        });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    // Events Download, Delete â†’ comportement standard avec saison si dispo
+    const download = (eventType === 'Grab' || eventType === 'Download') ? {
+      quality: body.release?.quality?.name || body.release?.quality || undefined,
+      size: body.release?.size ? `${(body.release.size / 1_073_741_824).toFixed(2)} GB` : undefined,
+      releaseName: body.release?.releaseTitle || undefined,
+    } : undefined;
+
+    // Extraire le numÃ©ro de saison depuis le premier Ã©pisode si dispo
+    const firstEpisode = episodeList[0];
+    const seasonNumber = firstEpisode?.seasonNumber;
+
+    dispatchResult = await dispatch(v2Event, {
+      correlationId: `sonarr-${eventType.toLowerCase()}-${tmdbId}-${seasonNumber ?? 'ns'}-${Date.now()}`,
+      media: {
+        tmdbId,
+        mediaType: 'tv',
+        title: seasonNumber !== undefined ? `${title} â€” Saison ${seasonNumber}` : title,
+        overview,
+        posterPath,
+        seasonNumber,
+      },
+      requester,
+      download,
+    });
+
+    if (dispatchResult.wasDuplicate) {
+      logger.info(`[SonarrWebhook V2] Duplicate event skipped for TMDB ${tmdbId}`);
+    } else if (dispatchResult.success) {
+      logger.info(`[SonarrWebhook V2] Dispatched to ${dispatchResult.recipients.length} recipient(s)`);
+    } else {
+      logger.error(`[SonarrWebhook V2] Failed to dispatch: ${dispatchResult.error}`);
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    logger.error('[SonarrWebhook V2] Error:', (error as Error).message);
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+  }
 }

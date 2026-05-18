@@ -1,11 +1,15 @@
-
+﻿﻿
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, accountRequests } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 // Schema validation for the request
 const requestSchema = z.object({
-  firstName: z.string().min(2, 'Le prénom doit contenir au moins 2 caractères'),
+  firstName: z.string().min(2, 'Le prÃ©nom doit contenir au moins 2 caractÃ¨res'),
   email: z.string().email('Email invalide'),
   inviter: z.string().optional()
 })
@@ -26,26 +30,22 @@ export async function POST(req: NextRequest) {
     const { firstName, email, inviter } = validation.data
 
     // Check if user already exists in MediaHub (User table)
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    })
+    const [existingUser] = await db.select().from(users).where(eq(users.email, email)).limit(1)
 
     if (existingUser) {
       return NextResponse.json(
-        { error: 'Un compte existe déjà avec cette adresse email' },
+        { error: 'Un compte existe dÃ©jÃ  avec cette adresse email' },
         { status: 409 }
       )
     }
 
     // Check if a request already exists
-    const existingRequest = await prisma.accountRequest.findUnique({
-      where: { email }
-    })
+    const [existingRequest] = await db.select().from(accountRequests).where(eq(accountRequests.email, email)).limit(1)
 
     if (existingRequest) {
         if (existingRequest.status === 'PENDING') {
             return NextResponse.json(
-                { error: 'Une demande est déjà en cours pour cet email' },
+                { error: 'Une demande est dÃ©jÃ  en cours pour cet email' },
                 { status: 409 }
             )
         }
@@ -54,20 +54,18 @@ export async function POST(req: NextRequest) {
         // or update it to PENDING if it was REJECTED? 
         // Let's assume unique email for requests for simplicity.
         return NextResponse.json(
-            { error: 'Une demande existe déjà pour cet email' },
+            { error: 'Une demande existe dÃ©jÃ  pour cet email' },
             { status: 409 }
         )
     }
 
     // Create the request
-    const newRequest = await prisma.accountRequest.create({
-      data: {
-        firstName,
-        email,
-        inviter,
-        status: 'PENDING'
-      }
-    })
+    const [newRequest] = await db.insert(accountRequests).values({
+      firstName,
+      email,
+      inviter: inviter || null,
+      status: 'PENDING'
+    }).returning()
 
     try {
         const { logAction } = await import('@/lib/audit')
@@ -76,7 +74,7 @@ export async function POST(req: NextRequest) {
         const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
         await ExternalNotificationService.send('account_request', {
             title: 'Nouvelle demande de compte',
-            message: `${firstName} (${email}) a demandé un accès à MediaHub.${inviter ? `\nInvité par : ${inviter}` : ''}`,
+            message: `${firstName} (${email}) a demandÃ© un accÃ¨s Ã  MediaHub.${inviter ? `\nInvitÃ© par : ${inviter}` : ''}`,
             data: { email, firstName, inviter }
         })
     } catch (e) {
@@ -102,10 +100,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Email required' }, { status: 400 })
     }
 
-    const request = await prisma.accountRequest.findUnique({
-        where: { email },
-        select: { status: true }
-    })
+    const [request] = await db.select({ status: accountRequests.status }).from(accountRequests).where(eq(accountRequests.email, email)).limit(1)
 
     return NextResponse.json({ 
         exists: !!request,

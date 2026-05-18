@@ -1,11 +1,15 @@
-
+﻿﻿
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { UnraidService } from '@/lib/services/unraid'
 import { DockerService } from '@/lib/services/docker'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { settings } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 import { defineAbilityFor } from '@/lib/ability'
+
+export const dynamic = 'force-dynamic'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -64,8 +68,8 @@ export async function POST(request: Request) {
     }
 
     // Fallback to Unraid API if Docker action fails
-    const unraidUrlSetting = await prisma.setting.findFirst({ where: { key: 'unraid_url' }, select: { value: true } })
-    const unraidApiKeySetting = await prisma.setting.findFirst({ where: { key: 'unraid_api_key' }, select: { value: true } })
+    const [unraidUrlSetting] = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, 'unraid_url')).limit(1)
+    const [unraidApiKeySetting] = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, 'unraid_api_key')).limit(1)
 
     if (unraidUrlSetting?.value && unraidApiKeySetting?.value) {
         try {

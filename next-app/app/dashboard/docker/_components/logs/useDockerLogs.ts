@@ -16,7 +16,6 @@ export function useDockerLogs(containerId: string) {
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'https' : 'http'
-    // @ts-ignore
     const runtimeUrl = window.__ENV?.TRACKER_WS_URL
     const buildUrl = process.env.NEXT_PUBLIC_TRACKER_WS_URL
     const wsUrl = runtimeUrl || buildUrl || `${protocol}://${window.location.hostname}:3005`

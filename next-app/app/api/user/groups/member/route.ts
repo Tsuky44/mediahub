@@ -1,8 +1,12 @@
-import { prisma } from '@/lib/prisma'
+﻿import { db } from '@/lib/db/drizzle'
+import { userGroupMembers } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 import { logAction } from '@/lib/audit'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions)
@@ -25,21 +29,18 @@ export async function POST(req: Request) {
 
         // Check if already in a group?
         // A user (userId) should ideally only be in one group.
-        // The unique constraint in schema handles this: @@unique([userId])
+        // The unique constraint in schema handles this
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const member = await prisma.userGroupMember.create({
-            data: {
-                userGroupId,
-                userId: parseInt(String(userId)),
-            }
-        })
+        const [member] = await db.insert(userGroupMembers).values({
+            userGroupId,
+            userId: parseInt(String(userId))
+        }).returning()
 
         await logAction(
             parseInt(String((session.user as { id?: string | number }).id)),
             'ADD_MEMBER',
             'UserGroup',
-            userGroupId,
+            userGroupId.toString(),
             { memberId: member.id, userId, username }
         )
 
@@ -68,18 +69,13 @@ export async function DELETE(req: Request) {
     try {
         const { memberId } = await req.json()
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await prisma.userGroupMember.delete({
-            where: {
-                id: memberId
-            }
-        })
+        await db.delete(userGroupMembers).where(eq(userGroupMembers.id, memberId))
 
         await logAction(
             parseInt(String((session.user as { id?: string | number }).id)),
             'REMOVE_MEMBER',
             'UserGroupMember',
-            memberId,
+            memberId.toString(),
             null
         )
 

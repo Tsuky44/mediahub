@@ -7,35 +7,10 @@ import { prisma } from '@/lib/prisma'
 import { forget } from '@/lib/cache'
 import { revalidatePath } from 'next/cache'
 import { defineAbilityFor } from '@/lib/ability'
-import { z } from 'zod'
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
-
-// Patch 15: Zod schema de validation du body
-const requestBodySchema = z.object({
-  tmdbId: z.number().int().positive(),
-  mediaType: z.enum(['movie', 'tv']),
-  title: z.string().min(1).max(500),
-  posterPath: z.string().nullable().optional(),
-  seasons: z.array(z.number().int().min(0)).optional()
-})
-
-const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
-const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
+import { logger } from '@/lib/logger'
 
 
 export async function POST(request: NextRequest) {
-  // Patch 16: Rate limiting — max 20 requêtes/minute par IP
-  const ip = getClientIp(request)
-  const rl = checkRateLimit(`request:${ip}`, { windowMs: 60_000, max: 20 })
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: 'Trop de requêtes, veuillez patienter.' },
-      { status: 429, headers: { 'Retry-After': String(Math.ceil(rl.resetMs / 1000)) } }
-    )
-  }
-
   const user = await getCurrentUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -47,23 +22,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Patch 15: Validation Zod du body
-    const rawBody = await request.json()
-    const parsed = requestBodySchema.safeParse(rawBody)
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.errors[0].message },
-        { status: 400 }
-      )
+    const body = await request.json() as { tmdbId: number; mediaType: 'movie' | 'tv'; title?: string; posterPath?: string; seasons?: number | number[] }
+    const { tmdbId, mediaType, title, posterPath } = body
+
+    if (!tmdbId || !mediaType) {
+        return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
     }
-    const { tmdbId, mediaType, title, posterPath, seasons: requestedSeasonIds } = parsed.data
 
     let result: { success: boolean; message?: string; data?: unknown } = { success: false, message: 'Unknown error' }
     let externalId: string | undefined
-
-    // Variables hoistées pour réutilisation après le bloc TV (Patch 3: évite double fetch)
-    let capturedTvdbId: number | undefined
-    let capturedLookupSeasons: number[] | undefined
 
     if (mediaType === 'movie') {
         const radarrService = await getRadarrService()
@@ -83,7 +50,7 @@ export async function POST(request: NextRequest) {
 
         const addResult = await radarrService.addMovie({
             tmdbId,
-            title,
+            title: title || 'Unknown',
             qualityProfileId,
             rootFolderPath,
             year: 0, // Radarr lookup will fill this
@@ -123,39 +90,38 @@ export async function POST(request: NextRequest) {
         }
 
         // Lookup series to get seasons
-        const lookup = await sonarrService.getSeriesByTvdbId(tvdbId)
+        const lookup = await sonarrService.lookupSeriesByTvdbId(tvdbId)
         if (!lookup) {
             return NextResponse.json({ error: 'Series not found in Sonarr lookup' }, { status: 404 })
         }
 
-        // Hoisté pour réutilisation plus bas sans re-fetch (Patch 3)
-        capturedTvdbId = tvdbId
-        capturedLookupSeasons = lookup.seasons.map((s: { seasonNumber: number }) => s.seasonNumber)
-
-        let seasonsToRequest = [...capturedLookupSeasons]
+        let seasonsToRequest: number[] = []
         
         // If specific seasons are provided in the body, use them
-        if (requestedSeasonIds && requestedSeasonIds.length > 0) {
-            const requestedSeasons = requestedSeasonIds
+        if (body.seasons) {
+            const requestedSeasons = Array.isArray(body.seasons) ? body.seasons : [body.seasons]
             if (requestedSeasons.length > 0) {
                 // Fetch other active requests to maintain monitoring for previously requested seasons
-                const activeRequests = await prisma.mediaRequest.findMany({
+                const activeRequests = await (prisma as any).mediaRequest.findMany({
                     where: { 
                         tmdbId: tmdbId.toString()
                     }
                 })
                 
                 const seasonsFromRequests = new Set<number>(requestedSeasons)
-                activeRequests.forEach((req: Record<string, unknown>) => {
+                activeRequests.forEach((req: { metadata?: string | null }) => {
                     try {
-                        const metadata = req.metadata ? JSON.parse(req.metadata as string) : {}
-                        const seasons = (metadata as { seasons?: number[] }).seasons || []
+                        const metadata = req.metadata ? JSON.parse(req.metadata) as { seasons?: number[] } : {}
+                        const seasons = metadata.seasons || []
                         seasons.forEach((s: number) => seasonsFromRequests.add(s))
                     } catch (e) {}
                 })
                 
                 seasonsToRequest = Array.from(seasonsFromRequests)
             }
+        } else {
+            // Only use all seasons if no specific seasons were requested
+            seasonsToRequest = lookup.seasons.map((s: { seasonNumber: number }) => s.seasonNumber)
         }
 
         const addResult = await sonarrService.addSeries({
@@ -180,27 +146,27 @@ export async function POST(request: NextRequest) {
     }
 
     if (result.success) {
-        // Get user info (needed for DB update and notifications)
-        const dbUser = await prisma.user.findFirst({ 
-            where: { email: user.email || '' } 
-        })
-
         // Immediate Local DB Update
         try {
             const requestStatus = 2 // PENDING/PROCESSING equivalent
+            
+            // Get user info
+            const dbUser = await (prisma as any).user.findFirst({ 
+                where: { email: user.email || '' } 
+            })
             
             // ALWAYS create a new request instead of merging for TV series
             // Movies can still be merged/updated as they don't have seasons
             let existingRequest = null
             if (mediaType === 'movie') {
                 if (externalId) {
-                    existingRequest = await prisma.mediaRequest.findFirst({
+                    existingRequest = await (prisma as any).mediaRequest.findFirst({
                         where: { externalId: externalId }
                     })
                 }
                 
                 if (!existingRequest) {
-                     existingRequest = await prisma.mediaRequest.findFirst({
+                     existingRequest = await (prisma as any).mediaRequest.findFirst({
                         where: { tmdbId: tmdbId.toString() }
                      })
                 }
@@ -208,16 +174,26 @@ export async function POST(request: NextRequest) {
 
             let seasons: number[] = []
             if (mediaType === 'tv') {
-                if (requestedSeasonIds && requestedSeasonIds.length > 0) {
-                    seasons = requestedSeasonIds
-                } else if (capturedLookupSeasons) {
-                    // Patch 3: Réutilise les données déjà fetchées, pas de second appel Sonarr/TMDB
-                    seasons = capturedLookupSeasons
+                if (body.seasons) {
+                    seasons = Array.isArray(body.seasons) ? body.seasons : [body.seasons]
+                } else {
+                    // Fallback to all seasons if it's a new series request without specific seasons
+                    const sonarrService = await getSonarrService()
+                    const tmdbService = await getTmdbService()
+                    if (sonarrService && tmdbService) {
+                        const externalIds = await tmdbService.getExternalIds('tv', tmdbId)
+                        if (externalIds?.tvdb_id) {
+                            const lookupMeta = await sonarrService.lookupSeriesByTvdbId(externalIds.tvdb_id)
+                            if (lookupMeta) {
+                                seasons = lookupMeta.seasons.map((s: { seasonNumber: number }) => s.seasonNumber)
+                            }
+                        }
+                    }
                 }
             }
 
             if (existingRequest && mediaType === 'movie') {
-                const updatedRequest = await prisma.mediaRequest.update({
+                const updatedRequest = await (prisma as any).mediaRequest.update({
                     where: { id: existingRequest.id },
                     data: {
                         status: requestStatus,
@@ -226,30 +202,27 @@ export async function POST(request: NextRequest) {
                     }
                 })
                 const { logAction } = await import('@/lib/audit')
-                await logAction(dbUser?.id || null, 'MEDIA_REQUEST', 'MediaRequest', updatedRequest.id.toString(), { tmdbId, mediaType, title })
+                await logAction(dbUser?.id || null, 'MEDIA_REQUEST', 'MediaRequest', updatedRequest.id, { tmdbId, mediaType, title })
             } else if (mediaType === 'tv' && seasons.length > 0) {
-                // Patch 4: Pre-fetch une seule fois puis parse en JS (remplace le string-matching fragile en boucle)
-                const existingTvRequests = await prisma.mediaRequest.findMany({
-                    where: { tmdbId: tmdbId.toString(), mediaType: 'tv' },
-                    select: { id: true, metadata: true }
-                })
-                const alreadyRequestedSeasons = new Set<number>(
-                    existingTvRequests.flatMap(req => {
-                        try {
-                            const meta = JSON.parse(req.metadata || '{}')
-                            return Array.isArray(meta.seasons) ? meta.seasons : []
-                        } catch { return [] }
-                    })
-                )
-
                 // Create separate requests for each season to allow individual management
                 for (const seasonNum of seasons) {
-                    if (alreadyRequestedSeasons.has(seasonNum)) {
-                        log(`[Request API] Season ${seasonNum} already requested, skipping duplicate entry creation`)
+                    // Check if this specific season is already requested to avoid duplicates
+                    const existingSeasonRequest = await (prisma as any).mediaRequest.findFirst({
+                        where: {
+                            tmdbId: tmdbId.toString(),
+                            mediaType: 'tv',
+                            metadata: {
+                                contains: `"seasons":[${seasonNum}]`
+                            }
+                        }
+                    })
+
+                    if (existingSeasonRequest) {
+                        logger.info(`[Request API] Season ${seasonNum} already requested, skipping duplicate entry creation`)
                         continue
                     }
 
-                    const newRequest = await prisma.mediaRequest.create({
+                    const newRequest = await (prisma as any).mediaRequest.create({
                         data: {
                             externalId: externalId || `pending_${tmdbId}_${Date.now()}_s${seasonNum}`,
                             tmdbId: tmdbId.toString(),
@@ -267,10 +240,10 @@ export async function POST(request: NextRequest) {
                         }
                     })
                     const { logAction } = await import('@/lib/audit')
-                    await logAction(dbUser?.id || null, 'MEDIA_REQUEST', 'MediaRequest', newRequest.id.toString(), { tmdbId, mediaType, title, season: seasonNum })
+                    await logAction(dbUser?.id || null, 'MEDIA_REQUEST', 'MediaRequest', newRequest.id, { tmdbId, mediaType, title, season: seasonNum })
                 }
             } else {
-                const newRequest = await prisma.mediaRequest.create({
+                const newRequest = await (prisma as any).mediaRequest.create({
                     data: {
                         externalId: externalId || `pending_${tmdbId}_${Date.now()}`,
                         tmdbId: tmdbId.toString(),
@@ -282,18 +255,18 @@ export async function POST(request: NextRequest) {
                         requesterEmail: user.email,
                         metadata: JSON.stringify({
                             posterPath: posterPath,
-                            seasons: seasons.length > 0 ? seasons.sort((a: number, b: number) => a - b) : undefined
+                            seasons: seasons.length > 0 ? seasons.sort((a, b) => a - b) : undefined
                         }),
                         requestedAt: new Date()
                     }
                 })
                 const { logAction } = await import('@/lib/audit')
-                await logAction(dbUser?.id || null, 'MEDIA_REQUEST', 'MediaRequest', newRequest.id.toString(), { tmdbId, mediaType, title })
+                await logAction(dbUser?.id || null, 'MEDIA_REQUEST', 'MediaRequest', newRequest.id, { tmdbId, mediaType, title })
             }
 
-            log(`[Request API] Immediate local DB update success for ${title}`)
+            logger.info(`[Request API] Immediate local DB update success for ${title}`)
         } catch (dbError) {
-            error('[Request API] Failed to update local DB immediately:', dbError)
+            logger.error('[Request API] Failed to update local DB immediately:', dbError)
             // Non-blocking error, we continue
         }
 
@@ -302,83 +275,66 @@ export async function POST(request: NextRequest) {
         revalidatePath(`/dashboard/media/${tmdbId}`)
         revalidatePath('/dashboard/requests/list') // Refresh list immediately
 
-        // Send external notification
+        // Notify V2 — MEDIA_REQUESTED
         try {
-            const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-            let overview = ''
-            let rating = ''
-            let genres = ''
-            let year = ''
-            let notifPosterPath: string | null = posterPath ?? null
+            const { Notify } = await import('@/lib/notifications-v2')
+            const tmdbService = await getTmdbService()
+            let overview: string | undefined
+            let year: string | undefined
+            let genres: string | undefined
+            let posterPathResolved: string | undefined = posterPath
 
-            try {
-                const tmdbService = await getTmdbService()
-                if (tmdbService) {
-                    const details = await tmdbService.getDetails(tmdbId, mediaType as 'movie' | 'tv')
-                    if (details) {
-                        overview = details.overview || ''
-                        rating = details.vote_average?.toFixed(1) || ''
-                        year = mediaType === 'movie' 
-                            ? (details.release_date?.substring(0, 4) || '')
-                            : (details.first_air_date?.substring(0, 4) || '')
-                        if (details.genres) {
-                            genres = details.genres.map((g: Record<string, unknown>) => g.name as string).join(', ')
-                        }
-                        if (!notifPosterPath && details.poster_path) {
-                            notifPosterPath = details.poster_path
-                        }
+            if (tmdbService) {
+                const details = await tmdbService.getDetails(parseInt(String(tmdbId)), mediaType)
+                if (details) {
+                    overview = details.overview || undefined
+                    year = mediaType === 'movie'
+                        ? (details.release_date?.substring(0, 4) || undefined)
+                        : (details.first_air_date?.substring(0, 4) || undefined)
+                    if (details.genres) {
+                        genres = details.genres.map((g: { name?: string }) => g.name).join(', ')
+                    }
+                    if (!posterPathResolved && details.poster_path) {
+                        posterPathResolved = details.poster_path
                     }
                 }
-            } catch (tmdbErr) {
-                console.error('[Request API] TMDB fetch failed for notification, sending without enriched data:', tmdbErr)
             }
 
-            const parsedSeasons: number[] = requestedSeasonIds ?? [];
+            const parsedSeasons: number[] = body.seasons
+                ? (Array.isArray(body.seasons) ? body.seasons : [body.seasons])
+                : []
 
-            await ExternalNotificationService.send('media_request', {
-                title: 'Nouvelle demande de média',
-                message: `L'utilisateur ${user.name || user.email} a demandé ${title}.`,
-                data: {
-                    tmdbId,
+            const dbUser = await (prisma as any).user.findFirst({ where: { email: user.email || '' } })
+
+            const { formatSeasonList } = await import('@/lib/notifications-v2/utils/season-formatter')
+            const seasonLabel =
+                parsedSeasons.length === 1
+                    ? `Saison ${parsedSeasons[0]}`
+                    : parsedSeasons.length > 1
+                      ? formatSeasonList(parsedSeasons)
+                      : undefined
+            const displayTitle = seasonLabel ? `${title} — ${seasonLabel}` : (title || 'Sans titre')
+
+            await Notify.mediaRequested(
+                {
+                    tmdbId: String(tmdbId),
                     mediaType,
-                    title,
-                    posterPath: notifPosterPath,
-                    overview,
-                    rating,
-                    genres,
+                    title: displayTitle,
                     year,
-                    episodes: (parsedSeasons.length > 0) ? `Saisons ${parsedSeasons.join(', ')}` : undefined,
-                    user: user.name || user.email
-                }
-            }, dbUser?.id)
-
-            // Notifications V2 — independent module, coexists with legacy
-            try {
-                console.log(`[Request API] Emitting NotificationsV2 MEDIA_REQUESTED for "${title}" (TMDB ${tmdbId})`)
-                const { Notify } = await import('@/lib/notifications-v2')
-                await Notify.mediaRequested(
-                    {
-                        tmdbId: String(tmdbId),
-                        mediaType: mediaType as 'movie' | 'tv',
-                        title,
-                        year,
-                        overview,
-                        posterPath: notifPosterPath ?? undefined,
-                        genres,
-                        rating,
-                    },
-                    dbUser ? {
-                        id: dbUser.id,
-                        name: dbUser.name ?? undefined,
-                        email: dbUser.email ?? undefined,
-                        whatsappNumber: (dbUser as Record<string, unknown>).whatsappNumber as string | undefined,
-                    } : undefined
-                )
-            } catch (v2Err) {
-                console.error('[Request API] NotificationsV2 emit failed:', v2Err)
-            }
+                    overview,
+                    posterPath: posterPathResolved,
+                    genres,
+                    seasonNumber: parsedSeasons.length === 1 ? parsedSeasons[0] : undefined,
+                },
+                dbUser ? {
+                    id: dbUser.id,
+                    name: dbUser.name ?? undefined,
+                    email: dbUser.email ?? undefined,
+                    whatsappNumber: dbUser.whatsappNumber ?? undefined,
+                } : undefined
+            )
         } catch (notifError) {
-            console.error('[Request API] Failed to send external notification:', notifError)
+            logger.error('[Request API] Failed to dispatch Notify V2 MEDIA_REQUESTED:', notifError)
         }
 
         return NextResponse.json(result)
@@ -387,7 +343,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (e) {
-    error('Request failed', e)
+    logger.error('Request failed', e)
     return NextResponse.json({ error: (e as Error).message || 'Internal Server Error' }, { status: 500 })
   }
 }

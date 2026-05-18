@@ -1,6 +1,8 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { userGroups, userGroupMembers, users, roles } from '@/lib/db/schema'
+import { eq, and, inArray, desc } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth'
 
@@ -8,28 +10,18 @@ const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 't
 const error = (...args: any[]) => { if (isDev) console.error(...args); };
 
 export async function getUserGroups() {
-  return await prisma.userGroup.findMany({
-    include: {
-      role: true,
-      members: {
-        include: {
-          user: true
-        }
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  })
+  // Simplified version without nested includes - fetch separately if needed
+  const groups = await db.select().from(userGroups).orderBy(desc(userGroups.createdAt))
+  return groups
 }
 
 export async function createUserGroup(name: string, roleId?: string) {
   try {
     const user = await getCurrentUser()
-    const group = await prisma.userGroup.create({
-      data: {
-        name,
-        roleId: roleId || null
-      }
-    })
+    const [group] = await db.insert(userGroups).values({
+      name,
+      roleId: roleId || null
+    }).returning()
 
     if (user) {
         const { logAction } = await import('@/lib/audit')
@@ -47,37 +39,24 @@ export async function createUserGroup(name: string, roleId?: string) {
 export async function updateUserGroup(id: string, name: string, roleId?: string) {
   try {
     const user = await getCurrentUser()
-    // transaction to ensure consistency
-    const result = await prisma.$transaction(async (tx) => {
-        const group = await tx.userGroup.update({
-            where: { id },
-            data: {
-                name,
-                roleId: roleId || null
-            }
-        })
-
-        // If roleId is set, update all members to this role
-        if (roleId) {
-            const members = await tx.userGroupMember.findMany({
-                where: { userGroupId: id }
-            })
-
-            const userIds = members.map(m => m.userId)
-
-            if (userIds.length > 0) {
-                await tx.user.updateMany({
-                    where: { id: { in: userIds } },
-                    data: {
-                        role: 'user', // Default base role
-                        roleId: roleId
-                    }
-                })
-            }
-        }
-
-        return group
-    })
+    // Update group
+    const [group] = await db.update(userGroups).set({
+      name,
+      roleId: roleId || null
+    }).where(eq(userGroups.id, id)).returning()
+    
+    // If roleId is set, update all members to this role
+    if (roleId && group) {
+      const members = await db.select().from(userGroupMembers).where(eq(userGroupMembers.userGroupId, id))
+      const userIds = members.map(m => m.userId)
+      
+      if (userIds.length > 0) {
+        await db.update(users).set({
+          role: 'user',
+          roleId: roleId
+        }).where(inArray(users.id, userIds))
+      }
+    }
 
     if (user) {
         const { logAction } = await import('@/lib/audit')
@@ -85,7 +64,7 @@ export async function updateUserGroup(id: string, name: string, roleId?: string)
     }
 
     revalidatePath('/dashboard/settings')
-    return result
+    return group
   } catch (error) {
     console.error('Error updating user group:', error)
     throw new Error('Failed to update user group')
@@ -95,9 +74,8 @@ export async function updateUserGroup(id: string, name: string, roleId?: string)
 export async function deleteUserGroup(id: string) {
   try {
     const user = await getCurrentUser()
-    await prisma.userGroup.delete({
-      where: { id }
-    })
+    await db.delete(userGroupMembers).where(eq(userGroupMembers.userGroupId, id))
+    await db.delete(userGroups).where(eq(userGroups.id, id))
 
     if (user) {
         const { logAction } = await import('@/lib/audit')
@@ -114,46 +92,27 @@ export async function deleteUserGroup(id: string) {
 export async function addUserToGroup(groupId: string, userId: number) {
   try {
     const user = await getCurrentUser()
-    await prisma.$transaction(async (tx) => {
-        // Check if user is already in the group
-    const existing = await tx.userGroupMember.findUnique({
-        where: {
-            userId_userGroupId: {
-                userGroupId: groupId,
-                userId: userId
-            }
-        }
+    // Check if user is already in the group
+    const [existing] = await db.select().from(userGroupMembers).where(
+      and(eq(userGroupMembers.userGroupId, groupId), eq(userGroupMembers.userId, userId))
+    ).limit(1)
+    
+    if (existing) return
+    
+    // Get group to know the role
+    const [group] = await db.select().from(userGroups).where(eq(userGroups.id, groupId)).limit(1)
+    if (!group) throw new Error('Group not found')
+    
+    // Add member
+    await db.insert(userGroupMembers).values({
+      userGroupId: groupId,
+      userId: userId
     })
-
-        if (existing) return
-
-        // Get group to know the role
-        const group = await tx.userGroup.findUnique({
-            where: { id: groupId },
-            include: { role: true }
-        })
-
-        if (!group) throw new Error('Group not found')
-
-        // Add member
-        await tx.userGroupMember.create({
-            data: {
-                userGroupId: groupId,
-                userId: userId
-            }
-        })
-
-        // Update user role if group has one
-        if (group.roleId) {
-            await tx.user.update({
-                where: { id: userId },
-                data: {
-                    role: 'user',
-                    roleId: group.roleId
-                }
-            })
-        }
-    })
+    
+    // Update user role if group has one
+    if (group.roleId) {
+      await db.update(users).set({ role: 'user', roleId: group.roleId }).where(eq(users.id, userId))
+    }
 
     if (user) {
         const { logAction } = await import('@/lib/audit')
@@ -170,46 +129,31 @@ export async function addUserToGroup(groupId: string, userId: number) {
 export async function addUsersToGroup(groupId: string, userIds: number[]) {
   try {
     const user = await getCurrentUser()
-    await prisma.$transaction(async (tx) => {
-        const group = await tx.userGroup.findUnique({
-            where: { id: groupId }
-        })
-
-        if (!group) throw new Error('Group not found')
-
-        // Filter out users already in group
-        const existingMembers = await tx.userGroupMember.findMany({
-            where: {
-                userGroupId: groupId,
-                userId: { in: userIds }
-            },
-            select: { userId: true }
-        })
-        
-        const existingUserIds = new Set(existingMembers.map(m => m.userId))
-        const newUserIds = userIds.filter(id => !existingUserIds.has(id))
-
-        if (newUserIds.length === 0) return
-
-        // Bulk create members
-        await tx.userGroupMember.createMany({
-            data: newUserIds.map(userId => ({
-                userGroupId: groupId,
-                userId: userId
-            }))
-        })
-
-        // Bulk update roles if group has role
-        if (group.roleId) {
-            await tx.user.updateMany({
-                where: { id: { in: newUserIds } },
-                data: {
-                    role: 'user',
-                    roleId: group.roleId
-                }
-            })
-        }
-    })
+    const [group] = await db.select().from(userGroups).where(eq(userGroups.id, groupId)).limit(1)
+    if (!group) throw new Error('Group not found')
+    
+    // Filter out users already in group
+    const existingMembers = await db.select().from(userGroupMembers).where(
+      and(eq(userGroupMembers.userGroupId, groupId), inArray(userGroupMembers.userId, userIds))
+    )
+    
+    const existingUserIds = new Set(existingMembers.map(m => m.userId))
+    const newUserIds = userIds.filter(id => !existingUserIds.has(id))
+    
+    if (newUserIds.length === 0) return
+    
+    // Bulk create members
+    await db.insert(userGroupMembers).values(
+      newUserIds.map(userId => ({
+        userGroupId: groupId,
+        userId: userId
+      }))
+    )
+    
+    // Bulk update roles if group has role
+    if (group.roleId) {
+      await db.update(users).set({ role: 'user', roleId: group.roleId }).where(inArray(users.id, newUserIds))
+    }
 
     if (user) {
         const { logAction } = await import('@/lib/audit')
@@ -226,14 +170,9 @@ export async function addUsersToGroup(groupId: string, userIds: number[]) {
 export async function removeUserFromGroup(groupId: string, userId: number) {
   try {
     const user = await getCurrentUser()
-    await prisma.userGroupMember.delete({
-      where: {
-        userId_userGroupId: {
-          userGroupId: groupId,
-          userId: userId
-        }
-      }
-    })
+    await db.delete(userGroupMembers).where(
+      and(eq(userGroupMembers.userGroupId, groupId), eq(userGroupMembers.userId, userId))
+    )
     // Note: We do NOT revert the user's role automatically, as we don't know what it should be.
     // The admin can manually change it if needed.
 

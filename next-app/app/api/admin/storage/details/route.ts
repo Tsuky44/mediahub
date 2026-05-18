@@ -3,7 +3,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getSetting } from '@/lib/settings'
 import { EmbyService } from '@/lib/services/emby'
-import { prisma } from '@/lib/prisma'
 import { defineAbilityFor } from '@/lib/ability'
 
 export const dynamic = 'force-dynamic'

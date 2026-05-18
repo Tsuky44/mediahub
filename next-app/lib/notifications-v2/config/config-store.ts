@@ -3,7 +3,9 @@
  * Key isolation: `notifications_v2_config` (no collision with legacy).
  */
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { settings } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 import type { NotificationsV2Config, NotificationEvent } from '../types'
 import { ALL_EVENTS } from '../types'
 
@@ -26,6 +28,8 @@ const DEFAULT_CONFIG: NotificationsV2Config = {
     acc[ev] = {
       enabled: true,
       template: '',
+      templateMovie: '',
+      templateTv: '',
       targetUserIds: [],
       targetNumbers: [],
       notifyRequester: true,
@@ -46,7 +50,12 @@ function mergeWithDefaults(raw: any): NotificationsV2Config {
   if (raw?.events) {
     for (const ev of ALL_EVENTS) {
       if (raw.events[ev]) {
-        merged.events[ev] = { ...DEFAULT_CONFIG.events[ev], ...raw.events[ev] }
+        const evConfig = { ...DEFAULT_CONFIG.events[ev], ...raw.events[ev] }
+        // Migration : ancien `template` → `templateMovie` pour rétrocompat
+        if (evConfig.template && !evConfig.templateMovie) {
+          evConfig.templateMovie = evConfig.template
+        }
+        merged.events[ev] = evConfig
       }
     }
   }
@@ -64,7 +73,7 @@ export class ConfigStore {
     if (!force && this.cache && now - this.cacheAt < this.CACHE_TTL_MS) {
       return this.cache
     }
-    const row = await prisma.setting.findFirst({ where: { key: CONFIG_KEY } })
+    const row = await db.query.settings.findFirst({ where: eq(settings.key, CONFIG_KEY) })
     const raw = row?.value ? safeParse(row.value) : null
     const cfg = mergeWithDefaults(raw)
     this.cache = cfg
@@ -74,11 +83,20 @@ export class ConfigStore {
 
   static async save(cfg: NotificationsV2Config): Promise<void> {
     const value = JSON.stringify(cfg)
-    await prisma.setting.upsert({
-      where: { key: CONFIG_KEY },
-      update: { value },
-      create: { key: CONFIG_KEY, value },
-    })
+    const existing = await db.query.settings.findFirst({ where: eq(settings.key, CONFIG_KEY) })
+    if (existing) {
+      await db.update(settings)
+        .set({ value, updatedAt: new Date() })
+        .where(eq(settings.key, CONFIG_KEY))
+    } else {
+      await db.insert(settings).values({
+        key: CONFIG_KEY,
+        value,
+        category: 'notifications',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+    }
     this.invalidate()
   }
 

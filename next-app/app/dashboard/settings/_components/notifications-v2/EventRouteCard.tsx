@@ -116,13 +116,29 @@ export default function EventRouteCard({
           </button>
         </div>
       </div>
-      <textarea
-        className="w-full border rounded px-3 py-2 text-sm font-mono dark:bg-gray-800"
-        rows={4}
-        placeholder="Template personnalisé ({title} {year} {user} {overview} {genres} {rating} {quality} {size} {progress} {release} {reason} {stage} {event} {timestamp}). Laisser vide = template par défaut."
-        value={route.template ?? ''}
-        onChange={(e) => onChange({ template: e.target.value })}
-      />
+
+      <div className="space-y-2">
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">Template Film (laisser vide = défaut)</label>
+          <textarea
+            className="w-full border rounded px-3 py-2 text-sm font-mono dark:bg-gray-800"
+            rows={3}
+            placeholder="{title} {year} {user} {overview} {genres} {rating} {quality} {size} {progress} {release} {reason} {stage} {event} {timestamp}"
+            value={route.templateMovie ?? ''}
+            onChange={(e) => onChange({ templateMovie: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 mb-1 block">Template Série (supporte {'{season}'} — laisser vide = défaut)</label>
+          <textarea
+            className="w-full border rounded px-3 py-2 text-sm font-mono dark:bg-gray-800"
+            rows={3}
+            placeholder="{{title}} {{year}} {{season}} {{user}} {{overview}} {{genres}} {{rating}} {{quality}} {{size}} {{progress}} {{release}} {{reason}} {{stage}} {{event}} {{timestamp}}"
+            value={route.templateTv ?? ''}
+            onChange={(e) => onChange({ templateTv: e.target.value })}
+          />
+        </div>
+      </div>
     </div>
   )
 }

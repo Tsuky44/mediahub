@@ -1,4 +1,5 @@
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { auditLogs } from '@/lib/db/schema'
 import { headers } from 'next/headers'
 
 export async function logAction(
@@ -24,16 +25,14 @@ export async function logAction(
       ...(details || {})
     };
 
-    await prisma.auditLog.create({
-      data: {
-        userId,
-        action,
-        entity,
-        entityId,
-        ipAddress,
-        userAgent,
-        details: Object.keys(logDetails).length > 0 ? JSON.stringify(logDetails) : null
-      }
+    await db.insert(auditLogs).values({
+      userId,
+      action,
+      entity,
+      entityId,
+      ipAddress,
+      userAgent,
+      details: Object.keys(logDetails).length > 0 ? JSON.stringify(logDetails) : null
     })
   } catch (error) {
     console.error('Failed to create audit log:', error)

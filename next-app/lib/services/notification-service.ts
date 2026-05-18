@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { notifications, users, roles } from '@/lib/db/schema'
+import { eq, or, and, ne, not } from 'drizzle-orm'
 import { trackerService } from './tracker-service'
 import { getTmdbService } from './tmdb'
 
@@ -26,19 +28,19 @@ export class NotificationService {
         }
       }
 
-      const notification = await prisma.notification.create({
-        data: {
-          userId,
-          title,
-          message,
-          type,
-          mediaId: data.mediaId,
-          mediaType: data.mediaType,
-          posterPath: data.posterPath,
-          link: data.link,
-          isRead: false
-        }
-      })
+      const inserted = await db.insert(notifications).values({
+        userId,
+        title,
+        message,
+        type,
+        mediaId: data.mediaId,
+        mediaType: data.mediaType,
+        posterPath: data.posterPath,
+        link: data.link,
+        isRead: false,
+        createdAt: new Date()
+      }).returning()
+      const notification = inserted[0]
 
       trackerService.broadcastNotification([userId], notification)
       return notification
@@ -53,15 +55,10 @@ export class NotificationService {
    */
   static async notifyAdmins(title: string, message: string, type: string, metadata: { version?: string, container?: string } = {}) {
     try {
-      // 1. Find all admin users
-      const admins = await prisma.user.findMany({
-        where: {
-          OR: [
-            { role: 'admin' },
-            { roleRef: { name: 'admin' } }
-          ]
-        },
-        select: { id: true }
+      // 1. Find all admin users (only role='admin' check; relation-based filter handled separately if needed)
+      const admins = await db.query.users.findMany({
+        where: eq(users.role, 'admin'),
+        columns: { id: true }
       })
 
       if (admins.length === 0) return
@@ -72,28 +69,28 @@ export class NotificationService {
       for (const admin of admins) {
         // Check for duplicate if version is provided
         if (type === 'system_update' && version) {
-          const existing = await prisma.notification.findFirst({
-            where: {
-              userId: admin.id,
-              type: 'system_update',
-              mediaId: version // We store version in mediaId
-            }
+          const existing = await db.query.notifications.findFirst({
+            where: and(
+              eq(notifications.userId, admin.id),
+              eq(notifications.type, 'system_update'),
+              eq(notifications.mediaId, version)
+            )
           })
           if (existing) continue
         }
 
-        const notification = await prisma.notification.create({
-          data: {
-            userId: admin.id,
-            title,
-            message,
-            type,
-            mediaId: version || null,
-            mediaType: container || 'system',
-            link: '/dashboard/settings?tab=services&subtab=maintenance',
-            isRead: false
-          }
-        })
+        const inserted = await db.insert(notifications).values({
+          userId: admin.id,
+          title,
+          message,
+          type,
+          mediaId: version || null,
+          mediaType: container || 'system',
+          link: '/dashboard/settings?tab=services&subtab=maintenance',
+          isRead: false,
+          createdAt: new Date()
+        }).returning()
+        const notification = inserted[0]
 
         trackerService.broadcastNotification([admin.id], notification)
       }
@@ -109,20 +106,14 @@ export class NotificationService {
    */
   static async clearSystemUpdateNotifications(exclude?: { mediaId: string, mediaType: string }) {
     try {
-      const where: any = {
-        type: 'system_update'
-      }
-
+      const conditions = [eq(notifications.type, 'system_update')]
       if (exclude) {
-        where.NOT = {
-          mediaId: exclude.mediaId,
-          mediaType: exclude.mediaType
-        }
+        conditions.push(not(and(
+          eq(notifications.mediaId, exclude.mediaId),
+          eq(notifications.mediaType, exclude.mediaType)
+        )!))
       }
-
-      await prisma.notification.deleteMany({
-        where
-      })
+      await db.delete(notifications).where(and(...conditions))
     } catch (error) {
       console.error('[NotificationService] Failed to clear update notifications:', error)
     }

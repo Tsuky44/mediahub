@@ -6,7 +6,6 @@ import MediaAvailabilityBadges from './MediaAvailabilityBadges'
 import MediaTitleHeader from './MediaTitleHeader'
 import MediaActionsRow from './MediaActionsRow'
 import MediaPrimaryActions from './MediaPrimaryActions'
-import MediaProgressBar from './MediaProgressBar'
 import MediaSidebar from './MediaSidebar'
 import MediaOverviewSection from './MediaOverviewSection'
 import MediaCastSection from './MediaCastSection'
@@ -125,16 +124,6 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
             />
 
             <DownloadStatusCard tmdbId={tmdbId} mediaType={mediaType} tvdbId={tvdbId} title={title} />
-
-            {mediaType === 'tv' &&
-              userProgress &&
-              userProgress.totalEpisodes !== undefined &&
-              userProgress.totalEpisodes > 0 && (
-                <MediaProgressBar
-                  userProgress={userProgress}
-                  totalEpisodes={userProgress.totalEpisodes}
-                />
-              )}
           </div>
         </div>
 
@@ -159,7 +148,31 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
           <div className="space-y-12">
             {mediaType === 'tv' && details.seasons && (
               <section>
-                <h2 className="text-2xl font-bold text-white mb-6">Saisons</h2>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                  <h2 className="text-2xl font-bold text-white">Saisons</h2>
+                  {userProgress &&
+                    userProgress.totalEpisodes !== undefined &&
+                    userProgress.totalEpisodes > 0 && (
+                      <div className="flex items-center gap-3 w-full sm:w-64">
+                        <div className="flex-1 relative h-2 rounded-full overflow-hidden bg-gray-800/60 border border-white/5">
+                          <div
+                            className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+                            style={{
+                              width: `${userProgress.playedPercentage}%`,
+                              background: 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
+                              boxShadow: '0 0 8px rgba(168,85,247,0.6)',
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-white whitespace-nowrap">
+                          {Math.round(userProgress.playedPercentage)}%
+                          <span className="text-gray-500 ml-1 font-normal">
+                            ({userProgress.totalEpisodes - userProgress.unplayedItemCount}/{userProgress.totalEpisodes})
+                          </span>
+                        </span>
+                      </div>
+                    )}
+                </div>
                 <SeasonList
                   tvId={tmdbId}
                   tvdbId={tvdbId}

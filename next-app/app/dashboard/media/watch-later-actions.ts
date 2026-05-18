@@ -1,13 +1,11 @@
 'use server'
 
-import { prisma } from "@/lib/prisma"
+import { db } from "@/lib/db/drizzle"
+import { users, watchLater } from "@/lib/db/schema"
+import { eq, and, or, inArray, desc, sql } from "drizzle-orm"
 import { getCurrentUser } from "@/lib/auth"
 import { revalidatePath } from "next/cache"
-
-const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
-const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
+import { logger } from '@/lib/logger'
 
 
 export interface WatchLaterItem {
@@ -30,46 +28,41 @@ export async function toggleWatchLater(params: {
     isEmbyItem: boolean
 }) {
     try {
-        log('[WatchLater] Toggling:', params.title, params.mediaId);
+        logger.info('[WatchLater] Toggling:', params.title, params.mediaId);
         const user = await getCurrentUser()
-        const userIdRaw = (user as { id?: string | number }).id
-        if (!user || !userIdRaw) {
-            error('[WatchLater] Unauthorized');
+        if (!user || !user?.id) {
+            logger.error('[WatchLater] Unauthorized');
             return { success: false, error: 'Vous devez être connecté pour faire cela.' }
         }
 
-        const userId = parseInt(String(userIdRaw))
+        const userId = parseInt(user.id)
         
         // Verify if user exists in DB before creating relation (in case of DB reset)
-        const userExists = await prisma.user.findUnique({ 
-            where: { id: userId } 
-        });
+        const [userExists] = await db.select().from(users).where(eq(users.id, userId)).limit(1)
         if (!userExists) {
-             error('[WatchLater] User not found in DB:', userId);
+             logger.error('[WatchLater] User not found in DB:', userId);
              return { success: false, error: 'Session invalide. Veuillez vous déconnecter et vous reconnecter.' }
         }
 
         // Find if it exists either by mediaId OR tmdbId (if provided)
-        const existing = await prisma.watchLater.findFirst({
-            where: {
-                userId,
-                mediaType: params.mediaType,
-                OR: [
-                    { mediaId: params.mediaId },
-                    { tmdbId: params.mediaId },
-                    ...(params.tmdbId ? [
-                        { mediaId: params.tmdbId },
-                        { tmdbId: params.tmdbId }
-                    ] : [])
-                ]
-            }
-        })
+        // Build OR conditions for mediaId/tmdbId matching
+        const mediaConditions = [eq(watchLater.mediaId, params.mediaId), eq(watchLater.tmdbId, params.mediaId)]
+        if (params.tmdbId) {
+            mediaConditions.push(eq(watchLater.mediaId, params.tmdbId))
+            mediaConditions.push(eq(watchLater.tmdbId, params.tmdbId))
+        }
+        
+        const [existing] = await db.select().from(watchLater).where(
+            and(
+                eq(watchLater.userId, userId),
+                eq(watchLater.mediaType, params.mediaType),
+                or(...mediaConditions)
+            )
+        ).limit(1)
 
         if (existing) {
-            log('[WatchLater] Removing item:', existing.id);
-            await prisma.watchLater.delete({
-                where: { id: existing.id }
-            })
+            logger.info('[WatchLater] Removing item:', existing.id);
+            await db.delete(watchLater).where(eq(watchLater.id, existing.id))
 
             const { logAction } = await import('@/lib/audit')
             await logAction(userId, 'WATCH_LATER_REMOVE', 'WatchLater', existing.id.toString(), { title: params.title, mediaType: params.mediaType, mediaId: params.mediaId })
@@ -78,18 +71,16 @@ export async function toggleWatchLater(params: {
             revalidatePath('/dashboard/media')
             return { success: true, action: 'removed' }
         } else {
-            log('[WatchLater] Adding item:', params.title);
-            const newItem = await prisma.watchLater.create({
-                data: {
-                    userId,
-                    mediaId: params.mediaId,
-                    tmdbId: params.tmdbId,
-                    mediaType: params.mediaType,
-                    title: params.title,
-                    posterPath: params.posterPath,
-                    isEmbyItem: params.isEmbyItem
-                }
-            })
+            logger.info('[WatchLater] Adding item:', params.title);
+            const [newItem] = await db.insert(watchLater).values({
+                userId,
+                mediaId: params.mediaId,
+                tmdbId: params.tmdbId || null,
+                mediaType: params.mediaType,
+                title: params.title,
+                posterPath: params.posterPath || null,
+                isEmbyItem: params.isEmbyItem
+            }).returning()
 
             const { logAction } = await import('@/lib/audit')
             await logAction(userId, 'WATCH_LATER_ADD', 'WatchLater', newItem.id.toString(), { title: params.title, mediaType: params.mediaType, mediaId: params.mediaId })
@@ -99,7 +90,7 @@ export async function toggleWatchLater(params: {
             return { success: true, action: 'added' }
         }
     } catch (e) {
-        error('Failed to toggle watch later:', e)
+        logger.error('Failed to toggle watch later:', e)
         return { success: false, error: 'Erreur interne du serveur' }
     }
 }
@@ -108,23 +99,15 @@ export async function toggleWatchLater(params: {
 export async function getWatchLaterList() {
     try {
         const user = await getCurrentUser()
-        const userIdRaw = (user as { id?: string | number }).id
-        if (!user || !userIdRaw) return []
+        if (!user || !user?.id) return []
 
-        const userId = parseInt(String(userIdRaw))
+        const userId = parseInt(user.id)
 
-        const items = await prisma.watchLater.findMany({
-            where: {
-                userId
-            },
-            orderBy: {
-                createdAt: 'desc'
-            }
-        })
+        const items = await db.select().from(watchLater).where(eq(watchLater.userId, userId)).orderBy(desc(watchLater.createdAt))
 
         return items
     } catch (e) {
-        error('Failed to get watch later list:', e)
+        logger.error('Failed to get watch later list:', e)
         return []
     }
 }
@@ -132,25 +115,21 @@ export async function getWatchLaterList() {
 export async function isInWatchLater(mediaId: string, mediaType: string): Promise<boolean> {
     try {
         const user = await getCurrentUser()
-        const userIdRaw = (user as { id?: string | number }).id
-        if (!user || !userIdRaw) return false
+        if (!user || !user?.id) return false
 
-        const userId = parseInt(String(userIdRaw))
+        const userId = parseInt(user.id)
         
-        const existing = await prisma.watchLater.findFirst({
-            where: {
-                userId,
-                mediaType,
-                OR: [
-                    { mediaId },
-                    { tmdbId: mediaId }
-                ]
-            }
-        })
+        const [existing] = await db.select().from(watchLater).where(
+            and(
+                eq(watchLater.userId, userId),
+                eq(watchLater.mediaType, mediaType),
+                or(eq(watchLater.mediaId, mediaId), eq(watchLater.tmdbId, mediaId))
+            )
+        ).limit(1)
         
         return !!existing
     } catch (e) {
-        error('Failed to check if in watch later:', e)
+        logger.error('Failed to check if in watch later:', e)
         return false
     }
 }
@@ -158,24 +137,20 @@ export async function isInWatchLater(mediaId: string, mediaType: string): Promis
 export async function areInWatchLater(items: { id: string, mediaType: string }[]) {
     try {
         const user = await getCurrentUser()
-        const userIdRaw = (user as { id?: string | number }).id
-        if (!user || !userIdRaw) return []
+        if (!user || !user?.id) return []
 
-        const userId = parseInt(String(userIdRaw))
+        const userId = parseInt(user.id)
         
         if (!items || items.length === 0) return []
 
         const ids = items.map(i => i.id)
         
-        const matches = await prisma.watchLater.findMany({
-            where: {
-                userId,
-                OR: [
-                    { mediaId: { in: ids } },
-                    { tmdbId: { in: ids } }
-                ]
-            }
-        })
+        const matches = await db.select().from(watchLater).where(
+            and(
+                eq(watchLater.userId, userId),
+                or(inArray(watchLater.mediaId, ids), inArray(watchLater.tmdbId, ids))
+            )
+        )
         
         const result: string[] = []
         for (const match of matches) {
@@ -187,7 +162,7 @@ export async function areInWatchLater(items: { id: string, mediaType: string }[]
         
         return result
     } catch (e) {
-        error('Failed to check watch later status:', e)
+        logger.error('Failed to check watch later status:', e)
         return []
     }
 }

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { setSetting } from '@/lib/settings'
-import { prisma } from '@/lib/prisma'
 import { logAction } from '@/lib/audit'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
@@ -29,9 +28,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     log('[Settings API] Received body:', JSON.stringify(body, null, 2))
     
-    const { 
-        qbittorrent_url, 
-        qbittorrent_username, 
+    const {
+        qbittorrent_url,
+        qbittorrent_username,
         qbittorrent_password,
         qbittorrent_poll_interval,
         smb_host,
@@ -67,7 +66,8 @@ export async function POST(request: NextRequest) {
         unraid_url,
         unraid_api_key,
         docker_host,
-        type
+        type,
+        request_all_seasons_enabled
     } = body
 
     // Update settings in DB
@@ -125,6 +125,7 @@ export async function POST(request: NextRequest) {
     await updateSetting('auth_plex_enabled', auth_plex_enabled)
     await updateSetting('auth_jellyfin_enabled', auth_jellyfin_enabled)
     await updateSetting('auth_local_enabled', auth_local_enabled)
+    await updateSetting('request_all_seasons_enabled', request_all_seasons_enabled)
 
     await updateSetting('unraid_url', unraid_url)
     await updateSetting('unraid_api_key', unraid_api_key)

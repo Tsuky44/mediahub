@@ -25,7 +25,6 @@ export function useLiveSessions(initialSessions: LiveSession[] = []) {
     const protocol = window.location.protocol === 'https:' ? 'https' : 'http'
     
     // Priority: Runtime Config -> Build-time Config -> Default (Port 3005)
-    // @ts-ignore
     const runtimeUrl = window.__ENV?.TRACKER_WS_URL
     const buildUrl = process.env.NEXT_PUBLIC_TRACKER_WS_URL
     

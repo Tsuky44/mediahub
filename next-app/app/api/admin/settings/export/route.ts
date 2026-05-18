@@ -1,8 +1,11 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { settings } from '@/lib/db/schema'
 import { encryptData } from '@/lib/crypto'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   try {
@@ -20,8 +23,8 @@ export async function POST(request: Request) {
     }
 
     // Fetch all settings
-    const settings = await prisma.setting.findMany({
-      select: {
+    const settingsList = await db.query.settings.findMany({
+      columns: {
         key: true,
         value: true,
         category: true
@@ -31,7 +34,7 @@ export async function POST(request: Request) {
     const configData = JSON.stringify({
       version: '1.0',
       exportedAt: new Date().toISOString(),
-      settings
+      settings: settingsList
     })
 
     // Encrypt

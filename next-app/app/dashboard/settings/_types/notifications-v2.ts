@@ -15,6 +15,10 @@ export const EVENT_LABELS: Record<NotificationEvent, string> = {
   MEDIA_DOWNLOAD_COMPLETE: 'Téléchargement terminé (100%)',
   MEDIA_IMPORTING: 'Import en cours',
   MEDIA_AVAILABLE: 'Média disponible (Emby)',
+  SEASON_PARTIALLY_AVAILABLE: 'Saison partiellement disponible',
+  SEASON_DOWNLOAD_COMPLETE: 'Batch téléchargement terminé',
+  SEASON_IMPORT_COMPLETE: 'Batch import terminé',
+  SEASON_AVAILABLE: 'Batch disponible',
   MEDIA_FAILED: 'Échec',
 }
 
@@ -26,5 +30,9 @@ export const EVENT_ORDER: NotificationEvent[] = [
   'MEDIA_DOWNLOAD_COMPLETE',
   'MEDIA_IMPORTING',
   'MEDIA_AVAILABLE',
+  'SEASON_PARTIALLY_AVAILABLE',
+  'SEASON_DOWNLOAD_COMPLETE',
+  'SEASON_IMPORT_COMPLETE',
+  'SEASON_AVAILABLE',
   'MEDIA_FAILED',
 ]

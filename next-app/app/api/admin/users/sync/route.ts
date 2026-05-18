@@ -6,9 +6,9 @@ import { getEmbyServiceForUser, getPlexServiceForUser, getJellyfinServiceForUser
 import { logAction } from '@/lib/audit'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
-const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
+const log = (...args: any[]) => { if (isDev) console.log(...args); };
+const error = (...args: any[]) => { if (isDev) console.error(...args); };
+const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 
 export async function POST(req: Request) {
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const isSuperAdmin = (session.user as { role?: string }).role === 'admin'
+  const isSuperAdmin = (session.user as any).role === 'admin'
   
   if (!isSuperAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -45,10 +45,10 @@ export async function POST(req: Request) {
       select: { key: true, value: true }
     })
     
-    const isEmbyEnabled = settings.find(s => s.key === 'auth_emby_enabled')?.value === 'true'
-    const isPlexEnabled = settings.find(s => s.key === 'auth_plex_enabled')?.value === 'true'
-    const isJellyfinEnabled = settings.find(s => s.key === 'auth_jellyfin_enabled')?.value === 'true'
-    const defaultRoleId = settings.find(s => s.key === 'default_role_id')?.value
+    const isEmbyEnabled = settings.find((s: {key: string, value: string | null}) => s.key === 'auth_emby_enabled')?.value === 'true'
+    const isPlexEnabled = settings.find((s: {key: string, value: string | null}) => s.key === 'auth_plex_enabled')?.value === 'true'
+    const isJellyfinEnabled = settings.find((s: {key: string, value: string | null}) => s.key === 'auth_jellyfin_enabled')?.value === 'true'
+    const defaultRoleId = settings.find((s: {key: string, value: string | null}) => s.key === 'default_role_id')?.value
 
     // Fetch admin role
     const adminRole = await prisma.role.findFirst({ where: { name: 'admin' } })
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
                     }
                   })
                   
-                  await logAction(parseInt(String((session.user as { id?: string | number }).id)), 'CREATE', 'User', newUser.id.toString(), {
+                  await logAction(parseInt((session.user as any).id), 'CREATE', 'User', newUser.id.toString(), {
                     provider: 'Emby',
                     userName: newUser.name,
                     userEmail: newUser.email
@@ -155,9 +155,9 @@ export async function POST(req: Request) {
                   activeUserIds.add(newUser.id.toString())
                   createdCount++
                 }
-              } catch (err) {
+              } catch (err: any) {
                 error(`[SyncUsers] Failed to process Emby user ${u.Name}:`, err)
-                details.push(`Emby user ${u.Name}: ${(err as Error).message}`)
+                details.push(`Emby user ${u.Name}: ${err.message}`)
               }
             }
           } else {
@@ -220,7 +220,7 @@ export async function POST(req: Request) {
                                 }
                             })
                             
-                                await logAction(parseInt(String((session.user as { id?: string | number }).id)), 'CREATE', 'User', newUser.id.toString(), {
+                                await logAction(parseInt((session.user as any).id), 'CREATE', 'User', newUser.id.toString(), {
                                   provider: 'Plex',
                                   userName: newUser.name,
                                   userEmail: newUser.email
@@ -238,18 +238,18 @@ export async function POST(req: Request) {
                                 activeUserIds.add(newUser.id.toString())
                                 createdCount++
                             }
-                        } catch (err) {
+                        } catch (err: any) {
                             error(`[SyncUsers] Failed to process Plex user ${u.Name}:`, err)
-                            details.push(`Plex user ${u.Name}: ${(err as Error).message}`)
+                            details.push(`Plex user ${u.Name}: ${err.message}`)
                         }
                     }
                 } else {
                     warn('[SyncUsers] Plex returned 0 users. Skipping cleanup for Plex.')
                     details.push('Plex: 0 users found (cleanup skipped)')
                 }
-            } catch (e) {
+            } catch (e: any) {
                 error(`[SyncUsers] Plex sync failed:`, e)
-                details.push(`Plex sync failed: ${(e as Error).message}`)
+                details.push(`Plex sync failed: ${e.message}`)
             }
         }
     }
@@ -297,7 +297,7 @@ export async function POST(req: Request) {
                                 }
                             })
                             
-                            await logAction(parseInt(String((session.user as { id?: string | number }).id)), 'CREATE', 'User', newUser.id.toString(), {
+                            await logAction(parseInt((session.user as any).id), 'CREATE', 'User', newUser.id.toString(), {
                               provider: 'Jellyfin',
                               userName: newUser.name,
                               userEmail: newUser.email
@@ -333,10 +333,10 @@ export async function POST(req: Request) {
     
     // Get all users
     const allUsers = await prisma.user.findMany()
-    const currentUserId = String((session.user as { id?: string | number }).id)
+    const currentUserId = (session.user as any).id
 
     // Pre-calculate counts and protection flags to optimize loop
-    const existingEmbyCount = allUsers.filter(u => u.embyUserId).length
+    const existingEmbyCount = allUsers.filter((u: any) => u.embyUserId).length
     const foundEmbyCount = activeEmbyIds.size
     const skipEmbyCleanup = shouldSyncEmby && embySyncSuccess && existingEmbyCount > 5 && foundEmbyCount < existingEmbyCount * 0.2
 
@@ -345,7 +345,7 @@ export async function POST(req: Request) {
         details.push(`Emby: Mass unlink protection triggered (Existing: ${existingEmbyCount}, Found: ${foundEmbyCount}). Cleanup skipped.`)
     }
 
-    const existingPlexCount = allUsers.filter(u => u.plexUserId).length
+    const existingPlexCount = allUsers.filter((u: any) => u.plexUserId).length
     const foundPlexCount = activePlexIds.size
     const skipPlexCleanup = shouldSyncPlex && plexSyncSuccess && existingPlexCount > 5 && foundPlexCount < existingPlexCount * 0.2
 
@@ -354,7 +354,7 @@ export async function POST(req: Request) {
         details.push(`Plex: Mass unlink protection triggered (Existing: ${existingPlexCount}, Found: ${foundPlexCount}). Cleanup skipped.`)
     }
 
-    const existingJellyfinCount = allUsers.filter(u => u.jellyfinUserId).length
+    const existingJellyfinCount = allUsers.filter((u: any) => u.jellyfinUserId).length
     const foundJellyfinCount = activeJellyfinIds.size
     const skipJellyfinCleanup = shouldSyncJellyfin && jellyfinSyncSuccess && existingJellyfinCount > 5 && foundJellyfinCount < existingJellyfinCount * 0.2
 
@@ -442,7 +442,7 @@ export async function POST(req: Request) {
     }
 
     await logAction(
-      parseInt(String((session.user as { id?: string | number }).id)),
+      parseInt((session.user as any).id),
       'SYNC',
       'User',
       'Batch',
@@ -459,8 +459,8 @@ export async function POST(req: Request) {
       jellyfin: jellyfinSyncSuccess,
       details
     })
-  } catch (syncError) {
-    error('[SyncUsers] Error:', syncError)
-    return NextResponse.json({ error: (syncError as Error).message }, { status: 500 })
+  } catch (error: any) {
+    error('[SyncUsers] Error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

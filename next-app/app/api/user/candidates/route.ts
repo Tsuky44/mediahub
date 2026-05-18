@@ -1,4 +1,5 @@
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { users, userGroupMembers } from '@/lib/db/schema'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { NextResponse } from 'next/server'
@@ -20,8 +21,8 @@ export async function GET() {
         log('[UserGroups] Fetching candidates')
 
         // 1. Fetch all registered users
-        const dbUsers = await prisma.user.findMany({
-            select: {
+        const dbUsers = await db.query.users.findMany({
+            columns: {
                 id: true,
                 embyUserId: true,
                 name: true
@@ -30,8 +31,8 @@ export async function GET() {
         log(`[UserGroups] Found ${dbUsers.length} users in DB`)
 
         // 2. Fetch existing group members to exclude them
-        const existingMembers = await prisma.userGroupMember.findMany()
-        const linkedSet = new Set(existingMembers.map((m: any) => m.userId))
+        const existingMembers = await db.query.userGroupMembers.findMany()
+        const linkedSet = new Set(existingMembers.map((m) => m.userId))
         log(`[UserGroups] Total linked accounts already: ${linkedSet.size}`)
 
         // 3. Build Candidates List

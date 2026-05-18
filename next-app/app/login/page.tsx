@@ -6,7 +6,9 @@ import BackgroundSlideshow from './BackgroundSlideshow'
 import Image from 'next/image'
 import { isAppConfigured } from '@/lib/setup'
 import { redirect } from 'next/navigation'
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { settings } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,10 +25,10 @@ export default async function LoginPage() {
   }
 
   // Fetch enabled auth providers
-  const embyEnabled = await prisma.setting.findFirst({ where: { key: 'auth_emby_enabled' }, select: { value: true } })
-  const plexEnabled = await prisma.setting.findFirst({ where: { key: 'auth_plex_enabled' }, select: { value: true } })
-  const jellyfinEnabled = await prisma.setting.findFirst({ where: { key: 'auth_jellyfin_enabled' }, select: { value: true } })
-  const localEnabled = await prisma.setting.findFirst({ where: { key: 'auth_local_enabled' }, select: { value: true } })
+  const embyEnabled = await db.query.settings.findFirst({ where: eq(settings.key, 'auth_emby_enabled'), columns: { value: true } })
+  const plexEnabled = await db.query.settings.findFirst({ where: eq(settings.key, 'auth_plex_enabled'), columns: { value: true } })
+  const jellyfinEnabled = await db.query.settings.findFirst({ where: eq(settings.key, 'auth_jellyfin_enabled'), columns: { value: true } })
+  const localEnabled = await db.query.settings.findFirst({ where: eq(settings.key, 'auth_local_enabled'), columns: { value: true } })
 
   const enabledProviders = {
     emby: embyEnabled ? embyEnabled.value === 'true' : true, // Default true

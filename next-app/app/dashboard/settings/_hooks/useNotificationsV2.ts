@@ -7,6 +7,7 @@ import {
   testNotificationsV2,
   testEventNotification,
   getUsersForNotifications,
+  pingEvolutionApi,
 } from '../notifications-v2-actions'
 import type { NotificationsV2Config, NotificationEvent } from '@/lib/notifications-v2'
 import type { UserOption } from '../_types/notifications-v2'
@@ -16,7 +17,9 @@ interface UseNotificationsV2Result {
   users: UserOption[]
   loading: boolean
   saving: boolean
+  pinging: boolean
   message: string | null
+  pingResult: { success: boolean; message: string } | null
   update: (patch: Partial<NotificationsV2Config>) => void
   updateEvolution: (patch: Partial<NotificationsV2Config['evolution']>) => void
   updateRetry: (patch: Partial<NotificationsV2Config['retry']>) => void
@@ -27,6 +30,7 @@ interface UseNotificationsV2Result {
   handleSave: () => Promise<void>
   handleTest: () => Promise<void>
   handleTestEvent: (event: NotificationEvent, mediaType: 'movie' | 'tv') => Promise<void>
+  handlePing: () => Promise<void>
 }
 
 export function useNotificationsV2(): UseNotificationsV2Result {
@@ -34,7 +38,9 @@ export function useNotificationsV2(): UseNotificationsV2Result {
   const [users, setUsers] = useState<UserOption[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [pinging, setPinging] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [pingResult, setPingResult] = useState<{ success: boolean; message: string } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -129,6 +135,25 @@ export function useNotificationsV2(): UseNotificationsV2Result {
     }
   }, [])
 
+  const handlePing = useCallback(async () => {
+    if (!config) return
+    setPinging(true)
+    setPingResult(null)
+    try {
+      const res = await pingEvolutionApi(
+        config.evolution.apiUrl,
+        config.evolution.apiKey,
+        config.evolution.instance
+      )
+      setPingResult(res)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setPingResult({ success: false, message: `❌ ${msg}` })
+    } finally {
+      setPinging(false)
+    }
+  }, [config])
+
   return {
     config,
     users,
@@ -142,5 +167,8 @@ export function useNotificationsV2(): UseNotificationsV2Result {
     handleSave,
     handleTest,
     handleTestEvent,
+    handlePing,
+    pinging,
+    pingResult,
   }
 }

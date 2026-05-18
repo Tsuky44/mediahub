@@ -1,6 +1,8 @@
 'use server'
 
-import { prisma } from '@/lib/prisma'
+import { db } from '@/lib/db/drizzle'
+import { accountRequests, users, settings as settingsTable, mediaRequests } from '@/lib/db/schema'
+import { eq, inArray } from 'drizzle-orm'
 import { importPlexHistory } from '@/lib/plex-import'
 import { importJellyseerrRequests } from '@/lib/jellyseerr-import'
 import { JellyseerrService } from '@/lib/services/jellyseerr'
@@ -9,16 +11,13 @@ import { getCurrentUser, getTmdbServiceForUser } from '@/lib/auth'
 import { UnraidService } from '@/lib/services/unraid'
 import { QBittorrentService } from '@/lib/services/qbittorrent'
 
-const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
-const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
+import { logger } from '@/lib/logger'
 
 
 export async function testQBittorrentConnectionAction(url: string, username?: string, password?: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as { role?: string }).role !== 'admin') {
+        if (!user || user?.role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -40,13 +39,11 @@ import { EmbyService } from '@/lib/services/emby'
 export async function approveAccountRequestAction(requestId: string, templateUserId?: string, customName?: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as { role?: string }).role !== 'admin') {
+        if (!user || user?.role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
-        const request = await prisma.accountRequest.findUnique({
-            where: { id: requestId }
-        })
+        const [request] = await db.select().from(accountRequests).where(eq(accountRequests.id, requestId)).limit(1)
 
         if (!request) {
             throw new Error('Demande introuvable')
@@ -57,16 +54,11 @@ export async function approveAccountRequestAction(requestId: string, templateUse
         }
 
         // Check if user already exists locally
-        const existingUser = await prisma.user.findUnique({
-            where: { email: request.email }
-        })
+        const [existingUser] = await db.select().from(users).where(eq(users.email, request.email)).limit(1)
 
         if (existingUser) {
             // If user exists, just mark request as approved
-            await prisma.accountRequest.update({
-                where: { id: requestId },
-                data: { status: 'APPROVED' }
-            })
+            await db.update(accountRequests).set({ status: 'APPROVED' }).where(eq(accountRequests.id, requestId))
             
             revalidatePath('/dashboard/settings')
             return { success: true, message: 'Demande approuvée (utilisateur existant).' }
@@ -77,14 +69,10 @@ export async function approveAccountRequestAction(requestId: string, templateUse
         
         try {
             // Fetch Emby settings
-            const settings = await prisma.setting.findMany({
-                where: {
-                    key: { in: ['emby_url', 'emby_api_key'] }
-                }
-            });
+            const settingsList = await db.select().from(settingsTable).where(inArray(settingsTable.key, ['emby_url', 'emby_api_key']));
             
-            const embyUrl = settings.find((s: Record<string, unknown>) => s.key === 'emby_url')?.value;
-            const embyApiKey = settings.find((s: Record<string, unknown>) => s.key === 'emby_api_key')?.value;
+            const embyUrl = settingsList.find((s: any) => s.key === 'emby_url')?.value;
+            const embyApiKey = settingsList.find((s: any) => s.key === 'emby_api_key')?.value;
 
             if (embyUrl && embyApiKey) {
                 const embyService = new EmbyService(embyUrl, embyApiKey)
@@ -97,9 +85,9 @@ export async function approveAccountRequestAction(requestId: string, templateUse
                     newEmbyUser = await embyService.createUser(newUserName)
                 } catch (e) {
                         // If creation fails, try to find existing user
-                        console.error("Emby create user failed:", e)
+                        logger.error("Emby create user failed:", e)
                         const users = await embyService.getUsers()
-                        newEmbyUser = users.find((u: Record<string, unknown>) => u.Name === newUserName)
+                        newEmbyUser = users.find((u: { Name?: string }) => u.Name === newUserName)
                         if (!newEmbyUser) {
                              embyMessage = ` (Échec création Emby: ${(e as Error).message})`
                              // Don't throw, proceed with just approval
@@ -139,21 +127,18 @@ export async function approveAccountRequestAction(requestId: string, templateUse
                 }
             }
         } catch (error) {
-            console.error("Emby automation failed:", error)
+            logger.error("Emby automation failed:", error)
             embyMessage = ` (Attention: Erreur Emby - ${(error as Error).message})`
         }
 
 
         // Mark request as approved - User will be created via Emby/Plex/Jellyfin sync (login)
-        await prisma.accountRequest.update({
-            where: { id: requestId },
-            data: { status: 'APPROVED' }
-        })
+        await db.update(accountRequests).set({ status: 'APPROVED' }).where(eq(accountRequests.id, requestId))
 
         try {
             const { logAction } = await import('@/lib/audit')
             await logAction(
-                parseInt((user as { id?: string | number }).id as string),
+                parseInt(user?.id),
                 'ACCOUNT_REQUEST_APPROVE',
                 'AccountRequest',
                 requestId,
@@ -167,7 +152,7 @@ export async function approveAccountRequestAction(requestId: string, templateUse
                 data: { email: request.email, firstName: request.firstName, status: 'approved' }
             })
         } catch (e) {
-            console.error('Failed to log account request approval:', e)
+            logger.error('Failed to log account request approval:', e)
         }
 
         revalidatePath('/dashboard/settings')
@@ -180,26 +165,23 @@ export async function approveAccountRequestAction(requestId: string, templateUse
 export async function rejectAccountRequestAction(requestId: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as { role?: string }).role !== 'admin') {
+        if (!user || user?.role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
-        const request = await prisma.accountRequest.update({
-            where: { id: requestId },
-            data: { status: 'REJECTED' }
-        })
+        const [request] = await db.update(accountRequests).set({ status: 'REJECTED' }).where(eq(accountRequests.id, requestId)).returning()
 
         try {
             const { logAction } = await import('@/lib/audit')
             await logAction(
-                parseInt((user as { id?: string | number }).id as string),
+                parseInt(user?.id),
                 'ACCOUNT_REQUEST_REJECT',
                 'AccountRequest',
                 requestId,
                 { email: request.email, firstName: request.firstName }
             )
         } catch (e) {
-            console.error('Failed to log account request rejection:', e)
+            logger.error('Failed to log account request rejection:', e)
         }
 
         revalidatePath('/dashboard/settings')
@@ -212,55 +194,49 @@ export async function rejectAccountRequestAction(requestId: string) {
 export async function deleteAccountRequestAction(requestId: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as { role?: string }).role !== 'admin') {
+        if (!user || user?.role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
-        const request = await prisma.accountRequest.delete({
-            where: { id: requestId }
-        })
+        const [request] = await db.delete(accountRequests).where(eq(accountRequests.id, requestId)).returning()
 
         try {
             const { logAction } = await import('@/lib/audit')
             await logAction(
-                parseInt((user as { id?: string | number }).id as string),
+                parseInt(user?.id),
                 'ACCOUNT_REQUEST_DELETE',
                 'AccountRequest',
                 requestId,
                 { email: request.email, firstName: request.firstName }
             )
         } catch (e) {
-            console.error('Failed to log account request deletion:', e)
+            logger.error('Failed to log account request deletion:', e)
         }
 
         revalidatePath('/dashboard/settings')
         return { success: true, message: 'Demande supprimée.' }
-    } catch (error) {
-        return { success: false, message: (error as Error).message }
+    } catch (error: any) {
+        return { success: false, message: error.message }
     }
 }
 
 export async function testUnraidDebugAction() {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as { role?: string }).role !== 'admin') {
+        if (!user || user?.role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
-        const settings = await prisma.setting.findMany({
-            where: {
-                key: { in: ['unraid_url', 'unraid_api_key'] }
-            }
-        });
+        const settings = await db.select().from(settingsTable).where(inArray(settingsTable.key, ['unraid_url', 'unraid_api_key']));
 
-        const url = settings.find((s: Record<string, unknown>) => s.key === 'unraid_url')?.value;
-        const apiKey = settings.find((s: Record<string, unknown>) => s.key === 'unraid_api_key')?.value;
+        const url = settings.find((s: any) => s.key === 'unraid_url')?.value;
+        const apiKey = settings.find((s: any) => s.key === 'unraid_api_key')?.value;
 
         if (!url || !apiKey) {
             return { success: false, message: 'Configuration Unraid manquante dans la DB.' };
         }
 
-        log(`[Debug Unraid] Test manuel sur ${url}`);
+        logger.info(`[Debug Unraid] Test manuel sur ${url}`);
         const service = new UnraidService(url, apiKey);
         const stats = await service.getStorageStats();
 
@@ -272,22 +248,22 @@ export async function testUnraidDebugAction() {
         }
 
         return { success: false, message: 'Échec de la récupération des stats. Vérifiez les logs serveur.' };
-    } catch (err) {
-        error('[testUnraidDebugAction] Error:', err);
-        return { success: false, message: (err as Error).message };
+    } catch (error) {
+        logger.error('[testUnraidDebugAction] Error:', error);
+        return { success: false, message: (error as Error).message };
     }
 }
 
 export async function importPlexHistoryAction() {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as { role?: string }).role !== 'admin') {
+        if (!user || user?.role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
-        log(`[Action] Starting Plex history import`)
+        logger.info(`[Action] Starting Plex history import`)
         
-        const result = await importPlexHistory(prisma)
+        const result = await importPlexHistory(db)
         
         revalidatePath('/dashboard/settings')
         revalidatePath('/dashboard')
@@ -296,11 +272,11 @@ export async function importPlexHistoryAction() {
             success: true, 
             message: `Import réussi : ${result.imported} nouveaux éléments, ${result.skipped} ignorés.` 
         }
-    } catch (err) {
-        error('[importPlexHistoryAction] Error:', err)
+    } catch (error) {
+        logger.error('[importPlexHistoryAction] Error:', error)
         return { 
             success: false, 
-            message: (err as Error).message || 'Erreur lors de l\'importation' 
+            message: (error as Error).message || 'Erreur lors de l\'importation' 
         }
     }
 }
@@ -308,7 +284,7 @@ export async function importPlexHistoryAction() {
 export async function testJellyseerrConnectionAction(url: string, key: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as { role?: string }).role !== 'admin') {
+        if (!user || user?.role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -327,7 +303,7 @@ export async function testJellyseerrConnectionAction(url: string, key: string) {
 export async function testProwlarrConnectionAction(url: string, key: string) {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as { role?: string }).role !== 'admin') {
+        if (!user || user?.role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -349,7 +325,7 @@ export async function testProwlarrConnectionAction(url: string, key: string) {
 export async function fixMissingTitlesAction() {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as { role?: string }).role !== 'admin') {
+        if (!user || user?.role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
@@ -358,10 +334,10 @@ export async function fixMissingTitlesAction() {
             throw new Error('Clé API TMDB manquante (vérifiez la configuration).')
         }
         
-        const requests = await prisma.mediaRequest.findMany({})
+        const requests = await db.select().from(mediaRequests)
 
         let fixed = 0
-        log(`[fixMissingTitlesAction] Checking ${requests.length} requests`)
+        logger.info(`[fixMissingTitlesAction] Checking ${requests.length} requests`)
 
         for (const req of requests) {
             if (!req.tmdbId) continue
@@ -375,16 +351,13 @@ export async function fixMissingTitlesAction() {
 
             if (!isMissing) continue
 
-            log(`[fixMissingTitlesAction] Fixing title for ${req.mediaType} ${req.tmdbId}`)
+            logger.info(`[fixMissingTitlesAction] Fixing title for ${req.mediaType} ${req.tmdbId}`)
             const details = await tmdb.getDetails(parseInt(req.tmdbId), req.mediaType as 'movie' | 'tv')
             
             if (details) {
                 const title = req.mediaType === 'movie' ? details.title : details.name
                 if (title) {
-                    await prisma.mediaRequest.update({
-                        where: { id: req.id },
-                        data: { title }
-                    })
+                    await db.update(mediaRequests).set({ title }).where(eq(mediaRequests.id, req.id))
                     fixed++
                 }
             }
@@ -404,18 +377,18 @@ export async function fixMissingTitlesAction() {
 export async function importJellyseerrRequestsAction() {
     try {
         const user = await getCurrentUser()
-        if (!user || (user as { role?: string }).role !== 'admin') {
+        if (!user || user?.role !== 'admin') {
             throw new Error('Unauthorized')
         }
 
         // Delete all existing requests first as requested
-        log(`[Action] Deleting all requests`)
-        await prisma.mediaRequest.deleteMany({})
+        logger.info(`[Action] Deleting all requests`)
+        await db.delete(mediaRequests)
 
-        const result = await importJellyseerrRequests(prisma)
+        const result = await importJellyseerrRequests(db)
         
         // After import, run the fix titles action automatically
-        log(`[Action] Fixing missing titles`)
+        logger.info(`[Action] Fixing missing titles`)
         await fixMissingTitlesAction()
         
         revalidatePath('/dashboard/requests')

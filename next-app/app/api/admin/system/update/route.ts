@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { db } from '@/lib/db/drizzle';
+import { users } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 import Docker from 'dockerode';
 import os from 'os';
 
@@ -25,8 +27,8 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const user = await prisma.user.findUnique({
-            where: { email: session.user.email }
+        const user = await db.query.users.findFirst({
+            where: eq(users.email, session.user.email)
         });
 
         if (user?.role !== 'admin') {
@@ -54,8 +56,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const user = await prisma.user.findUnique({
-            where: { email: session.user.email }
+        const user = await db.query.users.findFirst({
+            where: eq(users.email, session.user.email)
         });
 
         if (user?.role !== 'admin') {
