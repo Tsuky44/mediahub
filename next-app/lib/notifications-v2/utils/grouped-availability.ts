@@ -13,7 +13,7 @@
 
 import { db } from '@/lib/db/drizzle'
 import { mediaRequests } from '@/lib/db/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, ne } from 'drizzle-orm'
 import { logger } from '@/lib/logger'
 import { dispatch } from '../dispatcher'
 import { NOTIFICATION_EVENTS } from '../types'
@@ -60,9 +60,11 @@ export async function tryDispatchGroupedAvailability(params: {
 }): Promise<GroupedAvailabilityResult> {
   const { tmdbId, tvdbId, title, overview, posterPath, requester, pendingInQueueSeasons } = params
 
-  // Récupérer les demandes TV pour ce tmdbId (toutes, triées par date desc)
+  // Récupérer uniquement les demandes TV non-disponibles (status != 5) pour ce tmdbId.
+  // Les demandes avec status=5 sont des anciennes demandes déjà traitées (ex: S1 demandée
+  // il y a 6 mois) — on ne doit pas les agréger avec la demande en cours (S5+S6).
   const requests = await db.query.mediaRequests.findMany({
-    where: and(eq(mediaRequests.tmdbId, tmdbId), eq(mediaRequests.mediaType, 'tv')),
+    where: and(eq(mediaRequests.tmdbId, tmdbId), eq(mediaRequests.mediaType, 'tv'), ne(mediaRequests.status, 5)),
     orderBy: (t, { desc }) => [desc(t.requestedAt)],
   })
 
