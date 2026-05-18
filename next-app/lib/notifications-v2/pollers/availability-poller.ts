@@ -39,6 +39,16 @@ export class AvailabilityPoller {
     logger.info(`[NotificationsV2][AvailabilityPoller] Started (every ${this.intervalMs / 1000}s)`)
   }
 
+  /** Purge les clés mémoire pour un tmdbId (appelé quand une demande est supprimée). */
+  purgeForTmdbId(tmdbId: string): void {
+    for (const key of this.notifiedKeys) {
+      if (key.includes(`:${tmdbId}:`)) {
+        this.notifiedKeys.delete(key)
+      }
+    }
+    logger.info(`[AvailabilityPoller] Purged in-memory dedup keys for tmdbId=${tmdbId}`)
+  }
+
   stop(): void {
     if (this.timer) clearInterval(this.timer)
     this.timer = null

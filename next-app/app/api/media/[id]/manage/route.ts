@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getRadarrServiceForUser, getSonarrServiceForUser, getTmdbServiceForUser, getCurrentUser } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
-import { mediaRequests, settings, notificationEvents, episodeBatches } from '@/lib/db/schema'
+import { mediaRequests, settings, episodeBatches } from '@/lib/db/schema'
 import { eq, desc, and, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { getMediaAvailability } from '@/lib/services/media-status'
@@ -199,8 +199,9 @@ export async function DELETE(
              // Delete local request
              await db.delete(mediaRequests).where(eq(mediaRequests.tmdbId, tmdbIdStr))
 
-             // Clean up notification dedup keys for this media
-             await db.delete(notificationEvents).where(eq(notificationEvents.tmdbId, tmdbIdStr))
+             // Purge dedup keys en DB + cache mémoire (pour que re-demander relance les notifs)
+             const { purgeNotifDedupForTmdbId } = await import('@/lib/notifications-v2/bootstrap')
+             await purgeNotifDedupForTmdbId(tmdbIdStr)
 
              // Clean up episode batches for this media
              await db.delete(episodeBatches).where(eq(episodeBatches.tmdbId, tmdbIdStr))
@@ -301,8 +302,9 @@ export async function DELETE(
             // Just delete the local DB entry
             const [deletedRequest] = await db.delete(mediaRequests).where(eq(mediaRequests.id, currentTargetId)).returning()
 
-            // Clean up notification dedup keys for this media (so re-requesting triggers notifications again)
-            await db.delete(notificationEvents).where(eq(notificationEvents.tmdbId, tmdbIdStr))
+            // Purge dedup keys en DB + cache mémoire (pour que re-demander relance les notifs)
+            const { purgeNotifDedupForTmdbId } = await import('@/lib/notifications-v2/bootstrap')
+            await purgeNotifDedupForTmdbId(tmdbIdStr)
 
             // Clean up episode batches for this media
             await db.delete(episodeBatches).where(eq(episodeBatches.tmdbId, tmdbIdStr))

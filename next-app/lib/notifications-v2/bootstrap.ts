@@ -106,6 +106,24 @@ export async function startNotificationsV2(): Promise<void> {
   logger.info('[NotificationsV2] Bootstrap complete (OutboxWorker + AvailabilityPoller@30s + QueuePoller@5s)')
 }
 
+/**
+ * Purge toutes les dedup keys (DB + cache mémoire) pour un tmdbId donné.
+ * À appeler quand une demande ou un média est supprimé, pour que les notifs
+ * repartent de zéro si le média est re-demandé.
+ */
+export async function purgeNotifDedupForTmdbId(tmdbId: string): Promise<void> {
+  try {
+    const { db } = await import('@/lib/db/drizzle')
+    const { notificationEvents } = await import('@/lib/db/schema')
+    const { eq } = await import('drizzle-orm')
+    await db.delete(notificationEvents).where(eq(notificationEvents.tmdbId, tmdbId))
+    logger.info(`[NotificationsV2] Purged DB dedup keys for tmdbId=${tmdbId}`)
+  } catch (e) {
+    logger.warn(`[NotificationsV2] Failed to purge DB dedup keys for tmdbId=${tmdbId}:`, e)
+  }
+  globalForV2.__notificationsV2Refs?.availabilityPoller.purgeForTmdbId(tmdbId)
+}
+
 export function stopNotificationsV2(): void {
   const refs = globalForV2.__notificationsV2Refs
   if (!refs) return
