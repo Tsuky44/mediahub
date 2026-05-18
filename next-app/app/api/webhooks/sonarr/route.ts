@@ -166,19 +166,28 @@ async function handleImportEvent(body: any) {
     pendingInQueueSeasons: [...pendingQueueSeasons],
   });
 
-  // Si le helper a gÃ©rÃ© toutes les saisons en mode groupÃ©, on s'arrÃªte
+  // Si le helper a gÃrÃ toutes les saisons en mode groupÃ, on s'arrÃªte
   if (grouped.dispatched) {
     return NextResponse.json({ success: true });
   }
 
+  // Si une demande groupÃe a ÃtÃ dÃtectÃe (mÃªme en attente de queue),
+  // on bloque le fallback pour toutes les saisons couvertes par ce groupe.
+  const groupedSeasonsSet = new Set(grouped.groupedSeasons);
+
   // Fallback mono-saison : dispatcher individuellement pour chaque saison
-  // (demandes sans seasons[] groupées, ou demande d'une saison unique)
+  // (demandes sans seasons[] groupÃes, ou demande d'une saison unique)
   for (const [seasonNumber, episodeNumbers] of Object.entries(groupedEpisodes)) {
     const seasonNum = parseInt(seasonNumber);
     const importedCount = episodeNumbers.length;
 
     if (pendingQueueSeasons.has(seasonNum)) {
-      logger.info(`[SonarrWebhook V2] Season ${seasonNum}: still in Sonarr queue â†' skipping`);
+      logger.info(`[SonarrWebhook V2] Season ${seasonNum}: still in Sonarr queue â†â€™ skipping`);
+      continue;
+    }
+
+    if (grouped.isGrouped && groupedSeasonsSet.has(seasonNum)) {
+      logger.info(`[SonarrWebhook V2] Season ${seasonNum}: part of grouped request (waiting) â†â€™ skipping fallback`);
       continue;
     }
 

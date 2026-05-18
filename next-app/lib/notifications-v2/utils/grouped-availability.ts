@@ -33,6 +33,14 @@ export interface GroupedAvailabilityResult {
   partialSeasons: number[]
   /** saisons demandées mais absentes */
   missingSeasons: number[]
+  /**
+   * true si au moins une demande groupée (multi-saisons) a été détectée.
+   * Même si dispatched=false (en attente de queue), le webhook doit bloquer
+   * le fallback mono-saison pour ne pas envoyer des notifs individuelles.
+   */
+  isGrouped: boolean
+  /** Saisons couvertes par une demande groupée (pour bloquer le fallback) */
+  groupedSeasons: number[]
 }
 
 /**
@@ -70,7 +78,7 @@ export async function tryDispatchGroupedAvailability(params: {
 
   if (requests.length === 0) {
     logger.warn(`[GroupedAvailability] No request found for tmdbId=${tmdbId}`)
-    return { dispatched: false, allComplete: false, partialSeasons: [], missingSeasons: [] }
+    return { dispatched: false, allComplete: false, partialSeasons: [], missingSeasons: [], isGrouped: false, groupedSeasons: [] }
   }
 
   // Récupérer les stats de la série depuis Sonarr (une seule fois pour toutes les saisons)
@@ -102,6 +110,8 @@ export async function tryDispatchGroupedAvailability(params: {
   }
 
   let anyDispatched = false
+  let isGrouped = false
+  const groupedSeasons = new Set<number>()
 
   for (const [, userRequests] of byUser) {
     // Rassembler toutes les saisons demandées par cet utilisateur
@@ -127,6 +137,10 @@ export async function tryDispatchGroupedAvailability(params: {
     }
 
     const sortedRequested = [...requestedSeasons].sort((a, b) => a - b)
+
+    // Marquer comme grouped dès qu'on a une demande multi-saisons
+    isGrouped = true
+    for (const s of sortedRequested) groupedSeasons.add(s)
 
     // Vérifier si au moins une saison demandée est encore en queue → attendre
     const stillWaiting = sortedRequested.filter((s) => pendingInQueueSeasons.includes(s))
@@ -224,6 +238,8 @@ export async function tryDispatchGroupedAvailability(params: {
     allComplete: false,
     partialSeasons: [],
     missingSeasons: [],
+    isGrouped,
+    groupedSeasons: [...groupedSeasons],
   }
 }
 
