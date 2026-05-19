@@ -437,15 +437,26 @@ export class QueuePoller {
   }
 
   /**
-   * Retourne tous les états entre `prev` (exclusif) et `newState` (inclusif).
-   * Permet d'émettre les états intermédiaires manqués (ex: passage direct de
-   * `downloading` à `importing` → on émet aussi `download_complete`).
+   * Retourne les états à dispatcher pour atteindre `newState`.
+   *
+   * Règle : on NE synthétise PAS les états intermédiaires manqués si on saute
+   * directement à un état avancé sans les avoir observés réellement.
+   * Ex: first observation = `importing` → on dispatche UNIQUEMENT `importing`,
+   * pas [downloading, download_complete, importing] en rafale.
+   * Cela évite d'envoyer "dl 100%" après "import en cours" côté utilisateur.
+   *
+   * Exception : si `prev = downloading` et `newState = importing`, on émet
+   * `download_complete` en intermédiaire car c'est une transition attendue.
    */
   private missedStates(key: string, newState: TrackedState): TrackedState[] {
     const prev = this.lastState.get(key)
     const newIdx = STATE_ORDER.indexOf(newState)
     const prevIdx = prev ? STATE_ORDER.indexOf(prev) : -1
     if (newIdx <= prevIdx) return []
+    // Si c'est la première observation (pas de prev) et qu'on arrive directement
+    // en état avancé → dispatcher uniquement cet état, pas les intermédiaires synthétiques
+    if (!prev) return [newState]
+    // Transition depuis un état connu → émettre tous les intermédiaires
     return STATE_ORDER.slice(prevIdx + 1, newIdx + 1)
   }
 
