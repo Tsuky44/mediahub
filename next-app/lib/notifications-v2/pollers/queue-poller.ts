@@ -19,8 +19,8 @@ import { getRadarrService, type RadarrQueueItem } from '@/lib/services/radarr'
 import { getSonarrService, type SonarrQueueItem } from '@/lib/services/sonarr'
 import { getTmdbService } from '@/lib/services/tmdb'
 import { db } from '@/lib/db/drizzle'
-import { mediaRequests, users } from '@/lib/db/schema'
-import { eq, and } from 'drizzle-orm'
+import { mediaRequests, notificationEvents } from '@/lib/db/schema'
+import { eq, and, gte } from 'drizzle-orm'
 import { logger } from '@/lib/logger'
 import { ConfigStore } from '../config/config-store'
 import { dispatch } from '../dispatcher'
@@ -34,6 +34,13 @@ const EVENT_FOR_STATE: Record<TrackedState, NotificationEvent> = {
   downloading: NOTIFICATION_EVENTS.MEDIA_DOWNLOADING,
   download_complete: NOTIFICATION_EVENTS.MEDIA_DOWNLOAD_COMPLETE,
   importing: NOTIFICATION_EVENTS.MEDIA_IMPORTING,
+}
+
+/** Inverse de EVENT_FOR_STATE — pour reconstituer l'état depuis la DB */
+const STATE_FOR_EVENT: Partial<Record<NotificationEvent, TrackedState>> = {
+  [NOTIFICATION_EVENTS.MEDIA_DOWNLOADING]: 'downloading',
+  [NOTIFICATION_EVENTS.MEDIA_DOWNLOAD_COMPLETE]: 'download_complete',
+  [NOTIFICATION_EVENTS.MEDIA_IMPORTING]: 'importing',
 }
 
 /**
@@ -96,6 +103,8 @@ export class QueuePoller {
   private readonly lastContext = new Map<string, CachedContext>()
   /** Cache tvdbId → tmdbId pour éviter les appels TMDB répétés */
   private readonly tvdbToTmdb = new Map<number, string>()
+  /** État max par (tmdbId:season) rechargé depuis la DB au démarrage */
+  private readonly dbStateByMedia = new Map<string, TrackedState>()
 
   constructor(private readonly intervalMs = 15_000) {}
 
@@ -142,16 +151,23 @@ export class QueuePoller {
       logger.info(`[NotifV2][QueuePoller] Sonarr queue (${sonarrQueue.length} items): ${JSON.stringify(summary)}`)
     }
 
-    // Premier tick : on enregistre les tats actuels SANS dispatcher (vite le spam au dmarrage)
+    // Premier tick : on enregistre les états actuels SANS dispatcher (évite le spam au démarrage)
     if (this.isFirstRun) {
       this.isFirstRun = false
+
+      // 1. Seed depuis la DB : les events dispatchés aujourd'hui pour ne pas régresser après redémarrage
+      await this.seedLastStateFromDb()
+
+      // 2. Seed depuis la queue courante (si état DB absent pour cet item)
       for (const item of radarrQueue) {
         const state = mapTrackedState(item)
-        if (state) this.lastState.set(this.radarrKey(item), state)
+        const key = this.radarrKey(item)
+        if (state && !this.lastState.has(key)) this.lastState.set(key, state)
       }
       for (const item of sonarrQueue) {
         const state = mapTrackedState(item)
-        if (state) this.lastState.set(this.sonarrKey(item), state)
+        const key = this.sonarrKey(item)
+        if (state && !this.lastState.has(key)) this.lastState.set(key, state)
       }
       logger.info(
         `[NotifV2][QueuePoller] Startup seed: ${radarrQueue.length} Radarr + ${sonarrQueue.length} Sonarr items silenced (keys: ${Array.from(this.lastState.keys()).join(', ')})`
@@ -236,10 +252,9 @@ export class QueuePoller {
     if (!newState) return
 
     const key = this.radarrKey(item)
-    if (!this.shouldDispatchTransition(key, newState)) return
-
     const tmdbId = item.movie?.tmdbId ? String(item.movie.tmdbId) : null
     if (!tmdbId) return
+    if (!this.shouldDispatchTransition(key, newState, `${tmdbId}:x`)) return
 
     const { media, requester } = await this.buildContextMovie(tmdbId, item.movie?.title ?? item.title)
     if (!media) return
@@ -346,11 +361,15 @@ export class QueuePoller {
     state: TrackedState
     sample: SonarrQueueItem
   }): Promise<void> {
-    const statesToDispatch = this.missedStates(group.key, group.state)
-    if (statesToDispatch.length === 0) return
-
     const tmdbId = await this.resolveTvdbToTmdb(group.tvdbId)
     if (!tmdbId) return
+
+    const mediaKey = `${tmdbId}:${group.seasonNumber}`
+    // Re-vérifier shouldDispatch avec mediaKey DB avant de calculer missedStates
+    if (!this.shouldDispatchTransition(group.key, group.state, mediaKey)) return
+
+    const statesToDispatch = this.missedStates(group.key, group.state)
+    if (statesToDispatch.length === 0) return
 
     const { media, requester } = await this.buildContextSeries(
       tmdbId,
@@ -394,13 +413,27 @@ export class QueuePoller {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  /** Décide si la transition vers `newState` doit déclencher un dispatch. */
-  private shouldDispatchTransition(key: string, newState: TrackedState): boolean {
+  /**
+   * Décide si la transition vers `newState` doit déclencher un dispatch.
+   * Vérifie à la fois l'état mémoire ET l'état DB (anti-régression post-restart).
+   * mediaKey = `tmdbId:season` (optionnel — si fourni, vérifie aussi dbStateByMedia)
+   */
+  private shouldDispatchTransition(key: string, newState: TrackedState, mediaKey?: string): boolean {
     const prev = this.lastState.get(key)
-    if (!prev) return true
-    const prevIdx = STATE_ORDER.indexOf(prev)
     const newIdx = STATE_ORDER.indexOf(newState)
-    return newIdx > prevIdx
+    const memIdx = prev ? STATE_ORDER.indexOf(prev) : -1
+    if (newIdx <= memIdx) return false
+    // Vérifier aussi l'état DB chargé au démarrage
+    if (mediaKey) {
+      const dbState = this.dbStateByMedia.get(mediaKey)
+      const dbIdx = dbState ? STATE_ORDER.indexOf(dbState) : -1
+      if (newIdx <= dbIdx) {
+        // Sync l'état mémoire avec la DB pour les ticks suivants
+        if (dbIdx > memIdx) this.lastState.set(key, dbState!)
+        return false
+      }
+    }
+    return true
   }
 
   /**
@@ -414,6 +447,47 @@ export class QueuePoller {
     const prevIdx = prev ? STATE_ORDER.indexOf(prev) : -1
     if (newIdx <= prevIdx) return []
     return STATE_ORDER.slice(prevIdx + 1, newIdx + 1)
+  }
+
+  /**
+   * Recharge depuis la DB les événements de queue dispatchés aujourd'hui.
+   * Stocke l'état max par clé `tmdbId:season` dans dbStateByMedia.
+   * Permet de ne pas régresser après un redémarrage du container.
+   *
+   * Format dedup_key: req:<userId>:<mediaType>:<tmdbId>:<event>[:<season>]:<date>
+   *                   tmdb:<mediaType>:<tmdbId>:<event>[:<season>]:<date>
+   */
+  private async seedLastStateFromDb(): Promise<void> {
+    try {
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const rows = await db
+        .select({ event: notificationEvents.event, tmdbId: notificationEvents.tmdbId, mediaType: notificationEvents.mediaType, payload: notificationEvents.payload })
+        .from(notificationEvents)
+        .where(gte(notificationEvents.createdAt, todayStart))
+
+      for (const row of rows) {
+        const state = STATE_FOR_EVENT[row.event as NotificationEvent]
+        if (!state || !row.tmdbId) continue
+        // Extraire le seasonNumber depuis le payload JSON
+        let seasonNumber: number | undefined
+        try {
+          const p = JSON.parse(row.payload ?? '{}')
+          seasonNumber = p?.media?.seasonNumber
+        } catch {}
+        const mediaKey = `${row.tmdbId}:${seasonNumber ?? 'x'}`
+        const existing = this.dbStateByMedia.get(mediaKey)
+        const existingIdx = existing ? STATE_ORDER.indexOf(existing) : -1
+        if (STATE_ORDER.indexOf(state) > existingIdx) {
+          this.dbStateByMedia.set(mediaKey, state)
+        }
+      }
+      if (this.dbStateByMedia.size > 0) {
+        logger.info(`[NotifV2][QueuePoller] DB seed: ${this.dbStateByMedia.size} media state(s) loaded from today`)
+      }
+    } catch (e) {
+      logger.warn('[NotifV2][QueuePoller] DB seed failed (non-blocking):', e)
+    }
   }
 
   private async resolveTvdbToTmdb(tvdbId: number): Promise<string | null> {
