@@ -18,11 +18,15 @@ export function useDockerLogs(containerId: string) {
     const protocol = window.location.protocol === 'https:' ? 'https' : 'http'
     const runtimeUrl = window.__ENV?.TRACKER_WS_URL
     const buildUrl = process.env.NEXT_PUBLIC_TRACKER_WS_URL
-    const wsUrl = runtimeUrl || buildUrl || `${protocol}://${window.location.hostname}:3005`
+    const fallbackUrl = process.env.NODE_ENV === 'development'
+      ? `${protocol}://${window.location.hostname}:3005`
+      : undefined
 
-    log(`[LogViewer] Connecting to ${wsUrl}`)
+    const wsUrl = runtimeUrl || buildUrl || fallbackUrl
 
-    const socket = io(wsUrl, {
+    log(`[LogViewer] Connecting to ${wsUrl || 'relative host'}`)
+
+    const socket = io(wsUrl || undefined, {
       transports: ['websocket'],
       reconnectionAttempts: 10,
     })

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { getTrackerConfigs, saveTrackerConfigs, fetchAllTrackerStats, TrackerConfig, TrackerStats, formatTrackerBytes, getRatioColor, invalidateTrackerStatsCache } from '@/lib/services/tracker-stats-service'
+import { getTrackerConfigs, saveTrackerConfigs, fetchAllTrackerStats, TrackerConfig, TrackerStats, formatTrackerBytes, getRatioColor } from '@/lib/services/tracker-stats-service'
 import { checkAccess } from '../downloads/actions'
 import { randomUUID } from 'crypto'
 import { logger } from '@/lib/logger'
@@ -65,7 +65,6 @@ export async function addTrackerConfig(
 
     configs.push(newConfig)
     await saveTrackerConfigs(configs)
-    invalidateTrackerStatsCache()
 
     revalidatePath('/dashboard/settings')
     
@@ -115,7 +114,6 @@ export async function updateTrackerConfig(
     }
 
     await saveTrackerConfigs(configs)
-    invalidateTrackerStatsCache()
     revalidatePath('/dashboard/settings')
     
     return { success: true }
@@ -142,7 +140,6 @@ export async function deleteTrackerConfig(id: string): Promise<{ success: boolea
     }
 
     await saveTrackerConfigs(filtered)
-    invalidateTrackerStatsCache()
     revalidatePath('/dashboard/settings')
     
     return { success: true }

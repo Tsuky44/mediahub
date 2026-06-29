@@ -34,9 +34,12 @@ export class AvailabilityPoller {
   start(): void {
     if (this.started) return
     this.started = true
-    this.tick().catch(() => {})
+    // Exécuter le premier tick après 10s pour laisser les webhooks en vol traiter en priorité au démarrage
+    setTimeout(() => {
+      this.tick().catch(() => {})
+    }, 10_000)
     this.timer = setInterval(() => this.tick().catch(() => {}), this.intervalMs)
-    logger.info(`[NotificationsV2][AvailabilityPoller] Started (every ${this.intervalMs / 1000}s)`)
+    logger.info(`[NotificationsV2][AvailabilityPoller] Started (every ${this.intervalMs / 1000}s, delayed first tick)`)
   }
 
   /** Purge les clés mémoire pour un tmdbId (appelé quand une demande est supprimée). */
@@ -200,7 +203,7 @@ export class AvailabilityPoller {
       const media: MediaInfo = {
         tmdbId: rep.tmdbId,
         mediaType: rep.mediaType as 'tv' | 'movie',
-        title: seasonNumber != null ? `${rep.title} — Saison ${seasonNumber}` : rep.title,
+        title: seasonNumber != null ? `${rep.title} - Saison ${seasonNumber}` : rep.title,
         year: meta.year as string | undefined,
         overview: meta.overview as string | undefined,
         posterPath: meta.posterPath as string | undefined,
@@ -215,6 +218,7 @@ export class AvailabilityPoller {
 
       if (result.wasDuplicate) {
         this.notifiedKeys.add(prospectKey)
+        logger.info(`[NotificationsV2][AvailabilityPoller] Webhook already handled this event (duplicate detected for req #${rep.id})`)
       } else if (result.success) {
         this.notifiedKeys.add(prospectKey)
         logger.info(`[NotificationsV2][AvailabilityPoller] Dispatched MEDIA_AVAILABLE for req #${rep.id} to ${result.recipients.length} recipient(s)`)

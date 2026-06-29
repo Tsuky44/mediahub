@@ -33,8 +33,9 @@ let correlationStore: any = null;
 
 if (isServer) {
   try {
-    const { AsyncLocalStorage } = require('async_hooks');
-    correlationStore = new (AsyncLocalStorage as any)();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const asyncHooks = eval('require')('async_hooks');
+    correlationStore = new asyncHooks.AsyncLocalStorage();
   } catch {
     // Fallback if async_hooks not available
   }

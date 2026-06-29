@@ -28,7 +28,7 @@ export function useDownloadStatus(
 
     const interval = setInterval(() => {
       if (!document.hidden) fetchStatus()
-    }, 10_000)
+    }, 2_000)
 
     const onVisibilityChange = () => {
       if (!document.hidden) fetchStatus()

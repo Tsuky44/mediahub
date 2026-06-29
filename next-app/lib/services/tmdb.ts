@@ -254,7 +254,8 @@ export class TmdbService {
       const response = await client.get(`/${type}/${id}`, {
         params: {
           language: 'fr-FR',
-          append_to_response: `videos,${type === 'tv' ? 'aggregate_credits' : 'credits'},watch/providers,keywords,external_ids,recommendations,similar`
+          append_to_response: `videos,images,${type === 'tv' ? 'aggregate_credits' : 'credits'},watch/providers,keywords,external_ids,recommendations,similar`,
+          include_image_language: 'fr,en,null'
         }
       })
       return response.data

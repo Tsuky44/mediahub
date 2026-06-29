@@ -10,6 +10,7 @@ interface RequestStatusButtonProps {
   isTv: boolean
   onPrimaryClick: () => void
   onSeasonClick: () => void
+  onStatusClick?: () => void
 }
 
 export function RequestStatusButton({
@@ -20,13 +21,14 @@ export function RequestStatusButton({
   isTv,
   onPrimaryClick,
   onSeasonClick,
+  onStatusClick,
 }: RequestStatusButtonProps) {
   if (status === 'partial') {
     return (
       <div className="flex gap-2">
         <button
-          disabled
-          className="flex items-center gap-2 rounded-full bg-purple-600/20 px-6 py-3 font-semibold text-purple-400 border border-purple-500/30 cursor-default backdrop-blur-sm"
+          onClick={onStatusClick}
+          className="flex items-center gap-2 rounded-full bg-purple-600/20 hover:bg-purple-600/30 px-6 py-3 font-semibold text-purple-400 border border-purple-500/30 cursor-pointer backdrop-blur-sm transition-all"
         >
           <Check className="h-5 w-5" />
           Partiellement disponible
@@ -48,8 +50,8 @@ export function RequestStatusButton({
     return (
       <div className="flex gap-2">
         <button
-          disabled
-          className="flex items-center gap-2 rounded-full bg-green-600/20 px-6 py-3 font-semibold text-green-400 border border-green-500/30 cursor-default backdrop-blur-sm"
+          onClick={onStatusClick}
+          className="flex items-center gap-2 rounded-full bg-green-600/20 hover:bg-green-600/30 px-6 py-3 font-semibold text-green-400 border border-green-500/30 cursor-pointer backdrop-blur-sm transition-all"
         >
           <Check className="h-5 w-5" />
           Disponible sur Emby
@@ -71,8 +73,8 @@ export function RequestStatusButton({
     return (
       <div className="flex gap-2">
         <button
-          disabled
-          className="flex items-center gap-2 rounded-full bg-yellow-600/20 px-6 py-3 font-semibold text-yellow-400 border border-yellow-500/30 cursor-default backdrop-blur-sm"
+          onClick={onStatusClick}
+          className="flex items-center gap-2 rounded-full bg-yellow-600/20 hover:bg-yellow-600/30 px-6 py-3 font-semibold text-yellow-400 border border-yellow-500/30 cursor-pointer backdrop-blur-sm transition-all"
         >
           <Loader2 className="h-5 w-5 animate-spin" />
           En cours de traitement...

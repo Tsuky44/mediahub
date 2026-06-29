@@ -24,14 +24,17 @@ export function useLiveSessions(initialSessions: LiveSession[] = []) {
     // Determine the protocol and hostname
     const protocol = window.location.protocol === 'https:' ? 'https' : 'http'
     
-    // Priority: Runtime Config -> Build-time Config -> Default (Port 3005)
+    // Priority: Runtime Config -> Build-time Config -> Default (Port 3005 in dev, relative in prod)
     const runtimeUrl = window.__ENV?.TRACKER_WS_URL
     const buildUrl = process.env.NEXT_PUBLIC_TRACKER_WS_URL
+    const fallbackUrl = process.env.NODE_ENV === 'development'
+      ? `${protocol}://${window.location.hostname}:3005`
+      : undefined
     
-    const wsUrl = runtimeUrl || buildUrl || `${protocol}://${window.location.hostname}:3005`
+    const wsUrl = runtimeUrl || buildUrl || fallbackUrl
     
-    console.log(`[WebSocket] Connecting to ${wsUrl}...`)
-    const socket: Socket = io(wsUrl, {
+    console.log(`[WebSocket] Connecting to ${wsUrl || 'relative host'}...`)
+    const socket: Socket = io(wsUrl || undefined, {
       transports: ['websocket'], // Force WebSocket to avoid polling-related flickering
       reconnectionAttempts: 10,
       reconnectionDelay: 2000

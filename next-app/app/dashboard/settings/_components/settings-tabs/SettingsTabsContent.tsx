@@ -9,9 +9,10 @@ import UserGroupManagement from '../UserGroupManagement'
 import SystemMessageManagement from '../SystemMessageManagement'
 import AccountRequestsManagement from '../AccountRequestsManagement'
 import ActivityLogs from '../ActivityLogs'
-import ExternalNotifications from '../ExternalNotifications'
+// import ExternalNotifications from '../ExternalNotifications' // V1 notifications supprimées
 import NotificationsV2Settings from '../NotificationsV2'
 import { TrackerStatsManagement } from '../TrackerStatsManagement'
+import SupportManagement from '../support/SupportManagement'
 
 import type {
     SettingsTabId,
@@ -40,7 +41,7 @@ export default function SettingsTabsContent({
 }: SettingsTabsContentProps) {
     return (
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
-            {activeTab === 'services' && permissions.services && (
+            {(activeTab === 'services' || activeTab === 'media' || activeTab === 'downloads' || activeTab === 'automation' || activeTab === 'storage' || activeTab === 'maintenance') && (
                 <SettingsForm settings={settings} readOnly={!canManageSettings} />
             )}
             {activeTab === 'users' && permissions.users && (
@@ -67,9 +68,10 @@ export default function SettingsTabsContent({
                 <AccountRequestsManagement requests={accountRequests} users={dbUsers} />
             )}
             {activeTab === 'logs' && permissions.logs && <ActivityLogs />}
-            {activeTab === 'notifications' && permissions.notifications && <ExternalNotifications />}
+            {/* {activeTab === 'notifications' && permissions.notifications && <ExternalNotifications />} // V1 notifications supprimées */}
             {activeTab === 'notifications-v2' && permissions.notifications && <NotificationsV2Settings />}
             {activeTab === 'trackers' && permissions.trackers && <TrackerStatsManagement />}
+            {activeTab === 'support' && permissions.support && <SupportManagement />}
         </div>
     )
 }

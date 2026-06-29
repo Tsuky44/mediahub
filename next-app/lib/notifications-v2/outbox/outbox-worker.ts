@@ -103,12 +103,12 @@ export class OutboxWorker {
 
     logger.info(`[NotifV2][OutboxWorker] Processing ${due.length} delivery(ies)`)
 
-    const provider = new EvolutionProvider(config.evolution, config.retry)
+    const evolutionProvider = new EvolutionProvider(config.evolution, config.retry)
 
     for (const delivery of due) {
       if (this.abortController?.signal.aborted) break
 
-      await this.processDelivery(delivery, provider, config)
+      await this.processDelivery(delivery, evolutionProvider, config)
     }
   }
 

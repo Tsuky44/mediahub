@@ -1,6 +1,6 @@
 ﻿import { NextResponse } from 'next/server'
 import { db } from '@/lib/db/drizzle'
-import { settings, users, userGroups, userGroupMembers, accounts, sessions, notifications, watchLater, mediaRequests, watchEvents, auditLogs } from '@/lib/db/schema'
+import { settings, users, userGroups, userGroupMembers, accounts, sessions, watchLater, mediaRequests, watchEvents, auditLogs } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { decryptData } from '@/lib/crypto'
 import { isAppConfigured } from '@/lib/setup'
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       // DELETE ALL EXISTING DATA (Order: Child -> Parent)
       await db.delete(userGroupMembers)
       await db.delete(mediaRequests)
-      await db.delete(notifications)
+      // await db.delete(notifications) // V1 notifications supprimées - table notifications n'existe plus
       await db.delete(watchLater)
       await db.delete(accounts)
       await db.delete(sessions)
@@ -113,11 +113,12 @@ export async function POST(request: Request) {
           await db.insert(sessions).values(s)
         }
       }
-      if (dbData.notifications?.length) {
-        for (const n of dbData.notifications) {
-          await db.insert(notifications).values(n)
-        }
-      }
+      // V1 notifications supprimées - plus d'import de notifications
+      // if (dbData.notifications?.length) {
+      //   for (const n of dbData.notifications) {
+      //     await db.insert(notifications).values(n)
+      //   }
+      // }
       if (dbData.watchLater?.length) {
         for (const w of dbData.watchLater) {
           await db.insert(watchLater).values(w)

@@ -133,6 +133,7 @@ export async function fetchDashboardData(
             title: req.title,
             posterPath: posterPath,
             tmdbId: req.tmdbId,
+            seasons: (metadata as { seasons?: number[] }).seasons ?? undefined,
           },
           requestedBy: {
             displayName: req.requesterName || 'Inconnu',

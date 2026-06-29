@@ -108,6 +108,20 @@ function summarizeError(err: unknown): string {
   if (err instanceof AxiosError) {
     const status = err.response?.status
     const data = err.response?.data
+    
+    // Détecter si l'instance Evolution API est déconnectée (Connection Closed)
+    if (data && typeof data === 'object') {
+      const dataObj = data as Record<string, any>
+      const responseMsg = dataObj.response?.message
+      const hasConnectionClosed = Array.isArray(responseMsg)
+        ? responseMsg.some((m) => String(m).includes('Connection Closed'))
+        : String(responseMsg ?? '').includes('Connection Closed')
+
+      if (hasConnectionClosed || String(dataObj.error).includes('Connection Closed')) {
+        return "L'instance WhatsApp d'Evolution API est déconnectée (Session fermée). Reconnectez votre téléphone ou scannez à nouveau le QR Code."
+      }
+    }
+
     return `HTTP ${status ?? '?'} ${err.code ?? ''} ${typeof data === 'object' ? JSON.stringify(data).slice(0, 200) : String(data ?? '')}`
   }
   return err instanceof Error ? err.message : String(err)

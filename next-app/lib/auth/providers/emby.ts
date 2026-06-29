@@ -101,14 +101,8 @@ export const embyProvider = CredentialsProvider({
         }).returning()
         user = insertResult[0] || await db.query.users.findFirst({ where: eq(users.email, email), with: { roleRef: true } })
 
-        try {
-            const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-            await ExternalNotificationService.send('user_created', {
-                title: 'Nouvel utilisateur',
-                message: `L'utilisateur ${user?.name} s'est connecté pour la première fois (via Emby).`,
-                data: { name: user?.name, email: user?.email, provider: 'Emby' }
-            })
-        } catch (e) {}
+        // V1 notifications supprimées - plus d'envoi de notifications pour nouveaux utilisateurs Emby
+        log(`[Auth] New Emby user connected: ${user?.name} (V1 notifications removed)`)
 
       } else {
         log(`[Auth] Updating existing user: ${user.name} (${user.id})`)

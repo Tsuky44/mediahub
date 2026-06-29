@@ -9,21 +9,6 @@ services:
       - DATABASE_URL=file:/data/db/prod.db
       - NEXTAUTH_URL=http://localhost:3008 # L'URL publique de votre site
       - NEXTAUTH_SECRET=change_me_secret_key_123 # IMPORTANT : Changez ceci pour sécuriser votre installation
-      # Optionnel : URL du WebSocket si vous utilisez un proxy (ex: https://mon-site.com). 
-      # Si vous utilisez Nginx Proxy Manager avec un seul domaine, mettez l'URL de votre site sans port.
-      - NEXT_PUBLIC_TRACKER_WS_URL=https://mediahub.tsuky.ovh
-    volumes:
-      - ./data/db:/data/db
-    user: root
-
-  tracker:
-    image: ghcr.io/tsuky44/mediahub-tracker:latest
-    container_name: mediahub-tracker
-    restart: unless-stopped
-    ports:
-      - "3005:3005" # Port du WebSocket (requis si pas de proxy inverse)
-    environment:
-      - DATABASE_URL=file:/data/db/prod.db
     volumes:
       - ./data/db:/data/db
     user: root

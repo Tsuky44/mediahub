@@ -1,4 +1,4 @@
-﻿﻿/**
+﻿﻿﻿﻿﻿﻿/**
  * Radarr Webhook â€” Notifications V2
  * ReÃ§oit tous les events de Radarr et les dispatche via le systÃ¨me V2 (DB + Outbox)
  * Events supportÃ©s : Grab, Download, Import, Rename, MovieDelete, Health
@@ -99,6 +99,28 @@ export async function POST(req: Request) {
         : (body.release?.size ? `${(body.release.size / 1_073_741_824).toFixed(2)} GB` : undefined),
       releaseName: body.movieFile?.relativePath || body.movieFile?.releaseGroup || body.release?.releaseTitle || undefined,
     } : undefined;
+
+    // Enregistrer le torrent dans le qBittorrent Watch Poller pour suivre la progression (1% et 100%)
+    if (eventType === 'Grab') {
+      try {
+        const { getQbitWatchPoller } = await import('@/lib/notifications-v2/realtime/qbit-watch-poller');
+        getQbitWatchPoller().addWatch({
+          hash: body.downloadId || undefined,
+          releaseName: body.release?.releaseTitle || undefined,
+          media: {
+            tmdbId,
+            mediaType: 'movie',
+            title,
+            year: year ? String(year) : undefined,
+            overview,
+            posterPath,
+          },
+          requester,
+        });
+      } catch (e) {
+        logger.error('[RadarrWebhook V2] Failed to register torrent in QbitWatchPoller:', e);
+      }
+    }
 
     // Dispatcher via V2 (enregistre en DB + outbox)
     // On utilise un correlationId avec timestamp pour permettre plusieurs Ã©vÃ©nements

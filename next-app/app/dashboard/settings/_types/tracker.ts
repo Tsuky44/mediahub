@@ -18,7 +18,9 @@ export interface TrackerConfig {
     baseUrl: string
     enabled: boolean
     username?: string
+    password?: string
     apiKey?: string
+    passkey?: string
 }
 
 export interface TrackerStat {

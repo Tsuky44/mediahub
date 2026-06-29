@@ -28,6 +28,11 @@ export default function SettingsTabs({
     const permissions = useMemo<SettingsTabPermissions>(
         () => ({
             services: isAdmin,
+            media: isAdmin,
+            downloads: isAdmin,
+            automation: isAdmin,
+            storage: isAdmin,
+            maintenance: isAdmin,
             users: isAdmin,
             groups: isAdmin,
             roles: isAdmin,
@@ -38,6 +43,7 @@ export default function SettingsTabs({
             logs: isAdmin,
             notifications: isAdmin,
             trackers: isAdmin,
+            support: isAdmin,
         }),
         [isAdmin]
     )
@@ -50,28 +56,33 @@ export default function SettingsTabs({
     ).length
 
     return (
-        <div className="w-full mx-auto space-y-8 px-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <h2 className="text-3xl font-black text-white tracking-tight">Paramètres</h2>
-                <SettingsTabsNav
-                    permissions={permissions}
-                    activeTab={activeTab}
-                    onChange={setActiveTab}
-                    pendingRequestsCount={pendingRequestsCount}
-                />
+        <div className="w-full mx-auto space-y-6 max-w-7xl">
+            <h2 className="text-3xl font-black text-white tracking-tight">Paramètres</h2>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                <div className="lg:col-span-3">
+                    <SettingsTabsNav
+                        permissions={permissions}
+                        activeTab={activeTab}
+                        onChange={setActiveTab}
+                        pendingRequestsCount={pendingRequestsCount}
+                    />
+                </div>
+                
+                <div className="lg:col-span-9">
+                    <SettingsTabsContent
+                        activeTab={activeTab}
+                        permissions={permissions}
+                        canManageSettings={isAdmin}
+                        canManageUsers={isAdmin}
+                        dbUsers={dbUsers}
+                        settings={settings}
+                        roles={roles}
+                        userGroups={userGroups}
+                        accountRequests={accountRequests}
+                    />
+                </div>
             </div>
-
-            <SettingsTabsContent
-                activeTab={activeTab}
-                permissions={permissions}
-                canManageSettings={isAdmin}
-                canManageUsers={isAdmin}
-                dbUsers={dbUsers}
-                settings={settings}
-                roles={roles}
-                userGroups={userGroups}
-                accountRequests={accountRequests}
-            />
         </div>
     )
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { NotificationService } from '@/lib/services/notification-service'
+// V1 notifications supprimées
+// import { NotificationService } from '@/lib/services/notification-service'
 import { getTmdbService } from '@/lib/services/tmdb'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
@@ -113,23 +114,9 @@ export async function POST(req: NextRequest) {
 
             log(`[EmbyWebhook] Found ${usersToNotify.size} users to notify for ${item.Name}`);
 
-            // 4. Send notifications
-            const notifyPromises = Array.from(usersToNotify.values()).map(async (user) => {
-                await NotificationService.notifyUser(
-                    user.id,
-                    notificationTitle,
-                    notificationMessage,
-                    'media_available',
-                    {
-                        mediaId: targetTmdbId,
-                        mediaType: targetMediaType,
-                        posterPath: undefined, // Service will fetch
-                        link: `/dashboard/media/${targetTmdbId}?type=${targetMediaType}`
-                    }
-                );
-            });
-
-            await Promise.all(notifyPromises);
+            // 4. V1 notifications supprimées - plus d'envoi de notifications
+            log(`[EmbyWebhook] Would notify ${usersToNotify.size} users for ${item.Name} (V1 notifications removed)`);
+            console.log(`[EmbyWebhook] V1 notifications removed - cannot send notifications for: ${notificationTitle}`);
         }
     }
 
@@ -227,7 +214,7 @@ export async function POST(req: NextRequest) {
           await (prisma as any).watchEvent.create({
             data: {
               embyUserId,
-              user: user ? { connect: { id: user.id } } : undefined,
+              userId: user ? user.id : null,
               itemId,
               itemName: item.Name,
               itemType: item.Type,

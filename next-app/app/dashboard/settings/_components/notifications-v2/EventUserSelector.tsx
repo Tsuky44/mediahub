@@ -29,27 +29,27 @@ export default function EventUserSelector({
   }
 
   return (
-    <div className="space-y-1">
-      <label className="block text-xs font-medium text-gray-500">
-        Utilisateurs destinataires (leur numéro WhatsApp sera utilisé)
+    <div className="space-y-2">
+      <label className="block text-xs font-medium text-gray-400">
+        Utilisateurs destinataires
       </label>
       <select
-        className="w-full border rounded px-3 py-2 text-sm dark:bg-gray-800"
+        className="block w-full rounded-lg border border-white/10 bg-black/30 py-2 px-3 text-sm text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         value=""
         onChange={handleAdd}
       >
-        <option value="">— Ajouter un utilisateur —</option>
+        <option value="" className="bg-gray-800">— Ajouter un utilisateur —</option>
         {users
           .filter((u) => !selectedIds.includes(u.id))
           .map((u) => (
-            <option key={u.id} value={u.id}>
+            <option key={u.id} value={u.id} className="bg-gray-800">
               {(u.name || u.email) +
                 (u.hasWhatsapp ? '' : ' ⚠️ sans WhatsApp')}
             </option>
           ))}
       </select>
       {selectedIds.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-1">
+        <div className="flex flex-wrap gap-1.5">
           {selectedIds.map((uid) => {
             const u = users.find((x) => x.id === uid)
             const label = u ? u.name || u.email : `User #${uid}`
@@ -58,10 +58,10 @@ export default function EventUserSelector({
               <span
                 key={uid}
                 className={
-                  'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border ' +
+                  'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs border ' +
                   (warn
-                    ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30'
-                    : 'bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border-indigo-500/30')
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/20'
+                    : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/20')
                 }
                 title={warn ? 'Aucun numéro WhatsApp sur ce compte' : ''}
               >
@@ -70,7 +70,7 @@ export default function EventUserSelector({
                 <button
                   type="button"
                   onClick={() => handleRemove(uid)}
-                  className="hover:text-black dark:hover:text-white ml-1"
+                  className="hover:text-white ml-1 text-[14px] leading-none"
                 >
                   ×
                 </button>

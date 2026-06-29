@@ -10,6 +10,7 @@
 import { ConfigStore } from './config/config-store'
 import { logger } from '@/lib/logger'
 import type { NotificationEvent, NotificationEventPayload } from './types'
+import { NOTIFICATION_EVENTS } from './types'
 import {
   recordEvent,
   markEventDispatched,
@@ -17,6 +18,7 @@ import {
   resolveRecipients,
 } from './store'
 import { getOutboxWorkerInstance } from './outbox/outbox-worker'
+import { createMediaAvailableNotification } from '@/lib/notifications/internal'
 
 export interface DispatchResult {
   success: boolean
@@ -84,24 +86,42 @@ export async function dispatch(
 
     logger.info(`${tag} Recipients resolved: ${recipients.size} recipient(s) | ${logInfo}`)
 
-    if (recipients.size === 0) {
-      logger.warn(`${tag} No recipients resolved. Marking event dispatched (no deliveries).`)
+    // 4) Enqueue deliveries (evolution)
+    const deliveries: { eventId: number; recipient: string; provider: string }[] =
+      Array.from(recipients).map((recipient) => ({
+        eventId: record.eventId,
+        recipient,
+        provider: 'evolution',
+      }))
+
+    // 4b) Webhook désactivé — réactivation future via WebhookSection dans les settings
+    // if (config.webhook?.enabled && config.webhook?.webhookUrl) {
+    //   deliveries.push({ eventId: record.eventId, recipient: config.webhook.webhookUrl, provider: 'webhook' })
+    // }
+
+    if (deliveries.length === 0) {
+      logger.warn(`${tag} No recipients resolved. Marking event dispatched.`)
       await markEventDispatched(record.eventId)
       return { success: true, eventId: record.eventId, wasDuplicate: false, recipients: [], correlationId }
     }
-
-    // 4) Enqueue deliveries
-    const deliveries = Array.from(recipients).map((recipient) => ({
-      eventId: record.eventId,
-      recipient,
-      provider: 'evolution' as const,
-    }))
 
     const deliveryIds = await enqueueDeliveries(deliveries)
     logger.info(`${tag} Enqueued ${deliveryIds.length} deliveries. Triggering outbox worker immediately.`)
 
     // Trigger le worker immédiatement pour envoi quasi-instantané (pas d'attente 5s)
     getOutboxWorkerInstance()?.triggerNow()
+
+    // Internal UI notification for availability events
+    if (
+      payload.media &&
+      payload.requester?.id &&
+      (event === NOTIFICATION_EVENTS.MEDIA_AVAILABLE ||
+        event === NOTIFICATION_EVENTS.SEASON_AVAILABLE ||
+        event === NOTIFICATION_EVENTS.EPISODE_AVAILABLE ||
+        event === NOTIFICATION_EVENTS.SEASON_PARTIALLY_AVAILABLE)
+    ) {
+      createMediaAvailableNotification(payload.media, payload.requester.id).catch(() => {})
+    }
 
     return {
       success: true,

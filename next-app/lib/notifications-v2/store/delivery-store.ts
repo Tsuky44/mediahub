@@ -58,11 +58,21 @@ export async function enqueueDeliveries(paramsList: EnqueueParams[]): Promise<nu
     nextRetryAt: new Date(),
   }))
 
-  const result = await db.insert(notificationDeliveries).values(values).returning({
-    id: notificationDeliveries.id,
-  })
+  const result = await db
+    .insert(notificationDeliveries)
+    .values(values)
+    .onConflictDoNothing({
+      target: [
+        notificationDeliveries.eventId,
+        notificationDeliveries.recipient,
+        notificationDeliveries.provider,
+      ],
+    })
+    .returning({
+      id: notificationDeliveries.id,
+    })
 
-  return result.map((r) => r.id)
+  return result.map((r) => r.id).filter((id): id is number => id != null)
 }
 
 /**

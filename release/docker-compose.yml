@@ -12,13 +12,3 @@ services:
     volumes:
       - ./data/db:/data/db
     user: root
-
-  tracker:
-    image: mediahub-tracker:latest
-    container_name: mediahub-tracker
-    restart: unless-stopped
-    environment:
-      - DATABASE_URL=file:/data/db/prod.db
-    volumes:
-      - ./data/db:/data/db
-    user: root

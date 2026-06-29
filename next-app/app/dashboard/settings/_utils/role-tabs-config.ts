@@ -283,6 +283,49 @@ export const ROLE_PERMISSION_TABS: PermissionTabDef[] = [
             },
         ],
     },
+    {
+        id: 'settings',
+        label: 'Paramètres',
+        heading: 'Permissions Notifications Internes',
+        groups: [
+            {
+                title: 'Disponibilité des Médias',
+                style: 'compact',
+                permissions: [
+                    {
+                        subject: 'Notification',
+                        action: 'read_all_media_available',
+                        label: 'Voir toutes les nouvelles disponibilités',
+                        description: 'Permet de recevoir les notifications internes pour tous les nouveaux films/séries ajoutés.',
+                    },
+                    {
+                        subject: 'Notification',
+                        action: 'read_own_media_available',
+                        label: 'Voir uniquement ses demandes disponibles',
+                        description: 'Permet de recevoir les notifications internes uniquement pour les films/séries que vous avez demandés.',
+                    },
+                ],
+            },
+            {
+                title: 'Notifications Système & Support',
+                style: 'compact',
+                permissions: [
+                    {
+                        subject: 'Notification',
+                        action: 'read_system_update',
+                        label: 'Voir les notifications de nouvelle version',
+                        description: 'Permet d\'être notifié de la disponibilité d\'une nouvelle version de l\'application.',
+                    },
+                    {
+                        subject: 'Notification',
+                        action: 'read_new_ticket',
+                        label: 'Voir les notifications de tickets de support',
+                        description: 'Permet de recevoir une notification lorsqu\'un utilisateur ouvre un ticket de support.',
+                    },
+                ],
+            },
+        ],
+    },
 ]
 
 export function findTabConfig(tabId: string): PermissionTabDef | undefined {

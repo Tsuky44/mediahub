@@ -4,6 +4,7 @@ import { SessionProvider } from "next-auth/react"
 import { Toaster } from "react-hot-toast"
 import { AbilityProvider } from "./AbilityProvider"
 import { QueryProvider } from "./QueryProvider"
+import SupportChatbot from "@/components/global/SupportChatbot"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -21,6 +22,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               },
             }}
           />
+          <SupportChatbot />
         </AbilityProvider>
       </QueryProvider>
     </SessionProvider>

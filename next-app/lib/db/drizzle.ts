@@ -202,6 +202,7 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
       "poster_path" TEXT,
       "is_read" INTEGER NOT NULL DEFAULT 0,
       "link" TEXT,
+      "data" TEXT,
       "created_at" INTEGER NOT NULL
     );`,
     indexes: [
@@ -345,6 +346,26 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
     ],
   },
   {
+    name: 'episode_batches',
+    ddl: `CREATE TABLE IF NOT EXISTS "episode_batches" (
+      "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+      "tmdb_id" TEXT NOT NULL,
+      "season_number" INTEGER NOT NULL,
+      "episodes" TEXT NOT NULL,
+      "status" TEXT DEFAULT 'downloading' NOT NULL,
+      "downloaded_episodes" TEXT,
+      "failed_download_episodes" TEXT,
+      "imported_episodes" TEXT,
+      "available_episodes" TEXT,
+      "created_at" INTEGER NOT NULL,
+      "updated_at" INTEGER NOT NULL
+    );`,
+    indexes: [
+      `CREATE INDEX IF NOT EXISTS "episode_batches_tmdb_season_idx" ON "episode_batches" ("tmdb_id", "season_number");`,
+      `CREATE INDEX IF NOT EXISTS "episode_batches_status_idx" ON "episode_batches" ("status");`,
+    ],
+  },
+  {
     name: 'file_shares',
     ddl: `CREATE TABLE IF NOT EXISTS "file_shares" (
       "id" TEXT PRIMARY KEY NOT NULL,
@@ -393,6 +414,7 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
     indexes: [
       `CREATE INDEX IF NOT EXISTS "notification_deliveries_event_id_idx" ON "notification_deliveries" ("event_id");`,
       `CREATE INDEX IF NOT EXISTS "notification_deliveries_status_retry_idx" ON "notification_deliveries" ("status", "next_retry_at");`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "notification_deliveries_unique_recipient" ON "notification_deliveries" ("event_id", "recipient", "provider");`,
     ],
   },
   {
@@ -427,6 +449,55 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
       `CREATE INDEX IF NOT EXISTS "tracker_stats_logs_tracker_timestamp_idx" ON "tracker_stats_logs" ("tracker", "timestamp");`,
     ],
   },
+  {
+    name: 'support_categories',
+    ddl: `CREATE TABLE IF NOT EXISTS "support_categories" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "name" TEXT NOT NULL,
+      "description" TEXT,
+      "discord_webhook" TEXT,
+      "discord_mentions" TEXT,
+      "order" INTEGER NOT NULL DEFAULT 0,
+      "created_at" INTEGER NOT NULL,
+      "updated_at" INTEGER NOT NULL
+    );`,
+  },
+  {
+    name: 'support_subcategories',
+    ddl: `CREATE TABLE IF NOT EXISTS "support_subcategories" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "category_id" TEXT NOT NULL REFERENCES "support_categories"("id") ON DELETE CASCADE,
+      "name" TEXT NOT NULL,
+      "description" TEXT,
+      "discord_webhook" TEXT,
+      "discord_mentions" TEXT,
+      "order" INTEGER NOT NULL DEFAULT 0,
+      "created_at" INTEGER NOT NULL,
+      "updated_at" INTEGER NOT NULL
+    );`,
+  },
+  {
+    name: 'support_tickets',
+    ddl: `CREATE TABLE IF NOT EXISTS "support_tickets" (
+      "id" TEXT PRIMARY KEY NOT NULL,
+      "user_id" INTEGER REFERENCES "users"("id") ON DELETE SET NULL,
+      "user_name" TEXT,
+      "user_email" TEXT,
+      "category_id" TEXT NOT NULL REFERENCES "support_categories"("id"),
+      "subcategory_id" TEXT REFERENCES "support_subcategories"("id"),
+      "message" TEXT NOT NULL,
+      "attachments" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'open',
+      "discord_message_id" TEXT,
+      "created_at" INTEGER NOT NULL,
+      "updated_at" INTEGER NOT NULL
+    );`,
+    indexes: [
+      `CREATE INDEX IF NOT EXISTS "support_tickets_status_idx" ON "support_tickets" ("status");`,
+      `CREATE INDEX IF NOT EXISTS "support_tickets_user_idx" ON "support_tickets" ("user_id");`,
+      `CREATE INDEX IF NOT EXISTS "support_tickets_created_at_idx" ON "support_tickets" ("created_at");`,
+    ],
+  },
 ];
 
 // Colonnes potentiellement absentes des DB legacy : ALTER TABLE ADD COLUMN
@@ -451,6 +522,10 @@ const COLUMN_PATCHES: ReadonlyArray<{ table: string; column: string; type: strin
   { table: 'media_subscriptions', column: 'poster_path', type: 'TEXT' },
   { table: 'watch_later', column: 'tmdb_id', type: 'TEXT' },
   { table: 'watch_events', column: 'tmdb_id', type: 'TEXT' },
+  { table: 'support_tickets', column: 'attachments', type: 'TEXT' },
+  { table: 'notifications', column: 'data', type: 'TEXT' },
+  { table: 'support_categories', column: 'discord_mentions', type: 'TEXT' },
+  { table: 'support_subcategories', column: 'discord_mentions', type: 'TEXT' },
 ];
 
 function tableExists(db: Database.Database, name: string): boolean {
@@ -462,17 +537,22 @@ function tableExists(db: Database.Database, name: string): boolean {
 
 function runMigrations(db: Database.Database): void {
   // 1) Créer la table de méta-migrations
-  db.exec(`CREATE TABLE IF NOT EXISTS "_drizzle_meta" (
-    "key" TEXT PRIMARY KEY NOT NULL,
-    "value" TEXT,
-    "applied_at" INTEGER NOT NULL
-  );`);
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS "_drizzle_meta" (
+      "key" TEXT PRIMARY KEY NOT NULL,
+      "value" TEXT,
+      "applied_at" INTEGER NOT NULL
+    );`);
+  } catch (err) {
+    console.warn('[Drizzle] _drizzle_meta creation skipped:', (err as Error).message);
+  }
 
-  // 2) Créer toutes les tables manquantes + leurs indexes
+  // 2) Créer toutes les tables manquantes (sans les indexes d'abord)
   for (const t of TABLE_DEFINITIONS) {
-    db.exec(t.ddl);
-    if (t.indexes) {
-      for (const idx of t.indexes) db.exec(idx);
+    try {
+      db.exec(t.ddl);
+    } catch (err) {
+      console.warn(`[Drizzle] Table ${t.name} creation skipped:`, (err as Error).message);
     }
   }
 
@@ -481,7 +561,21 @@ function runMigrations(db: Database.Database): void {
     try {
       db.exec(`ALTER TABLE "${patch.table}" ADD COLUMN "${patch.column}" ${patch.type};`);
     } catch {
-      // Colonne déjà présente — ignoré
+      // Colonne déjà présente — ignoré silencieusement
+    }
+  }
+
+  // 4) Créer les indexes (isolé pour ne pas bloquer si doublons existants)
+  for (const t of TABLE_DEFINITIONS) {
+    if (t.indexes) {
+      for (const idx of t.indexes) {
+        try {
+          db.exec(idx);
+        } catch (err) {
+          // Index déjà présent ou données en conflit — on logue mais on continue
+          console.warn(`[Drizzle] Index on ${t.name} skipped:`, (err as Error).message);
+        }
+      }
     }
   }
 
@@ -548,15 +642,118 @@ function runMigrations(db: Database.Database): void {
     }
   }
 
+  // 6) Migration one-shot : fix notification deliveries unique index
+  //    L'index unique notification_deliveries_unique_recipient est nécessaire
+  //    pour éviter les doublons et permettre le dispatch des notifications.
+  const NOTIF_DELIVERIES_INDEX_KEY = 'notification_deliveries_unique_index_v1';
+  const notifIndexApplied = db
+    .prepare(`SELECT value FROM "_drizzle_meta" WHERE key = ?`)
+    .get(NOTIF_DELIVERIES_INDEX_KEY) as { value: string } | undefined;
+
+  if (!notifIndexApplied) {
+    const tx = db.transaction(() => {
+      // Vérifier si l'index existe déjà
+      const indexExists = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='notification_deliveries' AND name='notification_deliveries_unique_recipient'`)
+        .get();
+
+      if (!indexExists) {
+        console.log('[Drizzle] Creating notification_deliveries_unique_recipient index...');
+
+        // Supprimer les doublons avant de créer l'index
+        const duplicates = db.prepare(`
+          SELECT event_id, recipient, provider, COUNT(*) as count
+          FROM notification_deliveries
+          GROUP BY event_id, recipient, provider
+          HAVING count > 1
+        `).all() as Array<{ event_id: number; recipient: string; provider: string; count: number }>;
+
+        if (duplicates.length > 0) {
+          console.log(`[Drizzle] Removing ${duplicates.length} duplicate delivery groups...`);
+          for (const dup of duplicates) {
+            db.prepare(`
+              DELETE FROM notification_deliveries
+              WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM notification_deliveries
+                WHERE event_id = ? AND recipient = ? AND provider = ?
+              )
+              AND event_id = ? AND recipient = ? AND provider = ?
+            `).run(dup.event_id, dup.recipient, dup.provider, dup.event_id, dup.recipient, dup.provider);
+          }
+        }
+
+        // Créer l'index unique
+        db.prepare(`CREATE UNIQUE INDEX notification_deliveries_unique_recipient ON notification_deliveries (event_id, recipient, provider)`).run();
+        console.log('[Drizzle] notification_deliveries_unique_recipient index created');
+
+        // Corriger les events en attente sans deliveries
+        const pendingEvents = db.prepare(`
+          SELECT id, event
+          FROM notification_events
+          WHERE status = 'pending'
+          AND id NOT IN (SELECT DISTINCT event_id FROM notification_deliveries)
+          ORDER BY id DESC
+        `).all() as Array<{ id: number; event: string }>;
+
+        if (pendingEvents.length > 0) {
+          console.log(`[Drizzle] Fixing ${pendingEvents.length} pending events without deliveries...`);
+
+          // Récupérer le numéro WhatsApp par défaut (user 1)
+          const user = db.prepare(`SELECT whatsapp_number FROM users WHERE id = 1`).get() as { whatsapp_number: string } | undefined;
+          const defaultRecipient = user?.whatsapp_number || '33675199234';
+
+          for (const e of pendingEvents) {
+            try {
+              db.prepare(`
+                INSERT INTO notification_deliveries (event_id, recipient, provider, status, attempts, created_at, next_retry_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+              `).run(e.id, defaultRecipient, 'evolution', 'pending', 0, Date.now(), Date.now());
+
+              db.prepare(`UPDATE notification_events SET status = 'dispatched' WHERE id = ?`).run(e.id);
+            } catch (err) {
+              console.warn(`[Drizzle] Failed to fix event ${e.id}:`, (err as Error).message);
+            }
+          }
+        }
+      } else {
+        console.log('[Drizzle] notification_deliveries_unique_recipient index already exists');
+      }
+
+      // Marquer la migration comme appliquée
+      db.prepare(
+        `INSERT INTO "_drizzle_meta" (key, value, applied_at) VALUES (?, ?, ?)`,
+      ).run(NOTIF_DELIVERIES_INDEX_KEY, 'ok', Date.now());
+    });
+
+    try {
+      tx();
+      console.log('[Drizzle] Notification deliveries index migration completed');
+    } catch (err) {
+      console.error('[Drizzle] Notification deliveries index migration failed:', err);
+    }
+  }
+
   if (isDev) console.log('[Drizzle] Migrations applied successfully');
 }
 
-if (!isBuildPhase && !globalForDb.__mediahubDbInit) {
-  try {
-    runMigrations(sqlite);
-    globalForDb.__mediahubDbInit = true;
-  } catch (err) {
-    console.error('[Drizzle] Migration error:', err);
+// Migration des tables manquantes (support_* ajoutées après la v0.9)
+// On vérifie explicitement car __mediahubDbInit peut être true sur une
+// vieille version du schéma (DB initialisée avant l'ajout des tables support).
+if (!isBuildPhase) {
+  const supportTables = ['support_categories', 'support_subcategories', 'support_tickets'];
+  const missing = supportTables.filter((t) => !tableExists(sqlite, t));
+
+  if (missing.length > 0 || !globalForDb.__mediahubDbInit) {
+    try {
+      runMigrations(sqlite);
+      globalForDb.__mediahubDbInit = true;
+      if (missing.length > 0) {
+        console.log('[Drizzle] Created missing tables:', missing.join(', '));
+      }
+    } catch (err) {
+      console.error('[Drizzle] Migration error:', err);
+    }
   }
 }
 

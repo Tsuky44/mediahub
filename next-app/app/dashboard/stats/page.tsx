@@ -6,7 +6,6 @@ import { StatsCharts } from './_components/StatsCharts'
 import { LiveSessions } from './_components/LiveSessions'
 import { RecentHistory } from './_components/RecentHistory'
 import { UserStatsCard } from './_components/UserStatsCard'
-import { StorageManager } from './_components/StorageManager'
 import { TopItemsTabs } from './_components/TopItemsTabs'
 import { StatCard } from './_components/StatCard'
 import { StatsPeriodNav } from './_components/StatsPeriodNav'
@@ -106,11 +105,6 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
         <RecentHistory initialHistory={data.aggregatedHistory} />
       </div>
 
-      {data.canManageStorage && (
-        <div className="mt-12 border-t border-white/10 pt-8">
-          <StorageManager canDelete={data.canDeleteMedia} />
-        </div>
-      )}
     </div>
   )
 }

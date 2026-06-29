@@ -10,6 +10,7 @@ interface MediaTitleHeaderProps {
   runtime?: number
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   genres?: any[]
+  logoPath?: string
 }
 
 export default function MediaTitleHeader({
@@ -20,18 +21,29 @@ export default function MediaTitleHeader({
   contentRating,
   runtime,
   genres,
+  logoPath,
 }: MediaTitleHeaderProps) {
   return (
     <>
-      <h1 className="text-4xl md:text-6xl font-black text-white leading-tight break-words drop-shadow-lg tracking-tight">
-        {title}{' '}
-        <span className="text-gray-500 font-thin">
-          ({releaseDate ? new Date(releaseDate).getFullYear() : ''})
-        </span>
-      </h1>
+      {logoPath ? (
+        <div className="max-w-[280px] sm:max-w-[340px] md:max-w-[420px] animate-fade-in mb-3">
+          <img
+            src={`https://image.tmdb.org/t/p/original${logoPath}`}
+            alt={title}
+            className="w-full h-auto max-h-[140px] md:max-h-[180px] object-contain drop-shadow-2xl select-none"
+          />
+        </div>
+      ) : (
+        <h1 className="text-4xl md:text-6xl font-black text-white leading-tight break-words drop-shadow-lg tracking-tight mb-3">
+          {title}{' '}
+          <span className="text-gray-500 font-thin">
+            ({releaseDate ? new Date(releaseDate).getFullYear() : ''})
+          </span>
+        </h1>
+      )}
 
       {mediaType === 'movie' && watched && (
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold uppercase tracking-wider backdrop-blur-md">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold uppercase tracking-wider backdrop-blur-md mb-2">
           <svg
             className="w-4 h-4"
             fill="currentColor"
@@ -48,6 +60,11 @@ export default function MediaTitleHeader({
       )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-gray-400">
+        {logoPath && releaseDate && (
+          <span className="text-white font-extrabold text-base">
+            {new Date(releaseDate).getFullYear()}
+          </span>
+        )}
         {contentRating && (
           <span className="border border-white/20 px-2 py-0.5 rounded text-xs text-gray-300 bg-white/5 backdrop-blur-sm">
             {contentRating}

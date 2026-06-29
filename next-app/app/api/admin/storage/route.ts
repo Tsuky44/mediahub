@@ -5,6 +5,9 @@ import { SonarrService } from '@/lib/services/sonarr'
 import { RadarrService } from '@/lib/services/radarr'
 import { getSetting } from '@/lib/settings'
 import { defineAbilityFor } from '@/lib/ability'
+import { db } from '@/lib/db/drizzle'
+import { mediaRequests, episodeBatches } from '@/lib/db/schema'
+import { eq } from 'drizzle-orm'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
@@ -235,6 +238,39 @@ export async function DELETE(request: Request) {
     if (parentId) {
         log(`Refreshing parent item ${parentId} in Emby`)
         await embyService.refreshItem(parentId)
+    }
+
+    // 4. Supprimer les demandes locales liées (tmdbId pour films, ou via tvdbId pour séries)
+    if (type === 'Movie' && providerId) {
+        try {
+            const tmdbIdStr = String(providerId)
+            await db.delete(mediaRequests).where(eq(mediaRequests.tmdbId, tmdbIdStr))
+            await db.delete(episodeBatches).where(eq(episodeBatches.tmdbId, tmdbIdStr))
+            try {
+                const { purgeNotifDedupForTmdbId } = await import('@/lib/notifications-v2/bootstrap')
+                await purgeNotifDedupForTmdbId(tmdbIdStr)
+            } catch (e) { /* ignore */ }
+        } catch (e) {
+            error('Failed to delete local requests for movie:', e)
+        }
+    } else if ((type === 'Series') && providerId) {
+        try {
+            // providerId is tvdbId for series — find tmdbId via requests that have tvdbId stored, or search by title
+            // Best effort: delete requests where tmdbId matches any stored request for this tvdbId
+            // The tmdbId is not available here directly, but we can purge by tvdbId if stored, or skip
+            // For now, we look up any request with this series' name via Emby item info
+            if (itemInfo?.ProviderIds?.Tmdb) {
+                const tmdbIdStr = String(itemInfo.ProviderIds.Tmdb)
+                await db.delete(mediaRequests).where(eq(mediaRequests.tmdbId, tmdbIdStr))
+                await db.delete(episodeBatches).where(eq(episodeBatches.tmdbId, tmdbIdStr))
+                try {
+                    const { purgeNotifDedupForTmdbId } = await import('@/lib/notifications-v2/bootstrap')
+                    await purgeNotifDedupForTmdbId(tmdbIdStr)
+                } catch (e) { /* ignore */ }
+            }
+        } catch (e) {
+            error('Failed to delete local requests for series:', e)
+        }
     }
 
     return NextResponse.json({ success: true })

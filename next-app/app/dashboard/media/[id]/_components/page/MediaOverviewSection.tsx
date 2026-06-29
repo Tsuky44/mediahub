@@ -18,19 +18,19 @@ export default function MediaOverviewSection({
   keywords,
 }: MediaOverviewSectionProps) {
   return (
-    <div className="xl:col-span-8 space-y-12">
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-white">Résumé</h2>
-        <p className="text-lg text-gray-300 leading-relaxed">
-          {overview || 'Aucun synopsis disponible.'}
-        </p>
-      </div>
+    <div className="xl:col-span-8 space-y-10">
       <MediaCrewGrid
         director={director}
         writers={writers}
         editors={editors}
       />
       <MediaKeywords keywords={keywords} />
+      <div className="space-y-4 pt-4 border-t border-white/5">
+        <h2 className="text-2xl font-bold text-white">Résumé</h2>
+        <p className="text-base text-gray-300 leading-relaxed max-w-4xl">
+          {overview || 'Aucun synopsis disponible.'}
+        </p>
+      </div>
     </div>
   )
 }

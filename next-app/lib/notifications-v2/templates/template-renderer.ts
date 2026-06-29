@@ -20,9 +20,21 @@ export class TemplateRenderer {
       template = route
     } else if (route) {
       const variant = isTv ? route.templateTv : route.templateMovie
-      template = (variant && variant.trim().length > 0)
-        ? variant
-        : (route.template && route.template.trim().length > 0 ? route.template : '')
+      if (variant && variant.trim().length > 0) {
+        template = variant
+      } else if (route.template && route.template.trim().length > 0) {
+        const movieCustomized = !!(route.templateMovie && route.templateMovie.trim().length > 0)
+        if (isTv) {
+          // Pour les séries, on n'utilise le template legacy que si le template film n'a PAS été personnalisé
+          // (ce qui indique une ancienne config globale partagée). Sinon, on préfère le template TV par défaut.
+          if (!movieCustomized) {
+            template = route.template
+          }
+        } else {
+          // Pour les films, si templateMovie est vide, on peut utiliser route.template (legacy)
+          template = route.template
+        }
+      }
     }
 
     if (!template || template.trim().length === 0) {
@@ -40,6 +52,9 @@ export class TemplateRenderer {
 
     const seasonNumber = p.media.seasonNumber
     const seasonStr = seasonNumber != null ? `S${String(seasonNumber).padStart(2, '0')}` : ''
+
+    const episodeNumber = (p.media as any).episodeNumber
+    const episodeStr = episodeNumber != null ? `E${String(episodeNumber).padStart(2, '0')}` : ''
 
     // Episode batch placeholders (from payload if present)
     const episodesDownloaded = (p as any).episodesDownloaded as number[] | undefined
@@ -62,6 +77,8 @@ export class TemplateRenderer {
       rating: p.media.rating != null ? String(p.media.rating) : 'N/A',
       season: seasonStr,
       seasonNumber: seasonNumber != null ? String(seasonNumber) : '',
+      episode: episodeStr,
+      episodeNumber: episodeNumber != null ? String(episodeNumber) : '',
       user: p.requester?.name || p.requester?.email || 'inconnu',
       userEmail: p.requester?.email ?? '',
       userWhatsapp: p.requester?.whatsappNumber ?? '',

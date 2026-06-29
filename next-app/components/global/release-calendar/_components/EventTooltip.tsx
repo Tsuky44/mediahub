@@ -13,9 +13,10 @@ import type { CalendarEvent } from '@/app/actions/calendar'
 interface EventTooltipProps {
   event: CalendarEvent
   mousePos: { x: number; y: number }
+  isTouch?: boolean
 }
 
-export function EventTooltip({ event, mousePos }: EventTooltipProps) {
+export function EventTooltip({ event, mousePos, isTouch }: EventTooltipProps) {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -24,16 +25,28 @@ export function EventTooltip({ event, mousePos }: EventTooltipProps) {
 
   if (!mounted) return null
 
-  const top =
-    mousePos.y + 15 > window.innerHeight - 250
-      ? mousePos.y - 220
-      : mousePos.y + 15
-  const left =
-    mousePos.x + 400 > window.innerWidth ? mousePos.x - 395 : mousePos.x + 15
+  // Mobile: position tooltip at center of screen if touch event
+  let top: number
+  let left: number
+
+  if (isTouch) {
+    // Center tooltip on mobile for better visibility
+    top = window.innerHeight / 2 - 125
+    left = window.innerWidth / 2 - 190
+  } else {
+    top =
+      mousePos.y + 15 > window.innerHeight - 250
+        ? mousePos.y - 220
+        : mousePos.y + 15
+    left =
+      mousePos.x + 400 > window.innerWidth ? mousePos.x - 395 : mousePos.x + 15
+  }
 
   return createPortal(
     <div
-      className="fixed z-[100] w-[380px] bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 duration-200 flex ring-1 ring-white/5"
+      className={`fixed z-[100] w-[380px] bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 duration-200 flex ring-1 ring-white/5 ${
+        isTouch ? 'max-w-[90vw] sm:w-[380px]' : ''
+      }`}
       style={{ top, left }}
     >
       <div className="w-[120px] bg-gray-900 relative flex-shrink-0 border-r border-white/5">

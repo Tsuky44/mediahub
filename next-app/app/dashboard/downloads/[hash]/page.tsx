@@ -3,7 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 import { notFound, redirect } from 'next/navigation'
 import { getQBittorrentService } from '@/lib/services/qbittorrent'
-import { getTorrentDetails, getTorrentPageUrl, getTrackerInfo } from './actions'
+import { getTorrentDetails, getTorrentPageUrl, getTrackerInfo, fetchRelatedRequests } from './actions'
 import { TorrentDetailsHeader } from './_components/TorrentDetailsHeader'
 import { MediaInfoCard } from './_components/MediaInfoCard'
 import { TorrentInfoCard } from './_components/TorrentInfoCard'
@@ -60,6 +60,11 @@ export default async function TorrentDetailsPage({ params }: TorrentDetailsPageP
 
   const { torrent, parsed, mediaInfo } = data
 
+  // Fetch related media requests if we have a tmdbId
+  const relatedRequests = (mediaInfo?.tmdbId && parsed.mediaType !== 'game')
+    ? await fetchRelatedRequests(mediaInfo.tmdbId, parsed.mediaType)
+    : []
+
   // Get tracker info - handle empty or multiple trackers
   let rawTracker = torrent.tracker || ''
 
@@ -100,7 +105,7 @@ export default async function TorrentDetailsPage({ params }: TorrentDetailsPageP
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
             {mediaInfo ? (
-              <MediaInfoCard mediaInfo={mediaInfo} torrentHash={torrent.hash} parsed={parsed} />
+              <MediaInfoCard mediaInfo={mediaInfo} torrentHash={torrent.hash} parsed={parsed} relatedRequests={relatedRequests} />
             ) : (
               <div className="bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/5 p-8 text-center">
                 <FileQuestion className="w-12 h-12 mx-auto text-gray-600 mb-4" />

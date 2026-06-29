@@ -1,11 +1,47 @@
 'use client'
 
-import { useEffect, useState, useTransition, useCallback, useRef } from 'react'
+import { useEffect, useState, useTransition, useRef } from 'react'
 import { useInView } from 'react-intersection-observer'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { fetchMedia } from '../../actions'
 import type { MediaFiltersValue } from '@/components/global/media-filters/_types/media-filters'
 import { mapGenres } from '@/components/global/media-filters/_utils/genre-mapping'
+
+const CACHE_KEY = 'infinite-media-cache'
+
+interface ScrollCache {
+  items: any[]
+  page: number
+  hasMore: boolean
+  scrollY: number
+  timestamp: number
+}
+
+function getCacheKey(pathname: string, search: string): string {
+  return `${CACHE_KEY}:${pathname}?${search}`
+}
+
+function saveScrollCache(key: string, data: ScrollCache) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(data))
+  } catch {}
+}
+
+function loadScrollCache(key: string): ScrollCache | null {
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (!raw) return null
+    const data = JSON.parse(raw) as ScrollCache
+    // Expire cache after 5 minutes
+    if (Date.now() - data.timestamp > 5 * 60 * 1000) {
+      sessionStorage.removeItem(key)
+      return null
+    }
+    return data
+  } catch {
+    return null
+  }
+}
 
 // Parse filters from URL search params
 function parseFiltersFromURL(params: URLSearchParams): Partial<MediaFiltersValue> {
@@ -56,12 +92,32 @@ export function useInfiniteMedia(
   initialSearch?: string,
   initialFilters?: Partial<MediaFiltersValue>
 ) {
-  const [items, setItems] = useState(initialItems)
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const cacheKey = getCacheKey(pathname, searchParams.toString())
+  const restoredRef = useRef(false)
+
+  const [items, setItems] = useState(() => {
+    if (typeof window === 'undefined') return initialItems
+    const cached = loadScrollCache(cacheKey)
+    if (cached && cached.items.length > 0) {
+      restoredRef.current = true
+      return cached.items
+    }
+    return initialItems
+  })
+  const [page, setPage] = useState(() => {
+    if (typeof window === 'undefined') return 1
+    const cached = loadScrollCache(cacheKey)
+    return cached ? cached.page : 1
+  })
+  const [hasMore, setHasMore] = useState(() => {
+    if (typeof window === 'undefined') return true
+    const cached = loadScrollCache(cacheKey)
+    return cached ? cached.hasMore : true
+  })
   const [loading, setLoading] = useState(false)
   const [isPending, startTransition] = useTransition()
-  const searchParams = useSearchParams()
   const [activeFilters, setActiveFilters] = useState<Partial<MediaFiltersValue>>(() => {
     // Prioritize URL params over initialFilters
     const urlFilters = parseFiltersFromURL(searchParams)
@@ -75,7 +131,79 @@ export function useInfiniteMedia(
   // Track previous type for genre mapping
   const prevTypeRef = useRef(initialType)
 
+  // Restore scroll position after items are rendered
   useEffect(() => {
+    if (restoredRef.current) {
+      const cached = loadScrollCache(cacheKey)
+      if (cached && cached.scrollY > 0) {
+        // Wait for DOM to paint before scrolling
+        requestAnimationFrame(() => {
+          window.scrollTo(0, cached.scrollY)
+        })
+      }
+      restoredRef.current = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Save scroll cache on beforeunload and when items/page change
+  useEffect(() => {
+    const save = () => {
+      saveScrollCache(cacheKey, {
+        items,
+        page,
+        hasMore,
+        scrollY: window.scrollY,
+        timestamp: Date.now(),
+      })
+    }
+
+    window.addEventListener('beforeunload', save)
+    return () => window.removeEventListener('beforeunload', save)
+  }, [items, page, hasMore, cacheKey])
+
+  // Also save on visibility change (covers navigation to detail page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        saveScrollCache(cacheKey, {
+          items,
+          page,
+          hasMore,
+          scrollY: window.scrollY,
+          timestamp: Date.now(),
+        })
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [items, page, hasMore, cacheKey])
+
+  // Save scroll position on scroll (debounced) to handle SPA navigation via Link
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>
+    const handleScroll = () => {
+      clearTimeout(timeoutId)
+      timeoutId = setTimeout(() => {
+        saveScrollCache(cacheKey, {
+          items,
+          page,
+          hasMore,
+          scrollY: window.scrollY,
+          timestamp: Date.now(),
+        })
+      }, 300)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      clearTimeout(timeoutId)
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [items, page, hasMore, cacheKey])
+
+  useEffect(() => {
+    // Skip reset if we just restored from cache
+    if (loadScrollCache(cacheKey)?.items.length && items.length > initialItems.length) return
     setItems(initialItems)
     setPage(1)
     setHasMore(true)

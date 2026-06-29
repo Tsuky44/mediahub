@@ -56,6 +56,20 @@ export function useTrackerConfigs(): UseTrackerConfigsResult {
         }
     }, [])
 
+    /** Recharge configs + stats depuis le cache (sans rescraper) pour un retour immédiat. */
+    const reloadConfigs = useCallback(async () => {
+        try {
+            const [trackersRes, statsRes] = await Promise.all([
+                getConfiguredTrackers(),
+                getAllTrackerStats(false),
+            ])
+            setTrackers(trackersRes.configs)
+            setStats(statsRes.formatted)
+        } catch (e) {
+            console.error('Failed to reload tracker configs:', e)
+        }
+    }, [])
+
     useEffect(() => {
         reload()
     }, [reload])
@@ -63,33 +77,33 @@ export function useTrackerConfigs(): UseTrackerConfigsResult {
     const add = useCallback(async (data: TrackerFormData): Promise<boolean> => {
         const res = await addTrackerConfig(data)
         if (res.success) {
-            await reload()
+            await reloadConfigs()
             return true
         }
         alert(res.error)
         return false
-    }, [reload])
+    }, [reloadConfigs])
 
     const update = useCallback(async (id: string, data: TrackerFormData): Promise<boolean> => {
         const res = await updateTrackerConfig(id, data)
         if (res.success) {
-            await reload()
+            await reloadConfigs()
             return true
         }
         alert(res.error)
         return false
-    }, [reload])
+    }, [reloadConfigs])
 
     const remove = useCallback(async (id: string): Promise<boolean> => {
         if (!confirm('Supprimer ce tracker ?')) return false
         const res = await deleteTrackerConfig(id)
         if (res.success) {
-            await reload()
+            await reloadConfigs()
             return true
         }
         alert(res.error)
         return false
-    }, [reload])
+    }, [reloadConfigs])
 
     const test = useCallback(async (tracker: any) => {
         setTestingId(tracker.id)

@@ -1,6 +1,5 @@
 'use client'
 
-import { TabNavigation } from './TabNavigation'
 import { MediaSettings } from './MediaSettings'
 import { DownloadSettings } from './DownloadSettings'
 import { AutomationSettings } from './AutomationSettings'
@@ -16,14 +15,12 @@ interface SettingsFormProps {
 }
 
 export default function SettingsForm({ settings, readOnly = false }: SettingsFormProps) {
-  const { activeTab, setActiveTab, formData, loading, statusMessage, updateField, handleSubmit } =
+  const { activeTab, formData, loading, statusMessage, updateField, handleSubmit } =
     useSettingsForm(settings)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
-
-      <div className="space-y-6 min-h-[400px]">
+      <div className="space-y-6">
         {activeTab === 'media' && <MediaSettings formData={formData} updateField={updateField} readOnly={readOnly} />}
         {activeTab === 'downloads' && (
           <DownloadSettings formData={formData} updateField={updateField} readOnly={readOnly} />

@@ -23,7 +23,6 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
-import { ImpersonationBanner } from "@/components/global/ImpersonationBanner";
 import { startStatsScheduler } from "@/lib/services/stats-scheduler";
 
 if (process.env.NEXT_RUNTIME === 'nodejs') {
@@ -51,7 +50,6 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
-          <ImpersonationBanner />
           {children}
         </Providers>
       </body>

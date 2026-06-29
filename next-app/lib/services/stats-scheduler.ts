@@ -265,7 +265,8 @@ async function checkCompletedDownloads() {
             limit: 300
         })
 
-        const { ExternalNotificationService } = await import('./external-notification-service')
+        // V1 notifications supprimées - plus d'ExternalNotificationService
+        // const { ExternalNotificationService } = await import('./external-notification-service')
         const newNotifiedHashes = [...notifiedHashes]
 
         for (const torrent of newCompleted) {
@@ -283,19 +284,19 @@ async function checkCompletedDownloads() {
                     req.tmdbId === hashEntry.tmdbId && req.mediaType === hashEntry.mediaType
                 )
                 if (matchingRequests.length === 0) {
-                    // No matching request but we know the media — notify globally without requesterId
-                    console.log(`[StatsScheduler] media_downloaded via hash map (no request): ${hashEntry.title} (TMDB ${hashEntry.tmdbId})`)
-                    await ExternalNotificationService.send('media_downloaded', {
-                        title: hashEntry.title,
-                        message: `Le téléchargement de "${hashEntry.title}" est terminé.`,
-                        data: {
-                            tmdbId: hashEntry.tmdbId,
-                            mediaType: hashEntry.mediaType,
-                            title: hashEntry.title,
-                            quality,
-                            size
-                        }
-                    })
+                    // No matching request but we know the media - V1 notifications supprimées
+                    console.log(`[StatsScheduler] media_downloaded via hash map (no request): ${hashEntry.title} (TMDB ${hashEntry.tmdbId}) - V1 notifications removed`)
+                    // await ExternalNotificationService.send('media_downloaded', {
+                    //     title: hashEntry.title,
+                    //     message: `Le téléchargement de "${hashEntry.title}" est terminé.`,
+                    //     data: {
+                    //         tmdbId: hashEntry.tmdbId,
+                    //         mediaType: hashEntry.mediaType,
+                    //         title: hashEntry.title,
+                    //         quality,
+                    //         size
+                    //     }
+                    // })
                 }
             } else {
                 // Fallback: title matching
@@ -322,22 +323,24 @@ async function checkCompletedDownloads() {
 
                 console.log(`[StatsScheduler] media_downloaded for "${req.title}" via ${hashEntry ? 'hash map' : 'title match'} (torrent: ${torrent.name})`)
 
-                await ExternalNotificationService.send('media_downloaded', {
-                    title: req.title || torrent.name,
-                    message: `Le téléchargement de "${req.title || torrent.name}" est terminé.`,
-                    data: {
-                        tmdbId: req.tmdbId,
-                        mediaType: req.mediaType,
-                        title: req.title || torrent.name,
-                        year,
-                        overview,
-                        posterPath,
-                        genres,
-                        quality,
-                        size,
-                        user: req.requesterName || ''
-                    }
-                }, req.userId ?? undefined)
+                // V1 notifications supprimées - plus d'envoi de notifications
+                console.log(`[StatsScheduler] V1 notifications removed - would send notification for: ${req.title || torrent.name}`)
+                // await ExternalNotificationService.send('media_downloaded', {
+                //     title: req.title || torrent.name,
+                //     message: `Le téléchargement de "${req.title || torrent.name}" est terminé.`,
+                //     data: {
+                //         tmdbId: req.tmdbId,
+                //         mediaType: req.mediaType,
+                //         title: req.title || torrent.name,
+                //         year,
+                //         overview,
+                //         posterPath,
+                //         genres,
+                //         quality,
+                //         size,
+                //         user: req.requesterName || ''
+                //     }
+                // }, req.userId ?? undefined)
             }
 
             newNotifiedHashes.push(hashKey)

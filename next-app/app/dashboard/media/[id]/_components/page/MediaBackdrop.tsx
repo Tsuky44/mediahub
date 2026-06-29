@@ -9,19 +9,21 @@ export default function MediaBackdrop({
 }: MediaBackdropProps) {
   if (!backdropUrl) {
     return (
-      <div className="fixed inset-0 h-screen w-full overflow-hidden z-0 pointer-events-none" />
+      <div className="absolute top-0 left-0 w-full h-[70vh] overflow-hidden z-0 pointer-events-none bg-gradient-to-b from-[#0f172a] to-[#0f172a]" />
     )
   }
   return (
-    <div className="fixed inset-0 h-screen w-full overflow-hidden z-0 pointer-events-none">
+    <div className="absolute top-0 left-0 w-full h-[65vh] md:h-[80vh] overflow-hidden z-0 pointer-events-none">
       <img
         src={backdropUrl}
         alt={alt}
-        className="h-full w-full object-cover opacity-40 scale-105"
+        className="absolute right-0 top-0 w-full md:w-[75%] h-full object-cover opacity-75 scale-100 transition-all duration-1000"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent"></div>
-      <div className="absolute inset-0 bg-gradient-to-r from-[#0f172a] via-[#0f172a]/40 to-transparent"></div>
-      <div className="absolute inset-0 backdrop-blur-[1px]"></div>
+      {/* Deep dark blue/black gradient blending on the left for text contrast */}
+      <div className="absolute inset-0 bg-gradient-to-r from-[#0f172a] via-[#0f172a]/95 to-transparent w-full md:w-[60%]"></div>
+      <div className="absolute inset-0 bg-gradient-to-r from-[#0f172a] via-[#0f172a]/45 to-transparent"></div>
+      {/* Bottom fade blending into the main page content */}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/50 to-transparent"></div>
     </div>
   )
 }

@@ -52,20 +52,8 @@ const isFullSync = process.argv.includes('--full-sync');
 const server = http.createServer();
 
 // Restreindre l'origine CORS au domaine de l'app si disponible.
-// Priorité: NEXTAUTH_URL > TRACKER_CORS_ORIGIN > '*' (fallback permissif)
-const CORS_ORIGIN: string | string[] = (() => {
-  const nextAuthUrl = process.env.NEXTAUTH_URL
-  const customOrigin = process.env.TRACKER_CORS_ORIGIN
-  if (nextAuthUrl) {
-    try {
-      // On extrait juste l'origine (scheme + host + port) sans le path
-      const { origin } = new URL(nextAuthUrl)
-      return origin
-    } catch { /* URL invalide, on continue */ }
-  }
-  if (customOrigin) return customOrigin
-  return '*'
-})()
+// Utilisation de '*' par défaut pour une compatibilité totale dans le conteneur unifié.
+const CORS_ORIGIN = '*';
 
 const io = new Server(server, {
   cors: {
@@ -937,10 +925,10 @@ async function saveWatchEvent(session: SessionState) {
         let tmdbId = (session.mediaInfo?.ProviderIds as Record<string, unknown> | undefined)?.Tmdb || null;
         if (tmdbId) tmdbId = String(tmdbId);
 
-        const event = await p.watchEvent.create({
+        const event = await (p as any).watchEvent.create({
             data: {
                 embyUserId: session.userId,
-                user: user ? { connect: { id: user.id } } : undefined,
+                userId: user ? user.id : null,
                 userName: session.userName,
                 itemId: session.itemId,
                 itemName: session.itemName,

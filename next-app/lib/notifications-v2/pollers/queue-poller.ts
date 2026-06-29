@@ -25,6 +25,7 @@ import { logger } from '@/lib/logger'
 import { ConfigStore } from '../config/config-store'
 import { dispatch } from '../dispatcher'
 import { NOTIFICATION_EVENTS, type NotificationEvent, type MediaInfo, type RequesterInfo } from '../types'
+import { getStuckImportDetector, type StuckItem } from './stuck-import-detector'
 
 type TrackedState = 'downloading' | 'download_complete' | 'importing'
 
@@ -105,15 +106,21 @@ export class QueuePoller {
   private readonly tvdbToTmdb = new Map<number, string>()
   /** État max par (tmdbId:season) rechargé depuis la DB au démarrage */
   private readonly dbStateByMedia = new Map<string, TrackedState>()
+  /** Détecteur d'imports bloqués pour backoff et gestion */
+  private readonly stuckDetector = getStuckImportDetector()
+  /** Intervalle dynamique basé sur la santé des APIs */
+  private currentIntervalMs = 15_000
 
-  constructor(private readonly intervalMs = 15_000) {}
+  constructor(private readonly baseIntervalMs = 15_000) {
+    this.currentIntervalMs = baseIntervalMs
+  }
 
   start(): void {
     if (this.started) return
     this.started = true
     this.tick().catch(() => {})
-    this.timer = setInterval(() => this.tick().catch(() => {}), this.intervalMs)
-    logger.info(`[NotifV2][QueuePoller] Started (every ${this.intervalMs / 1000}s)`)
+    this.timer = setInterval(() => this.tick().catch(() => {}), this.currentIntervalMs)
+    logger.info(`[NotifV2][QueuePoller] Started (every ${this.currentIntervalMs / 1000}s)`)
   }
 
   stop(): void {
@@ -131,25 +138,66 @@ export class QueuePoller {
       return
     }
 
-    const [radarr, sonarr] = await Promise.all([getRadarrService(), getSonarrService()])
-    const [radarrQueue, sonarrQueue] = await Promise.all([
-      radarr ? radarr.getQueue().catch(() => [] as RadarrQueueItem[]) : Promise.resolve([] as RadarrQueueItem[]),
-      sonarr ? sonarr.getQueue().catch(() => [] as SonarrQueueItem[]) : Promise.resolve([] as SonarrQueueItem[]),
-    ])
-
-    // Log diagnostique : tats bruts de la queue Sonarr (uniquement si non vide)
-    if (sonarrQueue.length > 0) {
-      const summary = sonarrQueue.map((q) => ({
-        s: q.series?.title,
-        seasonNumber: q.episode?.seasonNumber ?? q.seasonNumber,
-        ep: q.episode?.episodeNumber,
-        status: q.status,
-        trackedDownloadState: q.trackedDownloadState,
-        sizeleft: q.sizeleft,
-        mapped: mapTrackedState(q),
-      }))
-      logger.info(`[NotifV2][QueuePoller] Sonarr queue (${sonarrQueue.length} items): ${JSON.stringify(summary)}`)
+    // Vérifier si on doit skipper ce tick (backoff)
+    if (this.stuckDetector.shouldSkipTick()) {
+      logger.debug('[NotifV2][QueuePoller] Tick skipped: backoff active')
+      return
     }
+
+    const tickStart = Date.now()
+    let apiSuccess = true
+
+    // Récupérer les services
+    const servicesStart = Date.now()
+    const [radarr, sonarr] = await Promise.all([getRadarrService(), getSonarrService()])
+    
+    // Récupérer les queues avec timing
+    const queuePromise = Promise.all([
+      radarr ? radarr.getQueue().catch((e) => {
+        logger.error('[NotifV2][QueuePoller] Radarr queue fetch failed:', e)
+        apiSuccess = false
+        return [] as RadarrQueueItem[]
+      }) : Promise.resolve([] as RadarrQueueItem[]),
+      sonarr ? sonarr.getQueue().catch((e) => {
+        logger.error('[NotifV2][QueuePoller] Sonarr queue fetch failed:', e)
+        apiSuccess = false
+        return [] as SonarrQueueItem[]
+      }) : Promise.resolve([] as SonarrQueueItem[]),
+    ])
+    
+    const [radarrQueue, sonarrQueue] = await queuePromise
+    const apiDuration = Date.now() - servicesStart
+
+    // Mettre à jour le détecteur d'imports bloqués
+    this.stuckDetector.updateQueues(radarrQueue, sonarrQueue)
+    this.stuckDetector.recordApiCall(apiDuration, apiSuccess)
+
+    // Mettre à jour l'intervalle dynamique
+    const newInterval = this.stuckDetector.getCurrentInterval()
+    if (newInterval !== this.currentIntervalMs) {
+      this.currentIntervalMs = newInterval
+      // Redémarrer le timer avec le nouvel intervalle
+      if (this.timer) {
+        clearInterval(this.timer)
+        this.timer = setInterval(() => this.tick().catch(() => {}), this.currentIntervalMs)
+      }
+      logger.info(`[NotifV2][QueuePoller] Interval adjusted to ${this.currentIntervalMs / 1000}s (stuck: ${this.stuckDetector.getStats().stuckCount})`)
+    }
+
+    // Log des stats si des items bloqués détectés
+    const stats = this.stuckDetector.getStats()
+    if (stats.stuckCount > 0) {
+      logger.warn(`[NotifV2][QueuePoller] Stuck imports: ${stats.stuckCount} (confirmed: ${stats.confirmedStuckCount})`)
+    }
+
+    if (sonarrQueue.length > 0) {
+      logger.debug(`[NotifV2][QueuePoller] Sonarr queue: ${sonarrQueue.length} item(s)`)
+    }
+
+    // Filtrer les items bloqués confirmés pour réduire la charge
+    const confirmedStuckIds = new Set(
+      this.stuckDetector.getConfirmedStuckItems().map(item => `${item.type}:${item.id}`)
+    )
 
     // Premier tick : on enregistre les états actuels SANS dispatcher (évite le spam au démarrage)
     if (this.isFirstRun) {
@@ -175,8 +223,12 @@ export class QueuePoller {
       return
     }
 
-    // Process Radarr items
+    // Process Radarr items (skip confirmed stuck to reduce API load)
     for (const item of radarrQueue) {
+      if (confirmedStuckIds.has(`radarr:${item.id}`)) {
+        logger.debug(`[NotifV2][QueuePoller] Skipping confirmed stuck Radarr item: ${item.title}`)
+        continue
+      }
       try {
         await this.processRadarrItem(item)
       } catch (e) {
@@ -184,8 +236,11 @@ export class QueuePoller {
       }
     }
 
-    // Process Sonarr items (groups par srie+saison pour viter le spam multi-pisodes)
-    const sonarrBySeason = this.groupSonarrBySeason(sonarrQueue)
+    // Filter out stuck Sonarr items before grouping
+    const activeSonarrQueue = sonarrQueue.filter(item => !confirmedStuckIds.has(`sonarr:${item.id}`))
+    
+    // Process Sonarr items (groups par série+saison pour éviter le spam multi-pisodes)
+    const sonarrBySeason = this.groupSonarrBySeason(activeSonarrQueue)
     if (sonarrBySeason.length > 0) {
       logger.info(
         `[NotifV2][QueuePoller] Sonarr groups: ${sonarrBySeason.map((g) => `${g.key}=${g.state}`).join(', ')} | lastState: ${Array.from(this.lastState.entries()).map(([k, v]) => `${k}=${v}`).join(', ')}`
@@ -211,6 +266,12 @@ export class QueuePoller {
       await this.flushOnRemoval(key)
       this.lastState.delete(key)
       this.lastContext.delete(key)
+    }
+
+    // Log du temps total du tick
+    const tickDuration = Date.now() - tickStart
+    if (tickDuration > 5000) {
+      logger.warn(`[NotifV2][QueuePoller] Slow tick: ${tickDuration}ms`)
     }
   }
 
@@ -455,21 +516,22 @@ export class QueuePoller {
   }
 
   /**
-   * Recharge depuis la DB les événements de queue dispatchés aujourd'hui.
+   * Recharge depuis la DB les événements de queue dispatchés sur les 7 derniers jours.
    * Stocke l'état max par clé `tmdbId:season` dans dbStateByMedia.
-   * Permet de ne pas régresser après un redémarrage du container.
+   * Permet de ne pas régresser après un redémarrage du container, même après minuit.
    *
    * Format dedup_key: req:<userId>:<mediaType>:<tmdbId>:<event>[:<season>]:<date>
    *                   tmdb:<mediaType>:<tmdbId>:<event>[:<season>]:<date>
    */
   private async seedLastStateFromDb(): Promise<void> {
     try {
-      const todayStart = new Date()
-      todayStart.setHours(0, 0, 0, 0)
+      const windowStart = new Date()
+      windowStart.setDate(windowStart.getDate() - 7)
+      windowStart.setHours(0, 0, 0, 0)
       const rows = await db
         .select({ event: notificationEvents.event, tmdbId: notificationEvents.tmdbId, mediaType: notificationEvents.mediaType, payload: notificationEvents.payload })
         .from(notificationEvents)
-        .where(gte(notificationEvents.createdAt, todayStart))
+        .where(gte(notificationEvents.createdAt, windowStart))
 
       for (const row of rows) {
         const state = STATE_FOR_EVENT[row.event as NotificationEvent]

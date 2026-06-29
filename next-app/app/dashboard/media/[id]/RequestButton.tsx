@@ -1,10 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import { useRequestStatus } from './_components/request/useRequestStatus'
 import { RequestStatusButton } from './_components/request/RequestStatusButton'
 import { SeasonSelectorModal } from './_components/SeasonSelectorModal'
 import { useRouter } from 'next/navigation'
 import { requestAllSeasons } from './actions'
+import { DownloadStatusModal } from './_components/DownloadStatusModal'
 
 interface RequestButtonProps {
   tmdbId: number
@@ -15,6 +17,7 @@ interface RequestButtonProps {
   seasonStatuses?: any[]
   canRequest?: boolean
   requestAllSeasonsEnabled?: boolean
+  tvdbId?: number
 }
 
 export default function RequestButton({
@@ -26,8 +29,11 @@ export default function RequestButton({
   seasonStatuses,
   canRequest = false,
   requestAllSeasonsEnabled = false,
+  tvdbId,
 }: RequestButtonProps) {
   const router = useRouter()
+  const [showStatusModal, setShowStatusModal] = useState(false)
+
   const { status, loading, showSeasonModal, setShowSeasonModal, setStatus, sendRequest } = useRequestStatus(
     tmdbId,
     mediaType,
@@ -83,6 +89,16 @@ export default function RequestButton({
         isTv={isTv}
         onPrimaryClick={handlePrimaryClick}
         onSeasonClick={() => setShowSeasonModal(true)}
+        onStatusClick={() => setShowStatusModal(true)}
+      />
+      
+      <DownloadStatusModal
+        isOpen={showStatusModal}
+        onClose={() => setShowStatusModal(false)}
+        tmdbId={tmdbId}
+        mediaType={mediaType}
+        tvdbId={tvdbId}
+        title={title}
       />
       {isTv && seasons && seasonStatuses && (
         <SeasonSelectorModal

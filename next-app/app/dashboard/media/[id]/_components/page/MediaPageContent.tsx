@@ -1,10 +1,8 @@
 import { SeasonList } from '../SeasonList'
-import { DownloadStatusCard } from '../../DownloadStatusCard'
+import { UserActivityButton } from '../UserActivityButton'
 import MediaBackdrop from './MediaBackdrop'
-import MediaPosterImage from './MediaPosterImage'
 import MediaAvailabilityBadges from './MediaAvailabilityBadges'
 import MediaTitleHeader from './MediaTitleHeader'
-import MediaActionsRow from './MediaActionsRow'
 import MediaPrimaryActions from './MediaPrimaryActions'
 import MediaSidebar from './MediaSidebar'
 import MediaOverviewSection from './MediaOverviewSection'
@@ -69,61 +67,57 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
     (r: { iso_3166_1?: string; rating?: string }) => r.iso_3166_1 === 'US'
   )?.rating
 
+  const logos = details.images?.logos || []
+  const bestLogo = logos.find((l: any) => l.iso_639_1 === 'fr') ||
+                   logos.find((l: any) => l.iso_639_1 === 'en') ||
+                   logos[0]
+  const logoPath = bestLogo?.file_path
+
   return (
     <div className="relative min-h-screen bg-[#0f172a] text-gray-300 overflow-x-hidden font-sans selection:bg-indigo-500/30">
       <MediaBackdrop backdropUrl={backdropUrl} alt={title} />
 
       <div className="relative z-10 mx-auto max-w-[1600px] px-4 py-12 sm:px-8 lg:px-12">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row gap-10 items-start md:items-end mb-16">
-          <MediaPosterImage posterUrl={posterUrl} alt={title} />
+        {/* Header Section (Hero Backdrop Layout) */}
+        <div className="relative flex flex-col justify-end min-h-[35vh] md:min-h-[50vh] pt-16 pb-6 mb-12">
+          <div className="max-w-6xl space-y-6">
+            <div className="space-y-4">
+              <MediaAvailabilityBadges status={availability.status} />
+              <MediaTitleHeader
+                title={title}
+                releaseDate={releaseDate}
+                mediaType={mediaType}
+                watched={!!userProgress?.played}
+                contentRating={contentRating}
+                runtime={details.runtime}
+                genres={details.genres}
+                logoPath={logoPath}
+              />
+            </div>
 
-          <div className="flex-1 w-full min-w-0 space-y-8 pb-2">
-            <div className="flex flex-col gap-6">
-              <div className="space-y-3">
-                <MediaAvailabilityBadges status={availability.status} />
-                <MediaTitleHeader
-                  title={title}
-                  releaseDate={releaseDate}
-                  mediaType={mediaType}
-                  watched={!!userProgress?.played}
-                  contentRating={contentRating}
-                  runtime={details.runtime}
-                  genres={details.genres}
-                />
-              </div>
-
-              <MediaActionsRow
-                id={id}
+            <div className="flex flex-wrap gap-4 items-center">
+              <MediaPrimaryActions
                 tmdbId={tmdbId}
                 mediaType={mediaType}
                 title={title}
-                releaseDate={releaseDate}
+                availability={availability}
                 details={details}
                 embyItem={embyItem}
+                embyServerId={embyServerId}
+                embyUrl={embyUrl}
+                trailer={trailer}
+                ability={ability}
+                requestAllSeasonsEnabled={requestAllSeasonsEnabled}
+                id={id}
                 isWatchLaterItem={isWatchLaterItem}
                 isSubscribed={isSubscribed}
                 isInCalendar={isInCalendar}
                 tvdbId={tvdbId}
-                ability={ability}
+                canManageSettings={ability.can('manage_settings', 'Media')}
+                canTriggerSearch={ability.can('trigger_search', 'Media')}
+                canInteractiveSearch={ability.can('interactive_search', 'Media')}
               />
             </div>
-
-            <MediaPrimaryActions
-              tmdbId={tmdbId}
-              mediaType={mediaType}
-              title={title}
-              availability={availability}
-              details={details}
-              embyItem={embyItem}
-              embyServerId={embyServerId}
-              embyUrl={embyUrl}
-              trailer={trailer}
-              ability={ability}
-              requestAllSeasonsEnabled={requestAllSeasonsEnabled}
-            />
-
-            <DownloadStatusCard tmdbId={tmdbId} mediaType={mediaType} tvdbId={tvdbId} title={title} />
           </div>
         </div>
 
@@ -150,28 +144,37 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
               <section>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                   <h2 className="text-2xl font-bold text-white">Saisons</h2>
-                  {userProgress &&
-                    userProgress.totalEpisodes !== undefined &&
-                    userProgress.totalEpisodes > 0 && (
-                      <div className="flex items-center gap-3 w-full sm:w-64">
-                        <div className="flex-1 relative h-2 rounded-full overflow-hidden bg-gray-800/60 border border-white/5">
-                          <div
-                            className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
-                            style={{
-                              width: `${userProgress.playedPercentage}%`,
-                              background: 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
-                              boxShadow: '0 0 8px rgba(168,85,247,0.6)',
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs font-bold text-white whitespace-nowrap">
-                          {Math.round(userProgress.playedPercentage)}%
-                          <span className="text-gray-500 ml-1 font-normal">
-                            ({userProgress.totalEpisodes - userProgress.unplayedItemCount}/{userProgress.totalEpisodes})
-                          </span>
-                        </span>
-                      </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    {embyItem && (
+                      <UserActivityButton
+                        tmdbId={tmdbId}
+                        mediaType={mediaType}
+                        title={title}
+                      />
                     )}
+                    {userProgress &&
+                      userProgress.totalEpisodes !== undefined &&
+                      userProgress.totalEpisodes > 0 && (
+                        <div className="flex items-center gap-3 w-full sm:w-64">
+                          <div className="flex-1 relative h-2 rounded-full overflow-hidden bg-gray-800/60 border border-white/5">
+                            <div
+                              className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+                              style={{
+                                width: `${userProgress.playedPercentage}%`,
+                                background: 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
+                                boxShadow: '0 0 8px rgba(168,85,247,0.6)',
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs font-bold text-white whitespace-nowrap">
+                            {Math.round(userProgress.playedPercentage)}%
+                            <span className="text-gray-500 ml-1 font-normal">
+                              ({userProgress.totalEpisodes - userProgress.unplayedItemCount}/{userProgress.totalEpisodes})
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                  </div>
                 </div>
                 <SeasonList
                   tvId={tmdbId}

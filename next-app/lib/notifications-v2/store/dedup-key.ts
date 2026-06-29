@@ -21,6 +21,7 @@ const PERMANENT_DEDUP_EVENTS = new Set<NotificationEvent>([
   'MEDIA_APPROVED',
   'MEDIA_AVAILABLE',
   'SEASON_PARTIALLY_AVAILABLE',
+  'EPISODE_AVAILABLE',
 ])
 
 // Retourne la date du jour au format YYYY-MM-DD (pour dédup journalière)
@@ -28,14 +29,21 @@ function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-/** Encode l'identifiant saison(s) pour la clé : "S1" pour une seule, "S1,2" pour groupé. */
+/** Encode l'identifiant saison(s) et épisode(s) pour la clé : "S1" pour une seule, "S1:E3" avec épisode. */
 function seasonSegment(media: MediaInfo): string {
-  if (media.seasonNumber !== undefined) return `:S${media.seasonNumber}`
-  if (media.mediaType === 'tv' && media.seasons && media.seasons.length > 0) {
+  let seg = ''
+  if (media.seasonNumber !== undefined) {
+    seg += `:S${media.seasonNumber}`
+  } else if (media.mediaType === 'tv' && media.seasons && media.seasons.length > 0) {
     const sorted = [...media.seasons].sort((a, b) => a - b)
-    return `:S${sorted.join(',')}`
+    seg += `:S${sorted.join(',')}`
   }
-  return ''
+
+  const epNum = (media as any).episodeNumber
+  if (epNum !== undefined) {
+    seg += `:E${epNum}`
+  }
+  return seg
 }
 
 export function buildDedupKey(

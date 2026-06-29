@@ -4,8 +4,9 @@ import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth'
 import { ConfigStore } from '@/lib/notifications-v2'
-import type { NotificationsV2Config, NotificationEvent } from '@/lib/notifications-v2'
+import type { NotificationsV2Config, NotificationEvent, WebhookConfig } from '@/lib/notifications-v2'
 import { notificationBus, NOTIFICATION_EVENTS } from '@/lib/notifications-v2'
+import { WebhookProvider, DEFAULT_WEBHOOK_PAYLOAD } from '@/lib/notifications-v2/providers/webhook-provider'
 
 /** Only admins can manage config. */
 async function assertAdmin() {
@@ -174,4 +175,56 @@ export async function testEventNotification(
   })
 
   return { success: true, message: `Événement ${event} (${mediaType}) de test envoyé.` }
+}
+
+export async function getDefaultWebhookPayload(): Promise<string> {
+  await assertAdmin()
+  return DEFAULT_WEBHOOK_PAYLOAD
+}
+
+export async function testWebhook(
+  webhookConfig: WebhookConfig
+): Promise<{ success: boolean; message: string }> {
+  await assertAdmin()
+
+  if (!webhookConfig.webhookUrl) {
+    return { success: false, message: '⚠️ Remplis l\'URL du webhook avant de tester.' }
+  }
+
+  let jsonPayload = webhookConfig.jsonPayload
+  if (!jsonPayload) {
+    jsonPayload = DEFAULT_WEBHOOK_PAYLOAD
+  }
+
+  try {
+    JSON.parse(jsonPayload)
+  } catch {
+    return { success: false, message: '❌ Le JSON payload est invalide.' }
+  }
+
+  const testPayload = {
+    event: 'TEST_NOTIFICATION' as const,
+    timestamp: new Date().toISOString(),
+    correlationId: 'test-' + Date.now(),
+    media: {
+      tmdbId: 'test-123',
+      mediaType: 'movie' as const,
+      title: 'Test Notification — MediaHub',
+      overview: 'Ceci est une notification de test envoyée depuis MediaHub.',
+      posterPath: '/t6HIqrRAclMCA60NsSmeqe9RmNV.jpg',
+    },
+    requester: {
+      id: 0,
+      name: 'Admin Test',
+      email: 'admin@mediahub.test',
+    },
+  }
+
+  const provider = new WebhookProvider({ ...webhookConfig, jsonPayload })
+  const result = await provider.send(testPayload as any)
+
+  if (result.success) {
+    return { success: true, message: '✅ Webhook test envoyé avec succès.' }
+  }
+  return { success: false, message: `❌ Échec : ${result.error ?? 'Erreur inconnue'}` }
 }

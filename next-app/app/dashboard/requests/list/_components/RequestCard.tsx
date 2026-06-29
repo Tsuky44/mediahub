@@ -58,7 +58,7 @@ export function RequestCard({
                     className={`absolute top-4 left-4 z-20 transition-all duration-300 ${
                         isSelected
                             ? 'opacity-100 scale-100'
-                            : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'
+                            : 'opacity-100 scale-100 sm:opacity-0 sm:scale-75 sm:group-hover:opacity-100 sm:group-hover:scale-100'
                     }`}
                 >
                     <div

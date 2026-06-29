@@ -25,6 +25,53 @@ function Check-Error {
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $NextAppPath = Join-Path $ScriptDir "next-app"
 
+# Lire la version actuelle depuis package.json
+$PackageJsonPath = Join-Path $NextAppPath "package.json"
+$CurrentVersion = "0.1.0"
+if (Test-Path $PackageJsonPath) {
+    $PackageJson = Get-Content $PackageJsonPath | ConvertFrom-Json
+    if ($PackageJson.version) {
+        $CurrentVersion = $PackageJson.version
+    }
+}
+
+Write-Host ""
+Write-Host "Version actuelle détectée dans package.json : $CurrentVersion" -ForegroundColor Green
+$InputCurrent = Read-Host "Confirmez ou entrez la version ACTUELLE (Appuyez sur Entrée pour '$CurrentVersion')"
+if (-not [string]::IsNullOrEmpty($InputCurrent)) {
+    $CurrentVersion = $InputCurrent
+}
+
+$TargetVersion = Read-Host "Entrez la NOUVELLE version à appliquer (ex: 1.0.0)"
+if ([string]::IsNullOrEmpty($TargetVersion)) {
+    Write-Error "ERREUR : La nouvelle version ne peut pas être vide."
+    exit 1
+}
+
+# Nettoyer les préfixes 'v' si l'utilisateur l'a saisi
+$TargetVersion = $TargetVersion -replace '^v', ''
+
+# Mettre à jour package.json avec la nouvelle version
+if (Test-Path $PackageJsonPath) {
+    Write-Host "Mise à jour de package.json vers la version $TargetVersion..." -ForegroundColor Yellow
+    $PackageContent = Get-Content $PackageJsonPath -Raw
+    # Remplacer la ligne "version": "..." par la nouvelle version
+    $PackageContent = $PackageContent -replace '"version"\s*:\s*"[^"]+"', "`"version`": `"$TargetVersion`""
+    Set-Content $PackageJsonPath $PackageContent
+}
+
+# Générer les tags Docker
+$VersionTag = "v$TargetVersion"
+$MinorVersion = $TargetVersion -replace '\.\d+$', '' # ex: 1.0.0 -> 1.0
+$MinorVersionTag = "v$MinorVersion"
+
+Write-Host ""
+Write-Host "--- Résumé de la publication ---" -ForegroundColor Cyan
+Write-Host "Version cible : $TargetVersion" -ForegroundColor Green
+Write-Host "Tags Docker : latest, $VersionTag, $MinorVersionTag" -ForegroundColor Green
+Write-Host "--------------------------------" -ForegroundColor Cyan
+Write-Host ""
+
 # Login
 Write-Host "1. Connexion à ghcr.io..." -ForegroundColor Yellow
 Write-Host "Veuillez entrer votre Personal Access Token (PAT) GitHub:"
@@ -35,23 +82,22 @@ Check-Error "Échec de la connexion à GitHub Packages."
 
 # Build & Push App
 Write-Host "2. Build & Push : Application..." -ForegroundColor Yellow
-docker build --network=host --target runner -t "ghcr.io/$GitHubUser/mediahub-app:latest" "$NextAppPath"
+docker build --target runner -t "ghcr.io/$GitHubUser/mediahub-app:latest" -t "ghcr.io/$GitHubUser/mediahub-app:$VersionTag" -t "ghcr.io/$GitHubUser/mediahub-app:$MinorVersionTag" "$NextAppPath"
 Check-Error "Échec du build de l'application"
 
 docker push "ghcr.io/$GitHubUser/mediahub-app:latest"
-Check-Error "Échec du push de l'application"
+Check-Error "Échec du push de l'application (latest)"
 
-# Build & Push Tracker
-Write-Host "3. Build & Push : Tracker..." -ForegroundColor Yellow
-docker build --network=host --target tracker -t "ghcr.io/$GitHubUser/mediahub-tracker:latest" "$NextAppPath"
-Check-Error "Échec du build du tracker"
+docker push "ghcr.io/$GitHubUser/mediahub-app:$VersionTag"
+Check-Error "Échec du push de l'application ($VersionTag)"
 
-docker push "ghcr.io/$GitHubUser/mediahub-tracker:latest"
-Check-Error "Échec du push du tracker"
+docker push "ghcr.io/$GitHubUser/mediahub-app:$MinorVersionTag"
+Check-Error "Échec du push de l'application ($MinorVersionTag)"
 
 Write-Host "=== Terminé ! ===" -ForegroundColor Green
-Write-Host "Les images sont disponibles sur :"
+Write-Host "L'image est disponible sur :"
 Write-Host "- ghcr.io/$GitHubUser/mediahub-app:latest"
-Write-Host "- ghcr.io/$GitHubUser/mediahub-tracker:latest"
+Write-Host "- ghcr.io/$GitHubUser/mediahub-app:$VersionTag"
+Write-Host "- ghcr.io/$GitHubUser/mediahub-app:$MinorVersionTag"
 Write-Host ""
 Write-Host "Vous pouvez distribuer le fichier 'docker-compose.public.yml' (renommé en docker-compose.yml) aux utilisateurs."

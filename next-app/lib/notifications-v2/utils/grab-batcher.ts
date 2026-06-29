@@ -49,6 +49,17 @@ export class SeasonGrabBatcher {
     const key = String(tmdbId)
 
     if (!this.batches.has(key)) {
+      if (this.batches.size >= 50) {
+        const oldestKey = this.batches.keys().next().value
+        if (oldestKey) {
+          logger.warn(`[GrabBatcher] Max batches reached (50), flushing oldest key: ${oldestKey}`)
+          if (this.timers.has(oldestKey)) {
+            clearTimeout(this.timers.get(oldestKey)!)
+            this.timers.delete(oldestKey)
+          }
+          this.flush(oldestKey)
+        }
+      }
       this.batches.set(key, { data, seasons: new Set() })
     }
 
@@ -91,7 +102,7 @@ export class SeasonGrabBatcher {
         media: {
           tmdbId: data.tmdbId,
           mediaType: 'tv',
-          title: `${data.title} — Saison ${seasons[0]}`,
+          title: `${data.title} - Saison ${seasons[0]}`,
           overview: data.overview,
           posterPath: data.posterPath,
           seasonNumber: seasons[0],
@@ -108,7 +119,7 @@ export class SeasonGrabBatcher {
         media: {
           tmdbId: data.tmdbId,
           mediaType: 'tv',
-          title: `${data.title} — ${seasonLabel}`,
+          title: `${data.title} - ${seasonLabel}`,
           overview: data.overview,
           posterPath: data.posterPath,
         },

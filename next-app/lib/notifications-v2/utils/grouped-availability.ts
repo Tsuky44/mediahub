@@ -101,42 +101,42 @@ export async function tryDispatchGroupedAvailability(params: {
     logger.warn(`[GroupedAvailability] Failed to fetch Sonarr series stats for tvdbId=${tvdbId}:`, e)
   }
 
-  // Regrouper les demandes par userId pour gérer plusieurs demandeurs indépendants
-  const byUser = new Map<string, typeof requests>()
+  // Regrouper par (userId, seasonSet) — clé = userId + liste de saisons triées.
+  // IMPORTANT: chaque demande individuelle est traitée séparément selon ses propres saisons.
+  // Cela évite de fusionner une ancienne demande "S1-10" avec une nouvelle "S11-12".
+  type ReqGroup = { req: typeof requests[number]; seasons: number[] }
+  const byUserAndSeasons = new Map<string, ReqGroup>()
+
   for (const req of requests) {
-    const key = req.userId != null ? String(req.userId) : 'anonymous'
-    if (!byUser.has(key)) byUser.set(key, [])
-    byUser.get(key)!.push(req)
+    let meta: Record<string, unknown> = {}
+    try { meta = req.metadata ? JSON.parse(req.metadata) : {} } catch {}
+    const rawSeasons = meta.seasons
+    if (!Array.isArray(rawSeasons) || rawSeasons.length === 0) continue
+
+    const seasons: number[] = []
+    for (const s of rawSeasons) {
+      const n = typeof s === 'number' ? s : (s as Record<string, unknown>)?.seasonNumber
+      if (typeof n === 'number') seasons.push(n)
+    }
+    if (seasons.length <= 1) continue // mono-saison → géré par l'appelant
+
+    seasons.sort((a, b) => a - b)
+    // Clé unique par (userId, seasonSet) — une demande = une notif groupée
+    const userKey = req.userId != null ? String(req.userId) : 'anonymous'
+    const seasonKey = seasons.join(',')
+    const mapKey = `${userKey}:${seasonKey}`
+
+    // Garder seulement la demande la plus récente si même userId+seasons (rare mais possible)
+    if (!byUserAndSeasons.has(mapKey)) {
+      byUserAndSeasons.set(mapKey, { req, seasons })
+    }
   }
 
   let anyDispatched = false
   let isGrouped = false
   const groupedSeasons = new Set<number>()
 
-  for (const [, userRequests] of byUser) {
-    // Rassembler toutes les saisons demandées par cet utilisateur
-    const requestedSeasons = new Set<number>()
-    for (const req of userRequests) {
-      let meta: Record<string, unknown> = {}
-      try { meta = req.metadata ? JSON.parse(req.metadata) : {} } catch {}
-      const seasons = meta.seasons
-      if (Array.isArray(seasons) && seasons.length > 0) {
-        for (const s of seasons) {
-          const n = typeof s === 'number' ? s : (s as Record<string, unknown>)?.seasonNumber
-          if (typeof n === 'number') requestedSeasons.add(n)
-        }
-      } else {
-        // Demande sans seasons[] → pas de groupement, géré par l'appelant
-        continue
-      }
-    }
-
-    if (requestedSeasons.size <= 1) {
-      // Demande mono-saison → pas de groupement, géré par l'appelant
-      continue
-    }
-
-    const sortedRequested = [...requestedSeasons].sort((a, b) => a - b)
+  for (const [, { req, seasons: sortedRequested }] of byUserAndSeasons) {
 
     // Marquer comme grouped dès qu'on a une demande multi-saisons
     isGrouped = true
@@ -180,7 +180,6 @@ export async function tryDispatchGroupedAvailability(params: {
     const allComplete = missingSeasons.length === 0 && partialSeasons.length === 0
 
     // Construire le titre et le message de statut
-    const req = userRequests[0]
     let meta: Record<string, unknown> = {}
     try { meta = req.metadata ? JSON.parse(req.metadata) : {} } catch {}
 
@@ -190,7 +189,7 @@ export async function tryDispatchGroupedAvailability(params: {
       email: (req as Record<string, unknown>).requesterEmail as string | undefined ?? undefined,
     } : undefined)
 
-    const seasonLabel = buildSeasonLabel(sortedRequested)
+    const seasonLabel = await buildSeasonLabel(sortedRequested)
 
     let statusSuffix = ''
     if (!allComplete) {
@@ -200,7 +199,7 @@ export async function tryDispatchGroupedAvailability(params: {
       statusSuffix = ` (${parts.join(', ')})`
     }
 
-    const groupedTitle = `${title} — ${seasonLabel}${statusSuffix}`
+    const groupedTitle = `${title} - ${seasonLabel}${statusSuffix}`
     const event = allComplete
       ? NOTIFICATION_EVENTS.MEDIA_AVAILABLE
       : NOTIFICATION_EVENTS.SEASON_PARTIALLY_AVAILABLE
@@ -244,10 +243,23 @@ export async function tryDispatchGroupedAvailability(params: {
 }
 
 /** "Saison 1" / "Saisons 1-2" / "Saisons 1, 2, 4" */
-function buildSeasonLabel(seasons: number[]): string {
+async function buildSeasonLabel(seasons: number[]): Promise<string> {
   if (seasons.length === 1) return `Saison ${seasons[0]}`
-  // Plage continue ?
-  const isContiguous = seasons.every((s, i) => i === 0 || s === seasons[i - 1] + 1)
-  if (isContiguous) return `Saisons ${seasons[0]}-${seasons[seasons.length - 1]}`
-  return `Saisons ${seasons.join(', ')}`
+  
+  // Utiliser le même formateur que le reste du système pour la cohérence
+  const { formatSeasonList } = await import('./season-formatter')
+  const formatted = formatSeasonList(seasons)
+  
+  // Convertir le format "S1-2" en "Saisons 1-2" pour la cohérence
+  if (formatted.startsWith('S') && formatted.includes('-')) {
+    return `Saisons ${formatted.substring(1).replace('-', ' à ')}`
+  }
+  
+  // Convertir le format "S1, 3" en "Saisons 1, 3" pour la cohérence
+  if (formatted.startsWith('S') && formatted.includes(',')) {
+    return `Saisons ${formatted.substring(1)}`
+  }
+  
+  // Fallback pour une seule saison
+  return `Saisons ${formatted.substring(1)}`
 }

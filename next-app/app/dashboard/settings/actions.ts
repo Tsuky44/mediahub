@@ -145,12 +145,8 @@ export async function approveAccountRequestAction(requestId: string, templateUse
                 { email: request.email, firstName: request.firstName }
             )
 
-            const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-            await ExternalNotificationService.send('account_request', {
-                title: 'Demande de compte approuvée',
-                message: `La demande de ${request.firstName} (${request.email}) a été approuvée.`,
-                data: { email: request.email, firstName: request.firstName, status: 'approved' }
-            })
+            // V1 notifications supprimées - plus d'envoi de notifications externes
+            logger.info(`[Settings] Account request for ${request.firstName} (${request.email}) approved - V1 notifications removed`)
         } catch (e) {
             logger.error('Failed to log account request approval:', e)
         }

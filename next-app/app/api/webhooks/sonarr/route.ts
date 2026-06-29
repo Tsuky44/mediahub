@@ -1,4 +1,4 @@
-﻿﻿/**
+﻿﻿﻿﻿﻿﻿/**
  * Sonarr Webhook â€” Notifications V2
  * ReÃ§oit tous les events de Sonarr et les dispatche via le systÃ¨me V2 (DB + Outbox)
  * Events supportÃ©s : Grab, Download, Import, Rename, SeriesDelete, EpisodeDelete, Health
@@ -199,17 +199,34 @@ async function handleImportEvent(body: any) {
       || (totalEpisodes > 0 && importedCount >= totalEpisodes);
 
     if (isComplete) {
-      logger.info(`[SonarrWebhook V2] Season ${seasonNum} complete (queue empty) â†' MEDIA_AVAILABLE`);
+      logger.info(`[SonarrWebhook V2] Season ${seasonNum} complete (queue empty) -> MEDIA_AVAILABLE`);
       await dispatch(NOTIFICATION_EVENTS.MEDIA_AVAILABLE, {
-        media: { tmdbId, mediaType: 'tv', title: `${title} â€" Saison ${seasonNum}`, overview, posterPath, seasonNumber: seasonNum },
+        media: { tmdbId, mediaType: 'tv', title: `${title} - Saison ${seasonNum}`, overview, posterPath, seasonNumber: seasonNum },
         requester,
       });
     } else {
-      logger.info(`[SonarrWebhook V2] Season ${seasonNum} partial (${fileCount}/${totalEpisodes}) â†' SEASON_PARTIALLY_AVAILABLE`);
+      logger.info(`[SonarrWebhook V2] Season ${seasonNum} partial (${fileCount}/${totalEpisodes}) -> SEASON_PARTIALLY_AVAILABLE`);
       await dispatch(NOTIFICATION_EVENTS.SEASON_PARTIALLY_AVAILABLE, {
-        media: { tmdbId, mediaType: 'tv', title: `${title} â€" Saison ${seasonNum} (partielle)`, overview, posterPath, seasonNumber: seasonNum },
+        media: { tmdbId, mediaType: 'tv', title: `${title} - Saison ${seasonNum} (partielle)`, overview, posterPath, seasonNumber: seasonNum },
         requester,
       });
+    }
+
+    // Optionnel : Notification par épisode si activée dans la config.
+    // On passe par l'EpisodeImportBatcher qui regroupe les imports d'épisodes successifs (packs)
+    // sur une fenêtre de 10s pour éviter d'envoyer des notifications individuelles si tout s'importe d'un coup.
+    if (!isComplete) {
+      const { episodeImportBatcher } = await import('@/lib/notifications-v2/utils/episode-import-batcher');
+      for (const epNum of episodeNumbers) {
+        episodeImportBatcher.add(tmdbId, seasonNum, epNum, {
+          tmdbId,
+          title,
+          overview,
+          posterPath,
+          seasonNumber: seasonNum,
+          requester,
+        });
+      }
     }
   }
 
@@ -310,6 +327,26 @@ export async function POST(req: Request) {
         releaseName: body.release?.releaseTitle || undefined,
       };
 
+      // Enregistrer le torrent dans le qBittorrent Watch Poller pour suivre la progression (1% et 100%)
+      try {
+        const { getQbitWatchPoller } = await import('@/lib/notifications-v2/realtime/qbit-watch-poller');
+        getQbitWatchPoller().addWatch({
+          hash: body.downloadId || undefined,
+          releaseName: body.release?.releaseTitle || undefined,
+          media: {
+            tmdbId: String(tmdbId),
+            mediaType: 'tv',
+            title,
+            overview,
+            posterPath,
+            seasonNumber: seasonNumbers[0],
+          },
+          requester,
+        });
+      } catch (e) {
+        logger.error('[SonarrWebhook V2] Failed to register torrent in QbitWatchPoller:', e);
+      }
+
       const { grabBatcher } = await import('@/lib/notifications-v2/utils/grab-batcher');
       for (const seasonNum of seasonNumbers) {
         grabBatcher.add(String(tmdbId), seasonNum, {
@@ -340,7 +377,7 @@ export async function POST(req: Request) {
       media: {
         tmdbId,
         mediaType: 'tv',
-        title: seasonNumber !== undefined ? `${title} â€” Saison ${seasonNumber}` : title,
+        title: seasonNumber !== undefined ? `${title} - Saison ${seasonNumber}` : title,
         overview,
         posterPath,
         seasonNumber,

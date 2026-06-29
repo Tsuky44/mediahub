@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { defineAbilityFor } from '@/lib/ability'
+import { MediaManagerButton } from '../_components/MediaManagerButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,8 @@ export default async function RequestsListPage() {
   const canView = ability.can('read', 'MediaRequest')
   const canSync = ability.can('sync', 'MediaRequest')
   const canDelete = ability.can('delete', 'MediaRequest')
+  const canManageStorage = ability.can('manage_storage', 'Stats') || user?.role === 'admin'
+  const canDeleteMedia = ability.can('delete_media', 'Stats') || user?.role === 'admin'
 
   if (!canView) {
       redirect('/dashboard')
@@ -30,6 +33,9 @@ export default async function RequestsListPage() {
             <h2 className="text-3xl font-bold text-white tracking-tight">Mes demandes</h2>
             <p className="text-gray-400 mt-1">Suivez l'état de vos demandes de médias</p>
         </div>
+        {canManageStorage && (
+            <MediaManagerButton canDelete={canDeleteMedia} />
+        )}
       </div>
 
       <InfiniteRequestList initialData={initialData} canSync={canSync} canDelete={canDelete} />

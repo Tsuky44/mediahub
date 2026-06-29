@@ -129,6 +129,15 @@ export const DEFAULT_TEMPLATES: Record<NotificationEvent, TemplateVariants> = {
       'Certains épisodes sont manquants.',
   },
 
+  [NOTIFICATION_EVENTS.EPISODE_AVAILABLE]: {
+    movie: '',
+    tv:
+      '📺 *Nouvel épisode disponible*\n\n' +
+      '📌 *{title}* ({year}) - {season}{episode}\n' +
+      '👤 {user}\n\n' +
+      '📖 {overview}',
+  },
+
   [NOTIFICATION_EVENTS.MEDIA_FAILED]: {
     movie:
       '⚠️ *Échec*\n\n' +

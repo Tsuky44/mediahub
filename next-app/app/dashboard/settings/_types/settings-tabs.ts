@@ -2,6 +2,11 @@ import type { ComponentType } from 'react'
 
 export type SettingsTabId =
     | 'services'
+    | 'media'
+    | 'downloads'
+    | 'automation'
+    | 'storage'
+    | 'maintenance'
     | 'users'
     | 'groups'
     | 'roles'
@@ -13,6 +18,7 @@ export type SettingsTabId =
     | 'notifications'
     | 'notifications-v2'
     | 'trackers'
+    | 'support'
 
 /**
  * Per-tab visibility flags. The `notifications-v2` tab shares the
@@ -21,6 +27,11 @@ export type SettingsTabId =
  */
 export interface SettingsTabPermissions {
     services: boolean
+    media: boolean
+    downloads: boolean
+    automation: boolean
+    storage: boolean
+    maintenance: boolean
     users: boolean
     groups: boolean
     roles: boolean
@@ -31,12 +42,14 @@ export interface SettingsTabPermissions {
     logs: boolean
     notifications: boolean
     trackers: boolean
+    support: boolean
 }
 
 export type SettingsTabPermissionKey = keyof SettingsTabPermissions
 
 export interface SettingsTabIcon {
     size?: number
+    className?: string
 }
 
 export interface SettingsTabDef {

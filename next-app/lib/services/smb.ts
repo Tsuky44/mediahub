@@ -2,22 +2,26 @@ import { getSetting } from '../settings';
 import SMB2 from '@marsaud/smb2';
 import path from 'path';
 import archiver from 'archiver';
+import { logger } from '../logger';
 
+// Legacy dev-only logs (kept for backward compatibility)
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
-const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
+const devLog = (...args: unknown[]) => { if (isDev) console.log(...args); };
+const devError = (...args: unknown[]) => { if (isDev) console.error(...args); };
+const devWarn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export async function getSmbService() {
-    const host = await getSetting('smb_host');
-    const share = await getSetting('smb_share');
-    const user = await getSetting('smb_user');
-    const pass = await getSetting('smb_password');
-    
+    const host = await getSetting('storage_host');
+    const share = await getSetting('storage_share');
+    const user = await getSetting('storage_user');
+    const pass = await getSetting('storage_password');
+    const rootPath = await getSetting('storage_root_path');
+
     if (!host || !share) return null;
-    
-    return new SmbService(host, share, user, pass);
+
+    logger.info('[getSmbService] Creating SMB service:', { host, share, hasRootPath: !!rootPath });
+    return new SmbService(host, share, user, pass, rootPath || '');
 }
 
 export interface FileInfo {
@@ -81,7 +85,7 @@ export class SmbService {
             ]);
             return true;
         } catch (e) {
-            warn('[SMB] Connection check failed:', e instanceof Error ? e.message : e);
+            devWarn('[SMB] Connection check failed:', e instanceof Error ? e.message : e);
             return false;
         }
     }
@@ -94,7 +98,7 @@ export class SmbService {
                 // If isConnected hangs, it will now timeout thanks to the update above
                 const connected = await this.isConnected();
                 if (i > 0 || !connected) {
-                    if (i > 0) log(`[SMB] Retrying connection (attempt ${i + 1}/${retries})...`);
+                    if (i > 0) devLog(`[SMB] Retrying connection (attempt ${i + 1}/${retries})...`);
                     await this.disconnect();
                 }
                 
@@ -110,7 +114,7 @@ export class SmbService {
             } catch (err) {
                 const smbErr = err as Error & { code?: string }
                 lastError = smbErr;
-                error(`[SMB] Operation failed (attempt ${i + 1}/${retries}):`, smbErr.message || smbErr);
+                devError(`[SMB] Operation failed (attempt ${i + 1}/${retries}):`, smbErr.message || smbErr);
                 
                 // If it's a connection error, disconnect to force a fresh connection on next attempt
                 if (smbErr.code === 'STATUS_CONNECTION_DISCONNECTED' || 
@@ -134,7 +138,7 @@ export class SmbService {
             try {
                 this.client.disconnect();
             } catch (e) {
-                error('Error disconnecting SMB:', e);
+                devError('Error disconnecting SMB:', e);
             }
             this.client = null;
         }
@@ -163,7 +167,7 @@ export class SmbService {
                 new Promise<void>((resolve, reject) => {
                     testClient.readdir('', (err: any) => {
                         if (err) {
-                            error('[SMB Test] readdir error:', err);
+                            devError('[SMB Test] readdir error:', err);
                             reject(err);
                         } else {
                             resolve();
@@ -175,7 +179,7 @@ export class SmbService {
             testClient.disconnect();
             return true;
         } catch (err: any) {
-            error('SMB Test Connection Error:', err);
+            devError('SMB Test Connection Error:', err);
             try { testClient.disconnect(); } catch (e) {}
             
             // Traduction des erreurs communes pour l'utilisateur
@@ -191,14 +195,14 @@ export class SmbService {
     }
 
     async listFiles(remotePath: string = ''): Promise<FileInfo[]> {
-        log(`[SMB] Listing files for path: "${remotePath}"`);
+        logger.info(`[SMB] Listing files for path: "${remotePath}"`);
         return this.withRetry(async (client) => {
             let targetPath = path.join(this.rootSubPath, remotePath).replace(/\//g, '\\');
             if (targetPath === '.' || targetPath === '/' || targetPath === '\\') {
                 targetPath = '';
             }
 
-            log(`[SMB] Target share path: "${targetPath}"`);
+            logger.info(`[SMB] Target share path: "${targetPath}" (rootSubPath: "${this.rootSubPath}")`);
 
             const files = await new Promise<any[]>((resolve, reject) => {
                 const timeout = setTimeout(() => {
@@ -208,12 +212,14 @@ export class SmbService {
                 client.readdir(targetPath, { stats: true }, (err: any, data: any) => {
                     clearTimeout(timeout);
                     if (err) {
-                        error(`[SMB] readdir error for "${targetPath}":`, err);
+                        logger.error(`[SMB] readdir error for "${targetPath}":`, err);
                         reject(err);
                     }
                     else resolve(data || []);
                 });
             });
+
+            logger.info(`[SMB] Found ${files?.length || 0} files in "${targetPath}"`);
 
             if (!files || files.length === 0) {
                 return [];
@@ -332,7 +338,7 @@ export class SmbService {
                             });
                             
                             fileStream.on('error', (err: any) => {
-                                error(`[SMB] Stream error for ${itemRemotePath}:`, err);
+                                devError(`[SMB] Stream error for ${itemRemotePath}:`, err);
                                 if (!isResolved) {
                                     isResolved = true;
                                     cleanup();
@@ -378,7 +384,7 @@ export class SmbService {
                 await addFolderToArchive(targetPath, '');
                 await archive.finalize();
             } catch (err) {
-                error('[SMB] ZIP Generation Error:', err);
+                devError('[SMB] ZIP Generation Error:', err);
                 if (archive.writable) {
                     archive.emit('error', err);
                 }
@@ -421,7 +427,7 @@ export class SmbService {
                     } catch (err) {
                         const smbErr = err as Error & { code?: string }
                         if (smbErr.code === 'STATUS_ACCESS_DENIED') throw smbErr;
-                        error(`[SMB] Failed to readdir ${currentPath}:`, smbErr.message);
+                        devError(`[SMB] Failed to readdir ${currentPath}:`, smbErr.message);
                     }
 
                     for (const file of files) {

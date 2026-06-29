@@ -16,6 +16,7 @@ export const NOTIFICATION_EVENTS = {
   MEDIA_IMPORTING: 'MEDIA_IMPORTING',
   MEDIA_AVAILABLE: 'MEDIA_AVAILABLE',
   SEASON_PARTIALLY_AVAILABLE: 'SEASON_PARTIALLY_AVAILABLE',
+  EPISODE_AVAILABLE: 'EPISODE_AVAILABLE',
   MEDIA_FAILED: 'MEDIA_FAILED',
   SEASON_DOWNLOAD_COMPLETE: 'SEASON_DOWNLOAD_COMPLETE',
   SEASON_IMPORT_COMPLETE: 'SEASON_IMPORT_COMPLETE',
@@ -114,11 +115,23 @@ export interface EventRouteConfig {
   includePoster: boolean
 }
 
+export interface WebhookConfig {
+  enabled: boolean
+  webhookUrl: string
+  jsonPayload: string
+  authHeader?: string
+  customHeaders?: { key: string; value: string }[]
+  supportVariables?: boolean
+  /** Bitmask des types d'événements à notifier (même logique que Overseerr). 0 = tous. */
+  types: number
+}
+
 export interface NotificationsV2Config {
   enabled: boolean
   evolution: EvolutionConfig
   retry: RetryConfig
   events: Record<NotificationEvent, EventRouteConfig>
+  webhook: WebhookConfig
 }
 
 // ─────────────────────────────────────────────────────────────

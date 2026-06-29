@@ -30,7 +30,9 @@ export function useTrackerStatsCard(): UseTrackerStatsCardResult {
 
   const loadStats = async (force: boolean = false) => {
     if (force) {
-      await queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+      // Appelle directement le serveur pour forcer la mise à jour (évite le double fetch de React Query et assure le passage de force=true)
+      const freshData = await getAllTrackerStats(true)
+      queryClient.setQueryData(QUERY_KEY, freshData)
     } else {
       await queryClient.refetchQueries({ queryKey: QUERY_KEY })
     }

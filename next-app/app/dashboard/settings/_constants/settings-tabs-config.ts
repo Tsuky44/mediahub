@@ -1,5 +1,4 @@
 import {
-    Server,
     Users,
     UsersRound,
     Shield,
@@ -8,12 +7,37 @@ import {
     MessageSquare,
     UserPlus,
     Activity,
-    Bell,
     BellRing,
     BarChart3,
+    Tv,
+    Download,
+    Bot,
+    HardDrive,
+    Wrench,
+    LifeBuoy,
 } from 'lucide-react'
 
 import type { SettingsTabDef, SettingsTabId } from '../_types/settings-tabs'
+
+export interface SettingsCategory {
+    title: string
+    tabs: readonly SettingsTabId[]
+}
+
+export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
+    {
+        title: 'Système & Services',
+        tabs: ['media', 'downloads', 'automation', 'storage', 'backup', 'maintenance', 'notifications-v2'],
+    },
+    {
+        title: 'Utilisateurs & Accès',
+        tabs: ['users', 'groups', 'roles', 'requests', 'linking'],
+    },
+    {
+        title: 'Monitoring & Outils',
+        tabs: ['messages', 'trackers', 'logs', 'support'],
+    },
+] as const
 
 /**
  * Ordered tab catalog. The order also drives the fallback selection in
@@ -21,23 +45,28 @@ import type { SettingsTabDef, SettingsTabId } from '../_types/settings-tabs'
  * provided).
  */
 export const SETTINGS_TABS: readonly SettingsTabDef[] = [
-    { id: 'services', label: 'Services', icon: Server, permissionKey: 'services' },
+    { id: 'media', label: 'Média & Intégrations', icon: Tv, permissionKey: 'media' },
+    { id: 'downloads', label: 'Téléchargements', icon: Download, permissionKey: 'downloads' },
+    { id: 'automation', label: 'Automatisation', icon: Bot, permissionKey: 'automation' },
+    { id: 'storage', label: 'Stockage & Docker', icon: HardDrive, permissionKey: 'storage' },
+    { id: 'backup', label: 'Sauvegarde', icon: Database, permissionKey: 'backup' },
+    { id: 'maintenance', label: 'Maintenance', icon: Wrench, permissionKey: 'maintenance' },
+    { id: 'notifications-v2', label: 'Notifications', icon: BellRing, permissionKey: 'notifications' },
     { id: 'users', label: 'Utilisateurs', icon: Users, permissionKey: 'users' },
     { id: 'groups', label: 'Groupes', icon: UsersRound, permissionKey: 'groups' },
-    { id: 'roles', label: 'Rôles', icon: Shield, permissionKey: 'roles' },
-    { id: 'linking', label: 'Lier', icon: LinkIcon, permissionKey: 'linking' },
-    { id: 'backup', label: 'Sauvegarde', icon: Database, permissionKey: 'backup' },
-    { id: 'messages', label: 'Messages', icon: MessageSquare, permissionKey: 'messages' },
+    { id: 'roles', label: 'Rôles & Permissions', icon: Shield, permissionKey: 'roles' },
     { id: 'requests', label: 'Demandes', icon: UserPlus, permissionKey: 'requests' },
-    { id: 'logs', label: 'Activité', icon: Activity, permissionKey: 'logs' },
-    { id: 'notifications', label: 'Notifications', icon: Bell, permissionKey: 'notifications' },
-    { id: 'notifications-v2', label: 'Notif V2', icon: BellRing, permissionKey: 'notifications' },
+    { id: 'linking', label: 'Lier', icon: LinkIcon, permissionKey: 'linking' },
+    { id: 'messages', label: 'Messages Système', icon: MessageSquare, permissionKey: 'messages' },
     { id: 'trackers', label: 'Trackers', icon: BarChart3, permissionKey: 'trackers' },
+    { id: 'logs', label: 'Activité', icon: Activity, permissionKey: 'logs' },
+    { id: 'support', label: 'Support & Tickets', icon: LifeBuoy, permissionKey: 'support' },
 ] as const
 
-const SETTINGS_TAB_ID_SET: ReadonlySet<SettingsTabId> = new Set(
-    SETTINGS_TABS.map(t => t.id)
-)
+const SETTINGS_TAB_ID_SET: ReadonlySet<SettingsTabId> = new Set<SettingsTabId>([
+    'services', // pour la rétro-compatibilité
+    ...SETTINGS_TABS.map(t => t.id)
+])
 
 export function isSettingsTabId(value: string | null | undefined): value is SettingsTabId {
     return typeof value === 'string' && SETTINGS_TAB_ID_SET.has(value as SettingsTabId)

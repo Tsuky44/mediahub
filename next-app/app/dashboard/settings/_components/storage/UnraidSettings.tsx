@@ -21,7 +21,7 @@ export function UnraidSettings({
   result,
 }: UnraidSettingsProps) {
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-6">
+    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
       <SectionHeader icon={Server} title="Unraid" description="Intégration Unraid API" />
       <div className="grid gap-6 md:grid-cols-2">
         <InputField

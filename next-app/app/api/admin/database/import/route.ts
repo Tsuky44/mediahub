@@ -2,7 +2,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
-import { users, settings, notifications, watchLater, accounts, sessions, mediaRequests, watchEvents, auditLogs, userGroups, userGroupMembers } from '@/lib/db/schema'
+import { users, settings, watchLater, accounts, sessions, mediaRequests, watchEvents, auditLogs, userGroups, userGroupMembers } from '@/lib/db/schema'
 import { decryptData } from '@/lib/crypto'
 import { revalidatePath } from 'next/cache'
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     // 1. DELETE ALL EXISTING DATA (Order: Child -> Parent)
     await db.delete(userGroupMembers)
     await db.delete(mediaRequests)
-    await db.delete(notifications)
+    // await db.delete(notifications) // V1 notifications supprimées - table notifications n'existe plus
     await db.delete(watchLater)
     await db.delete(accounts)
     await db.delete(sessions)
@@ -104,11 +104,12 @@ export async function POST(request: Request) {
         await db.insert(sessions).values(s)
       }
     }
-    if (dbData.notifications?.length) {
-      for (const n of dbData.notifications) {
-        await db.insert(notifications).values(n)
-      }
-    }
+    // V1 notifications supprimées - plus d'import de notifications
+    // if (dbData.notifications?.length) {
+    //   for (const n of dbData.notifications) {
+    //     await db.insert(notifications).values(n)
+    //   }
+    // }
     if (dbData.watchLater?.length) {
       for (const w of dbData.watchLater) {
         await db.insert(watchLater).values(w)

@@ -48,7 +48,7 @@ export function SeasonItem({
     }, [initialStatus])
 
     return (
-        <div className="overflow-hidden rounded-lg border border-gray-700 bg-gray-800">
+        <div className="overflow-hidden rounded-lg border border-gray-700 bg-gray-800 transition-all duration-300">
             <SeasonItemHeader
                 season={season}
                 title={title}

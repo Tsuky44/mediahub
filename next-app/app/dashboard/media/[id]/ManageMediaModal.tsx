@@ -44,7 +44,7 @@ export function ManageMediaModal({ isOpen, onClose, tmdbId, mediaType, title }: 
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
 
-            <div className="relative w-full max-w-2xl bg-[#1e293b] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="relative w-full max-w-6xl bg-[#1e293b] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col h-[85vh] max-h-[90vh]">
                 <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/5">
                     <div>
                         <h2 className="text-2xl font-bold text-indigo-400">

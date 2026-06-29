@@ -12,6 +12,7 @@ interface CalendarGridProps {
   onEventMouseEnter: (event: CalendarEvent, x: number, y: number) => void
   onEventMouseMove: (x: number, y: number) => void
   onEventMouseLeave: () => void
+  onEventTouchStart?: (event: CalendarEvent, x: number, y: number) => void
 }
 
 const daysOfWeek = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
@@ -24,6 +25,7 @@ export function CalendarGrid({
   onEventMouseEnter,
   onEventMouseMove,
   onEventMouseLeave,
+  onEventTouchStart,
 }: CalendarGridProps) {
   return (
     <div className="flex-1 bg-black/20 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl relative">
@@ -85,11 +87,15 @@ export function CalendarGrid({
                     onMouseMove={e => {
                       onEventMouseMove(e.clientX, e.clientY)
                     }}
+                    onTouchStart={e => {
+                      const touch = e.touches[0]
+                      onEventTouchStart?.(event, touch.clientX, touch.clientY)
+                    }}
                     className={cn(
-                      'px-2 py-1 rounded text-[11px] font-medium truncate cursor-pointer transition-all border-l-2',
+                      'px-2 py-1 rounded text-[11px] font-medium truncate cursor-pointer transition-all border-l-2 touch-manipulation',
                       event.mediaType === 'movie'
-                        ? 'bg-amber-500/10 text-amber-200/90 border-amber-500/50 hover:bg-amber-500/20'
-                        : 'bg-indigo-500/10 text-indigo-200/90 border-indigo-500/50 hover:bg-indigo-500/20',
+                        ? 'bg-amber-500/10 text-amber-200/90 border-amber-500/50 hover:bg-amber-500/20 active:bg-amber-500/30'
+                        : 'bg-indigo-500/10 text-indigo-200/90 border-indigo-500/50 hover:bg-indigo-500/20 active:bg-indigo-500/30',
                       event.status === 'unmonitored' && 'opacity-50 grayscale'
                     )}
                   >

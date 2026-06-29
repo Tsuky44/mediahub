@@ -305,27 +305,9 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
                 await db.update(mediaRequests)
                     .set({ status, updatedAt: new Date() })
                     .where(eq(mediaRequests.id, req.id as number));
-                // Send notification when media first becomes available
+                // V1 notifications supprimées - plus d'envoi de notifications externes
                 if (status === 5) {
-                    try {
-                        const { ExternalNotificationService } = await import('@/lib/services/external-notification-service');
-                        await ExternalNotificationService.send('media_available', {
-                            title: req.title as string,
-                            message: `${req.title as string} est maintenant disponible sur le serveur.`,
-                            data: {
-                                tmdbId: req.tmdbId as string,
-                                mediaType: req.mediaType as string,
-                                title: req.title as string,
-                                year: (metadata.year as string | undefined) || '',
-                                overview: (metadata.overview as string | undefined) || '',
-                                posterPath: (metadata.posterPath as string | undefined) || '',
-                                genres: (metadata.genres as string | undefined) || '',
-                                user: (req.requesterName as string | undefined) || ''
-                            }
-                        }, typeof req.userId === 'number' ? req.userId : undefined);
-                    } catch (notifErr) {
-                        error(`[FetchRequests] Failed to send media_available notification for ${req.title}:`, notifErr);
-                    }
+                    log(`[FetchRequests] Media ${req.title} is now available - V1 notifications removed`);
                 }
             }
             

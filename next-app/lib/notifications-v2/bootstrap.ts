@@ -11,7 +11,7 @@
 
 import { OutboxWorker } from './outbox'
 import { AvailabilityPoller } from './pollers/availability-poller'
-import { QueuePoller } from './pollers/queue-poller'
+import { getQbitWatchPoller } from './realtime/qbit-watch-poller'
 import { logger } from '@/lib/logger'
 import { db } from '@/lib/db/drizzle'
 import { notificationEvents } from '@/lib/db/schema'
@@ -23,7 +23,6 @@ const globalForV2 = globalThis as unknown as {
   __notificationsV2Refs?: {
     outboxWorker: OutboxWorker
     availabilityPoller: AvailabilityPoller
-    queuePoller: QueuePoller
   }
 }
 
@@ -94,16 +93,17 @@ export async function startNotificationsV2(): Promise<void> {
   const availabilityPoller = new AvailabilityPoller()
   availabilityPoller.start()
 
-  // QueuePoller: détecte les états intermédiaires (DOWNLOADING / DOWNLOAD_COMPLETE / IMPORTING)
-  // via la queue Radarr/Sonarr toutes les 5s (webhooks ne fournissent pas ces events).
-  // 5s pour capter les transitions rapides (Sonarr peut downloader/importer en < 15s).
-  const queuePoller = new QueuePoller(5_000)
-  queuePoller.start()
+  // QbitWatchPoller: surveille les téléchargements actifs dans qBittorrent
+  const qbitWatchPoller = getQbitWatchPoller()
+  qbitWatchPoller.start()
 
-  globalForV2.__notificationsV2Refs = { outboxWorker, availabilityPoller, queuePoller }
+  // QueuePoller: DESACTIVE (l'utilisateur ne veut pas de polling API)
+  // Les événements DOWNLOADING/DOWNLOAD_COMPLETE sont capturés via QbitWatchPoller
+
+  globalForV2.__notificationsV2Refs = { outboxWorker, availabilityPoller }
   globalForV2.__notificationsV2Started = true
 
-  logger.info('[NotificationsV2] Bootstrap complete (OutboxWorker + AvailabilityPoller@30s + QueuePoller@5s)')
+  logger.info('[NotificationsV2] Bootstrap complete (OutboxWorker + AvailabilityPoller@30s + QbitWatchPoller@15s | QueuePoller DESACTIVE)')
 }
 
 /**
@@ -129,7 +129,7 @@ export function stopNotificationsV2(): void {
   if (!refs) return
   refs.outboxWorker.stop()
   refs.availabilityPoller.stop()
-  refs.queuePoller.stop()
+  getQbitWatchPoller().stop()
   globalForV2.__notificationsV2Started = false
   globalForV2.__notificationsV2Refs = undefined
 }

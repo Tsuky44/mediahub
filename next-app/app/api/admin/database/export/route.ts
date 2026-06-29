@@ -2,7 +2,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
-import { users, settings, notifications, watchLater, accounts, sessions, mediaRequests, watchEvents, auditLogs, userGroups, userGroupMembers } from '@/lib/db/schema'
+import { users, settings, watchLater, accounts, sessions, mediaRequests, watchEvents, auditLogs, userGroups, userGroupMembers } from '@/lib/db/schema'
 import { encryptData } from '@/lib/crypto'
 
 export const dynamic = 'force-dynamic'
@@ -27,7 +27,6 @@ export async function POST(request: Request) {
     const [
       usersData,
       settingsData,
-      notificationsData,
       watchLaterData,
       accountsData,
       sessionsData,
@@ -48,7 +47,7 @@ export async function POST(request: Request) {
           updatedAt: true
         }
       }),
-      db.query.notifications.findMany(),
+      // db.query.notifications.findMany(), // V1 notifications supprimées - table notifications n'existe plus
       db.query.watchLater.findMany(),
       db.query.accounts.findMany(),
       db.query.sessions.findMany(),
@@ -66,7 +65,7 @@ export async function POST(request: Request) {
       data: {
         users: usersData,
         settings: settingsData,
-        notifications: notificationsData,
+        // notifications: notificationsData, // V1 notifications supprimées
         watchLater: watchLaterData,
         accounts: accountsData,
         sessions: sessionsData,

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { mediaSubscriptions, mediaRequests } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { NotificationService } from '@/lib/services/notification-service';
+// V1 notifications supprimées
+// import { NotificationService } from '@/lib/services/notification-service';
 
 export const dynamic = 'force-dynamic'
 
@@ -35,22 +36,20 @@ export async function POST(req: NextRequest) {
             subscriptions.forEach(s => usersToNotify.set(s.userId, s.user));
             requests.forEach(r => { if (r.user) usersToNotify.set(r.user.id, r.user) });
 
+            // V1 notifications supprimées - plus d'envoi de notifications
             const results = [];
             for (const user of Array.from(usersToNotify.values())) {
-                try {
-                    await NotificationService.notifyUser(
-                        user.id,
-                        'Test Debug Notification',
-                        `Test pour média ${tmdbId}`,
-                        'system_test',
-                        { mediaId: String(tmdbId), mediaType }
-                    );
-                    results.push({ userId: user.id, status: 'sent' });
-                } catch (e: any) {
-                    results.push({ userId: user.id, status: 'failed', error: e.message });
-                }
+                results.push({ 
+                    userId: user.id, 
+                    status: 'failed', 
+                    error: 'V1 notifications removed - cannot send test notification' 
+                });
             }
-            return NextResponse.json({ debugInfo, results });
+            return NextResponse.json({ 
+                debugInfo, 
+                results,
+                message: 'V1 notifications have been removed. Test notifications cannot be sent.' 
+            });
         }
 
         return NextResponse.json({ debugInfo });

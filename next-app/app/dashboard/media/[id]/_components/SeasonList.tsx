@@ -40,7 +40,7 @@ export function SeasonList({
 
     return (
         <div className="space-y-4">
-            <div className="space-y-2">
+            <div className="flex flex-col gap-4">
                 {sortedSeasons.map(season => {
                     const status = seasonStatuses.find(s => s.seasonNumber === season.season_number)
                     const progress = seasonProgress.find(p => p.seasonNumber === season.season_number)

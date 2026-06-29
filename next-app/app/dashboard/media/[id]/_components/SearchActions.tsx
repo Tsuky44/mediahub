@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, User, Loader2 } from 'lucide-react'
 import { ProwlarrSearch } from '@/components/global/ProwlarrSearch'
 import { triggerAutomaticSearch } from '@/app/dashboard/media/[id]/interactive-actions'
@@ -38,6 +39,9 @@ export function SearchActions({
 
   const [isInteractiveOpen, setIsInteractiveOpen] = useState(false)
   const [autoSearching, setAutoSearching] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
 
   const handleAutoSearch = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -82,7 +86,7 @@ export function SearchActions({
             </button>
         )}
 
-      {isInteractiveOpen && allowInteractive && (
+      {mounted && isInteractiveOpen && allowInteractive && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
             <div className="p-4 border-b border-white/10 flex items-center justify-between bg-slate-800/50">
@@ -115,7 +119,8 @@ export function SearchActions({
               />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

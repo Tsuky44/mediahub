@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { getNotifications, markAsRead, markAllAsRead, deleteNotification } from '@/app/actions/notifications'
 
 export interface Notification {
   id: number
@@ -13,38 +12,60 @@ export interface Notification {
   posterPath: string | null
   isRead: boolean
   link: string | null
-  createdAt: Date
+  createdAt: number
 }
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true)
-    const data = await getNotifications()
-    setNotifications(data as Notification[])
-    setLoading(false)
+    try {
+      const res = await fetch('/api/notifications')
+      if (!res.ok) throw new Error('Failed to fetch')
+      const json = await res.json()
+      setNotifications(json.items ?? [])
+    } catch {
+      // Silently fail
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
     fetchNotifications()
   }, [fetchNotifications])
 
-  const handleMarkAsRead = async (id: number) => {
-    await markAsRead(id)
-    fetchNotifications()
-  }
+  const handleMarkAsRead = useCallback(async (id: number) => {
+    try {
+      const res = await fetch(`/api/notifications/${id}/read`, { method: 'PATCH' })
+      if (!res.ok) throw new Error('Failed')
+      setNotifications(prev => prev.map(n => (n.id === id ? { ...n, isRead: true } : n)))
+    } catch {
+      // Silently fail
+    }
+  }, [])
 
-  const handleMarkAllAsRead = async () => {
-    await markAllAsRead()
-    fetchNotifications()
-  }
+  const handleMarkAllAsRead = useCallback(async () => {
+    try {
+      const res = await fetch('/api/notifications', { method: 'PATCH' })
+      if (!res.ok) throw new Error('Failed')
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
+    } catch {
+      // Silently fail
+    }
+  }, [])
 
-  const handleDelete = async (id: number) => {
-    await deleteNotification(id)
-    fetchNotifications()
-  }
+  const handleDelete = useCallback(async (id: number) => {
+    try {
+      const res = await fetch(`/api/notifications/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed')
+      setNotifications(prev => prev.filter(n => n.id !== id))
+    } catch {
+      // Silently fail
+    }
+  }, [])
 
   return {
     notifications,
@@ -52,5 +73,6 @@ export function useNotifications() {
     handleMarkAsRead,
     handleMarkAllAsRead,
     handleDelete,
+    refresh: fetchNotifications,
   }
 }

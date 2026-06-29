@@ -204,7 +204,7 @@ export const prisma = {
   mediaRequest: createTableProxy(schema.mediaRequests, 'mediaRequests'),
   accountRequest: createTableProxy(schema.accountRequests, 'accountRequests'),
   watchLater: createTableProxy(schema.watchLater, 'watchLater'),
-  notification: createTableProxy(schema.notifications, 'notifications'),
+  // notification: createTableProxy(schema.notifications, 'notifications'), // V1 notifications supprimées
   mediaSubscription: createTableProxy(schema.mediaSubscriptions, 'mediaSubscriptions'),
   watchEvent: createTableProxy(schema.watchEvents, 'watchEvents'),
   dailyTrackerStat: createTableProxy(schema.dailyTrackerStats, 'dailyTrackerStats'),
@@ -231,3 +231,8 @@ export const prisma = {
 
 // Export par défaut
 export default prisma;
+
+// Compat avec l'ancien pattern getPrisma() utilisé dans le tracker
+export function getPrisma() {
+  return prisma;
+}

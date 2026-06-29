@@ -4,7 +4,7 @@ import { Bell, RefreshCw, Check, Trash2, ExternalLink } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import clsx from 'clsx'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { Notification } from './useNotifications'
 
 interface NotificationItemProps {
@@ -14,10 +14,35 @@ interface NotificationItemProps {
 }
 
 export function NotificationItem({ notification, onMarkAsRead, onDelete }: NotificationItemProps) {
+  const router = useRouter()
+
+  const getButtonText = () => {
+    switch (notification.type) {
+      case 'new_ticket':
+        return 'Voir le ticket'
+      case 'system_update':
+        return 'Mettre à jour'
+      case 'media_available':
+      default:
+        return 'Voir le média'
+    }
+  }
+
+  const handleContainerClick = () => {
+    if (notification.link) {
+      router.push(notification.link)
+      if (!notification.isRead) {
+        onMarkAsRead(notification.id)
+      }
+    }
+  }
+
   return (
     <div
+      onClick={handleContainerClick}
       className={clsx(
         "bg-gray-900 border transition-all duration-200 rounded-2xl p-5 flex gap-6 items-start group",
+        notification.link && "cursor-pointer hover:bg-gray-900/80 hover:border-indigo-500/40",
         notification.isRead
           ? "border-gray-800/50 opacity-80"
           : "border-indigo-500/30 shadow-[0_0_20px_rgba(79,70,229,0.1)] bg-indigo-500/[0.02]"
@@ -61,7 +86,10 @@ export function NotificationItem({ notification, onMarkAsRead, onDelete }: Notif
           <div className="flex items-center gap-2">
             {!notification.isRead && (
               <button
-                onClick={() => onMarkAsRead(notification.id)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onMarkAsRead(notification.id)
+                }}
                 className="p-2 text-gray-400 hover:text-green-400 hover:bg-green-400/10 rounded-xl transition-all"
                 title="Marquer comme lu"
               >
@@ -69,7 +97,10 @@ export function NotificationItem({ notification, onMarkAsRead, onDelete }: Notif
               </button>
             )}
             <button
-              onClick={() => onDelete(notification.id)}
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(notification.id)
+              }}
               className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
               title="Supprimer"
             >
@@ -84,12 +115,15 @@ export function NotificationItem({ notification, onMarkAsRead, onDelete }: Notif
           </span>
 
           {notification.link && (
-            <Link
-              href={notification.link}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                handleContainerClick()
+              }}
               className="bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 border border-indigo-500/20"
             >
-              Voir le média <ExternalLink className="h-3 w-3" />
-            </Link>
+              {getButtonText()} <ExternalLink className="h-3 w-3" />
+            </button>
           )}
         </div>
       </div>

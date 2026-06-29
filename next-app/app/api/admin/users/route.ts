@@ -1,4 +1,4 @@
-﻿﻿import { NextResponse } from 'next/server'
+﻿﻿﻿﻿﻿﻿import { NextResponse } from 'next/server'
 import { db } from '@/lib/db/drizzle'
 import { users, roles } from '@/lib/db/schema'
 import { eq, or, asc } from 'drizzle-orm'
@@ -84,16 +84,8 @@ export async function POST(request: Request) {
       { name, email, roleId }
     )
 
-    try {
-        const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-        await ExternalNotificationService.send('user_created', {
-            title: 'Nouvel utilisateur',
-            message: `L'utilisateur ${name} (${email}) a Ã©tÃ© crÃ©Ã© manuellement par un administrateur.`,
-            data: { name, email }
-        })
-    } catch (e) {
-        logger.error('Failed to send external notification for user creation:', e)
-    }
+    // V1 notifications supprimées - plus d'envoi de notifications externes
+    logger.info(`[Users] User ${name} (${email}) created manually by admin - V1 notifications removed`)
 
     return NextResponse.json(newUser)
   } catch (error) {

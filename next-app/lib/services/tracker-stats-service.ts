@@ -403,12 +403,19 @@ export async function fetchAllTrackerStats(force: boolean = false): Promise<Map<
       const configs = await getTrackerConfigs()
       const results = new Map<string, TrackerStats>()
 
-      for (const config of configs) {
-        if (!config.enabled) continue
+      const enabledConfigs = configs.filter(c => c.enabled)
 
-        const stats = await fetchTrackerStatsWithLock(config)
+      // Exécute le scraping de tous les trackers en parallèle pour un gain de temps massif !
+      const statsResults = await Promise.all(
+        enabledConfigs.map(async (config) => {
+          const stats = await fetchTrackerStatsWithLock(config)
+          return { id: config.id, stats, config }
+        })
+      )
+
+      for (const { id, stats, config } of statsResults) {
         if (stats) {
-          results.set(config.id, stats)
+          results.set(id, stats)
           config.lastSync = Date.now()
         }
       }

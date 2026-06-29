@@ -23,5 +23,10 @@ else
     echo "[entrypoint] DB file absent — Drizzle l'initialisera au premier accès."
 fi
 
-echo "[entrypoint] Launching server..."
-exec node server.js
+# Injecter les origines autorisées (Server Actions) au runtime.
+# La config Next.js est figée au build (standalone) : on patche
+# required-server-files.json avant de démarrer le serveur.
+node scripts/patch-allowed-origins.js
+
+echo "[entrypoint] Launching server orchestrator..."
+exec node scripts/start-all.js

@@ -29,7 +29,7 @@ export function PlexSettings({
   readOnly,
 }: PlexSettingsProps) {
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-6">
+    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
       <SectionHeader icon={Tv} title="Plex" description="Configuration de l'intégration Plex" />
       <div className="mb-6">
         <CheckboxField

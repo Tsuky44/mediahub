@@ -1,6 +1,4 @@
-import { JellyseerrSection } from './automation-settings/JellyseerrSection'
 import { ArrSection } from './automation-settings/ArrSection'
-import { useAutomationSettings } from './automation-settings/useAutomationSettings'
 import { SettingsFormData } from './types'
 
 interface Props {
@@ -10,34 +8,8 @@ interface Props {
 }
 
 export const AutomationSettings = ({ formData, updateField, readOnly }: Props) => {
-    const {
-        jellyseerrLoading,
-        jellyseerrResult,
-        importRequestsLoading,
-        importRequestsResult,
-        fixTitlesLoading,
-        fixTitlesResult,
-        handleTestJellyseerr,
-        handleImportRequests,
-        handleFixTitles,
-    } = useAutomationSettings()
-
     return (
         <div className="space-y-6">
-            <JellyseerrSection
-                formData={formData}
-                updateField={updateField}
-                onTest={handleTestJellyseerr}
-                testLoading={jellyseerrLoading}
-                testResult={jellyseerrResult}
-                onImport={handleImportRequests}
-                importLoading={importRequestsLoading}
-                importResult={importRequestsResult}
-                onFix={handleFixTitles}
-                fixLoading={fixTitlesLoading}
-                fixResult={fixTitlesResult}
-            />
-
             <ArrSection
                 title="Radarr"
                 description="Automatisation des films"
@@ -46,6 +18,7 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
                 formData={formData}
                 updateField={updateField}
                 placeholder="http://localhost:7878"
+                readOnly={readOnly}
             />
 
             <ArrSection
@@ -56,6 +29,7 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
                 formData={formData}
                 updateField={updateField}
                 placeholder="http://localhost:8989"
+                readOnly={readOnly}
             />
         </div>
     )

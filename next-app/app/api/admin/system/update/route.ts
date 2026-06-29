@@ -49,30 +49,56 @@ export async function GET(req: Request) {
 
 // POST: Perform update
 export async function POST(req: Request) {
+    console.log('[UpdateAPI] POST request received');
     try {
         const session = await getServerSession(authOptions);
+        console.log('[UpdateAPI] Session:', session?.user?.email ? 'authenticated' : 'none');
         
         if (!session?.user?.email) {
+            console.log('[UpdateAPI] Unauthorized - no email in session');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const user = await db.query.users.findFirst({
             where: eq(users.email, session.user.email)
         });
+        console.log('[UpdateAPI] User role:', user?.role);
 
         if (user?.role !== 'admin') {
+            console.log('[UpdateAPI] Forbidden - user is not admin');
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Trigger update
-        // Note: This might kill the server process if it restarts immediately.
-        // The client should handle the disconnection gracefully.
-        await SystemUpdateService.performUpdate();
+        // Parse target tag from request body if available
+        let tag: string | undefined;
+        try {
+            const body = await req.json();
+            console.log('[UpdateAPI] Request body:', body);
+            if (body && typeof body.tag === 'string') {
+                tag = body.tag;
+            }
+        } catch (e) {
+            console.log('[UpdateAPI] No body or invalid JSON, using default');
+            // No body or invalid JSON, ignore and use default
+        }
 
-        return NextResponse.json({ success: true, message: 'Update started. The container will restart shortly.' });
+        // Trigger update in the background and respond immediately.
+        // We MUST NOT await performUpdate because the companion container will
+        // eventually stop this very container, which would interrupt the HTTP
+        // response and cause the client to see a false "error".
+        console.log(`[UpdateAPI] Triggering update to tag: ${tag || 'latest'}`);
+        SystemUpdateService.performUpdate(tag).catch((err: any) => {
+            console.error('[UpdateAPI] Background update failed:', err);
+        });
 
+        console.log('[UpdateAPI] Update triggered successfully (background)');
+        return NextResponse.json({
+            success: true,
+            message: `Mise à jour vers ${tag || 'la dernière version'} lancée. Suivez la progression dans le terminal.`,
+        });
     } catch (error: any) {
         console.error('[UpdateAPI] Update trigger failed:', error);
+        console.error('[UpdateAPI] Error stack:', error.stack);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

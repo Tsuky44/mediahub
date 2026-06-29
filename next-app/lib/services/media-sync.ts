@@ -1,8 +1,7 @@
 import { db } from '@/lib/db/drizzle';
-import { mediaRequests, mediaSubscriptions, notifications } from '@/lib/db/schema';
+import { mediaRequests, mediaSubscriptions } from '@/lib/db/schema';
 import { eq, and, ne, inArray, gte } from 'drizzle-orm';
 import { getMediaAvailability } from '@/lib/services/media-status';
-import { NotificationService } from '@/lib/services/notification-service';
 
 export class MediaSyncService {
     private static isRunning = false;
@@ -199,47 +198,21 @@ export class MediaSyncService {
         const notifiedUserIds = new Set<number>();
         const title = availability.details?.title || 'Média disponible';
 
-        // Check for existing notifications in the last 1 hour to prevent duplicates
-        // This handles race conditions between Webhook and Sync
-        const recentNotifications = await db.query.notifications.findMany({
-            where: and(
-                eq(notifications.mediaId, tmdbId),
-                eq(notifications.mediaType, mediaType),
-                inArray(notifications.type, ['request_available', 'media_available']),
-                gte(notifications.createdAt, new Date(Date.now() - 60 * 60 * 1000))
-            ),
-            columns: { userId: true }
-        });
+        // V1 notifications supprimées - plus de vérification des notifications récentes
+        console.log(`[MediaSync] Skipping recent notification check (V1 notifications removed)`);
 
-        recentNotifications.forEach(n => notifiedUserIds.add(n.userId));
+        // V1 notifications supprimées - plus de notifications pour les demandeurs
+        console.log(`[MediaSync] Would notify ${requests.length} requesters for "${title}" (V1 notifications removed)`);
 
-        // Notify Requesters
         for (const req of requests) {
             if (!req.user) continue;
-            if (notifiedUserIds.has(req.user.id)) continue;
-            
-            await NotificationService.notifyUser(
-                req.user.id,
-                'Votre demande est disponible',
-                `Le film/série "${title}" que vous avez demandé est maintenant disponible.`,
-                'request_available',
-                { mediaId: tmdbId, mediaType, posterPath: undefined }
-            );
             notifiedUserIds.add(req.user.id);
         }
 
-        // Notify Subscribers
+        // V1 notifications supprimées - plus de notifications pour les abonnés
+        console.log(`[MediaSync] Would notify ${subscriptions.length} subscribers for "${title}" (V1 notifications removed)`);
         for (const sub of subscriptions) {
             if (!sub.user) continue;
-            if (notifiedUserIds.has(sub.user.id)) continue;
-
-            await NotificationService.notifyUser(
-                sub.user.id,
-                'Nouveau contenu disponible',
-                `"${title}" est maintenant disponible dans votre médiathèque.`,
-                'media_available',
-                { mediaId: tmdbId, mediaType, posterPath: undefined }
-            );
             notifiedUserIds.add(sub.user.id);
         }
     }

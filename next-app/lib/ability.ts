@@ -2,7 +2,7 @@ import { AbilityBuilder, createMongoAbility, MongoAbility } from '@casl/ability'
 import { User } from 'next-auth';
 import { logger } from '@/lib/logger';
 
-export type Actions = 'manage' | 'create' | 'read' | 'update' | 'delete' | 'trigger_search' | 'manage_settings' | 'interactive_search' | 'sync' | 'read_all' | 'import' | 'manage_storage' | 'delete_media' | 'add_torrent' | 'manage_torrents' | 'read_explorer' | 'share_files' | 'delete_files' | 'read_details' | 'manage_containers' | 'manage_groups' | 'read_logs' | 'read_stats' | 'manage_state' | 'access_console';
+export type Actions = 'manage' | 'create' | 'read' | 'update' | 'delete' | 'trigger_search' | 'manage_settings' | 'interactive_search' | 'sync' | 'read_all' | 'import' | 'manage_storage' | 'delete_media' | 'add_torrent' | 'manage_torrents' | 'read_explorer' | 'share_files' | 'delete_files' | 'read_details' | 'manage_containers' | 'manage_groups' | 'read_logs' | 'read_stats' | 'manage_state' | 'access_console' | 'read_all_media_available' | 'read_own_media_available' | 'read_system_update' | 'read_new_ticket';
 export type Subjects = 
   | 'all' 
   | 'User' 
@@ -13,7 +13,8 @@ export type Subjects =
   | 'Stats'
   | 'Media'
   | 'DashboardStats'
-  | 'Library'; 
+  | 'Library'
+  | 'Notification'; 
 
 export type AppAbility = MongoAbility<[Actions, Subjects]>;
 

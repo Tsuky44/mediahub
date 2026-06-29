@@ -1,6 +1,7 @@
 'use client'
 
 import type { ComponentType, ReactNode } from 'react'
+import clsx from 'clsx'
 
 import type { SettingsTabIcon } from '../../_types/settings-tabs'
 
@@ -22,15 +23,22 @@ export default function SettingsTabButton({
     return (
         <button
             onClick={onClick}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={clsx(
+                "w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 border active:scale-[0.98]",
                 isActive
-                    ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
+                    ? "bg-indigo-600/15 text-indigo-400 border-indigo-500/30 shadow-sm shadow-indigo-500/5 font-semibold"
+                    : "text-white/60 hover:text-white hover:bg-white/5 border-transparent"
+            )}
         >
-            <Icon size={16} />
-            {label}
-            {badge}
+            <div className="flex items-center gap-3">
+                <Icon size={18} className={clsx(isActive ? "text-indigo-400" : "text-white/45")} />
+                <span>{label}</span>
+            </div>
+            {badge && (
+                <div className="shrink-0 ml-2">
+                    {badge}
+                </div>
+            )}
         </button>
     )
 }

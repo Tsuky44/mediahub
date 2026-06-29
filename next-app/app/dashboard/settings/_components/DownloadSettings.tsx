@@ -58,7 +58,7 @@ export const DownloadSettings = ({ formData, updateField, readOnly }: Props) => 
     return (
         <div className="space-y-6">
             {/* QBittorrent Section */}
-            <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-6">
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
                 <SectionHeader 
                     icon={Download} 
                     title="QBittorrent" 
@@ -102,7 +102,7 @@ export const DownloadSettings = ({ formData, updateField, readOnly }: Props) => 
             </div>
 
             {/* Prowlarr Section */}
-            <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-6">
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
                 <SectionHeader 
                     icon={Globe} 
                     title="Prowlarr" 

@@ -29,14 +29,18 @@ export async function resolveRecipients(
   }
 
   const recipients = new Set<string>()
+  /** IDs des users déjà couverts via targetUserIds — pour éviter le doublon avec notifyRequester. */
+  const coveredUserIds = new Set<number>()
 
   // 1) Raw phone numbers (targetNumbers)
   for (const n of route.targetNumbers) {
-    if (n && n.trim()) recipients.add(n.trim())
+    if (n && n.trim()) recipients.add(normalizeNumber(n))
   }
 
   // 2) Resolve user IDs → whatsappNumber from DB
-  const ids = (route.targetUserIds ?? []).filter((id): id is number => typeof id === 'number')
+  const ids = (route.targetUserIds ?? [])
+    .map((id) => (typeof id === 'string' ? parseInt(id, 10) : id))
+    .filter((id): id is number => typeof id === 'number' && !isNaN(id))
   if (ids.length > 0) {
     try {
       const usersList = await db.query.users.findMany({
@@ -45,7 +49,8 @@ export async function resolveRecipients(
       })
       for (const u of usersList) {
         if (u.whatsappNumber && u.whatsappNumber.trim()) {
-          recipients.add(u.whatsappNumber.trim())
+          recipients.add(normalizeNumber(u.whatsappNumber))
+          coveredUserIds.add(u.id)
         } else {
           console.warn(`[NotifV2] User #${u.id} (${u.name || u.email}) has no whatsappNumber`)
         }
@@ -56,8 +61,14 @@ export async function resolveRecipients(
   }
 
   // 3) Requester (if opted-in and number available)
-  if (route.notifyRequester && requester?.whatsappNumber) {
-    recipients.add(requester.whatsappNumber)
+  // Skip if the requester is already covered via targetUserIds OR if their number is already in the Set
+  // (e.g. the requester's number was added via targetNumbers) — évite le doublon dans les deux cas
+  const requesterId = requester?.id != null ? Number(requester.id) : null
+  const requesterAlreadyCovered =
+    (requesterId != null && coveredUserIds.has(requesterId)) ||
+    (requester?.whatsappNumber != null && recipients.has(normalizeNumber(requester.whatsappNumber)))
+  if (route.notifyRequester && requester?.whatsappNumber && !requesterAlreadyCovered) {
+    recipients.add(normalizeNumber(requester.whatsappNumber))
   }
 
   // 4) Fallback to default number only if nothing else is set
@@ -70,10 +81,16 @@ export async function resolveRecipients(
     `targetUserIds=[${route.targetUserIds?.join(',') ?? ''}]`,
     `targetNumbers=[${route.targetNumbers?.join(',') ?? ''}]`,
     `notifyRequester=${route.notifyRequester}`,
+    `requesterAlreadyCovered=${requesterAlreadyCovered}`,
     `requesterHasNumber=${!!requester?.whatsappNumber}`,
     `fallbackUsed=${usedFallback}`,
     `resolved=${Array.from(recipients).join(',')}`,
   ].join(' ')
 
   return { recipients, logInfo }
+}
+
+/** Normalise un numéro de téléphone : extrait uniquement les chiffres pour une déduplication parfaite. */
+function normalizeNumber(n: string): string {
+  return n.replace(/[^\d]/g, '')
 }

@@ -207,11 +207,13 @@ function isLikelyTV(name: string): boolean {
   // Check for season patterns (but no episodes - could be full season)
   for (const pattern of PATTERNS.season) {
     if (pattern.test(normalized)) {
-      // If it has "COMPLETE" or "FULL", it's likely a full season pack
-      if (/\b(complete|full|pack|integral)\b/i.test(normalized)) {
-        return true
-      }
+      return true
     }
+  }
+
+  // S'il y a des termes comme "integrale", "saison", "season", "pack" ou "complete"
+  if (/\b(saison|season|integrale|pack|complete)\b/i.test(normalized)) {
+    return true
   }
 
   return false
@@ -223,11 +225,25 @@ function isLikelyTV(name: string): boolean {
 function isLikelyMovie(name: string): boolean {
   const normalized = name.toLowerCase()
 
-  // If it has a year and doesn't look like TV or game, it's likely a movie
+  // Si c'est un jeu ou une série, ce n'est pas un film
+  if (isLikelyTV(name) || isLikelyGame(name)) {
+    return false
+  }
+
+  // S'il y a une année
   if (PATTERNS.year.test(normalized)) {
-    if (!isLikelyTV(name) && !isLikelyGame(name)) {
-      return true
-    }
+    return true
+  }
+
+  // S'il y a des extensions de fichiers vidéo courantes
+  if (/\.(mkv|mp4|avi|divx|xvid|mov|wmv|mpg|mpeg|flv)$/i.test(normalized)) {
+    return true
+  }
+
+  // S'il y a des mots-clés typiques de vidéo
+  const videoKeywords = /\b(1080p|720p|2160p|4k|uhd|bluray|webrip|web-dl|hdtv|bdrip|brrip|dvdrip|multi|vff|vostfr|french|truefrench|vf|subfrench|vfq)\b/i
+  if (videoKeywords.test(normalized)) {
+    return true
   }
 
   return false
@@ -424,7 +440,10 @@ function extractPlatform(name: string): string | undefined {
  * Extract the clean title from the torrent name
  */
 function extractTitle(name: string, mediaType: MediaType): string {
-  let title = name.replace(/\.torrent$/i, '')
+  // Normaliser d'abord en remplaçant les séparateurs courants par des espaces pour simplifier les expressions régulières
+  let title = name
+    .replace(/\.torrent$/i, '')
+    .replace(/[._\-]+/g, ' ')
 
   // For movies: stop at the year to get clean title
   if (mediaType === 'movie') {
@@ -438,14 +457,18 @@ function extractTitle(name: string, mediaType: MediaType): string {
 
   // For TV shows: stop at season/episode pattern
   if (mediaType === 'tv') {
-    // Find the first occurrence of SxxExx pattern and cut there
-    const tvPatternMatch = title.match(/[Ss]\d{1,2}[Ee]\d{1,3}/)
+    // Find the first occurrence of SxxExx or Sxx pattern and cut there
+    const tvPatternMatch = title.match(/\b[Ss]\d{1,2}[Ee]\d{1,3}\b/)
+    const seasonOnlyMatch = title.match(/\b[Ss]\d{1,2}\b/)
     if (tvPatternMatch) {
       const index = title.indexOf(tvPatternMatch[0])
       title = title.substring(0, index)
+    } else if (seasonOnlyMatch) {
+      const index = title.indexOf(seasonOnlyMatch[0])
+      title = title.substring(0, index)
     } else {
       // Try 1x02 pattern
-      const altPatternMatch = title.match(/\d{1,2}[xX]\d{1,3}/)
+      const altPatternMatch = title.match(/\b\d{1,2}[xX]\d{1,3}\b/)
       if (altPatternMatch) {
         const index = title.indexOf(altPatternMatch[0])
         title = title.substring(0, index)
@@ -458,21 +481,24 @@ function extractTitle(name: string, mediaType: MediaType): string {
     // Remove source (WEB, BluRay, etc.)
     .replace(/\b(BluRay|BLURAY|BD|BD50|BD25|WEB[-\s]?DL|WEBDL|WEB[-\s]?Rip|WEBRip|WEB|HDTV|PDTV|DVD|DVD[-\s]?Rip|CAM|HD[-\s]?CAM|TS|HD[-\s]?TS|TC)\b/gi, '')
     // Remove quality
-    .replace(/\b(4K|UHD|2160p|1080p|1080i|720p|480p|360p|HDR|HDR10|DV|REMUX)\b/gi, '')
-    // Remove codec
-    .replace(/\b(H\.265|HEVC|H265|x265|H\.264|AVC|H264|x264|AV1|VP9|MPEG[-\s]?2|MPEG[-\s]?4|XviD|DivX)\b/gi, '')
+    .replace(/\b(4K|UHD|2160p|1080p|1080i|720p|480p|360p|HDR|HDR10|HDR10\+|DV|REMUX|4KLight|1080pLight|720pLight|4K-Light|1080p-Light|720p-Light)\b/gi, '')
+    // Remove technical specs
+    .replace(/\b(10bit|10\-bit|8bit|8\-bit|12bit|12\-bit|HEVC|x265|x264|H\.265|H\.264|AVC|AV1|VP9|MPEG[-\s]?2|MPEG[-\s]?4|XviD|DivX)\b/gi, '')
     // Remove audio
     .replace(/\b(DD[\s+]?5\.1|DD[\s+]?2\.0|AC3|DTS[-\s]?HD|DTS[-\s]?X|DTS|TrueHD|Atmos|AAC|FLAC|MP3|5\.1|7\.1|2\.0)\b/gi, '')
     // Remove language
-    .replace(/\b(VOSTFR|SUBFRENCH|SUB|FRENCH|FRA|VF|VF2|VFF|VFQ|ENGLISH|ENG|VO|MULTI|TRUEFRENCH)\b/gi, '')
+    .replace(/\b(VOSTFR|SUBFRENCH|SUB|FRENCH|FRA|VF|VF2|VFF|VFQ|VFI|ENGLISH|ENG|VO|VOST|MULTI|TRUEFRENCH)\b/gi, '')
+    // Remove release features
+    .replace(/\b(Hybrid|Unrated|Extended|Remastered|Director's[\s-]?Cut|Collector|Special[\s-]?Edition)\b/gi, '')
     // Remove release group (brackets at end or preceded by dash)
     .replace(/[-\[(]\s*[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*\s*[\])]?$/, '')
     // Remove year (for non-movies or if year is after title)
     .replace(/\b(19[0-9]{2}|20[0-9]{2})\b/, '')
     // Remove episode/season patterns (for remaining cases)
-    .replace(/[Ss]\d{1,2}[Ee]\d{1,3}(?:[-~][Ee]?\d{1,3})?/, '')
-    .replace(/[Ss]\d{1,2}\.?[Ee]\d{1,3}/, '')
-    .replace(/\d{1,2}[xX]\d{1,3}(?:[-~]\d{1,3})?/, '')
+    .replace(/[Ss]\d{1,2}[Ee]\d{1,3}(?:[-~][Ee]?\d{1,3})?/gi, '')
+    .replace(/[Ss]\d{1,2}\.?[Ee]\d{1,3}/gi, '')
+    .replace(/\b[Ss]\d{1,2}\b/gi, '')
+    .replace(/\d{1,2}[xX]\d{1,3}(?:[-~]\d{1,3})?/gi, '')
     .replace(/(?:Season|Saison)\s*\d{1,2}/gi, '')
     .replace(/[Ee]p(?:isode)?\s*\d{1,3}/gi, '')
     // Remove game-specific suffixes
@@ -480,7 +506,7 @@ function extractTitle(name: string, mediaType: MediaType): string {
     .replace(/\b(GOTY|Game of the Year|Definitive|Ultimate|Collector|Edition)\b/gi, '')
     .replace(/\b(Update|Patch|DLC|Build|Version)\b.*$/i, '')
     // Remove extra spaces and punctuation
-    .replace(/[._\-\[\]()]+/g, ' ')
+    .replace(/[\[\]()]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 

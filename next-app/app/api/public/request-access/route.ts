@@ -1,4 +1,4 @@
-﻿﻿
+﻿﻿﻿﻿﻿﻿
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db/drizzle'
 import { users, accountRequests } from '@/lib/db/schema'
@@ -71,12 +71,8 @@ export async function POST(req: NextRequest) {
         const { logAction } = await import('@/lib/audit')
         await logAction(null, 'ACCOUNT_REQUEST_CREATE', 'AccountRequest', newRequest.id, { email, firstName, inviter })
 
-        const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-        await ExternalNotificationService.send('account_request', {
-            title: 'Nouvelle demande de compte',
-            message: `${firstName} (${email}) a demandÃ© un accÃ¨s Ã  MediaHub.${inviter ? `\nInvitÃ© par : ${inviter}` : ''}`,
-            data: { email, firstName, inviter }
-        })
+        // V1 notifications supprimées - plus d'envoi de notifications externes
+        console.log(`[RequestAccess] Account request from ${firstName} (${email}) - V1 notifications removed`)
     } catch (e) {
         console.error('Failed to log or notify account request creation:', e)
     }

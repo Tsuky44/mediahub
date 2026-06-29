@@ -9,6 +9,9 @@ import { parseTorrentName, ParsedTorrentName, MediaType } from '@/lib/torrent-pa
 import { checkAccess } from '../actions'
 import { Torrent } from '@/lib/services/qbittorrent'
 import { IndexerField } from '@/lib/services/prowlarr'
+import { db } from '@/lib/db/drizzle'
+import { mediaRequests } from '@/lib/db/schema'
+import { eq, and } from 'drizzle-orm'
 
 // Typed shapes for external API responses to avoid `any`
 interface TmdbGenre { name: string }
@@ -122,6 +125,17 @@ export interface MediaInfo {
     character?: string;
     profile_path?: string;
   }>;
+  crew?: Array<{
+    name: string;
+    job: string;
+    profile_path?: string;
+  }>;
+  studios?: string[];
+  countries?: string[];
+  original_language?: string;
+  tagline?: string;
+  status?: string;
+  tmdbId?: number;
   igdbId?: number
   publishers?: string[]
   gameModes?: string[]
@@ -180,13 +194,37 @@ async function fetchTMDBInfo(parsed: ParsedTorrentName): Promise<MediaInfo | nul
   }
 
   try {
-    const searchQuery = parsed.title
+    let searchQuery = parsed.title
     const mediaType = parsed.mediaType as 'movie' | 'tv'
 
     log('[TMDB] Searching for:', searchQuery, 'type:', mediaType)
 
     // Search for the media
-    const searchResults = await tmdbService.search(mediaType, searchQuery)
+    let searchResults = await tmdbService.search(mediaType, searchQuery)
+    
+    // Si aucun résultat n'est trouvé, essayer de nettoyer davantage le titre
+    if ((!searchResults.results || searchResults.results.length === 0) && searchQuery.includes(' ')) {
+      // Nettoyer les termes de qualité, groupes ou formats résiduels qui auraient pu être manqués, ainsi que les mots isolés
+      const cleanedQuery = searchQuery
+        .replace(/\b(x264|x265|hevc|h264|h265|aac|dts|ac3|multi|vff|vf|vostfr|subfrench|french|eng|english|bluray|webrip|web|hd|uhd|complete|pack|saison\s*\d+|season\s*\d+|integrale|rip|ld|dvd|hdlight|remux|custom)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      if (cleanedQuery && cleanedQuery !== searchQuery) {
+        log('[TMDB] Retrying search with extra-cleaned query:', cleanedQuery)
+        searchResults = await tmdbService.search(mediaType, cleanedQuery)
+      }
+    }
+
+    // Deuxième fallback : si toujours aucun résultat, on essaie de chercher le premier mot ou les deux premiers mots significatifs (pour les titres très longs)
+    if (!searchResults.results || searchResults.results.length === 0) {
+      const words = searchQuery.split(' ').filter(w => w.length > 1);
+      if (words.length > 3) {
+        const shortenedQuery = words.slice(0, 3).join(' ');
+        log('[TMDB] Retrying search with shortened query (first 3 words):', shortenedQuery)
+        searchResults = await tmdbService.search(mediaType, shortenedQuery)
+      }
+    }
     
     if (!searchResults.results || searchResults.results.length === 0) {
       log('[TMDB] No results found')
@@ -224,13 +262,25 @@ async function fetchTMDBInfo(parsed: ParsedTorrentName): Promise<MediaInfo | nul
       ? `https://www.themoviedb.org/movie/${bestMatch.id}`
       : `https://www.themoviedb.org/tv/${bestMatch.id}`
 
-    // Extract cast
+    // Extract cast (augmenté à 20 acteurs)
     const rawCredits = mediaType === 'tv' ? (details.aggregate_credits || { cast: [] }) : (details.credits || { cast: [] })
-    const cast = (rawCredits.cast || []).slice(0, 10).map((c: TmdbCastMember) => ({
+    const cast = (rawCredits.cast || []).slice(0, 20).map((c: TmdbCastMember) => ({
       name: c.name,
       character: mediaType === 'tv' ? (c.roles?.map((r) => r.character).join(' / ') || c.character) : c.character,
       profile_path: c.profile_path
     }))
+
+    // Extract crew (équipe technique : réalisateurs, scénaristes, producteurs)
+    const rawCrew = rawCredits.crew || []
+    const importantJobs = ['Director', 'Screenplay', 'Writer', 'Producer', 'Executive Producer', 'Editor', 'Director of Photography', 'Original Music Composer']
+    const crew = rawCrew
+      .filter((member: { job?: string }) => importantJobs.includes(member.job || ''))
+      .slice(0, 10)
+      .map((member: { name: string; job: string; profile_path?: string }) => ({
+        name: member.name,
+        job: member.job,
+        profile_path: member.profile_path
+      }))
 
     const result: MediaInfo = {
       mediaType: parsed.mediaType,
@@ -246,6 +296,13 @@ async function fetchTMDBInfo(parsed: ParsedTorrentName): Promise<MediaInfo | nul
       number_of_seasons: details.number_of_seasons,
       number_of_episodes: details.number_of_episodes,
       cast,
+      crew,
+      studios: (details.production_companies || []).map((c: { name: string }) => c.name),
+      countries: (details.production_countries || []).map((c: { name: string }) => c.name),
+      original_language: details.original_language?.toUpperCase(),
+      tagline: details.tagline,
+      status: details.status,
+      tmdbId: bestMatch.id,
       externalUrl
     }
 
@@ -562,4 +619,40 @@ export async function formatDuration(seconds: number): Promise<string> {
     return `${hours}h ${minutes}m`
   }
   return `${minutes}m`
+}
+
+export interface RelatedRequest {
+  id: number
+  status: number
+  requesterName: string | null
+  requesterEmail: string | null
+  requestedAt: Date
+  mediaType: string
+}
+
+/**
+ * Fetch media requests linked to a specific TMDB ID
+ */
+export async function fetchRelatedRequests(tmdbId: number, mediaType: string): Promise<RelatedRequest[]> {
+  try {
+    const requests = await db.query.mediaRequests.findMany({
+      where: and(
+        eq(mediaRequests.tmdbId, tmdbId.toString()),
+        eq(mediaRequests.mediaType, mediaType)
+      ),
+      orderBy: (requests, { desc }) => [desc(requests.requestedAt)]
+    })
+
+    return requests.map((req) => ({
+      id: req.id,
+      status: req.status,
+      requesterName: req.requesterName,
+      requesterEmail: req.requesterEmail,
+      requestedAt: req.requestedAt,
+      mediaType: req.mediaType
+    }))
+  } catch (e) {
+    error('[fetchRelatedRequests] Error:', e)
+    return []
+  }
 }

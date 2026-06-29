@@ -22,7 +22,7 @@ export function MediaCard({ item, showFavoriteButton = false }: { item: MediaIte
 
   const title = item.title || item.name || 'Untitled'
   const linkId = item.tmdbId || item.id
-  const posterUrl = getPosterUrl(item.poster_path)
+  const posterUrl = getPosterUrl(item.poster_path, 'w342')
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-2xl bg-gray-900 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,0,0,0.3)] hover:z-10 ring-1 ring-white/5 hover:ring-white/20">

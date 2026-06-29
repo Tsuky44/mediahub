@@ -26,7 +26,7 @@ const DEFAULT_CONFIG: NotificationsV2Config = {
   },
   events: ALL_EVENTS.reduce((acc, ev) => {
     acc[ev] = {
-      enabled: true,
+      enabled: ev !== 'EPISODE_AVAILABLE', // Désactivé par défaut pour EPISODE_AVAILABLE afin d'éviter le spam
       template: '',
       templateMovie: '',
       templateTv: '',
@@ -37,6 +37,15 @@ const DEFAULT_CONFIG: NotificationsV2Config = {
     }
     return acc
   }, {} as Record<NotificationEvent, any>),
+  webhook: {
+    enabled: false,
+    webhookUrl: '',
+    jsonPayload: '',
+    authHeader: '',
+    customHeaders: [],
+    supportVariables: false,
+    types: 0,
+  },
 }
 
 function mergeWithDefaults(raw: any): NotificationsV2Config {
@@ -46,6 +55,7 @@ function mergeWithDefaults(raw: any): NotificationsV2Config {
     evolution: { ...DEFAULT_CONFIG.evolution, ...(raw?.evolution ?? {}) },
     retry: { ...DEFAULT_CONFIG.retry, ...(raw?.retry ?? {}) },
     events: { ...DEFAULT_CONFIG.events },
+    webhook: { ...DEFAULT_CONFIG.webhook, ...(raw?.webhook ?? {}) },
   }
   if (raw?.events) {
     for (const ev of ALL_EVENTS) {

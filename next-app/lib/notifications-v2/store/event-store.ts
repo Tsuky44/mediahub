@@ -48,8 +48,8 @@ export async function recordEvent(
 
   try {
     // INSERT OR IGNORE grâce à la contrainte UNIQUE sur dedup_key
-    // Note: SQLite avec Drizzle — on utilise insert().onConflictDoNothing()
-    const insertResult = await db
+    // Note: SQLite avec Drizzle — on utilise insert().onConflictDoNothing().run()
+    const insertResult = db
       .insert(notificationEvents)
       .values({
         requestId: null,
@@ -64,28 +64,30 @@ export async function recordEvent(
         dispatchedAt: opts?.status === 'dispatched' ? new Date() : null,
       })
       .onConflictDoNothing({ target: notificationEvents.dedupKey })
+      .run()
 
-    // Drizzle SQLite ne retourne pas facilement l'info de conflit.
-    // On re-query pour savoir si c'était un insert ou un conflit.
+    const created = insertResult.changes > 0
+
+    // On re-query pour récupérer l'ID de l'événement (qu'il soit nouveau ou déjà existant)
     const existing = await db.query.notificationEvents.findFirst({
       where: eq(notificationEvents.dedupKey, dedupKey),
-      columns: { id: true, createdAt: true },
+      columns: { id: true },
     })
 
     if (!existing) {
-      // Cas très rare: race condition entre insert et select
       throw new Error(`EventStore: Failed to retrieve event after insert for dedupKey=${dedupKey}`)
     }
 
-    // Si l'event existe et a été créé il y a moins de 2s → probablement frais (insert)
-    // Sinon → probablement un doublon (déjà existant)
-    const createdAtMs = existing.createdAt instanceof Date ? existing.createdAt.getTime() : Number(existing.createdAt)
-    const isFresh = Date.now() - createdAtMs < 2000
+    if (created) {
+      logger.info(`[NotifV2][cid=${correlationId}] Event ${event} recorded in DB (id=${existing.id}, tmdbId=${payload.media.tmdbId})`)
+    } else {
+      logger.debug(`[NotifV2][cid=${correlationId}] Event ${event} was duplicate (existing id=${existing.id})`)
+    }
 
     return {
-      created: isFresh,
+      created,
       eventId: existing.id,
-      wasDuplicate: !isFresh,
+      wasDuplicate: !created,
     }
   } catch (err) {
     // Log structuré pour debugging

@@ -156,6 +156,38 @@ export class RadarrService {
     }
   }
 
+  /**
+   * Supprime un item de la queue Radarr.
+   * @param queueItemId - L'ID de l'item dans la queue
+   * @param options - Options de suppression (fichiers, blacklist)
+   */
+  async removeFromQueue(
+    queueItemId: number,
+    options: {
+      removeFromClient?: boolean
+      blocklist?: boolean
+      skipRedownload?: boolean
+      changeCategory?: boolean
+    } = {}
+  ): Promise<{ success: boolean; message?: string }> {
+    const client = this.getClient()
+    try {
+      const params = new URLSearchParams()
+      if (options.removeFromClient !== false) params.append('removeFromClient', 'true')
+      if (options.blocklist) params.append('blocklist', 'true')
+      if (options.skipRedownload) params.append('skipRedownload', 'true')
+      if (options.changeCategory) params.append('changeCategory', 'true')
+
+      await client.delete(`/queue/${queueItemId}?${params.toString()}`)
+      logger.info(`[Radarr] Removed queue item ${queueItemId}`, options)
+      return { success: true }
+    } catch (e) {
+      const errorMsg = (e as AppError).message
+      logger.error(`[Radarr] Failed to remove queue item ${queueItemId}:`, errorMsg)
+      return { success: false, message: errorMsg }
+    }
+  }
+
   async getProfiles() {
     return cached('radarr:profiles', async () => {
       const client = this.getClient()

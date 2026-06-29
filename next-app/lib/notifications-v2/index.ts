@@ -16,6 +16,7 @@ export type {
   FailureContext,
   NotificationsV2Config,
   EventRouteConfig,
+  WebhookConfig,
 } from './types'
 
 export { ConfigStore } from './config/config-store'

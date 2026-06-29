@@ -49,20 +49,20 @@ const initialFormData: SettingsFormData = {
 export function useSettingsForm(settings: Partial<SettingsFormData>) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const subtab = searchParams.get('subtab')
+  const tab = searchParams.get('tab')
 
   const [activeTab, setActiveTab] = useState<TabType>(() => {
-    if (subtab && ['media', 'downloads', 'automation', 'storage', 'maintenance'].includes(subtab)) {
-      return subtab as TabType
+    if (tab && ['media', 'downloads', 'automation', 'storage', 'maintenance'].includes(tab)) {
+      return tab as TabType
     }
     return 'media'
   })
 
   useEffect(() => {
-    if (subtab && ['media', 'downloads', 'automation', 'storage', 'maintenance'].includes(subtab)) {
-      setActiveTab(subtab as TabType)
+    if (tab && ['media', 'downloads', 'automation', 'storage', 'maintenance'].includes(tab)) {
+      setActiveTab(tab as TabType)
     }
-  }, [subtab])
+  }, [tab])
 
   const [loading, setLoading] = useState(false)
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)

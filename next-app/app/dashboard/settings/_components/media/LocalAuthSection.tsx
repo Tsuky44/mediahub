@@ -12,7 +12,7 @@ interface LocalAuthSectionProps {
 
 export function LocalAuthSection({ formData, updateField, readOnly }: LocalAuthSectionProps) {
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-6">
+    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
       <SectionHeader
         icon={UserCircle}
         title="Authentification Locale"

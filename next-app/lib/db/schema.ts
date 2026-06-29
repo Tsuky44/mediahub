@@ -103,25 +103,6 @@ export const userCalendarEvents = sqliteTable('user_calendar_events', {
 }));
 
 // ============================================================================
-// NOTIFICATIONS
-// ============================================================================
-export const notifications = sqliteTable('notifications', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  title: text('title').notNull(),
-  message: text('message').notNull(),
-  type: text('type').notNull(),
-  mediaId: text('media_id'),
-  mediaType: text('media_type'),
-  posterPath: text('poster_path'),
-  isRead: integer('is_read', { mode: 'boolean' }).notNull().default(false),
-  link: text('link'),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
-}, (table) => ({
-  userReadIdx: index('notifications_user_read_idx').on(table.userId, table.isRead),
-}));
-
-// ============================================================================
 // WATCH LATER
 // ============================================================================
 export const watchLater = sqliteTable('watch_later', {
@@ -354,6 +335,7 @@ export const notificationDeliveries = sqliteTable('notification_deliveries', {
 }, (table) => ({
   eventIdIdx: index('notification_deliveries_event_id_idx').on(table.eventId),
   statusRetryIdx: index('notification_deliveries_status_retry_idx').on(table.status, table.nextRetryAt),
+  uniqueDelivery: uniqueIndex('notification_deliveries_unique_recipient').on(table.eventId, table.recipient, table.provider),
 }));
 
 // ============================================================================
@@ -388,6 +370,77 @@ export const episodeBatches = sqliteTable('episode_batches', {
 }));
 
 // ============================================================================
+// SUPPORT CATEGORIES
+// ============================================================================
+export const supportCategories = sqliteTable('support_categories', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  name: text('name').notNull(),
+  description: text('description'),
+  discordWebhook: text('discord_webhook'),
+  discordMentions: text('discord_mentions'),
+  order: integer('order').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().$onUpdateFn(() => new Date()),
+});
+
+// ============================================================================
+// SUPPORT SUBCATEGORIES
+// ============================================================================
+export const supportSubcategories = sqliteTable('support_subcategories', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  categoryId: text('category_id').notNull().references(() => supportCategories.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  discordWebhook: text('discord_webhook'),
+  discordMentions: text('discord_mentions'),
+  order: integer('order').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().$onUpdateFn(() => new Date()),
+});
+
+// ============================================================================
+// SUPPORT TICKETS
+// ============================================================================
+export const supportTickets = sqliteTable('support_tickets', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+  userName: text('user_name'),
+  userEmail: text('user_email'),
+  categoryId: text('category_id').notNull().references(() => supportCategories.id),
+  subcategoryId: text('subcategory_id').references(() => supportSubcategories.id),
+  message: text('message').notNull(),
+  attachments: text('attachments'), // JSON array of image URLs
+  status: text('status').notNull().default('open'), // 'open' | 'in_progress' | 'resolved' | 'closed'
+  discordMessageId: text('discord_message_id'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().$onUpdateFn(() => new Date()),
+}, (table) => ({
+  statusIdx: index('support_tickets_status_idx').on(table.status),
+  userIdx: index('support_tickets_user_idx').on(table.userId),
+  createdAtIdx: index('support_tickets_created_at_idx').on(table.createdAt),
+}));
+
+// ============================================================================
+// NOTIFICATIONS (Internes — UI Badge/Dropdown)
+// ============================================================================
+export const notifications = sqliteTable('notifications', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  type: text('type').notNull(), // 'media_available' | 'new_ticket' | 'system_update'
+  mediaId: text('media_id'),
+  mediaType: text('media_type'),
+  posterPath: text('poster_path'),
+  isRead: integer('is_read', { mode: 'boolean' }).notNull().default(false),
+  link: text('link'),
+  data: text('data'), // JSON string for extra metadata
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+}, (table) => ({
+  userReadIdx: index('notifications_user_read_idx').on(table.userId, table.isRead),
+}));
+
+// ============================================================================
 // RELATIONS
 // ============================================================================
 
@@ -396,13 +449,13 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   accounts: many(accounts),
   auditLogs: many(auditLogs),
   requests: many(mediaRequests),
-  notifications: many(notifications),
-  sessions: many(sessions),
+    sessions: many(sessions),
   watchEvents: many(watchEvents),
   watchLater: many(watchLater),
   calendarEvents: many(userCalendarEvents),
   groupMemberships: many(userGroupMembers),
   subscriptions: many(mediaSubscriptions),
+  notifications: many(notifications),
 }));
 
 export const rolesRelations = relations(roles, ({ many }) => ({
@@ -423,9 +476,6 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, { fields: [sessions.userId], references: [users.id] }),
 }));
 
-export const notificationsRelations = relations(notifications, ({ one }) => ({
-  user: one(users, { fields: [notifications.userId], references: [users.id] }),
-}));
 
 export const watchLaterRelations = relations(watchLater, ({ one }) => ({
   user: one(users, { fields: [watchLater.userId], references: [users.id] }),
@@ -468,4 +518,24 @@ export const notificationEventsRelations = relations(notificationEvents, ({ one,
 
 export const notificationDeliveriesRelations = relations(notificationDeliveries, ({ one }) => ({
   event: one(notificationEvents, { fields: [notificationDeliveries.eventId], references: [notificationEvents.id] }),
+}));
+
+export const supportCategoriesRelations = relations(supportCategories, ({ many }) => ({
+  subcategories: many(supportSubcategories),
+  tickets: many(supportTickets),
+}));
+
+export const supportSubcategoriesRelations = relations(supportSubcategories, ({ one, many }) => ({
+  category: one(supportCategories, { fields: [supportSubcategories.categoryId], references: [supportCategories.id] }),
+  tickets: many(supportTickets),
+}));
+
+export const supportTicketsRelations = relations(supportTickets, ({ one }) => ({
+  user: one(users, { fields: [supportTickets.userId], references: [users.id] }),
+  category: one(supportCategories, { fields: [supportTickets.categoryId], references: [supportCategories.id] }),
+  subcategory: one(supportSubcategories, { fields: [supportTickets.subcategoryId], references: [supportSubcategories.id] }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));

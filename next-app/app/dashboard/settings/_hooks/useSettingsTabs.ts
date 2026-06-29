@@ -12,30 +12,36 @@ interface UseSettingsTabsResult {
 }
 
 /**
- * Owns the active settings tab.
- *
- * Selection rules (preserved from the original component):
- * - If `?tab=` is a known tab id, it wins on initial render and on URL
- *   changes (back / forward navigation).
- * - Otherwise the first tab the user has permission to see is selected,
- *   following the order of `SETTINGS_TABS`.
- * - As an ultimate fallback, `services` is selected.
+ * Owns the active settings tab and syncs it with the URL.
  */
 export function useSettingsTabs(permissions: SettingsTabPermissions): UseSettingsTabsResult {
     const searchParams = useSearchParams()
     const tabParam = searchParams.get('tab')
 
     const [activeTab, setActiveTab] = useState<SettingsTabId>(() => {
-        if (isSettingsTabId(tabParam)) return tabParam
+        const normalizedTab = tabParam === 'tickets' ? 'support' : tabParam
+        if (isSettingsTabId(normalizedTab)) return normalizedTab
         const firstAvailable = SETTINGS_TABS.find(def => permissions[def.permissionKey])
-        return firstAvailable?.id ?? 'services'
+        return firstAvailable?.id ?? 'media'
     })
 
     useEffect(() => {
-        if (isSettingsTabId(tabParam)) {
-            setActiveTab(tabParam)
+        const normalizedTab = tabParam === 'tickets' ? 'support' : tabParam
+        if (isSettingsTabId(normalizedTab)) {
+            setActiveTab(normalizedTab)
         }
     }, [tabParam])
 
-    return { activeTab, setActiveTab }
+    const handleTabChange = (id: SettingsTabId) => {
+        setActiveTab(id)
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href)
+            url.searchParams.set('tab', id)
+            // also remove subtab to avoid confusion
+            url.searchParams.delete('subtab')
+            window.history.pushState(null, '', url.pathname + url.search)
+        }
+    }
+
+    return { activeTab, setActiveTab: handleTabChange }
 }

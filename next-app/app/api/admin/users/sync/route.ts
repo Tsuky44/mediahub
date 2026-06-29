@@ -143,14 +143,8 @@ export async function POST(req: Request) {
                     userEmail: newUser.email
                   })
                   
-                  try {
-                      const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-                      await ExternalNotificationService.send('user_created', {
-                          title: 'Nouvel utilisateur',
-                          message: `L'utilisateur ${newUser.name} a été créé (via synchronisation Emby).`,
-                          data: { name: newUser.name, email: newUser.email, provider: 'Emby' }
-                      })
-                  } catch (e) {}
+                  // V1 notifications supprimées - plus d'envoi de notifications externes
+                  log(`[Sync] User ${newUser.name} created via Emby sync - V1 notifications removed`)
 
                   activeUserIds.add(newUser.id.toString())
                   createdCount++
@@ -226,14 +220,8 @@ export async function POST(req: Request) {
                                   userEmail: newUser.email
                                 })
                                 
-                                try {
-                                    const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-                                    await ExternalNotificationService.send('user_created', {
-                                        title: 'Nouvel utilisateur',
-                                        message: `L'utilisateur ${newUser.name} a été créé (via synchronisation Plex).`,
-                                        data: { name: newUser.name, email: newUser.email, provider: 'Plex' }
-                                    })
-                                } catch (e) {}
+                                // V1 notifications supprimées - plus d'envoi de notifications externes
+                                log(`[Sync] User ${newUser.name} created via Plex sync - V1 notifications removed`)
 
                                 activeUserIds.add(newUser.id.toString())
                                 createdCount++
@@ -303,14 +291,8 @@ export async function POST(req: Request) {
                               userEmail: newUser.email
                             })
                             
-                            try {
-                                const { ExternalNotificationService } = await import('@/lib/services/external-notification-service')
-                                await ExternalNotificationService.send('user_created', {
-                                    title: 'Nouvel utilisateur',
-                                    message: `L'utilisateur ${newUser.name} a été créé (via synchronisation Jellyfin).`,
-                                    data: { name: newUser.name, email: newUser.email, provider: 'Jellyfin' }
-                                })
-                            } catch (e) {}
+                            // V1 notifications supprimées - plus d'envoi de notifications externes
+                            log(`[Sync] User ${newUser.name} created via Jellyfin sync - V1 notifications removed`)
 
                             activeUserIds.add(newUser.id.toString())
                             createdCount++

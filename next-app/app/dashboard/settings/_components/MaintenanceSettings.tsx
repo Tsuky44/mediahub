@@ -2,7 +2,8 @@ import { Settings as SettingsIcon } from 'lucide-react'
 import { SectionHeader } from './SharedComponents'
 import { SettingsFormData } from './types'
 import { SystemUpdate } from './SystemUpdate'
-import { NotificationTest } from './NotificationTest'
+import { StuckImportsManager } from './StuckImportsManager'
+// import { NotificationTest } from './NotificationTest' // V1 notifications supprimées
 
 interface Props {
     formData: SettingsFormData
@@ -12,9 +13,10 @@ interface Props {
 
 export const MaintenanceSettings = ({ formData, updateField, readOnly }: Props) => {
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
             <SystemUpdate />
-            <NotificationTest />
+            <StuckImportsManager />
+            {/* <NotificationTest /> // V1 notifications supprimées */}
         </div>
     )
 }
