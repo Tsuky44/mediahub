@@ -573,14 +573,9 @@ export function parseTorrentName(name: string): ParsedTorrentName {
 }
 
 /**
- * Generate a search query for external APIs (TMDB or IGDB)
+ * Generate a search query for external APIs (TMDB)
  */
 export function generateSearchQuery(parsed: ParsedTorrentName): string {
-  if (parsed.mediaType === 'game') {
-    // For games, clean up the title for IGDB search
-    return parsed.title.replace(/\s+(?:Update|Patch|DLC|Build|v\d+).*$/i, '').trim()
-  }
-  
   // For movies/TV, return the title (TMDB handles year filtering well)
   return parsed.title
 }

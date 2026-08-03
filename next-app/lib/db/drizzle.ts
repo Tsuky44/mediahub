@@ -273,6 +273,15 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
     ],
   },
   {
+    name: 'media_last_played',
+    ddl: `CREATE TABLE IF NOT EXISTS "media_last_played" (
+      "item_id" TEXT PRIMARY KEY NOT NULL,
+      "item_type" TEXT,
+      "last_played_at" INTEGER NOT NULL,
+      "updated_at" INTEGER NOT NULL
+    );`,
+  },
+  {
     name: 'settings',
     ddl: `CREATE TABLE IF NOT EXISTS "settings" (
       "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -371,6 +380,7 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
       "id" TEXT PRIMARY KEY NOT NULL,
       "file_path" TEXT NOT NULL,
       "token" TEXT NOT NULL UNIQUE,
+      "password" TEXT,
       "expires_at" INTEGER,
       "created_at" INTEGER NOT NULL
     );`,
@@ -526,6 +536,7 @@ const COLUMN_PATCHES: ReadonlyArray<{ table: string; column: string; type: strin
   { table: 'notifications', column: 'data', type: 'TEXT' },
   { table: 'support_categories', column: 'discord_mentions', type: 'TEXT' },
   { table: 'support_subcategories', column: 'discord_mentions', type: 'TEXT' },
+  { table: 'file_shares', column: 'password', type: 'TEXT' },
 ];
 
 function tableExists(db: Database.Database, name: string): boolean {

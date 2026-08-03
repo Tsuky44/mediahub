@@ -19,6 +19,7 @@ import {
 } from './store'
 import { getOutboxWorkerInstance } from './outbox/outbox-worker'
 import { createMediaAvailableNotification } from '@/lib/notifications/internal'
+import { enrichRequester } from './utils/enrich-requester'
 
 export interface DispatchResult {
   success: boolean
@@ -65,6 +66,11 @@ export async function dispatch(
       logger.warn(`${tag} Route disabled for ${event}. Dropping event.`)
       return { success: false, wasDuplicate: false, recipients: [], error: 'Route disabled', correlationId }
     }
+
+    // 1b) Enrichir le requester (nom/email/whatsappNumber) depuis la DB via son id
+    //     si des champs manquent — évite « Demandé par : inconnu » et fiabilise
+    //     la résolution du numéro pour la case « notifier le demandeur ».
+    payload.requester = await enrichRequester(payload.requester)
 
     // 2) Record event atomiquement (dédup via UNIQUE dedup_key)
     const record = await recordEvent(event, payload, { correlationId })

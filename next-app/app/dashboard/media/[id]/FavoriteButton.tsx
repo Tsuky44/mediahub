@@ -5,6 +5,7 @@ import { Heart, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { clsx } from 'clsx'
 import { toggleFavorite as toggleFavoriteAction } from '@/app/dashboard/media/actions'
+import { useMediaServerType } from '@/app/dashboard/_hooks/useMediaServerType'
 
 interface FavoriteButtonProps {
     embyItemId: string
@@ -17,6 +18,8 @@ export default function FavoriteButton({ embyItemId, initialIsFavorite, tmdbId, 
     const [isFavorite, setIsFavorite] = useState(initialIsFavorite)
     const [loading, setLoading] = useState(false)
     const router = useRouter()
+    const serverType = useMediaServerType()
+    const serverName = serverType === 'jellyfin' ? 'Jellyfin' : 'Emby'
 
     const handleToggle = async () => {
         setLoading(true)
@@ -33,7 +36,7 @@ export default function FavoriteButton({ embyItemId, initialIsFavorite, tmdbId, 
                 router.refresh()
             } else {
                 // If it fails, maybe the item isn't on Emby yet
-                alert("Impossible de mettre en favori : ce média n'est pas encore disponible sur votre serveur Emby.")
+                alert(`Impossible de mettre en favori : ce média n'est pas encore disponible sur votre serveur ${serverName}.`)
             }
         } catch (e) {
             console.error('Error toggling favorite:', e)

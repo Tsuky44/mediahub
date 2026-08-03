@@ -1,28 +1,34 @@
 'use client'
 
-import { HardDrive, Film, Tv, Search, RefreshCw } from 'lucide-react'
+import { HardDrive, Film, Tv, Search, RefreshCw, History } from 'lucide-react'
 import { formatBytes } from '../../_utils/storage-formatters'
 
 interface StorageManagerHeaderProps {
   totalSize: number
   categorySize: number
+  totalsPending?: boolean
   activeTab: 'Movie' | 'Series'
   searchTerm: string
   loading: boolean
+  syncing: boolean
   onTabChange: (tab: 'Movie' | 'Series') => void
   onSearchChange: (value: string) => void
   onRefresh: () => void
+  onSync: () => void
 }
 
 export function StorageManagerHeader({
   totalSize,
   categorySize,
+  totalsPending = false,
   activeTab,
   searchTerm,
   loading,
+  syncing,
   onTabChange,
   onSearchChange,
   onRefresh,
+  onSync,
 }: StorageManagerHeaderProps) {
   return (
     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -32,10 +38,14 @@ export function StorageManagerHeader({
           Gestion du Stockage
         </h2>
         <p className="text-sm text-gray-400">
-          Total : <span className="text-white font-medium">{formatBytes(totalSize)}</span>
+          Total :{' '}
+          <span className="text-white font-medium">
+            {totalsPending ? 'Indexation en cours…' : formatBytes(totalSize)}
+          </span>
           {' • '}
           <span className={activeTab === 'Movie' ? 'text-blue-400' : 'text-green-400'}>
-            {activeTab === 'Movie' ? 'Films' : 'Séries'} : {formatBytes(categorySize)}
+            {activeTab === 'Movie' ? 'Films' : 'Séries'} :{' '}
+            {totalsPending ? '…' : formatBytes(categorySize)}
           </span>
         </p>
       </div>
@@ -80,6 +90,14 @@ export function StorageManagerHeader({
             className="w-full bg-black/40 backdrop-blur-sm border border-white/5 rounded-2xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
           />
         </div>
+        <button
+          onClick={onSync}
+          disabled={syncing}
+          className="p-2.5 bg-black/40 backdrop-blur-sm border border-white/5 hover:bg-white/10 rounded-2xl text-gray-400 hover:text-white transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Synchroniser les dates de lecture depuis Emby"
+        >
+          <History className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
+        </button>
         <button
           onClick={onRefresh}
           className="p-2.5 bg-black/40 backdrop-blur-sm border border-white/5 hover:bg-white/10 rounded-2xl text-gray-400 hover:text-white transition-all shadow-sm hover:shadow-md"

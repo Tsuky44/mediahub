@@ -3,6 +3,7 @@
 import { Eye, X, Film, Tv, RefreshCw, AlertTriangle, Activity } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 import { useUserActivity } from '../_hooks/useUserActivity'
+import { formatLastPlayed } from '@/app/dashboard/stats/_utils/storage-formatters'
 
 interface UserActivityButtonProps {
     tmdbId: number
@@ -106,8 +107,8 @@ export function UserActivityButton({ tmdbId, mediaType, title }: UserActivityBut
                                                                 <span className="truncate mr-2 flex-1" title={stat.episodeText || (stat.played ? 'Vu' : 'En cours')}>
                                                                     {stat.episodeText || (stat.played ? 'Vu' : 'En cours')}
                                                                 </span>
-                                                                <span className="whitespace-nowrap ml-2" title="Date de dernière lecture">
-                                                                    {stat.lastPlayedDate ? new Date(stat.lastPlayedDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Jamais'}
+                                                                <span className="whitespace-nowrap ml-2" title={stat.lastPlayedDate ? new Date(stat.lastPlayedDate).toLocaleString('fr-FR') : 'Date de dernière lecture'}>
+                                                                    {formatLastPlayed(stat.lastPlayedDate)}
                                                                 </span>
                                                             </div>
                                                             

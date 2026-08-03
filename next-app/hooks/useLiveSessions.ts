@@ -35,9 +35,12 @@ export function useLiveSessions(initialSessions: LiveSession[] = []) {
     
     console.log(`[WebSocket] Connecting to ${wsUrl || 'relative host'}...`)
     const socket: Socket = io(wsUrl || undefined, {
-      transports: ['websocket'], // Force WebSocket to avoid polling-related flickering
+      path: '/socket.io',
+      // Polling d'abord : les cookies httpOnly passent mieux via HTTP classique qu'en upgrade WSS
+      transports: ['polling', 'websocket'],
       reconnectionAttempts: 10,
-      reconnectionDelay: 2000
+      reconnectionDelay: 2000,
+      withCredentials: true,
     })
 
     socket.on('connect', () => {
@@ -47,6 +50,11 @@ export function useLiveSessions(initialSessions: LiveSession[] = []) {
 
     socket.on('disconnect', () => {
       console.log('[WebSocket] Disconnected from tracker')
+      setIsConnected(false)
+    })
+
+    socket.on('connect_error', (err) => {
+      console.error('[WebSocket] Connection error:', err.message)
       setIsConnected(false)
     })
 

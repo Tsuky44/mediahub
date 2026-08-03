@@ -2,6 +2,7 @@ export type ServiceStatus = 'online' | 'offline' | 'loading' | 'hidden'
 
 export interface ServicesHealth {
   emby: ServiceStatus
+  serverType?: 'emby' | 'jellyfin'
 }
 
 export interface DiskUsage {

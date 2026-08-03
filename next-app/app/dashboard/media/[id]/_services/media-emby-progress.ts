@@ -2,7 +2,7 @@ import 'server-only'
 import { db } from '@/lib/db/drizzle'
 import { users, userCalendarEvents } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
-import { getEmbyServiceForUser } from '@/lib/auth'
+import { getMediaServerServiceForUser, getMediaServerUserId } from '@/lib/auth'
 import type {
   MediaEmbyProgress,
   MediaType,
@@ -77,13 +77,14 @@ export async function fetchMediaEmbyProgress(params: {
   })
   const isInCalendar = !!calendarEvent
 
-  if (!dbUser.embyUserId) {
+  const mediaUserId = getMediaServerUserId(dbUser)
+  if (!mediaUserId) {
     return { ...EMPTY_PROGRESS, isInCalendar }
   }
 
-  const embyService = await getEmbyServiceForUser()
-  if (!embyService) {
-    return { ...EMPTY_PROGRESS, isInCalendar, embyUserId: dbUser.embyUserId }
+  const mediaService = await getMediaServerServiceForUser()
+  if (!mediaService) {
+    return { ...EMPTY_PROGRESS, isInCalendar, embyUserId: mediaUserId }
   }
 
   let embyItem: EmbyApiItem | null = null
@@ -92,8 +93,8 @@ export async function fetchMediaEmbyProgress(params: {
   let seasonProgress: SeasonProgressEntry[] = []
 
   try {
-    embyItem = (await embyService.getItemByTmdbId(
-      dbUser.embyUserId,
+    embyItem = (await mediaService.getItemByTmdbId(
+      mediaUserId,
       tmdbId,
       mediaType === 'movie' ? 'Movie' : 'Series'
     )) as EmbyApiItem | null
@@ -101,7 +102,7 @@ export async function fetchMediaEmbyProgress(params: {
     if (embyItem?.ServerId) {
       embyServerId = embyItem.ServerId
     } else {
-      const sysInfo = (await embyService.getSystemInfo()) as EmbyApiSystemInfo | null
+      const sysInfo = (await mediaService.getSystemInfo()) as EmbyApiSystemInfo | null
       if (sysInfo) embyServerId = sysInfo.Id || null
     }
 
@@ -121,8 +122,8 @@ export async function fetchMediaEmbyProgress(params: {
 
       if (mediaType === 'tv' && embyItem.Id) {
         log(`[MediaDetails] Fetching episodes for series ${embyItem.Id}`)
-        const allEpisodes = (await embyService.getEpisodes(
-          dbUser.embyUserId,
+        const allEpisodes = (await mediaService.getEpisodes(
+          mediaUserId,
           embyItem.Id
         )) as EmbyApiEpisode[]
         log(`[MediaDetails] Found ${allEpisodes.length} episodes`)
@@ -188,7 +189,7 @@ export async function fetchMediaEmbyProgress(params: {
   }
 
   return {
-    embyUserId: dbUser.embyUserId,
+    embyUserId: mediaUserId,
     embyItem,
     embyServerId,
     userProgress,

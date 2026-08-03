@@ -39,8 +39,8 @@ export const DB = {
 // --- API Timeouts (ms) ---
 export const TIMEOUT = {
   TMDB: 8_000,
-  SONARR: 10_000,
-  RADARR: 10_000,
+  SONARR: 30_000,
+  RADARR: 30_000,
   EMBY: 10_000,
   QBITTORRENT: 10_000,
   DOCKER: 15_000,

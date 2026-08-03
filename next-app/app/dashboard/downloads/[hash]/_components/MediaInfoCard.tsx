@@ -202,7 +202,7 @@ export function MediaInfoCard({ mediaInfo, torrentHash, parsed, relatedRequests 
                 className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
               >
                 <ExternalLink size={14} />
-                Voir sur {isGame ? 'IGDB' : 'TMDB'}
+                Voir sur TMDB
               </a>
             ) : null}
           </div>

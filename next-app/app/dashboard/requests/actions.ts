@@ -19,9 +19,8 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
         try {
           const { logAction } = await import('@/lib/audit')
           const user = await import('@/lib/auth').then(m => m.getCurrentUser())
-          if (user) {
-            const dbUser = await import('@/lib/prisma').then(m => (m.prisma as any).user.findFirst({ where: { email: user.email || '' } }))
-            await logAction(dbUser?.id || null, 'MEDIA_SEARCH', 'Search', '', { query: search, type })
+          if (user?.id) {
+            await logAction(parseInt(user.id), 'MEDIA_SEARCH', 'Search', '', { query: search, type })
           }
         } catch (e) {
           console.error('Failed to log search:', e)

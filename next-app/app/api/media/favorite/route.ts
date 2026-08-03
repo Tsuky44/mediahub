@@ -1,5 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
-import { getEmbyServiceForUser, getCurrentUser } from '@/lib/auth'
+import { getMediaServerServiceForUser, getMediaServerUserId, getCurrentUser } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -13,18 +13,19 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const embyService = await getEmbyServiceForUser()
+    const mediaService = await getMediaServerServiceForUser()
     
-    if (!embyService) {
-        return NextResponse.json({ error: 'Emby service unavailable' }, { status: 503 })
+    if (!mediaService) {
+        return NextResponse.json({ error: 'Media server unavailable' }, { status: 503 })
     }
 
     const dbUser = await db.query.users.findFirst({
         where: eq(users.email, user.email)
     })
 
-    if (!dbUser || !dbUser.embyUserId) {
-        return NextResponse.json({ error: 'Emby user not connected' }, { status: 400 })
+    const mediaUserId = getMediaServerUserId(dbUser)
+    if (!mediaUserId) {
+        return NextResponse.json({ error: 'Media server user not connected' }, { status: 400 })
     }
 
         const { embyItemId, isFavorite } = await req.json()
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Missing embyItemId' }, { status: 400 })
         }
 
-        await embyService.updateFavoriteStatus(dbUser.embyUserId, embyItemId, isFavorite)
+        await mediaService.updateFavoriteStatus(mediaUserId, embyItemId, isFavorite)
 
         return NextResponse.json({ success: true })
     } catch (error: any) {

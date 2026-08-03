@@ -3,6 +3,7 @@ import { db } from "@/lib/db/drizzle"
 import { users, settings as settingsTable, roles } from "@/lib/db/schema"
 import { eq, and, isNull, not } from "drizzle-orm"
 import bcrypt from "bcryptjs"
+import { checkRateLimit, registerLoginFailure, clearRateLimit } from "../rate-limiter"
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -15,6 +16,17 @@ export const localProvider = CredentialsProvider({
     password: { label: "Mot de passe", type: "password" }
   },
   async authorize(credentials, req) {
+    // Récupérer l'IP du client depuis les en-têtes
+    const reqHeaders = req?.headers as any
+    const ip = reqHeaders?.['x-forwarded-for']?.split(',')[0]?.trim() || reqHeaders?.['x-real-ip'] || '127.0.0.1'
+    const username = credentials?.username || 'unknown'
+
+    // Vérifier si l'utilisateur/IP est actuellement bloqué
+    const rateCheck = await checkRateLimit(ip, username, 'local')
+    if (!rateCheck.allowed) {
+      throw new Error(`Trop de tentatives de connexion. Réessayez dans ${rateCheck.timeLeft} minute(s).`)
+    }
+
     // Check if Local auth is enabled
     const [setting] = await db.select({ value: settingsTable.value })
       .from(settingsTable)
@@ -40,6 +52,7 @@ export const localProvider = CredentialsProvider({
 
     if (!user || !user.password) {
       log(`[Local Auth] User not found or no local password: ${credentials.username}`)
+      await registerLoginFailure(ip, username, 'local')
       throw new Error("Nom d'utilisateur ou mot de passe incorrect")
     }
 
@@ -47,8 +60,12 @@ export const localProvider = CredentialsProvider({
     const isValid = await bcrypt.compare(credentials.password, user.password)
     if (!isValid) {
       log(`[Local Auth] Invalid password for user: ${credentials.username}`)
+      await registerLoginFailure(ip, username, 'local')
       throw new Error("Nom d'utilisateur ou mot de passe incorrect")
     }
+
+    // Succès: on supprime l'historique de tentatives pour cette IP + utilisateur
+    await clearRateLimit(ip, username, 'local')
 
     log(`[Local Auth] User authenticated: ${user.name}`)
 

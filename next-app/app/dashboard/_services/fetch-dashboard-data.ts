@@ -1,4 +1,4 @@
-import { getEmbyServiceForUser } from '@/lib/auth'
+import { getMediaServerServiceForUser, getMediaServerUserId } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
 import { users, settings, mediaRequests } from '@/lib/db/schema'
 import { eq, inArray, desc } from 'drizzle-orm'
@@ -19,7 +19,7 @@ export interface DashboardData {
   recentlyWatched: RecentlyWatchedItem[]
   recommendations: RecommendationItem[]
   activeTorrents: Torrent[]
-  embyUrl: string | null | undefined
+  mediaServerUrl: string | null | undefined
   hasDownloads: boolean
   hasDocker: boolean
   showWelcome: boolean
@@ -35,7 +35,7 @@ export async function fetchDashboardData(
   const isAdminOrUserPlus = userRole === 'admin' || userRole === 'user_plus'
   const userId = user?.id ? parseInt(user.id) : NaN
 
-  const embyService = await getEmbyServiceForUser()
+  const mediaService = await getMediaServerServiceForUser()
 
   const dbUser =
     !isNaN(userId)
@@ -47,6 +47,7 @@ export async function fetchDashboardData(
   const settingsList = await db.query.settings.findMany({
     where: inArray(settings.key, [
       'emby_url',
+      'jellyfin_url',
       'qbittorrent_url',
       'smb_host',
       'docker_host',
@@ -62,7 +63,7 @@ export async function fetchDashboardData(
 
   const showWelcome = welcomeEnabled && (dbUser ? !dbUser.hasSeenWelcome : true)
 
-  const embyUrl = settingsList.find(s => s.key === 'emby_url')?.value
+  const mediaServerUrl = settingsList.find(s => s.key === 'emby_url')?.value || settingsList.find(s => s.key === 'jellyfin_url')?.value
   const hasQbit = !!settingsList.find(s => s.key === 'qbittorrent_url' && s.value)
   const hasSmb = !!settingsList.find(s => s.key === 'smb_host' && s.value)
   const hasDownloads = hasQbit || hasSmb
@@ -77,7 +78,7 @@ export async function fetchDashboardData(
   let activeTorrents: Torrent[] = []
 
   const [sessionsRes, requestsRes, watchedRes, recsRes, torrentsRes] = await Promise.allSettled([
-    embyService ? embyService.getSessions() : Promise.resolve([]),
+    mediaService ? mediaService.getSessions() : Promise.resolve([]),
     ability.can('read', 'MediaRequest')
       ? db.query.mediaRequests.findMany({
           orderBy: [desc(mediaRequests.requestedAt)],
@@ -182,7 +183,7 @@ export async function fetchDashboardData(
     recentlyWatched,
     recommendations,
     activeTorrents,
-    embyUrl,
+    mediaServerUrl,
     hasDownloads,
     hasDocker,
     showWelcome,

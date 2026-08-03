@@ -19,7 +19,7 @@ export default function ActivityLogsTable({ logs, loading }: ActivityLogsTablePr
                         <th className="px-4 py-3 font-medium">Utilisateur</th>
                         <th className="px-4 py-3 font-medium">Action</th>
                         <th className="px-4 py-3 font-medium">Détails</th>
-                        <th className="px-4 py-3 font-medium">IP</th>
+                        <th className="px-4 py-3 font-medium">Origine</th>
                         <th className="px-4 py-3 font-medium">Date</th>
                     </tr>
                 </thead>

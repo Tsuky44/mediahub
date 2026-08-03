@@ -78,7 +78,7 @@ export async function loadMediaPageData(params: {
     mediaType,
     details,
   })
-  const embyUrl = await getSetting('emby_url')
+  const embyUrl = await getSetting('emby_url') || await getSetting('jellyfin_url')
   const requestAllSeasonsEnabled = await getSetting('request_all_seasons_enabled')
 
   return {

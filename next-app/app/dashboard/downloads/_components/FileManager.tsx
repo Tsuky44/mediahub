@@ -9,6 +9,7 @@ import { FileManagerHeader } from './file-manager/FileManagerHeader'
 import { FileManagerTable } from './file-manager/FileManagerTable'
 import { DeleteFileModal } from './file-manager/DeleteFileModal'
 import { ShareFileModal } from './file-manager/ShareFileModal'
+import { ShareManagerModal } from './file-manager/ShareManagerModal'
 
 interface FileManagerProps {
     canDownload: boolean
@@ -47,6 +48,7 @@ export default function FileManager({ canDownload, canShare, canDelete }: FileMa
 
     const [deleteModal, setDeleteModal] = useState<DeleteModalState>({ isOpen: false, file: null })
     const [shareModal, setShareModal] = useState<ShareModalState>({ isOpen: false, filePath: '' })
+    const [shareManagerOpen, setShareManagerOpen] = useState(false)
 
     const handleDownload = (file: FileInfo) => {
         window.location.href = `/api/smb/download?path=${encodeURIComponent(file.fullPath)}`
@@ -61,8 +63,8 @@ export default function FileManager({ canDownload, canShare, canDelete }: FileMa
         }
     }
 
-    const handleConfirmShare = async (days?: number) => {
-        const res = await createPublicShare(shareModal.filePath, days)
+    const handleConfirmShare = async (days?: number, password?: string) => {
+        const res = await createPublicShare(shareModal.filePath, days, password)
         if (res.success) {
             setShareModal((prev) => ({ ...prev, token: res.token }))
         }
@@ -79,6 +81,7 @@ export default function FileManager({ canDownload, canShare, canDelete }: FileMa
                 onSearchChange={setSearchQuery}
                 onBack={navigateBack}
                 onRefresh={fetchFiles}
+                onManageShares={canShare ? () => setShareManagerOpen(true) : undefined}
             />
 
             <FileManagerTable
@@ -108,6 +111,11 @@ export default function FileManager({ canDownload, canShare, canDelete }: FileMa
                 token={shareModal.token}
                 onClose={() => setShareModal({ isOpen: false, filePath: '' })}
                 onCreate={handleConfirmShare}
+            />
+
+            <ShareManagerModal
+                isOpen={shareManagerOpen}
+                onClose={() => setShareManagerOpen(false)}
             />
         </div>
     )

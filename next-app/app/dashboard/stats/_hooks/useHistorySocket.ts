@@ -45,9 +45,10 @@ export function useHistorySocket(initialHistory: any[]): UseHistorySocketResult 
 
         const socket: Socket = io(wsUrl || undefined, {
             path: '/socket.io',
-            transports: ['websocket', 'polling'],
+            transports: ['polling', 'websocket'],
             reconnectionAttempts: 5,
             reconnectionDelay: 1000,
+            withCredentials: true,
         })
 
         socket.on('connect', () => setIsConnected(true))

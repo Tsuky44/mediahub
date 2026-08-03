@@ -2,6 +2,7 @@
 
 import { Eye } from 'lucide-react'
 import type { ItemDetails } from '../../../_types/storage'
+import { formatLastPlayed } from '../../../_utils/storage-formatters'
 
 interface UserActivitySectionProps {
   details: ItemDetails
@@ -29,7 +30,10 @@ export function UserActivitySection({ details }: UserActivitySectionProps) {
         Activité des utilisateurs
       </h4>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {details.viewingStats.map(stat => (
+        {details.viewingStats.map(stat => {
+          // Un média marqué "Vu" doit afficher une progression à 100%.
+          const displayPercentage = stat.played ? 100 : stat.percentage
+          return (
           <div
             key={stat.userId}
             className="bg-white/5 rounded-lg p-3 flex items-center gap-3 border border-white/5"
@@ -46,13 +50,13 @@ export function UserActivitySection({ details }: UserActivitySectionProps) {
                       {stat.playedEpisodes}/{stat.totalEpisodes} eps
                     </span>
                   )}
-                  <span className="font-medium text-white">{Math.round(stat.percentage)}%</span>
+                  <span className="font-medium text-white">{Math.round(displayPercentage)}%</span>
                 </div>
               </div>
               <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full ${stat.played ? 'bg-green-500' : 'bg-purple-500'}`}
-                  style={{ width: `${stat.percentage}%` }}
+                  style={{ width: `${displayPercentage}%` }}
                 />
               </div>
               <div className="mt-1 text-xs text-gray-500 flex justify-between items-center">
@@ -62,14 +66,15 @@ export function UserActivitySection({ details }: UserActivitySectionProps) {
                 >
                   {stat.episodeText || (stat.played ? 'Vu' : 'En cours')}
                 </span>
-                <span className="whitespace-nowrap ml-2" title="Date de dernière lecture">
-                  {stat.lastPlayedDate
-                    ? new Date(stat.lastPlayedDate).toLocaleDateString('fr-FR', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })
-                    : 'Jamais'}
+                <span
+                  className="whitespace-nowrap ml-2"
+                  title={
+                    stat.lastPlayedDate
+                      ? new Date(stat.lastPlayedDate).toLocaleString('fr-FR')
+                      : 'Date de dernière lecture'
+                  }
+                >
+                  {formatLastPlayed(stat.lastPlayedDate)}
                 </span>
               </div>
 
@@ -97,7 +102,8 @@ export function UserActivitySection({ details }: UserActivitySectionProps) {
               )}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

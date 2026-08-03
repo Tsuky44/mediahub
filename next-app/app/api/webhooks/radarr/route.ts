@@ -4,10 +4,11 @@
  * Events supportÃ©s : Grab, Download, Import, Rename, MovieDelete, Health
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyWebhookSecret } from '@/lib/webhooks/verify-secret';
 import { db } from '@/lib/db/drizzle';
 import { mediaRequests } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import { dispatch } from '@/lib/notifications-v2/dispatcher';
 import { logger } from '@/lib/logger';
 import { NOTIFICATION_EVENTS, type NotificationEvent } from '@/lib/notifications-v2/types';
@@ -22,20 +23,47 @@ export const dynamic = 'force-dynamic'
 // Radarr 'Import' n'existe pas comme event webhook Radarr standard
 const EVENT_MAP: Record<string, NotificationEvent> = {
   'Grab': NOTIFICATION_EVENTS.MEDIA_GRABBED,
-  'Download': NOTIFICATION_EVENTS.MEDIA_AVAILABLE,   // Radarr Download = import complet = dispo
-  'MovieAdded': NOTIFICATION_EVENTS.MEDIA_AVAILABLE,
   'MovieDelete': NOTIFICATION_EVENTS.MEDIA_FAILED,
-  // Rename et Health sont ignorÃ©s pour les notifs
+  // Download = import in Radarr, but NOT necessarily available in Emby/Jellyfin
+  // -> handled separately below (updates request status, lets AvailabilityPoller dispatch)
+  // MovieAdded = just added to Radarr catalog, NOT available -> ignored
 };
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const isValid = await verifyWebhookSecret(req, 'webhook_radarr_secret');
+    if (!isValid) {
+      logger.warn('[RadarrWebhook] Tentative d\'accès non autorisée (secret invalide ou absent)');
+      return NextResponse.json({ error: 'Unauthorized. Invalid secret.' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { eventType, movie } = body;
 
     logger.info(`[RadarrWebhook V2] Received event: ${eventType}`);
 
-    // Ignorer les events non mappÃ©s (Rename, Health, etc.)
+    // Handle Download (import) event: update request status to 5 (available)
+    // but do NOT dispatch MEDIA_AVAILABLE directly. The AvailabilityPoller will
+    // handle the notification with proper dedup, grouped season logic, and
+    // Emby/Jellyfin verification.
+    if (eventType === 'Download') {
+      if (!movie?.tmdbId) {
+        logger.warn(`[RadarrWebhook V2] Download event missing TMDB ID`);
+        return NextResponse.json({ success: true });
+      }
+      const tmdbId = String(movie.tmdbId);
+      await db.update(mediaRequests)
+        .set({ status: 5, updatedAt: new Date() })
+        .where(and(
+          eq(mediaRequests.tmdbId, tmdbId),
+          eq(mediaRequests.mediaType, 'movie'),
+          ne(mediaRequests.status, 5)
+        ));
+      logger.info(`[RadarrWebhook V2] Download event: marked requests for TMDB ${tmdbId} as available (status=5). AvailabilityPoller will dispatch notification.`);
+      return NextResponse.json({ success: true });
+    }
+
+    // Ignorer les events non mappÃ©s (Rename, Health, MovieAdded, etc.)
     const v2Event = EVENT_MAP[eventType];
     if (!v2Event) {
       logger.info(`[RadarrWebhook V2] Event ${eventType} ignored (not mapped)`);

@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeftIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, MagnifyingGlassIcon, ShareIcon } from '@heroicons/react/24/outline'
 
 interface FileManagerHeaderProps {
     path: string
@@ -9,6 +9,7 @@ interface FileManagerHeaderProps {
     onSearchChange: (q: string) => void
     onBack: () => void
     onRefresh: () => void
+    onManageShares?: () => void
 }
 
 /** En-tete du gestionnaire de fichiers : bouton retour, titre/path, recherche, actualiser. */
@@ -19,6 +20,7 @@ export function FileManagerHeader({
     onSearchChange,
     onBack,
     onRefresh,
+    onManageShares,
 }: FileManagerHeaderProps) {
     return (
         <div className="p-4 border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between bg-white/5 gap-4 relative z-10">
@@ -60,6 +62,15 @@ export function FileManagerHeader({
                 >
                     Actualiser
                 </button>
+                {onManageShares && (
+                    <button
+                        onClick={onManageShares}
+                        className="flex items-center gap-1.5 text-sm text-amber-400 hover:text-amber-300 font-bold whitespace-nowrap px-3 py-2 hover:bg-amber-500/10 rounded-xl transition-all duration-300"
+                    >
+                        <ShareIcon className="w-4 h-4" />
+                        Partages
+                    </button>
+                )}
             </div>
         </div>
     )

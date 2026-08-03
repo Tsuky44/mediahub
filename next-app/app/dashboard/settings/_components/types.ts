@@ -6,7 +6,7 @@ export interface SettingsFormData {
     prowlarr_url: string
     prowlarr_api_key: string
     // Storage settings (SMB or FTP)
-    storage_protocol: 'smb' | 'ftp'
+    storage_protocol: 'smb' | 'ftp' | 'local'
     storage_host: string
     storage_port: string
     storage_username: string
@@ -40,6 +40,9 @@ export interface SettingsFormData {
     unraid_api_key: string
     docker_host: string
     request_all_seasons_enabled: boolean
+    webhook_sonarr_secret?: string
+    webhook_radarr_secret?: string
+    webhook_emby_secret?: string
 }
 
 export type TabType = 'media' | 'downloads' | 'automation' | 'storage' | 'maintenance'

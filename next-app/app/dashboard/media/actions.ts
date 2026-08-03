@@ -1,7 +1,7 @@
 'use server'
 
 import { getWatchLaterList, isInWatchLater } from './watch-later-actions'
-import { getCurrentUser, getEmbyServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getMediaServerServiceForUser, getMediaServerUserId, getTmdbServiceForUser } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
 import { users, mediaRequests, watchEvents } from '@/lib/db/schema'
 import { eq, or, and, gte, desc, sql, count } from 'drizzle-orm'
@@ -20,18 +20,18 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const embyService = await getEmbyServiceForUser()
+        const mediaService = await getMediaServerServiceForUser()
         const tmdbService = await getTmdbServiceForUser()
         
-        if (!embyService) return { results: [], total_pages: 0 }
+        if (!mediaService) return { results: [], total_pages: 0 }
 
         const dbUser = await db.query.users.findFirst({
             where: eq(users.email, user.email)
         })
         
-        if (!dbUser || !dbUser.embyUserId) return { results: [], total_pages: 0 }
+        const userId = getMediaServerUserId(dbUser)
+        if (!userId) return { results: [], total_pages: 0 }
         
-        const userId = dbUser.embyUserId
         const limit = 50
         const startIndex = (page - 1) * limit
 
@@ -50,7 +50,7 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
             ids = embyWatchLaterIds.join(',')
         }
 
-        const data = await embyService.getUserItems(userId, {
+        const data = await mediaService.getUserItems(userId, {
             SearchTerm: query,
             StartIndex: startIndex,
             Limit: limit,
@@ -77,7 +77,7 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
 
             // Fallback to Emby image if TMDB image is not available
             if (!poster_path && item.Id != null) {
-                poster_path = embyService.getItemImageUrl(String(item.Id))
+                poster_path = mediaService.getItemImageUrl(String(item.Id))
             }
 
             const isWatchLaterItem = item.Id != null ? await isInWatchLater(String(item.Id), itemType) : false
@@ -112,24 +112,24 @@ export async function fetchRecentlyWatchedItems() {
         const user = await getCurrentUser()
         if (!user || !user.email) return []
 
-        const embyService = await getEmbyServiceForUser()
+        const mediaService = await getMediaServerServiceForUser()
         const tmdbService = await getTmdbServiceForUser()
         
-        if (!embyService) return []
+        if (!mediaService) return []
 
         const dbUser = await db.query.users.findFirst({
             where: eq(users.email, user.email)
         })
 
-        if (!dbUser || !dbUser.embyUserId) {
-            log('[fetchRecentlyWatchedItems] User not linked to Emby')
+        const userId = getMediaServerUserId(dbUser)
+        if (!userId) {
+            log('[fetchRecentlyWatchedItems] User not linked to a media server')
             return []
         }
         
-        const userId = dbUser.embyUserId
         log('[fetchRecentlyWatchedItems] Fetching recently played items for user:', userId)
         // Réduction du nombre d'items récupérés pour plus de rapidité (20 au lieu de 50)
-        const data = await embyService.getRecentlyPlayedItems(userId, 20)
+        const data = await mediaService.getRecentlyPlayedItems(userId, 20)
         const allItems = Array.isArray(data.Items) ? data.Items : []
         
         // Group items by SeriesId (for episodes) or Id (for movies)
@@ -161,7 +161,7 @@ export async function fetchRecentlyWatchedItems() {
             if (item.Type === 'Episode' && item.SeriesId) {
                 let series = seriesDetailsCache.get(String(item.SeriesId))
                 if (!series) {
-                    series = await embyService.getItemDetails(String(item.SeriesId), userId)
+                    series = await mediaService.getItemDetails(String(item.SeriesId), userId)
                     seriesDetailsCache.set(String(item.SeriesId), series)
                 }
                 const seriesTmdbId = series?.ProviderIds?.Tmdb
@@ -175,7 +175,7 @@ export async function fetchRecentlyWatchedItems() {
 
             // Fallback to Emby image
             if (!poster_path && item.Id != null) {
-                poster_path = embyService.getItemImageUrl(item.Type === 'Episode' && item.SeriesId != null ? String(item.SeriesId) : String(item.Id))
+                poster_path = mediaService.getItemImageUrl(item.Type === 'Episode' && item.SeriesId != null ? String(item.SeriesId) : String(item.Id))
             }
 
             const lastPlayedDate = item.UserData?.LastPlayedDate 
@@ -216,7 +216,7 @@ export async function fetchUserRecommendations(page: number = 1) {
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const embyService = await getEmbyServiceForUser()
+        const mediaService = await getMediaServerServiceForUser()
         const tmdbService = await getTmdbServiceForUser()
         
         if (!tmdbService) return { results: [], total_pages: 0 }
@@ -227,10 +227,12 @@ export async function fetchUserRecommendations(page: number = 1) {
 
         if (!dbUser) return { results: [], total_pages: 0 }
 
-        // 1. Get user's recent watch history from Emby
+        const mediaUserId = getMediaServerUserId(dbUser)
+
+        // 1. Get user's recent watch history from media server
         let history: EmbyItem[] = []
-        if (dbUser.embyUserId && embyService) {
-            const data = await embyService.getRecentlyPlayedItems(dbUser.embyUserId, 15)
+        if (mediaUserId && mediaService) {
+            const data = await mediaService.getRecentlyPlayedItems(mediaUserId, 15)
             history = Array.isArray(data.Items) ? data.Items : []
         }
 
@@ -250,8 +252,8 @@ export async function fetchUserRecommendations(page: number = 1) {
                 let tmdbId = item.ProviderIds?.Tmdb
                 const type = item.Type === 'Movie' ? 'movie' : (item.Type === 'Series' || item.Type === 'Episode' ? 'tv' : null)
                 
-                if (item.Type === 'Episode' && item.SeriesId && dbUser.embyUserId && embyService) {
-                    const series = await embyService.getItemDetails(String(item.SeriesId), dbUser.embyUserId)
+                if (item.Type === 'Episode' && item.SeriesId && mediaUserId && mediaService) {
+                    const series = await mediaService.getItemDetails(String(item.SeriesId), mediaUserId)
                     tmdbId = series?.ProviderIds?.Tmdb
                 }
 
@@ -333,7 +335,7 @@ export async function fetchServerTrends(page: number = 1) {
         const user = await getCurrentUser()
         if (!user) return { results: [], total_pages: 0 }
 
-        const embyService = await getEmbyServiceForUser()
+        const mediaService = await getMediaServerServiceForUser()
         const tmdbService = await getTmdbServiceForUser()
         
         if (!tmdbService) return { results: [], total_pages: 0 }
@@ -377,10 +379,10 @@ export async function fetchServerTrends(page: number = 1) {
         const seenTmdbIds = new Set<string>()
 
         // Process watched items first
-        if (embyService && topWatchedArray.length > 0) {
+        if (mediaService && topWatchedArray.length > 0) {
             for (const watch of topWatchedArray) {
                 try {
-                    const itemDetails = await embyService.getItemDetails(watch.itemId)
+                    const itemDetails = await mediaService.getItemDetails(watch.itemId)
                     const tmdbId = itemDetails.ProviderIds?.Tmdb
                     const mediaType = watch.itemType?.toLowerCase() === 'series' || watch.itemType?.toLowerCase() === 'episode' ? 'tv' : 'movie'
                     
@@ -439,17 +441,17 @@ export async function toggleFavorite(itemId: string, isFavorite: boolean) {
         const user = await getCurrentUser()
         if (!user || !user.email) return false
 
-        const embyService = await getEmbyServiceForUser()
-        if (!embyService) return false
+        const mediaService = await getMediaServerServiceForUser()
+        if (!mediaService) return false
 
         const dbUser = await db.query.users.findFirst({
             where: eq(users.email, user.email)
         })
 
-        if (!dbUser || !dbUser.embyUserId) return false
+        const userId = getMediaServerUserId(dbUser)
+        if (!userId) return false
         
-        const userId = dbUser.embyUserId
-        await embyService.updateFavoriteStatus(userId, itemId, isFavorite)
+        await mediaService.updateFavoriteStatus(userId, itemId, isFavorite)
         revalidatePath('/')
         return true
     } catch (e) {

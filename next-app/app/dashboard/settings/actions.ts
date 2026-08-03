@@ -7,7 +7,7 @@ import { importPlexHistory } from '@/lib/plex-import'
 import { importJellyseerrRequests } from '@/lib/jellyseerr-import'
 import { JellyseerrService } from '@/lib/services/jellyseerr'
 import { revalidatePath } from 'next/cache'
-import { getCurrentUser, getTmdbServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getMediaServerServiceForUser, getMediaServerType, getTmdbServiceForUser } from '@/lib/auth'
 import { UnraidService } from '@/lib/services/unraid'
 import { QBittorrentService } from '@/lib/services/qbittorrent'
 
@@ -34,7 +34,6 @@ export async function testQBittorrentConnectionAction(url: string, username?: st
     }
 }
 
-import { EmbyService } from '@/lib/services/emby'
 
 export async function approveAccountRequestAction(requestId: string, templateUserId?: string, customName?: string) {
     try {
@@ -64,71 +63,67 @@ export async function approveAccountRequestAction(requestId: string, templateUse
             return { success: true, message: 'Demande approuvée (utilisateur existant).' }
         }
 
-        // Emby Integration: Create User and Apply Template if requested
-        let embyMessage = '';
+        // Media Server Integration: Create User and Apply Template if requested
+        let mediaServerMessage = '';
         
         try {
-            // Fetch Emby settings
-            const settingsList = await db.select().from(settingsTable).where(inArray(settingsTable.key, ['emby_url', 'emby_api_key']));
+            const mediaService = await getMediaServerServiceForUser()
+            const serverType = await getMediaServerType()
+            const serverName = serverType === 'jellyfin' ? 'Jellyfin' : 'Emby'
             
-            const embyUrl = settingsList.find((s: any) => s.key === 'emby_url')?.value;
-            const embyApiKey = settingsList.find((s: any) => s.key === 'emby_api_key')?.value;
-
-            if (embyUrl && embyApiKey) {
-                const embyService = new EmbyService(embyUrl, embyApiKey)
-                
-                // 1. Create User in Emby
+            if (mediaService) {
+                // 1. Create User in media server
                 const newUserName = customName || request.firstName
                 
-                let newEmbyUser;
+                let newMediaUser;
                 try {
-                    newEmbyUser = await embyService.createUser(newUserName)
+                    newMediaUser = await mediaService.createUser(newUserName)
                 } catch (e) {
                         // If creation fails, try to find existing user
-                        logger.error("Emby create user failed:", e)
-                        const users = await embyService.getUsers()
-                        newEmbyUser = users.find((u: { Name?: string }) => u.Name === newUserName)
-                        if (!newEmbyUser) {
-                             embyMessage = ` (Échec création Emby: ${(e as Error).message})`
+                        logger.error(`${serverName} create user failed:`, e)
+                        const users = await mediaService.getUsers()
+                        newMediaUser = users.find((u: { Name?: string }) => u.Name === newUserName)
+                        if (!newMediaUser) {
+                             mediaServerMessage = ` (Échec création ${serverName}: ${(e as Error).message})`
                              // Don't throw, proceed with just approval
                         }
                 }
 
-                if (newEmbyUser && newEmbyUser.Id) {
+                if (newMediaUser && newMediaUser.Id) {
                     // 2. Get Template User Policy (if template provided)
                     if (templateUserId) {
-                        const templateUser = await embyService.getUser(templateUserId)
+                        const templateUser = await mediaService.getUser(templateUserId)
                         
                         if (templateUser) {
                             // 3. Apply Policy to New User
                             if (templateUser.Policy) {
-                                await embyService.updateUserPolicy(newEmbyUser.Id, templateUser.Policy)
+                                await mediaService.updateUserPolicy(newMediaUser.Id, templateUser.Policy)
                             }
                             // 4. Apply Configuration
                             if (templateUser.Configuration) {
-                                await embyService.updateUserConfiguration(newEmbyUser.Id, templateUser.Configuration)
+                                await mediaService.updateUserConfiguration(newMediaUser.Id, templateUser.Configuration)
                             }
                         }
                     }
 
                     // 5. Link Emby Connect (Using specific endpoint)
                     // Check if already linked from creation
-                    const userToUpdate = await embyService.getUser(newEmbyUser.Id)
+                    const userToUpdate = await mediaService.getUser(newMediaUser.Id)
                     if (userToUpdate.ConnectUserName === request.email) {
-                         embyMessage = ' Utilisateur Emby créé et lié (via création).'
+                         mediaServerMessage = ` Utilisateur ${serverName} créé et lié (via création).`
                     } else {
                         try {
-                            await embyService.linkUserToConnect(newEmbyUser.Id, request.email)
-                            embyMessage = ' Utilisateur Emby créé et lié (invitation envoyée).'
+                            await mediaService.linkUserToConnect(newMediaUser.Id, request.email)
+                            mediaServerMessage = ` Utilisateur ${serverName} créé et lié (invitation envoyée).`
                         } catch (e) {
-                            embyMessage = ` (Attention: Erreur liaison Emby Connect - ${(e as Error).message})`
+                            mediaServerMessage = ` (Attention: Erreur liaison ${serverName} Connect - ${(e as Error).message})`
                         }
                     }
                 }
             }
         } catch (error) {
-            logger.error("Emby automation failed:", error)
-            embyMessage = ` (Attention: Erreur Emby - ${(error as Error).message})`
+            logger.error("Media server automation failed:", error)
+            mediaServerMessage = ` (Attention: Erreur serveur média - ${(error as Error).message})`
         }
 
 
@@ -152,7 +147,7 @@ export async function approveAccountRequestAction(requestId: string, templateUse
         }
 
         revalidatePath('/dashboard/settings')
-        return { success: true, message: `Demande approuvée.${embyMessage}` }
+        return { success: true, message: `Demande approuvée.${mediaServerMessage}` }
     } catch (error) {
         return { success: false, message: (error as Error).message }
     }

@@ -3,7 +3,6 @@
 import { getQBittorrentService } from '@/lib/services/qbittorrent'
 import { QBittorrentCache } from '@/lib/services/qbittorrent-cache'
 import { getTmdbService } from '@/lib/services/tmdb'
-import { getIGDBService } from '@/lib/services/igdb'
 import { getProwlarrService } from '@/lib/services/prowlarr'
 import { parseTorrentName, ParsedTorrentName, MediaType } from '@/lib/torrent-parser'
 import { checkAccess } from '../actions'
@@ -21,8 +20,6 @@ interface TmdbCastMember {
   profile_path?: string
   roles?: Array<{ character: string }>
 }
-interface IgdbPlatform { name: string }
-interface IgdbGameMode { name: string }
 
 const isDev = process.env.NODE_ENV === 'development'
 const log = (...args: unknown[]) => { if (isDev) console.log(...args) }
@@ -136,7 +133,6 @@ export interface MediaInfo {
   tagline?: string;
   status?: string;
   tmdbId?: number;
-  igdbId?: number
   publishers?: string[]
   gameModes?: string[]
   // Common
@@ -168,8 +164,6 @@ export async function getTorrentDetails(hash: string): Promise<EnrichedTorrentIn
 
     if (parsed.mediaType === 'movie' || parsed.mediaType === 'tv') {
       mediaInfo = await fetchTMDBInfo(parsed)
-    } else if (parsed.mediaType === 'game') {
-      mediaInfo = await fetchIGDBInfo(parsed)
     }
 
     return {
@@ -310,71 +304,6 @@ async function fetchTMDBInfo(parsed: ParsedTorrentName): Promise<MediaInfo | nul
     return result
   } catch (e) {
     error('[TMDB] Error fetching info:', e)
-    return null
-  }
-}
-
-/**
- * Fetch IGDB info for games
- */
-async function fetchIGDBInfo(parsed: ParsedTorrentName): Promise<MediaInfo | null> {
-  const igdbService = getIGDBService()
-  
-  try {
-    const searchQuery = parsed.title
-    log('[IGDB] Searching for:', searchQuery)
-
-    const games = await igdbService.searchGames(searchQuery, 5)
-    
-    if (!games || games.length === 0) {
-      log('[IGDB] No results found')
-      return null
-    }
-
-    // Find best match - prefer exact match, then closest
-    let bestMatch = games[0]
-    
-    for (const game of games) {
-      if (game.name.toLowerCase() === searchQuery.toLowerCase()) {
-        bestMatch = game
-        break
-      }
-    }
-
-    // Get full details
-    const gameDetails = await igdbService.getGameById(bestMatch.id)
-    
-    if (!gameDetails) {
-      return null
-    }
-
-    // Build external URL (Steam if available, otherwise IGDB)
-    let externalUrl = `https://www.igdb.com/games/${gameDetails.name.toLowerCase().replace(/\s+/g, '-')}`
-    const steamWebsite = gameDetails.websites?.find(w => w.url.includes('store.steampowered.com'))
-    if (steamWebsite) {
-      externalUrl = steamWebsite.url
-    }
-
-    const result: MediaInfo = {
-      mediaType: 'game',
-      title: gameDetails.name,
-      overview: gameDetails.summary || gameDetails.storyline,
-      posterUrl: igdbService.getCoverUrl(gameDetails.cover) || undefined,
-      backdropUrl: gameDetails.artworks?.[0] ? igdbService.getImageUrl(gameDetails.artworks[0], '1080p') || undefined : undefined,
-      year: gameDetails.first_release_date ? new Date(gameDetails.first_release_date * 1000).getFullYear() : undefined,
-      vote_average: gameDetails.aggregated_rating ? gameDetails.aggregated_rating / 10 : (gameDetails.rating ? gameDetails.rating / 10 : undefined),
-      igdbId: gameDetails.id,
-      platforms: (gameDetails.platforms || []).map((p: IgdbPlatform) => p.name),
-      developers: igdbService.getDevelopers(gameDetails.involved_companies),
-      publishers: igdbService.getPublishers(gameDetails.involved_companies),
-      gameModes: (gameDetails.game_modes || []).map((m: IgdbGameMode) => m.name),
-      externalUrl
-    }
-
-    log('[IGDB] Found info:', result.title, result.year)
-    return result
-  } catch (e) {
-    error('[IGDB] Error fetching info:', e)
     return null
   }
 }

@@ -65,6 +65,79 @@ $VersionTag = "v$TargetVersion"
 $MinorVersion = $TargetVersion -replace '\.\d+$', '' # ex: 1.0.0 -> 1.0
 $MinorVersionTag = "v$MinorVersion"
 
+# --- Saisie du changelog ---
+Write-Host ""
+Write-Host "=== Saisie du changelog pour la version $TargetVersion ===" -ForegroundColor Cyan
+Write-Host "Entrez les modifications pour chaque catégorie."
+Write-Host "Pour chaque catégorie, tapez vos entrées une par une."
+Write-Host "Laissez vide et appuyez sur Entrée pour passer à la suivante."
+Write-Host "Si vous ne mettez rien du tout, aucune section ne sera ajoutée."
+Write-Host ""
+
+$Categories = @("Added", "Changed", "Fixed", "In Progress")
+$ChangelogSections = @{}
+
+foreach ($Category in $Categories) {
+    Write-Host "[$Category] - Appuyez sur Entrée sans rien taper pour passer cette catégorie" -ForegroundColor Yellow
+    $Entries = @()
+    while ($true) {
+        $Entry = Read-Host "  - $Category (Entrée pour terminer cette catégorie)"
+        if ([string]::IsNullOrWhiteSpace($Entry)) {
+            break
+        }
+        $Entries += $Entry.Trim()
+    }
+    if ($Entries.Count -gt 0) {
+        $ChangelogSections[$Category] = $Entries
+    }
+}
+
+# Construire la section changelog si au moins une catégorie a des entrées
+$ChangelogBlock = ""
+if ($ChangelogSections.Count -gt 0) {
+    $Today = Get-Date -Format "yyyy-MM-dd"
+    $ChangelogBlock = "## [$TargetVersion] - $Today`r`n`r`n"
+    foreach ($Category in $Categories) {
+        if ($ChangelogSections.ContainsKey($Category)) {
+            $ChangelogBlock += "### $Category`r`n"
+            foreach ($Entry in $ChangelogSections[$Category]) {
+                $ChangelogBlock += "- $Entry`r`n"
+            }
+            $ChangelogBlock += "`r`n"
+        }
+    }
+}
+
+# Écrire le changelog dans CHANGELOG.md
+$ChangelogPath = Join-Path $NextAppPath "CHANGELOG.md"
+if ($ChangelogBlock -ne "") {
+    Write-Host ""
+    Write-Host "Écriture du changelog dans CHANGELOG.md..." -ForegroundColor Yellow
+    if (Test-Path $ChangelogPath) {
+        $ExistingContent = Get-Content $ChangelogPath -Raw
+        # Insérer le nouveau bloc après l'en-tête (après la ligne d'introduction)
+        # On cherche la première occurrence de "## [" pour insérer avant
+        if ($ExistingContent -match "(?s)^(.*?)(## \[)") {
+            $Header = $Matches[1]
+            $Rest = $ExistingContent.Substring($Matches[1].Length)
+            $NewContent = $Header + $ChangelogBlock + $Rest
+            Set-Content $ChangelogPath $NewContent -NoNewline
+        } else {
+            # Pas de version existante, on ajoute à la fin
+            $NewContent = $ExistingContent.TrimEnd() + "`r`n`r`n" + $ChangelogBlock
+            Set-Content $ChangelogPath $NewContent -NoNewline
+        }
+    } else {
+        # Créer le fichier s'il n'existe pas
+        $Header = "# Changelog`r`n`r`nToutes les modifications notables de ce projet seront documentées dans ce fichier.`r`n`r`n"
+        Set-Content $ChangelogPath ($Header + $ChangelogBlock) -NoNewline
+    }
+    Write-Host "Changelog mis à jour avec succès." -ForegroundColor Green
+} else {
+    Write-Host ""
+    Write-Host "Aucune entrée de changelog saisie - CHANGELOG.md non modifié." -ForegroundColor DarkGray
+}
+
 Write-Host ""
 Write-Host "--- Résumé de la publication ---" -ForegroundColor Cyan
 Write-Host "Version cible : $TargetVersion" -ForegroundColor Green

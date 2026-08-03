@@ -8,7 +8,7 @@ export const SystemUpdate = () => {
     const [selectedTag, setSelectedTag] = useState<string>('')
     const [expandedChangelog, setExpandedChangelog] = useState<string | null>(null)
     const [showTerminal, setShowTerminal] = useState(false)
-    const terminalEndRef = useRef<HTMLDivElement>(null)
+    const terminalScrollRef = useRef<HTMLDivElement>(null)
 
     const hasUpdates = status && (status.app.updateAvailable || (status.tracker?.updateAvailable))
     
@@ -36,8 +36,8 @@ export const SystemUpdate = () => {
 
     // Scroll to bottom of terminal whenever logs change
     useEffect(() => {
-        if (terminalEndRef.current) {
-            terminalEndRef.current.scrollIntoView({ behavior: 'smooth' })
+        if (terminalScrollRef.current) {
+            terminalScrollRef.current.scrollTop = terminalScrollRef.current.scrollHeight
         }
     }, [updateLogs, showTerminal])
 
@@ -143,11 +143,10 @@ export const SystemUpdate = () => {
                         </div>
                     )}
 
-                    <div className="bg-black/90 border-x border-b border-zinc-800 rounded-b-xl p-4 font-mono text-xs text-zinc-300 h-80 overflow-y-auto leading-relaxed select-text shadow-inner">
+                    <div ref={terminalScrollRef} className="bg-black/90 border-x border-b border-zinc-800 rounded-b-xl p-4 font-mono text-xs text-zinc-300 h-80 overflow-y-auto leading-relaxed select-text shadow-inner">
                         <div className="whitespace-pre-wrap">
                             {updateLogs || "Initialisation de la console..."}
                         </div>
-                        <div ref={terminalEndRef} />
                     </div>
 
                     {updateState === 'success' && (

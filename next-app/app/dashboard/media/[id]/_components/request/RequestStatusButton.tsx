@@ -1,6 +1,7 @@
 'use client'
 
 import { Check, Download, Loader2, Plus } from 'lucide-react'
+import { useMediaServerType } from '@/app/dashboard/_hooks/useMediaServerType'
 
 interface RequestStatusButtonProps {
   status: string
@@ -23,6 +24,8 @@ export function RequestStatusButton({
   onSeasonClick,
   onStatusClick,
 }: RequestStatusButtonProps) {
+  const serverType = useMediaServerType()
+  const serverName = serverType === 'jellyfin' ? 'Jellyfin' : 'Emby'
   if (status === 'partial') {
     return (
       <div className="flex gap-2">
@@ -54,7 +57,7 @@ export function RequestStatusButton({
           className="flex items-center gap-2 rounded-full bg-green-600/20 hover:bg-green-600/30 px-6 py-3 font-semibold text-green-400 border border-green-500/30 cursor-pointer backdrop-blur-sm transition-all"
         >
           <Check className="h-5 w-5" />
-          Disponible sur Emby
+          Disponible sur {serverName}
         </button>
         {canRequest && hasUnrequestedSeasons && (
           <button

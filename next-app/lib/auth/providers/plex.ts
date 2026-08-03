@@ -3,6 +3,7 @@ import { db } from "@/lib/db/drizzle"
 import { users, settings as settingsTable, roles } from "@/lib/db/schema"
 import { eq, sql } from "drizzle-orm"
 import { PlexService } from "@/lib/services/plex"
+import { checkRateLimit, registerLoginFailure, clearRateLimit } from "../rate-limiter"
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -16,7 +17,18 @@ export const plexProvider = CredentialsProvider({
     password: { label: "Password", type: "password" },
     token: { label: "Token", type: "text" }
   },
-  async authorize(credentials) {
+  async authorize(credentials, req) {
+    // Récupérer l'IP du client depuis les en-têtes
+    const reqHeaders = req?.headers as any
+    const ip = reqHeaders?.['x-forwarded-for']?.split(',')[0]?.trim() || reqHeaders?.['x-real-ip'] || '127.0.0.1'
+    const username = credentials?.username || credentials?.token || 'unknown'
+
+    // Vérifier si l'utilisateur/IP est actuellement bloqué
+    const rateCheck = await checkRateLimit(ip, username, 'plex')
+    if (!rateCheck.allowed) {
+      throw new Error(`Trop de tentatives de connexion via Plex. Réessayez dans ${rateCheck.timeLeft} minute(s).`)
+    }
+
     if (!db) throw new Error("Erreur technique: Base de données non prête")
 
     // Check if Plex auth is enabled
@@ -133,6 +145,8 @@ export const plexProvider = CredentialsProvider({
 
       const effectiveRole = (user as any)?.roleRef?.name || user?.role
 
+      await clearRateLimit(ip, username, 'plex')
+
       return {
         id: user?.id?.toString() || '',
         email: user?.email || '',
@@ -147,6 +161,7 @@ export const plexProvider = CredentialsProvider({
       }
     } catch (e: any) {
       error("[Auth] Plex Authorize error:", e)
+      await registerLoginFailure(ip, username, 'plex')
       throw new Error(e.message || "Erreur d'authentification Plex")
     }
   }

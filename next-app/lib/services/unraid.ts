@@ -18,6 +18,20 @@ export interface UnraidContainer {
   icon?: string
 }
 
+export interface UnraidContainerStats {
+  cpu: number
+  memory: {
+    used: number
+    limit: number
+    percent: number
+  }
+  network: {
+    rx: number
+    tx: number
+  }
+  pids: number
+}
+
 interface GraphQLData {
   array?: { capacity?: { kilobytes?: { total?: string; used?: string; free?: string }; bytes?: { total?: string; used?: string; free?: string } } }
   storage?: { array?: { size?: string; used?: string; free?: string } }
@@ -58,7 +72,7 @@ export class UnraidService {
             'Content-Type': 'application/json',
             'x-api-key': this.apiKey,
           },
-          timeout: 5000,
+          timeout: 10000,
         }
       )
   }
@@ -105,6 +119,32 @@ export class UnraidService {
           }
       }
       return false
+  }
+
+  async getContainerStats(containerId: string): Promise<UnraidContainerStats | null> {
+    const endpoints = [
+        this.url.endsWith('/graphql') ? this.url : `${this.url}/graphql`,
+        this.url
+    ]
+    const uniqueEndpoints = [...new Set(endpoints)]
+
+    // Try to get stats from Unraid API
+    // Note: Unraid API may not expose detailed stats via GraphQL
+    // This is a placeholder that returns null to fall back to Docker socket
+    return null
+  }
+
+  async getContainerLogs(containerId: string, tail: number = 100): Promise<string | null> {
+    const endpoints = [
+        this.url.endsWith('/graphql') ? this.url : `${this.url}/graphql`,
+        this.url
+    ]
+    const uniqueEndpoints = [...new Set(endpoints)]
+
+    // Try to get logs from Unraid API
+    // Note: Unraid API may not expose logs via GraphQL
+    // This is a placeholder that returns null to fall back to Docker socket
+    return null
   }
 
   async getStorageStats(): Promise<UnraidStorageInfo | null> {

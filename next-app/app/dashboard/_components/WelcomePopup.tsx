@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { X, LayoutDashboard, Send, BarChart3, Download, Film, Info, Sparkles } from 'lucide-react'
 import { markWelcomeAsSeen } from '@/app/dashboard/actions'
+import { useMediaServerType } from '@/app/dashboard/_hooks/useMediaServerType'
 import clsx from 'clsx'
 
 interface WelcomePopupProps {
@@ -15,6 +16,8 @@ export function WelcomePopup({ show, userRole }: WelcomePopupProps) {
     const [closing, setClosing] = useState(false)
 
     const isAdminOrUserPlus = userRole === 'admin' || userRole === 'user_plus'
+    const serverType = useMediaServerType()
+    const serverName = serverType === 'jellyfin' ? 'Jellyfin' : 'Emby'
 
     useEffect(() => {
         if (show) {
@@ -60,7 +63,7 @@ export function WelcomePopup({ show, userRole }: WelcomePopupProps) {
         {
             icon: <Film className="w-5 h-5 text-red-400" />,
             title: "Médiathèque",
-            description: "Explorez tout le contenu disponible sur Emby directement d'ici.",
+            description: `Explorez tout le contenu disponible sur ${serverName} directement d'ici.`,
             show: true
         }
     ].filter(f => f.show)

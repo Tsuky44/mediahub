@@ -2,10 +2,12 @@
 
 import { FileInfo, SmbService } from '@/lib/services/smb';
 import { FtpService } from '@/lib/services/ftp';
+import { LocalService } from '@/lib/services/local';
 import { UnraidService } from '@/lib/services/unraid';
 import { db } from '@/lib/db/drizzle';
 import { fileShares } from '@/lib/db/schema';
 import { v4 as uuidv4 } from 'uuid';
+import { eq, desc } from 'drizzle-orm';
 import axios from 'axios';
 import https from 'https';
 import { getStorageServiceForUser, authOptions } from '@/lib/auth';
@@ -29,7 +31,7 @@ export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[
     }
 }
 
-export async function createPublicShare(filePath: string, expiresDays?: number) {
+export async function createPublicShare(filePath: string, expiresDays?: number, password?: string) {
     try {
         await checkAccess('downloads.share_files');
         const session = await getServerSession(authOptions);
@@ -43,6 +45,7 @@ export async function createPublicShare(filePath: string, expiresDays?: number) 
         const inserted = await db.insert(fileShares).values({
             filePath,
             token,
+            password: password || null,
             expiresAt,
             createdAt: new Date()
         }).returning();
@@ -52,6 +55,44 @@ export async function createPublicShare(filePath: string, expiresDays?: number) 
     } catch (e) {
         logger.error('Failed to create public share', e);
         return { success: false, error: 'Erreur lors de la création du lien de partage' };
+    }
+}
+
+export interface ShareListItem {
+    id: string
+    filePath: string
+    token: string
+    hasPassword: boolean
+    expiresAt: Date | null
+    createdAt: Date
+}
+
+export async function listPublicShares(): Promise<ShareListItem[]> {
+    try {
+        await checkAccess('downloads.share_files');
+        const rows = await db.select().from(fileShares).orderBy(desc(fileShares.createdAt));
+        return rows.map((row) => ({
+            id: row.id,
+            filePath: row.filePath,
+            token: row.token,
+            hasPassword: !!row.password,
+            expiresAt: row.expiresAt,
+            createdAt: row.createdAt,
+        }));
+    } catch (e) {
+        logger.error('Failed to list public shares', e);
+        return [];
+    }
+}
+
+export async function deletePublicShare(id: string) {
+    try {
+        await checkAccess('downloads.share_files');
+        await db.delete(fileShares).where(eq(fileShares.id, id));
+        return { success: true };
+    } catch (e) {
+        logger.error('Failed to delete public share', e);
+        return { success: false, error: 'Erreur lors de la suppression du lien' };
     }
 }
 
@@ -67,7 +108,7 @@ export async function testSmbConnection(config: { host: string, user: string, pa
 }
 
 export async function testStorageConnection(config: { 
-    protocol: 'smb' | 'ftp',
+    protocol: 'smb' | 'ftp' | 'local',
     host: string, 
     port?: string,
     user: string, 
@@ -77,7 +118,10 @@ export async function testStorageConnection(config: {
     secure?: boolean
 }) {
     try {
-        if (config.protocol === 'ftp') {
+        if (config.protocol === 'local') {
+            const localService = new LocalService(config.rootPath || '');
+            await localService.testConnection({ rootPath: config.rootPath });
+        } else if (config.protocol === 'ftp') {
             const ftpService = new FtpService(
                 config.host, 
                 config.port ? parseInt(config.port) : 21, 

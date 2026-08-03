@@ -1,7 +1,7 @@
 ﻿﻿﻿﻿﻿﻿import { NextResponse } from 'next/server'
 import { db } from '@/lib/db/drizzle'
 import { roles, permissions, users } from '@/lib/db/schema'
-import { eq, asc, sql } from 'drizzle-orm'
+import { eq, asc } from 'drizzle-orm'
 import { getRealUser } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -14,9 +14,22 @@ export async function GET() {
   }
 
   const rolesList = await db.select().from(roles).orderBy(asc(roles.name))
-  // TODO: Fetch permissions and user counts separately if needed
 
-  return NextResponse.json(rolesList)
+  const rolesWithPermissions = await Promise.all(
+    rolesList.map(async (role) => {
+      const perms = await db.select().from(permissions).where(eq(permissions.roleId, role.id))
+      return {
+        ...role,
+        permissions: perms.map(p => ({
+          action: p.action,
+          subject: p.subject,
+          conditions: p.conditions ? JSON.parse(p.conditions) : undefined,
+        })),
+      }
+    })
+  )
+
+  return NextResponse.json(rolesWithPermissions)
 }
 
 export async function POST(request: Request) {
@@ -27,7 +40,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { name, description, permissions } = await request.json()
+    const { name, description, permissions: permissionList } = await request.json()
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
@@ -39,9 +52,9 @@ export async function POST(request: Request) {
     }).returning()
     
     // Insert permissions separately
-    if (permissions && permissions.length > 0 && role) {
+    if (permissionList && permissionList.length > 0 && role) {
       await db.insert(permissions).values(
-        permissions.map((p: any) => ({
+        permissionList.map((p: any) => ({
           roleId: role.id,
           action: p.action,
           subject: p.subject,

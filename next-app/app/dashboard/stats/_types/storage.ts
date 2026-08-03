@@ -10,6 +10,8 @@ export interface StorageItem {
     addedAt: string
     tmdbId?: number
     tvdbId?: number
+    lastPlayedDate?: string | null
+    requestedAt?: string | null
 }
 
 export interface SeasonStat {
@@ -50,4 +52,37 @@ export interface ItemDetails {
 export interface DeleteTarget {
     item: StorageItem
     season?: SeasonDetail
+}
+
+export interface StorageTotals {
+    all: number
+    movies: number
+    series: number
+}
+
+export interface StorageListResponse {
+    items: StorageItem[]
+    totals: StorageTotals
+    pagination: StoragePagination
+    cacheReady?: {
+        movies: boolean
+        series: boolean
+        totals: boolean
+    }
+}
+
+export interface StoragePagination {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+    hasMore: boolean
+}
+
+export type StorageSortKey = 'size' | 'lastPlayed' | 'requested'
+export type StorageSortDir = 'asc' | 'desc'
+
+export interface StorageSort {
+    key: StorageSortKey
+    dir: StorageSortDir
 }

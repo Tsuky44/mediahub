@@ -6,27 +6,42 @@ RUN npm install -g pnpm@9.15.0
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat python3 make g++ curl
+RUN apk add --no-cache libc6-compat python3 make g++ curl sqlite-dev openssl-dev
 WORKDIR /app
 
-# Pre-populate node-gyp headers cache from official nodejs.org/dist so that
-# native modules (better-sqlite3, cpu-features) do not attempt to fetch from
-# unofficial-builds.nodejs.org (which is unreachable inside Docker BuildKit).
-RUN node -e "process.stdout.write(process.version.slice(1))" > /tmp/node_ver.txt \
-  && NODE_VER=$(cat /tmp/node_ver.txt) \
-  && mkdir -p /root/.cache/node-gyp/${NODE_VER} \
-  && curl -fsSL https://nodejs.org/dist/v${NODE_VER}/node-v${NODE_VER}-headers.tar.gz \
-     | tar -xz --strip-components=1 -C /root/.cache/node-gyp/${NODE_VER} \
-  && echo "9" > /root/.cache/node-gyp/${NODE_VER}/installVersion
+# Les modules natifs (better-sqlite3) compilent avec node-gyp, qui télécharge par
+# défaut les headers Node depuis le réseau. Dans Docker BuildKit / WSL2 le DNS peut
+# échouer (getaddrinfo EAI_AGAIN). On pré-télécharge les headers avec retries et on
+# force node-gyp à les utiliser localement (plus de requête réseau au build).
+RUN NODE_VERSION="$(node -p process.versions.node)" \
+  && set -e; ok=0; \
+  for i in 1 2 3 4 5; do \
+    curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 30 \
+      "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-headers.tar.gz" \
+      -o /tmp/node-headers.tar.gz && ok=1 && break; \
+    echo "node headers download attempt $i failed, retrying..."; sleep 5; \
+  done; \
+  if [ "$ok" -ne 1 ]; then echo "Failed to download Node headers" && exit 1; fi; \
+  tar -xzf /tmp/node-headers.tar.gz -C /usr/local --strip-components=1 \
+  && rm /tmp/node-headers.tar.gz
+
+ENV npm_config_disturl=https://nodejs.org/dist
+ENV npm_config_nodedir=/usr/local
+ENV PREBUILD_INSTALL_TIMEOUT=300000
+ENV npm_config_build_from_source=false
 
 # Install dependencies based on the preferred package manager
 COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
-RUN \
-  if [ -f pnpm-lock.yaml ]; then pnpm i --no-frozen-lockfile; \
-  elif [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+RUN set -e; \
+  for i in 1 2 3; do \
+    if [ -f pnpm-lock.yaml ]; then pnpm i --no-frozen-lockfile && exit 0; \
+    elif [ -f yarn.lock ]; then yarn --frozen-lockfile && exit 0; \
+    elif [ -f package-lock.json ]; then npm ci && exit 0; \
+    else echo "Lockfile not found." && exit 1; \
+    fi; \
+    echo "Dependency install attempt $i failed, retrying..."; sleep 10; \
+  done; \
+  echo "Dependency install failed after 3 attempts" && exit 1
 
 # Rebuild the source code only when needed
 FROM base AS builder

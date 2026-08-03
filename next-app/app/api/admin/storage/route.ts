@@ -7,18 +7,63 @@ import { getSetting } from '@/lib/settings'
 import { defineAbilityFor } from '@/lib/ability'
 import { db } from '@/lib/db/drizzle'
 import { mediaRequests, episodeBatches } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, inArray, or } from 'drizzle-orm'
+import type { StorageSortDir, StorageSortKey } from '@/app/dashboard/stats/_types/storage'
+import {
+    fetchMoviesPage,
+    fetchSeriesPage,
+    getStorageTotalsIfCached,
+    mapEmbyItemToStorageRow,
+    invalidateStorageListCache,
+    scheduleStorageCacheWarmup,
+    isFreshMovieCache,
+    isFreshSeriesCache,
+} from '@/lib/services/storage-list'
+import { getCachedLastPlayedDatesForStorage } from '@/lib/services/item-viewing-stats'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
 const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
 const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
+const DEFAULT_PAGE_SIZE = 50
+const MAX_PAGE_SIZE = 100
+const VALID_SORT_KEYS: StorageSortKey[] = ['size', 'lastPlayed', 'requested']
+const VALID_SORT_DIRS: StorageSortDir[] = ['asc', 'desc']
+
+function parseSort(
+    sortBy: string | null,
+    sortDir: string | null
+): { sortKey?: StorageSortKey; sortDir?: StorageSortDir } {
+    const sortKey = VALID_SORT_KEYS.includes(sortBy as StorageSortKey)
+        ? (sortBy as StorageSortKey)
+        : undefined
+    const dir = VALID_SORT_DIRS.includes(sortDir as StorageSortDir)
+        ? (sortDir as StorageSortDir)
+        : undefined
+    return { sortKey, sortDir: dir }
+}
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 120
 
 export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const typeParam = searchParams.get('type')
+    const typeFilter: 'Movie' | 'Series' =
+      typeParam === 'Series' ? 'Series' : 'Movie'
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)
+    const limit = Math.min(
+      MAX_PAGE_SIZE,
+      Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE)
+    )
+    const search = searchParams.get('search')?.trim() || undefined
+    const { sortKey, sortDir } = parseSort(
+        searchParams.get('sortBy'),
+        searchParams.get('sortDir')
+    )
+
     const user = await getRealUser() as { role: string }
     const ability = defineAbilityFor(user)
 
@@ -35,95 +80,119 @@ export async function GET(request: Request) {
 
     const embyService = new EmbyService(embyUrl, embyApiKey)
 
-    const items = await embyService.getStorageItems()
-    const activeSessions: Array<Record<string, unknown>> = []
+    // Cache en arrière-plan uniquement — ne pas bloquer ni surcharger Emby pendant la page.
+    scheduleStorageCacheWarmup(embyService)
 
-    // 3. Process and Group items
-    const movies: Array<Record<string, unknown>> = []
-    const seriesMap = new Map<string, Record<string, unknown>>()
+    const pageResult = typeFilter === 'Movie'
+      ? await fetchMoviesPage(embyService, page, limit, search, sortKey, sortDir)
+      : await fetchSeriesPage(embyService, page, limit, search, sortKey, sortDir)
 
-    // First pass: Initialize Series
-    for (const item of items) {
-      if (item.Type === 'Series') {
-        seriesMap.set(item.Id, {
-          id: item.Id,
-          name: item.Name,
-          type: 'Series',
-          size: 0,
-          path: item.Path,
-          isPlaying: false,
-          activeUser: null,
-          episodesCount: 0,
-          addedAt: item.DateCreated,
-          tvdbId: item.ProviderIds?.Tvdb
-        })
-      }
-    }
+    const totals = getStorageTotalsIfCached() ?? { all: 0, movies: 0, series: 0 }
 
-    // Second pass: Process Episodes and Movies
-    for (const item of items) {
-      let size = 0
-      if (item.MediaSources && item.MediaSources.length > 0) {
-        size = item.MediaSources.reduce((acc: number, src: Record<string, unknown>) => acc + ((src.Size as number) || 0), 0)
-      }
+    const rows = pageResult.items.map(item =>
+      typeFilter === 'Movie'
+        ? mapEmbyItemToStorageRow(item, 'Movie')
+        : mapEmbyItemToStorageRow(item, 'Series', {
+            size: item._size as number,
+            episodesCount: item._episodesCount as number,
+          })
+    )
 
-      const activeSession = activeSessions.find(s => s.itemId === item.Id || (item.Type === 'Episode' && s.itemId === item.Id))
-      const isPlaying = !!activeSession
-      const activeUser = activeSession?.userName
+    const pageIds = rows.map(r => String(r.id))
 
-      if (item.Type === 'Movie') {
-        movies.push({
-          id: item.Id,
-          name: item.Name,
-          type: 'Movie',
-          size,
-          path: item.Path,
-          isPlaying,
-          activeUser,
-          addedAt: item.DateCreated,
-          tmdbId: item.ProviderIds?.Tmdb
-        })
-      } else if (item.Type === 'Episode') {
-        const seriesId = item.SeriesId
-        if (!seriesId) continue
+    // Dates "Regardé" : cache DB uniquement pour la page courante (rapide).
+    try {
+      if (pageIds.length > 0) {
+        const dates =
+          typeFilter === 'Movie'
+            ? await getCachedLastPlayedDatesForStorage(pageIds, [], new Map())
+            : await getCachedLastPlayedDatesForStorage([], pageIds, new Map())
 
-        let series = seriesMap.get(seriesId)
-        
-        // If series not found (maybe not returned by Emby query?), create it from episode info
-        if (!series) {
-             series = {
-                id: seriesId,
-                name: item.SeriesName || 'Unknown Series',
-                type: 'Series',
-                size: 0,
-                path: item.Path,
-                isPlaying: false,
-                activeUser: null,
-                episodesCount: 0,
-                addedAt: item.DateCreated,
-                tvdbId: null // Missing if series object not found
-             }
-             seriesMap.set(seriesId, series)
-        }
-
-        const typedSeries = series as { size: number; episodesCount: number }
-        typedSeries.size += size
-        typedSeries.episodesCount += 1
-        
-        if (isPlaying) {
-          series.isPlaying = true
-          series.activeUser = activeUser
+        for (const row of rows) {
+          row.lastPlayedDate = dates[String(row.id)] ?? null
         }
       }
+    } catch (e) {
+      warn('Storage API: last played resolution failed:', (e as Error).message)
     }
 
-    const series = Array.from(seriesMap.values())
-    const allItems = [...movies, ...series].sort((a, b) => ((b as { size?: number }).size || 0) - ((a as { size?: number }).size || 0))
+    // Dates de demande : requête ciblée sur les ids de la page uniquement.
+    try {
+      if (pageIds.length > 0) {
+        const tmdbIds = rows
+          .map(r => (r.tmdbId != null ? String(r.tmdbId) : null))
+          .filter((id): id is string => !!id)
 
-    return NextResponse.json(allItems)
+        const conditions = [inArray(mediaRequests.embyItemId, pageIds)]
+        if (tmdbIds.length > 0) conditions.push(inArray(mediaRequests.tmdbId, tmdbIds))
+
+        const requests = await db
+          .select({
+            tmdbId: mediaRequests.tmdbId,
+            embyItemId: mediaRequests.embyItemId,
+            requestedAt: mediaRequests.requestedAt,
+          })
+          .from(mediaRequests)
+          .where(or(...conditions))
+
+        const reqByEmbyId = new Map<string, number>()
+        const reqByTmdbId = new Map<string, number>()
+        for (const r of requests) {
+          const ms = r.requestedAt ? new Date(r.requestedAt).getTime() : NaN
+          if (isNaN(ms)) continue
+          if (r.embyItemId) {
+            const cur = reqByEmbyId.get(r.embyItemId)
+            if (cur === undefined || ms > cur) reqByEmbyId.set(r.embyItemId, ms)
+          }
+          if (r.tmdbId) {
+            const cur = reqByTmdbId.get(r.tmdbId)
+            if (cur === undefined || ms > cur) reqByTmdbId.set(r.tmdbId, ms)
+          }
+        }
+
+        for (const row of rows) {
+          const embyId = String(row.id)
+          const byEmby = reqByEmbyId.get(embyId)
+          if (byEmby !== undefined) {
+            row.requestedAt = new Date(byEmby).toISOString()
+            continue
+          }
+          if (typeFilter === 'Movie' && row.tmdbId != null) {
+            const byTmdb = reqByTmdbId.get(String(row.tmdbId))
+            if (byTmdb !== undefined) row.requestedAt = new Date(byTmdb).toISOString()
+          }
+        }
+      }
+    } catch (e) {
+      warn('Storage API: request date resolution failed:', (e as Error).message)
+    }
+
+    const total = pageResult.total
+    const totalPages = Math.max(1, Math.ceil(total / limit))
+
+    return NextResponse.json({
+      items: rows,
+      totals,
+      cacheReady: {
+        movies: isFreshMovieCache(),
+        series: isFreshSeriesCache(),
+        totals: getStorageTotalsIfCached() !== null,
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore: page < totalPages,
+      },
+    })
   } catch (err) {
+    const raw = (err as Error).message || 'Erreur inconnue'
     error('Storage API Error:', err)
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+    const message = raw.includes('502')
+      ? 'Emby/Jellyfin temporairement indisponible'
+      : raw
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
@@ -152,12 +221,9 @@ export async function DELETE(request: Request) {
 
     const embyService = new EmbyService(embyUrl, embyApiKey)
 
-    // Get item info before deletion to know parent for refresh (Series/Season)
     const itemInfo = await embyService.getItemDetails(itemId)
     const parentId = itemInfo?.SeriesId || itemInfo?.ParentId
 
-    // 1. Delete/Unmonitor from *Arr (Files first!)
-    // We prioritize deleting files so Emby doesn't re-scan them
     if (deleteFromArr) {
         if (type === 'Movie') {
             const radarrUrl = await getSetting('radarr_url')
@@ -198,10 +264,8 @@ export async function DELETE(request: Request) {
                  try {
                      const series = await sonarrService.getSeriesByTvdbId(providerId)
                      if (series && series.id) {
-                         // Unmonitor the season to prevent redownload
                          await sonarrService.unmonitorSeason(series.id, seasonNumber)
                          
-                         // Delete all episode files for this season
                          try {
                              const files = await sonarrService.getEpisodeFiles(series.id)
                              const seasonFiles = files.filter(f => f.seasonNumber === seasonNumber)
@@ -222,10 +286,8 @@ export async function DELETE(request: Request) {
         }
     }
 
-    // 2. Delete from Emby
     try {
         if (type === 'Season' && parentId && seasonNumber !== undefined) {
-            // Delete individual episodes first to ensure they are gone from stats/metadata immediately
             await embyService.deleteEpisodesBySeasonNumber(parentId, seasonNumber)
         }
         await embyService.deleteItem(itemId)
@@ -233,14 +295,11 @@ export async function DELETE(request: Request) {
         error('Failed to delete item from Emby:', e)
     }
 
-    // 3. Refresh Parent in Emby (if applicable)
-    // This forces Emby to realize the season/episodes are gone if deleteItem didn't fully clean up or if files were just removed
     if (parentId) {
         log(`Refreshing parent item ${parentId} in Emby`)
         await embyService.refreshItem(parentId)
     }
 
-    // 4. Supprimer les demandes locales liées (tmdbId pour films, ou via tvdbId pour séries)
     if (type === 'Movie' && providerId) {
         try {
             const tmdbIdStr = String(providerId)
@@ -255,10 +314,6 @@ export async function DELETE(request: Request) {
         }
     } else if ((type === 'Series') && providerId) {
         try {
-            // providerId is tvdbId for series — find tmdbId via requests that have tvdbId stored, or search by title
-            // Best effort: delete requests where tmdbId matches any stored request for this tvdbId
-            // The tmdbId is not available here directly, but we can purge by tvdbId if stored, or skip
-            // For now, we look up any request with this series' name via Emby item info
             if (itemInfo?.ProviderIds?.Tmdb) {
                 const tmdbIdStr = String(itemInfo.ProviderIds.Tmdb)
                 await db.delete(mediaRequests).where(eq(mediaRequests.tmdbId, tmdbIdStr))
@@ -273,6 +328,8 @@ export async function DELETE(request: Request) {
         }
     }
 
+    invalidateStorageListCache()
+
     return NextResponse.json({ success: true })
 
   } catch (err) {
@@ -280,4 +337,3 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }
-

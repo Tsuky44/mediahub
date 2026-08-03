@@ -32,6 +32,17 @@ export function StorageProtocolSelector({ protocol, onChange }: StorageProtocolS
         >
           FTP
         </button>
+        <button
+          type="button"
+          onClick={() => onChange('local')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            protocol === 'local'
+              ? 'bg-indigo-600 text-white'
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+        >
+          Local
+        </button>
       </div>
     </div>
   )

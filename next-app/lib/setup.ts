@@ -1,15 +1,25 @@
 import { db } from '@/lib/db/drizzle'
 import { settings } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
+import { and, inArray, isNotNull, ne } from 'drizzle-orm'
+
+const SETUP_MARKER_KEYS = ['setup_complete', 'emby_url', 'jellyfin_url'] as const
 
 export async function isAppConfigured() {
   try {
-    // Check if global settings are configured (specifically Emby URL)
-    const setting = await db.query.settings.findFirst({
-      where: eq(settings.key, 'emby_url'),
-      columns: { value: true }
-    })
-    return !!setting?.value
+    // Ne pas utiliser findFirst sur un OR : une ligne URL vide (ex. emby_url
+    // créée par une sauvegarde des paramètres) peut masquer jellyfin_url valide.
+    const rows = await db
+      .select({ value: settings.value })
+      .from(settings)
+      .where(
+        and(
+          inArray(settings.key, [...SETUP_MARKER_KEYS]),
+          isNotNull(settings.value),
+          ne(settings.value, ''),
+        ),
+      )
+
+    return rows.some((row) => !!row.value?.trim())
   } catch (err) {
     console.error('Failed to check app configuration:', err)
     return false

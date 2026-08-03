@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 
-const TRACKER_URL = process.env.TRACKER_WS_URL || (process.env.NODE_ENV === 'production' ? 'http://mediahub-tracker:3005' : 'http://localhost:3005');
+const TRACKER_URL = process.env.TRACKER_WS_URL || 'http://127.0.0.1:3005';
 
 class TrackerService {
   private static instance: TrackerService;
@@ -27,8 +27,7 @@ class TrackerService {
       transports: ['websocket'],
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,
-      // Add a special header or auth to identify as the backend server if needed
-      // For now, we trust the internal network
+      auth: { isServer: true },
     });
 
     this.socket.on('connect', () => {

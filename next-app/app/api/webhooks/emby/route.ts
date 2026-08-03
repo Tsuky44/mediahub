@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyWebhookSecret } from '@/lib/webhooks/verify-secret'
 import { prisma } from '@/lib/prisma'
 // V1 notifications supprimées
 // import { NotificationService } from '@/lib/services/notification-service'
@@ -12,6 +13,12 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 export async function POST(req: NextRequest) {
   try {
+    const isValid = await verifyWebhookSecret(req, 'webhook_emby_secret');
+    if (!isValid) {
+      warn('[EmbyWebhook] Tentative d\'accès non autorisée (secret invalide ou absent)');
+      return NextResponse.json({ error: 'Unauthorized. Invalid secret.' }, { status: 401 });
+    }
+
     let payload: any
 
     // Emby peut envoyer du JSON direct ou du multipart/form-data avec un champ "data"

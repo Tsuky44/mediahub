@@ -27,8 +27,10 @@ export function useDockerLogs(containerId: string) {
     log(`[LogViewer] Connecting to ${wsUrl || 'relative host'}`)
 
     const socket = io(wsUrl || undefined, {
-      transports: ['websocket'],
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
       reconnectionAttempts: 10,
+      withCredentials: true,
     })
 
     socketRef.current = socket

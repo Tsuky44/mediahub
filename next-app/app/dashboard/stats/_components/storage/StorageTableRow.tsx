@@ -1,22 +1,32 @@
 'use client'
 
-import { Film, Tv, Play, Trash2 } from 'lucide-react'
+import { Film, Tv, Trash2 } from 'lucide-react'
 import type { StorageItem } from '../../_types/storage'
-import { formatBytes } from '../../_utils/storage-formatters'
+import { formatBytes, formatLastPlayed } from '../../_utils/storage-formatters'
 
 interface StorageTableRowProps {
   item: StorageItem
   onSelect: (item: StorageItem) => void
   onDelete: (item: StorageItem, e: React.MouseEvent) => void
+  selected: boolean
+  onToggleSelect: (id: string) => void
 }
 
-export function StorageTableRow({ item, onSelect, onDelete }: StorageTableRowProps) {
+export function StorageTableRow({ item, onSelect, onDelete, selected, onToggleSelect }: StorageTableRowProps) {
   return (
     <tr
       key={item.id}
       onClick={() => onSelect(item)}
-      className="hover:bg-white/5 transition-colors cursor-pointer group"
+      className={`transition-colors cursor-pointer group ${selected ? 'bg-purple-500/10 hover:bg-purple-500/15' : 'hover:bg-white/5'}`}
     >
+      <td className="pl-6 pr-2 py-4 w-10" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(item.id)}
+          className="w-4 h-4 rounded border-gray-600 text-purple-500 focus:ring-purple-500/50 bg-gray-800 cursor-pointer"
+        />
+      </td>
       <td className="px-6 py-4">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg ${item.type === 'Movie' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
@@ -34,13 +44,27 @@ export function StorageTableRow({ item, onSelect, onDelete }: StorageTableRowPro
         {formatBytes(item.size)}
       </td>
       <td className="px-6 py-4 text-center">
-        {item.isPlaying ? (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
-            <Play size={10} className="fill-current" />
-            Lecture par {item.activeUser}
+        {item.lastPlayedDate ? (
+          <span
+            className="text-gray-300 text-xs"
+            title={new Date(item.lastPlayedDate).toLocaleString('fr-FR')}
+          >
+            {formatLastPlayed(item.lastPlayedDate)}
           </span>
         ) : (
-          <span className="text-gray-600">-</span>
+          <span className="text-gray-600 text-xs">Jamais</span>
+        )}
+      </td>
+      <td className="px-6 py-4 text-center">
+        {item.requestedAt ? (
+          <span
+            className="text-gray-300 text-xs"
+            title={new Date(item.requestedAt).toLocaleString('fr-FR')}
+          >
+            {formatLastPlayed(item.requestedAt)}
+          </span>
+        ) : (
+          <span className="text-gray-600 text-xs">—</span>
         )}
       </td>
       <td className="px-6 py-4 text-right">

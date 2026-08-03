@@ -2,6 +2,7 @@ import Docker from 'dockerode';
 import { db } from '@/lib/db/drizzle';
 import { settings } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { UnraidService } from './unraid';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
@@ -9,9 +10,36 @@ const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
 const error = (...args: unknown[]) => { console.error(...args); };
 const warn = (...args: unknown[]) => { console.warn(...args); };
 
-
 export class DockerService {
     private static instance: Docker | null = null;
+
+    private static async initUnraidService(): Promise<UnraidService | null> {
+        try {
+            const [urlSetting, apiKeySetting] = await Promise.all([
+                db.query.settings.findFirst({
+                    where: eq(settings.key, 'unraid_url'),
+                    columns: { value: true }
+                }),
+                db.query.settings.findFirst({
+                    where: eq(settings.key, 'unraid_api_key'),
+                    columns: { value: true }
+                })
+            ]);
+
+            const url = urlSetting?.value || process.env.UNRAID_URL;
+            const apiKey = apiKeySetting?.value || process.env.UNRAID_API_KEY;
+
+            if (url && apiKey) {
+                log(`[DockerService] Initialized Unraid service: ${url}`);
+                return new UnraidService(url, apiKey);
+            }
+
+            return null;
+        } catch (e) {
+            error('[DockerService] Failed to initialize Unraid service:', e);
+            return null;
+        }
+    }
 
     private static async init() {
         // Always re-check settings to ensure we use the latest host
@@ -49,12 +77,28 @@ export class DockerService {
     }
 
     static async containerAction(containerId: string, action: 'start' | 'stop' | 'restart'): Promise<{ success: boolean; error?: string }> {
+        const id = String(containerId).trim();
+        log(`[DockerService] Performing ${action} on container "${id}"`);
+
+        // Try Unraid API first
+        const unraidService = await this.initUnraidService();
+        if (unraidService) {
+            try {
+                const success = await unraidService.containerAction(id, action);
+                if (success) {
+                    log(`[DockerService] ${action} succeeded via Unraid API`);
+                    return { success: true };
+                }
+                warn(`[DockerService] Unraid API ${action} failed, falling back to Docker socket`);
+            } catch (e) {
+                warn(`[DockerService] Unraid API ${action} error, falling back to Docker socket:`, e);
+            }
+        }
+
+        // Fallback to Docker socket
         try {
-            const id = String(containerId).trim();
             const docker = await this.init();
             const container = docker.getContainer(id);
-            
-            log(`[DockerService] Performing ${action} on container "${id}"`);
             
             if (action === 'start') {
                 try {
@@ -141,6 +185,33 @@ export class DockerService {
     }
 
     static async getContainerStats(containerId: string) {
+        // Try Unraid API first
+        const unraidService = await this.initUnraidService();
+        if (unraidService) {
+            try {
+                const stats = await unraidService.getContainerStats(containerId);
+                if (stats) {
+                    log('[DockerService] Using Unraid API for getContainerStats');
+                    return {
+                        cpu: stats.cpu,
+                        memory: {
+                            used: stats.memory.used,
+                            limit: stats.memory.limit,
+                            percent: stats.memory.percent
+                        },
+                        network: {
+                            rx: stats.network.rx,
+                            tx: stats.network.tx
+                        },
+                        pids: stats.pids
+                    };
+                }
+            } catch (e) {
+                warn('[DockerService] Unraid API getContainerStats failed, falling back to Docker socket:', e);
+            }
+        }
+
+        // Fallback to Docker socket
         try {
             const docker = await this.init();
             const container = docker.getContainer(containerId);
@@ -188,6 +259,8 @@ export class DockerService {
     }
 
     static async getContainerDetails(containerId: string) {
+        // getContainerDetails requires Docker socket (env variables, full config)
+        // Unraid API doesn't expose this level of detail for security
         try {
             if (!containerId) {
                 throw new Error('Container ID is required');
@@ -226,7 +299,7 @@ export class DockerService {
                 platform: info.Platform
             };
         } catch (err) {
-            const dockerErr = error as { statusCode?: number; json?: { message?: string }; message?: string }
+            const dockerErr = err as { statusCode?: number; json?: { message?: string }; message?: string }
             const statusCode = dockerErr.statusCode || 500;
             const msg = dockerErr.json?.message || dockerErr.message;
             
@@ -239,11 +312,40 @@ export class DockerService {
                 error(`[DockerService] Error ${statusCode} getting details for "${containerId}":`, msg);
             }
             
-            throw error;
+            throw err;
         }
     }
 
     static async listContainers() {
+        // Try Unraid API first
+        const unraidService = await this.initUnraidService();
+        if (unraidService) {
+            try {
+                const containers = await unraidService.getDockerContainers();
+                if (containers && containers.length > 0) {
+                    log('[DockerService] Using Unraid API for listContainers');
+                    return containers.map(c => ({
+                        id: c.id,
+                        name: c.name,
+                        image: c.image,
+                        state: c.state,
+                        status: c.status,
+                        ports: c.ports || '',
+                        labels: {},
+                        networkMode: 'unknown',
+                        restartPolicy: 'no',
+                        created: '',
+                        platform: 'linux',
+                        autoStart: c.autoStart,
+                        iconUrl: c.icon
+                    }));
+                }
+            } catch (e) {
+                warn('[DockerService] Unraid API listContainers failed, falling back to Docker socket:', e);
+            }
+        }
+
+        // Fallback to Docker socket
         try {
             const docker = await this.init();
             const containers = await docker.listContainers({ all: true });

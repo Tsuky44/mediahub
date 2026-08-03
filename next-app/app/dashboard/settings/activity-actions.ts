@@ -5,6 +5,7 @@ import { users, auditLogs, mediaRequests } from '@/lib/db/schema'
 import { eq, asc, desc, and, sql } from 'drizzle-orm'
 import { getCurrentUser } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
+import { syncStaleEmbyUserEmails } from '@/lib/auth/sync-emby-email'
 
 export async function getLogUsers() {
   const user = await getCurrentUser()
@@ -45,21 +46,31 @@ export async function getActivityLogs(page = 1, limit = 50, filters?: any) {
   }
 
   try {
-    // Build where conditions
+    await syncStaleEmbyUserEmails()
+
     const conditions = []
     if (filters?.userId) conditions.push(eq(auditLogs.userId, parseInt(filters.userId)))
     if (filters?.action) conditions.push(eq(auditLogs.action, filters.action))
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined
-    
-    // TODO: Implement pagination with Drizzle - simplified version for now
-    const logsQuery = db.select().from(auditLogs)
-    if (whereClause) logsQuery.where(whereClause)
-    
+    const offset = (page - 1) * limit
+
     const [logs, totalCount] = await Promise.all([
-      logsQuery.orderBy(desc(auditLogs.createdAt)),
-      db.select({ count: sql`count(*)` }).from(auditLogs).then(r => r[0]?.count || 0)
+      db.query.auditLogs.findMany({
+        where: whereClause,
+        with: {
+          user: {
+            columns: { id: true, name: true, email: true, image: true },
+          },
+        },
+        orderBy: [desc(auditLogs.createdAt)],
+        limit,
+        offset,
+      }),
+      whereClause
+        ? db.select({ count: sql<number>`count(*)` }).from(auditLogs).where(whereClause)
+        : db.select({ count: sql<number>`count(*)` }).from(auditLogs),
     ])
-    const total = Number(totalCount)
+    const total = Number(totalCount[0]?.count ?? 0)
 
     return { logs, total }
   } catch (error) {

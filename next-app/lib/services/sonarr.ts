@@ -366,12 +366,23 @@ export class SonarrService {
 
   async addSeries(options: AddSeriesOptions) {
     const client = this.getClient()
+    // Les écritures Sonarr (ajout + recherche) peuvent être lentes selon l'instance
+    const writeTimeout = 60_000
     try {
-      const series = await this.getSeriesByTvdbId(options.tvdbid)
-      let lookupSeries: SonarrSeries | null = null
+      const lookupSeries = await this.lookupSeriesByTvdbId(options.tvdbid)
+      if (!lookupSeries) {
+        return { success: false, message: 'Series not found in Sonarr lookup' }
+      }
 
-      if (!series || !series.id) {
-        lookupSeries = await this.lookupSeriesByTvdbId(options.tvdbid)
+      let series: SonarrSeries | null = null
+      if (lookupSeries.id && lookupSeries.id > 0) {
+        try {
+          const fullResponse = await client.get(`/series/${lookupSeries.id}`)
+          series = fullResponse.data as SonarrSeries
+        } catch (e) {
+          logger.error(`[Sonarr] Failed to fetch full series data for ${lookupSeries.id}:`, (e as Error).message)
+          return { success: false, message: (e as Error).message }
+        }
       }
 
       if (series && series.id) {
@@ -397,10 +408,12 @@ export class SonarrService {
           seasons: updatedSeasons
         }
         
-        await client.put(`/series/${series.id}`, updateData)
+        await client.put(`/series/${series.id}`, updateData, { timeout: writeTimeout })
         
         if (options.searchNow && seasonsChanged) {
-            await this.sendCommand('SeriesSearch', { seriesId: series.id });
+            this.sendCommand('SeriesSearch', { seriesId: series.id }).catch((e) =>
+              logger.warn(`[Sonarr] Background SeriesSearch failed for ${series.id}:`, (e as Error).message)
+            )
         }
 
         return { success: true, message: 'Series and seasons set to monitored', series: updateData }
@@ -420,11 +433,19 @@ export class SonarrService {
         seriesType: options.seriesType,
         seasons: seasonList.length > 0 ? this.buildSeasonList(options.seasons || [], seasonList) : [],
         addOptions: {
-          searchForMissingEpisodes: options.searchNow !== false
+          // Ne pas bloquer sur la recherche — Sonarr peut dépasser le timeout HTTP
+          searchForMissingEpisodes: false
         }
       }
 
-      const response = await client.post('/series', payload)
+      const response = await client.post('/series', payload, { timeout: writeTimeout })
+
+      if (options.searchNow !== false && response.data?.id) {
+        this.sendCommand('SeriesSearch', { seriesId: response.data.id }).catch((e) =>
+          logger.warn(`[Sonarr] Background SeriesSearch failed for ${response.data.id}:`, (e as Error).message)
+        )
+      }
+
       return { success: true, series: response.data }
 
     } catch (e) {

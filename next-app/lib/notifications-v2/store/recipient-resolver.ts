@@ -5,7 +5,7 @@
 
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
-import { inArray } from 'drizzle-orm'
+import { inArray, eq } from 'drizzle-orm'
 import type { ConfigStore } from '../config/config-store'
 import type { NotificationsV2Config, NotificationEvent, RequesterInfo } from '../types'
 
@@ -60,15 +60,43 @@ export async function resolveRecipients(
     }
   }
 
-  // 3) Requester (if opted-in and number available)
+  // 3) Requester (if opted-in)
+  // Le numéro du demandeur peut venir de l'objet `requester` OU être résolu
+  // depuis la DB via son `id`. Certains flux (ex: grouped-availability) passent
+  // un requester avec uniquement l'id, sans whatsappNumber — on le rattrape ici
+  // pour que la case "notifier le demandeur" fonctionne de façon fiable.
+  const requesterId = requester?.id != null ? Number(requester.id) : null
+  let requesterNumber = requester?.whatsappNumber?.trim() || undefined
+  let requesterNumberFromDb = false
+
+  if (
+    route.notifyRequester &&
+    !requesterNumber &&
+    requesterId != null &&
+    !isNaN(requesterId) &&
+    !coveredUserIds.has(requesterId)
+  ) {
+    try {
+      const u = await db.query.users.findFirst({
+        where: eq(users.id, requesterId),
+        columns: { id: true, whatsappNumber: true },
+      })
+      if (u?.whatsappNumber && u.whatsappNumber.trim()) {
+        requesterNumber = u.whatsappNumber.trim()
+        requesterNumberFromDb = true
+      }
+    } catch (err) {
+      console.error('[NotifV2] Failed to resolve requester whatsappNumber from DB:', err)
+    }
+  }
+
   // Skip if the requester is already covered via targetUserIds OR if their number is already in the Set
   // (e.g. the requester's number was added via targetNumbers) — évite le doublon dans les deux cas
-  const requesterId = requester?.id != null ? Number(requester.id) : null
   const requesterAlreadyCovered =
     (requesterId != null && coveredUserIds.has(requesterId)) ||
-    (requester?.whatsappNumber != null && recipients.has(normalizeNumber(requester.whatsappNumber)))
-  if (route.notifyRequester && requester?.whatsappNumber && !requesterAlreadyCovered) {
-    recipients.add(normalizeNumber(requester.whatsappNumber))
+    (requesterNumber != null && recipients.has(normalizeNumber(requesterNumber)))
+  if (route.notifyRequester && requesterNumber && !requesterAlreadyCovered) {
+    recipients.add(normalizeNumber(requesterNumber))
   }
 
   // 4) Fallback to default number only if nothing else is set
@@ -81,8 +109,10 @@ export async function resolveRecipients(
     `targetUserIds=[${route.targetUserIds?.join(',') ?? ''}]`,
     `targetNumbers=[${route.targetNumbers?.join(',') ?? ''}]`,
     `notifyRequester=${route.notifyRequester}`,
+    `requesterId=${requesterId ?? ''}`,
     `requesterAlreadyCovered=${requesterAlreadyCovered}`,
-    `requesterHasNumber=${!!requester?.whatsappNumber}`,
+    `requesterHasNumber=${!!requesterNumber}`,
+    `requesterNumberFromDb=${requesterNumberFromDb}`,
     `fallbackUsed=${usedFallback}`,
     `resolved=${Array.from(recipients).join(',')}`,
   ].join(' ')

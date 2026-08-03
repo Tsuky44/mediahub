@@ -261,6 +261,7 @@ export class RadarrService {
 
   async addMovie(options: RadarrMovieOptions) {
     const client = this.getClient()
+    const writeTimeout = 60_000
     try {
       const movie = await this.getMovieByTmdbId(options.tmdbId)
 
@@ -271,15 +272,16 @@ export class RadarrService {
         }
         
         if (!movie.monitored && options.monitored) {
-          // Update to monitored
           const updateData = {
             ...movie,
             monitored: true,
-            addOptions: {
-              searchForMovie: options.searchNow
-            }
           }
-          await client.put(`/movie/${updateData.id}`, updateData)
+          await client.put(`/movie/${updateData.id}`, updateData, { timeout: writeTimeout })
+          if (options.searchNow && updateData.id) {
+            this.sendCommand('MoviesSearch', { movieIds: [updateData.id] }).catch((e) =>
+              logger.warn(`[Radarr] Background MoviesSearch failed for ${updateData.id}:`, (e as AppError).message)
+            )
+          }
           return { success: true, message: 'Movie set to monitored', movie: updateData }
         }
 
@@ -303,10 +305,17 @@ export class RadarrService {
       payload.monitored = options.monitored !== false
       payload.minimumAvailability = options.minimumAvailability || 'announced'
       payload.addOptions = {
-        searchForMovie: options.searchNow !== false
+        searchForMovie: false
       }
 
-      const response = await client.post('/movie', payload)
+      const response = await client.post('/movie', payload, { timeout: writeTimeout })
+
+      if (options.searchNow !== false && response.data?.id) {
+        this.sendCommand('MoviesSearch', { movieIds: [response.data.id] }).catch((e) =>
+          logger.warn(`[Radarr] Background MoviesSearch failed for ${response.data.id}:`, (e as AppError).message)
+        )
+      }
+
       return { success: true, movie: response.data }
 
     } catch (e) {

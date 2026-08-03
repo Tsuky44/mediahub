@@ -44,6 +44,9 @@ const initialFormData: SettingsFormData = {
   unraid_api_key: '',
   docker_host: '',
   request_all_seasons_enabled: false,
+  webhook_sonarr_secret: '',
+  webhook_radarr_secret: '',
+  webhook_emby_secret: '',
 }
 
 export function useSettingsForm(settings: Partial<SettingsFormData>) {

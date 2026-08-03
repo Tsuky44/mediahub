@@ -51,7 +51,7 @@ export function NavbarUserMenu({ isOpen, onToggle }: NavbarUserMenuProps) {
                 {session.user.name}
               </p>
               <p className="text-xs text-gray-400 truncate mt-0.5">
-                {session.user.email || 'Utilisateur Emby'}
+                {session.user.email || 'Utilisateur'}
               </p>
             </div>
 

@@ -3,6 +3,7 @@ import { db } from "@/lib/db/drizzle"
 import { users, settings as settingsTable, roles } from "@/lib/db/schema"
 import { eq, sql } from "drizzle-orm"
 import { JellyfinService } from "@/lib/services/jellyfin"
+import { checkRateLimit, registerLoginFailure, clearRateLimit } from "../rate-limiter"
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -15,7 +16,18 @@ export const jellyfinProvider = CredentialsProvider({
     username: { label: "Username", type: "text" },
     password: { label: "Password", type: "password" }
   },
-  async authorize(credentials) {
+  async authorize(credentials, req) {
+    // Récupérer l'IP du client depuis les en-têtes
+    const reqHeaders = req?.headers as any
+    const ip = reqHeaders?.['x-forwarded-for']?.split(',')[0]?.trim() || reqHeaders?.['x-real-ip'] || '127.0.0.1'
+    const username = credentials?.username || 'unknown'
+
+    // Vérifier si l'utilisateur/IP est actuellement bloqué
+    const rateCheck = await checkRateLimit(ip, username, 'jellyfin')
+    if (!rateCheck.allowed) {
+      throw new Error(`Trop de tentatives de connexion via Jellyfin. Réessayez dans ${rateCheck.timeLeft} minute(s).`)
+    }
+
     if (!db) throw new Error("Erreur technique: Base de données non prête")
 
     // Check if Jellyfin auth is enabled
@@ -131,6 +143,8 @@ export const jellyfinProvider = CredentialsProvider({
 
       const effectiveRole = (user as any)?.roleRef?.name || user?.role
 
+      await clearRateLimit(ip, username, 'jellyfin')
+
       return {
         id: user?.id?.toString() || '',
         email: user?.email || '',
@@ -145,6 +159,7 @@ export const jellyfinProvider = CredentialsProvider({
       }
     } catch (e: any) {
       error("[Auth] Jellyfin Authorize error:", e)
+      await registerLoginFailure(ip, username, 'jellyfin')
       throw new Error(e.message || "Erreur d'authentification Jellyfin")
     }
   }

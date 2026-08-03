@@ -12,10 +12,10 @@ export interface EnabledProviders {
 
 /** Determine le provider par defaut selon ceux actives. */
 export function getDefaultProvider(enabled: EnabledProviders): LoginProvider {
-    if (enabled.local) return 'local'
     if (enabled.emby) return 'emby'
-    if (enabled.plex) return 'plex'
     if (enabled.jellyfin) return 'jellyfin'
+    if (enabled.plex) return 'plex'
+    if (enabled.local) return 'local'
     return 'local'
 }
 

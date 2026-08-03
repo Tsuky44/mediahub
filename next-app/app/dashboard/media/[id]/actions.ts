@@ -1,6 +1,6 @@
 'use server'
 
-import { getEmbyServiceForUser, getSonarrServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
+import { getMediaServerServiceForUser, getMediaServerUserId, getSonarrServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
 import { users, mediaRequests } from '@/lib/db/schema'
@@ -22,22 +22,23 @@ export async function getSeasonDetails(tvId: number, seasonNumber: number) {
 
     // Fetch user info for filtering
     const user = await getCurrentUser()
-    const embyService = await getEmbyServiceForUser()
+    const mediaService = await getMediaServerServiceForUser()
 
     let embyUserId: string | undefined = undefined
     if (user && user.email) {
         const [dbUser] = await db.select().from(users).where(eq(users.email, user.email)).limit(1)
-        if (dbUser && dbUser.embyUserId) {
-            embyUserId = dbUser.embyUserId
+        const mediaUserId = getMediaServerUserId(dbUser)
+        if (mediaUserId) {
+            embyUserId = mediaUserId
         }
     }
 
     // Fetch Emby data to check played status
     let embyEpisodes: { IndexNumber?: number; UserData?: { Played?: boolean; PlayedPercentage?: number } }[] = []
-    if (embyUserId && embyService) {
-         const embySeries = await embyService.getItemByTmdbId(embyUserId, tvId, 'Series')
+    if (embyUserId && mediaService) {
+         const embySeries = await mediaService.getItemByTmdbId(embyUserId, tvId, 'Series')
          if (embySeries) {
-             embyEpisodes = await embyService.getEpisodes(embyUserId, embySeries.Id, seasonNumber)
+             embyEpisodes = await mediaService.getEpisodes(embyUserId, embySeries.Id, seasonNumber)
          }
     }
 
@@ -112,6 +113,22 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
 
         const allSeasons = Array.from(seasonsFromRequests)
 
+        // Pre-fetch TMDB details and dbUser for notification (before Sonarr call)
+        let notifDetails: { overview?: string; year?: string; genres?: string; posterPath?: string } = {}
+        try {
+            const details = await tmdbService.getDetails(tvId, 'tv')
+            if (details) {
+                notifDetails.overview = details.overview || undefined
+                notifDetails.year = details.first_air_date?.substring(0, 4) || undefined
+                notifDetails.genres = details.genres?.map((g: { name: string }) => g.name).join(', ') || undefined
+                notifDetails.posterPath = details.poster_path || undefined
+            }
+        } catch (e) {
+            logger.warn('[Request Season] Failed to pre-fetch TMDB details:', e)
+        }
+
+        const [dbUser] = await db.select().from(users).where(eq(users.email, user?.email || '')).limit(1)
+
         const result = await sonarrService.addSeries({
             tvdbid: tvdbId,
             title: title || lookup?.title || 'Unknown Series',
@@ -124,14 +141,38 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
             monitored: true,
             searchNow: true
         })
-        
+
         // Invalidate internal memory cache for this media availability
         forget(`media_availability_tv_${tvId}`)
-        
+
+        // Notify V2 — MEDIA_REQUESTED (dispatched IMMEDIATELY before DB update
+        // to prevent race conditions with Sonarr webhooks arriving first)
+        try {
+            const { Notify } = await import('@/lib/notifications-v2')
+            await Notify.mediaRequested(
+                {
+                    tmdbId: String(tvId),
+                    mediaType: 'tv',
+                    title: title || lookup?.title || 'Sans titre',
+                    year: notifDetails.year,
+                    overview: notifDetails.overview,
+                    posterPath: lookup?.remotePoster || notifDetails.posterPath,
+                    genres: notifDetails.genres,
+                    seasonNumber,
+                },
+                dbUser ? {
+                    id: dbUser.id,
+                    name: dbUser.name ?? undefined,
+                    email: dbUser.email ?? undefined,
+                    whatsappNumber: (dbUser as any).whatsappNumber ?? undefined,
+                } : undefined
+            )
+        } catch (notifError) {
+            logger.error('[Request Season] Failed to dispatch Notify V2 MEDIA_REQUESTED:', notifError)
+        }
+
         // Update local DB to ensure it appears in "Mes demandes"
         try {
-            const [dbUser] = await db.select().from(users).where(eq(users.email, user?.email || '')).limit(1)
-
             let externalId: string | undefined
             const resultSeries = (result as { series?: { id?: number } }).series
             if (result.success && resultSeries?.id) {
@@ -171,32 +212,6 @@ export async function requestSeason(tvId: number, seasonNumber: number, title: s
 
             const { logAction } = await import('@/lib/audit')
             await logAction(dbUser?.id || null, 'MEDIA_REQUEST', 'MediaRequest', newRequest.id.toString(), { tmdbId: tvId, mediaType: 'tv', title, season: seasonNumber })
-
-            // Notify V2 — MEDIA_REQUESTED
-            try {
-                const { Notify } = await import('@/lib/notifications-v2')
-                const details = await tmdbService.getDetails(tvId, 'tv')
-                await Notify.mediaRequested(
-                    {
-                        tmdbId: String(tvId),
-                        mediaType: 'tv',
-                        title: title || lookup?.title || 'Sans titre',
-                        year: details?.first_air_date?.substring(0, 4) || undefined,
-                        overview: details?.overview || undefined,
-                        posterPath: lookup?.remotePoster || details?.poster_path || undefined,
-                        genres: details?.genres?.map((g: { name: string }) => g.name).join(', ') || undefined,
-                        seasonNumber,
-                    },
-                    dbUser ? {
-                        id: dbUser.id,
-                        name: dbUser.name ?? undefined,
-                        email: dbUser.email ?? undefined,
-                        whatsappNumber: (dbUser as any).whatsappNumber ?? undefined,
-                    } : undefined
-                )
-            } catch (notifError) {
-                logger.error('[Request Season] Failed to dispatch Notify V2 MEDIA_REQUESTED:', notifError)
-            }
         } catch (dbError) {
             logger.error('[Request Season] Failed to update local DB:', dbError)
         }
@@ -258,6 +273,22 @@ export async function requestSelectedSeasons(tvId: number, title: string, season
 
         const allSeasons = Array.from(seasonsToMonitor)
 
+        // Pre-fetch TMDB details and dbUser for notification (before Sonarr call)
+        let notifDetails: { overview?: string; year?: string; genres?: string; posterPath?: string } = {}
+        try {
+            const details = await tmdbService.getDetails(tvId, 'tv')
+            if (details) {
+                notifDetails.overview = details.overview || undefined
+                notifDetails.year = details.first_air_date?.substring(0, 4) || undefined
+                notifDetails.genres = details.genres?.map((g: { name: string }) => g.name).join(', ') || undefined
+                notifDetails.posterPath = details.poster_path || undefined
+            }
+        } catch (e) {
+            logger.warn('[Request Selected] Failed to pre-fetch TMDB details:', e)
+        }
+
+        const [dbUser] = await db.select().from(users).where(eq(users.email, user?.email || '')).limit(1)
+
         const result = await sonarrService.addSeries({
             tvdbid: tvdbId,
             title: title || 'Unknown Series',
@@ -270,19 +301,49 @@ export async function requestSelectedSeasons(tvId: number, title: string, season
             monitored: true,
             searchNow: true
         })
-        
-        forget(`media_availability_tv_${tvId}`)
-        
-        try {
-            const [dbUser] = await db.select().from(users).where(eq(users.email, user?.email || '')).limit(1)
 
+        forget(`media_availability_tv_${tvId}`)
+
+        // Notify V2 — MEDIA_REQUESTED (dispatched IMMEDIATELY before DB update
+        // to prevent race conditions with Sonarr webhooks arriving first)
+        try {
+            const { Notify } = await import('@/lib/notifications-v2')
+            const { formatSeasonList } = await import('@/lib/notifications-v2/utils/season-formatter')
+            const seasonLabel =
+                seasonNumbers.length === 1
+                    ? `Saison ${seasonNumbers[0]}`
+                    : formatSeasonList(seasonNumbers)
+            const displayTitle = `${title || 'Sans titre'} — ${seasonLabel}`
+
+            await Notify.mediaRequested(
+                {
+                    tmdbId: String(tvId),
+                    mediaType: 'tv',
+                    title: displayTitle,
+                    year: notifDetails.year,
+                    overview: notifDetails.overview,
+                    posterPath: notifDetails.posterPath,
+                    genres: notifDetails.genres,
+                    seasonNumber: seasonNumbers.length === 1 ? seasonNumbers[0] : undefined,
+                    seasons: seasonNumbers.length > 1 ? seasonNumbers : undefined,
+                },
+                dbUser ? {
+                    id: dbUser.id,
+                    name: dbUser.name ?? undefined,
+                    email: dbUser.email ?? undefined,
+                    whatsappNumber: (dbUser as any).whatsappNumber ?? undefined,
+                } : undefined
+            )
+        } catch (notifError) {
+            logger.error('[Request Selected] Failed to dispatch Notify V2 MEDIA_REQUESTED:', notifError)
+        }
+
+        try {
             let externalId: string | undefined
             const resultSeries = (result as { series?: { id?: number; remotePoster?: string; images?: { url?: string }[] } }).series
             if (result.success && resultSeries?.id) {
                 externalId = resultSeries.id.toString()
             }
-
-            const createdSeasons: number[] = []
 
             for (const seasonNumber of seasonNumbers) {
                 const existingSeasonRequest = await db.select().from(mediaRequests).where(
@@ -314,46 +375,8 @@ export async function requestSelectedSeasons(tvId: number, title: string, season
                     requestedAt: new Date()
                 }).returning()
 
-                createdSeasons.push(seasonNumber)
-
                 const { logAction } = await import('@/lib/audit')
                 await logAction(dbUser?.id || null, 'MEDIA_REQUEST', 'MediaRequest', newRequest.id.toString(), { tmdbId: tvId, mediaType: 'tv', title, season: seasonNumber })
-            }
-
-            // Notify V2 — MEDIA_REQUESTED (une seule fois, groupée par saisons)
-            if (createdSeasons.length > 0) {
-                try {
-                    const { Notify } = await import('@/lib/notifications-v2')
-                    const { formatSeasonList } = await import('@/lib/notifications-v2/utils/season-formatter')
-                    const details = await tmdbService.getDetails(tvId, 'tv')
-                    const seasonLabel =
-                        createdSeasons.length === 1
-                            ? `Saison ${createdSeasons[0]}`
-                            : formatSeasonList(createdSeasons)
-                    const displayTitle = `${title || 'Sans titre'} — ${seasonLabel}`
-
-                    await Notify.mediaRequested(
-                        {
-                            tmdbId: String(tvId),
-                            mediaType: 'tv',
-                            title: displayTitle,
-                            year: details?.first_air_date?.substring(0, 4) || undefined,
-                            overview: details?.overview || undefined,
-                            posterPath: resultSeries?.remotePoster || details?.poster_path || undefined,
-                            genres: details?.genres?.map((g: { name: string }) => g.name).join(', ') || undefined,
-                            seasonNumber: createdSeasons.length === 1 ? createdSeasons[0] : undefined,
-                            seasons: createdSeasons.length > 1 ? createdSeasons : undefined,
-                        },
-                        dbUser ? {
-                            id: dbUser.id,
-                            name: dbUser.name ?? undefined,
-                            email: dbUser.email ?? undefined,
-                            whatsappNumber: (dbUser as any).whatsappNumber ?? undefined,
-                        } : undefined
-                    )
-                } catch (notifError) {
-                    logger.error('[Request Selected] Failed to dispatch Notify V2 MEDIA_REQUESTED:', notifError)
-                }
             }
         } catch (dbError) {
             logger.error('[Request Selected] Failed to update local DB:', dbError)

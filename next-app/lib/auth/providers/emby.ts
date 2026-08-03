@@ -3,6 +3,8 @@ import { db } from "@/lib/db/drizzle"
 import { users, settings as settingsTable, roles } from "@/lib/db/schema"
 import { eq, sql } from "drizzle-orm"
 import { EmbyService } from "@/lib/services/emby"
+import { checkRateLimit, registerLoginFailure, clearRateLimit } from "../rate-limiter"
+import { isPlaceholderEmail, resolveEmbyUserEmail } from "../user-email"
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -15,7 +17,18 @@ export const embyProvider = CredentialsProvider({
     username: { label: "Username", type: "text" },
     password: { label: "Password", type: "password" }
   },
-  async authorize(credentials) {
+  async authorize(credentials, req) {
+    // Récupérer l'IP du client depuis les en-têtes
+    const reqHeaders = req?.headers as any
+    const ip = reqHeaders?.['x-forwarded-for']?.split(',')[0]?.trim() || reqHeaders?.['x-real-ip'] || '127.0.0.1'
+    const username = credentials?.username || 'unknown'
+
+    // Vérifier si l'utilisateur/IP est actuellement bloqué
+    const rateCheck = await checkRateLimit(ip, username, 'emby')
+    if (!rateCheck.allowed) {
+      throw new Error(`Trop de tentatives de connexion via Emby. Réessayez dans ${rateCheck.timeLeft} minute(s).`)
+    }
+
     if (!db) {
       error("[Auth] Database client is not available")
       throw new Error("Erreur technique: Base de données non prête")
@@ -66,6 +79,18 @@ export const embyProvider = CredentialsProvider({
         throw new Error("Authentification Emby échouée")
       }
 
+      let embyProfile = embyUser.User as Record<string, unknown>
+      try {
+        const fullProfile = await embyService.getUser(embyUser.User.Id)
+        if (fullProfile) {
+          embyProfile = { ...embyUser.User, ...fullProfile }
+        }
+      } catch (profileError) {
+        log("[Auth] Full Emby profile fetch failed, using auth response only:", profileError)
+      }
+
+      const resolvedEmail = resolveEmbyUserEmail(embyProfile as { Email?: string; ConnectUserName?: string })
+
       // Gérer l'utilisateur localement
       const userCount = await db.select({ count: sql`count(*)` }).from(users).get()
       const isFirstUser = userCount?.count === 0
@@ -74,10 +99,15 @@ export const embyProvider = CredentialsProvider({
         where: eq(users.embyUserId, embyUser.User.Id)
       })
 
-      const email = embyUser.User.Email || `${embyUser.User.Name.toLowerCase()}@local`
+      const fallbackEmail = `${embyUser.User.Name.toLowerCase()}@local`
+      const email = resolvedEmail || fallbackEmail
+
+      if (!user && resolvedEmail) {
+        user = await db.query.users.findFirst({ where: eq(users.email, resolvedEmail) })
+      }
 
       if (!user) {
-        user = await db.query.users.findFirst({ where: eq(users.email, email) })
+        user = await db.query.users.findFirst({ where: eq(users.email, fallbackEmail) })
       }
       
       const shouldBeAdmin = isFirstUser || embyUser.User.Policy?.IsAdministrator
@@ -118,6 +148,10 @@ export const embyProvider = CredentialsProvider({
             updateData.roleId = defaultRoleId || null
         }
 
+        if (resolvedEmail && isPlaceholderEmail(user.email)) {
+            updateData.email = resolvedEmail
+        }
+
         // CORRECTION: Utiliser db.update au lieu de prisma.user.update
         await db.update(users)
           .set(updateData)
@@ -131,6 +165,8 @@ export const embyProvider = CredentialsProvider({
       }
 
       const effectiveRole = (user as any)?.roleRef?.name || user?.role
+
+      await clearRateLimit(ip, username, 'emby')
 
       return {
         id: user?.id?.toString() || '',
@@ -146,6 +182,7 @@ export const embyProvider = CredentialsProvider({
       }
     } catch (e: any) {
       error("[Auth] Authorize error:", e)
+      await registerLoginFailure(ip, username, 'emby')
       if (e.message?.includes("fetch")) throw new Error(`Erreur de connexion à Emby: ${e.message}`)
       throw new Error(e.message || "Erreur d'authentification inconnue")
     }

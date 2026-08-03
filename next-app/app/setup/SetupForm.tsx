@@ -11,6 +11,7 @@ export default function SetupForm() {
     mode,
     setMode,
     formData,
+    setServerType,
     restorePassword,
     showRestorePassword,
     setShowRestorePassword,
@@ -31,6 +32,7 @@ export default function SetupForm() {
           loading={loading}
           onChange={handleChange}
           onSubmit={handleSubmit}
+          onServerTypeChange={setServerType}
         />
       ) : (
         <SetupRestoreForm

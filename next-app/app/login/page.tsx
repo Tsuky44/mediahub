@@ -98,7 +98,7 @@ export default async function LoginPage() {
         </div>
         
         <p className="mt-8 text-center text-sm text-gray-500">
-          Propulsé par Emby & MediaHub
+          MediaHub - Gestionnaire de médias unifié
         </p>
       </div>
     </div>

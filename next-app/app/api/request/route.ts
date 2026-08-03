@@ -8,10 +8,11 @@ import { forget } from '@/lib/cache'
 import { revalidatePath } from 'next/cache'
 import { defineAbilityFor } from '@/lib/ability'
 import { logger } from '@/lib/logger'
+import { authenticatePlayerIntegration } from '@/lib/integrations/player-integration-auth'
 
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser()
+  const user = (await getCurrentUser()) || (await authenticatePlayerIntegration(request))
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -27,6 +28,36 @@ export async function POST(request: NextRequest) {
 
     if (!tmdbId || !mediaType) {
         return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
+    }
+
+    // Pre-fetch user info and TMDB details for notification
+    // (dispatched early to prevent race conditions with Sonarr/Radarr webhooks)
+    const dbUser = await (prisma as any).user.findFirst({ where: { id: parseInt(user.id) } })
+
+    let notifOverview: string | undefined
+    let notifYear: string | undefined
+    let notifGenres: string | undefined
+    let notifPosterPath: string | undefined = posterPath
+
+    try {
+        const tmdbServiceForNotif = await getTmdbService()
+        if (tmdbServiceForNotif) {
+            const details = await tmdbServiceForNotif.getDetails(parseInt(String(tmdbId)), mediaType)
+            if (details) {
+                notifOverview = details.overview || undefined
+                notifYear = mediaType === 'movie'
+                    ? (details.release_date?.substring(0, 4) || undefined)
+                    : (details.first_air_date?.substring(0, 4) || undefined)
+                if (details.genres) {
+                    notifGenres = details.genres.map((g: { name?: string }) => g.name).join(', ')
+                }
+                if (!notifPosterPath && details.poster_path) {
+                    notifPosterPath = details.poster_path
+                }
+            }
+        }
+    } catch (e) {
+        logger.warn('[Request API] Failed to pre-fetch TMDB details for notification:', e)
     }
 
     let result: { success: boolean; message?: string; data?: unknown } = { success: false, message: 'Unknown error' }
@@ -146,14 +177,48 @@ export async function POST(request: NextRequest) {
     }
 
     if (result.success) {
+        // Notify V2 — MEDIA_REQUESTED (dispatched IMMEDIATELY before DB update
+        // to prevent race conditions with Sonarr/Radarr webhooks arriving first)
+        try {
+            const { Notify } = await import('@/lib/notifications-v2')
+            const { formatSeasonList } = await import('@/lib/notifications-v2/utils/season-formatter')
+
+            const parsedSeasons: number[] = body.seasons
+                ? (Array.isArray(body.seasons) ? body.seasons : [body.seasons])
+                : []
+            const seasonLabel =
+                parsedSeasons.length === 1
+                    ? `Saison ${parsedSeasons[0]}`
+                    : parsedSeasons.length > 1
+                      ? formatSeasonList(parsedSeasons)
+                      : undefined
+            const displayTitle = seasonLabel ? `${title} — ${seasonLabel}` : (title || 'Sans titre')
+
+            await Notify.mediaRequested(
+                {
+                    tmdbId: String(tmdbId),
+                    mediaType,
+                    title: displayTitle,
+                    year: notifYear,
+                    overview: notifOverview,
+                    posterPath: notifPosterPath,
+                    genres: notifGenres,
+                    seasonNumber: parsedSeasons.length === 1 ? parsedSeasons[0] : undefined,
+                },
+                dbUser ? {
+                    id: dbUser.id,
+                    name: dbUser.name ?? undefined,
+                    email: dbUser.email ?? undefined,
+                    whatsappNumber: dbUser.whatsappNumber ?? undefined,
+                } : undefined
+            )
+        } catch (notifError) {
+            logger.error('[Request API] Failed to dispatch Notify V2 MEDIA_REQUESTED:', notifError)
+        }
+
         // Immediate Local DB Update
         try {
             const requestStatus = 2 // PENDING/PROCESSING equivalent
-            
-            // Get user info
-            const dbUser = await (prisma as any).user.findFirst({ 
-                where: { email: user.email || '' } 
-            })
             
             // ALWAYS create a new request instead of merging for TV series
             // Movies can still be merged/updated as they don't have seasons
@@ -274,68 +339,6 @@ export async function POST(request: NextRequest) {
         forget(`media_availability_${mediaType}_${tmdbId}`)
         revalidatePath(`/dashboard/media/${tmdbId}`)
         revalidatePath('/dashboard/requests/list') // Refresh list immediately
-
-        // Notify V2 — MEDIA_REQUESTED
-        try {
-            const { Notify } = await import('@/lib/notifications-v2')
-            const tmdbService = await getTmdbService()
-            let overview: string | undefined
-            let year: string | undefined
-            let genres: string | undefined
-            let posterPathResolved: string | undefined = posterPath
-
-            if (tmdbService) {
-                const details = await tmdbService.getDetails(parseInt(String(tmdbId)), mediaType)
-                if (details) {
-                    overview = details.overview || undefined
-                    year = mediaType === 'movie'
-                        ? (details.release_date?.substring(0, 4) || undefined)
-                        : (details.first_air_date?.substring(0, 4) || undefined)
-                    if (details.genres) {
-                        genres = details.genres.map((g: { name?: string }) => g.name).join(', ')
-                    }
-                    if (!posterPathResolved && details.poster_path) {
-                        posterPathResolved = details.poster_path
-                    }
-                }
-            }
-
-            const parsedSeasons: number[] = body.seasons
-                ? (Array.isArray(body.seasons) ? body.seasons : [body.seasons])
-                : []
-
-            const dbUser = await (prisma as any).user.findFirst({ where: { email: user.email || '' } })
-
-            const { formatSeasonList } = await import('@/lib/notifications-v2/utils/season-formatter')
-            const seasonLabel =
-                parsedSeasons.length === 1
-                    ? `Saison ${parsedSeasons[0]}`
-                    : parsedSeasons.length > 1
-                      ? formatSeasonList(parsedSeasons)
-                      : undefined
-            const displayTitle = seasonLabel ? `${title} — ${seasonLabel}` : (title || 'Sans titre')
-
-            await Notify.mediaRequested(
-                {
-                    tmdbId: String(tmdbId),
-                    mediaType,
-                    title: displayTitle,
-                    year,
-                    overview,
-                    posterPath: posterPathResolved,
-                    genres,
-                    seasonNumber: parsedSeasons.length === 1 ? parsedSeasons[0] : undefined,
-                },
-                dbUser ? {
-                    id: dbUser.id,
-                    name: dbUser.name ?? undefined,
-                    email: dbUser.email ?? undefined,
-                    whatsappNumber: dbUser.whatsappNumber ?? undefined,
-                } : undefined
-            )
-        } catch (notifError) {
-            logger.error('[Request API] Failed to dispatch Notify V2 MEDIA_REQUESTED:', notifError)
-        }
 
         return NextResponse.json(result)
     } else {

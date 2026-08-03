@@ -56,6 +56,7 @@ export default function NotificationsDashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [autoRefresh, setAutoRefresh] = useState(false)
   const [search, setSearch] = useState('')
   const [expandedEventId, setExpandedEventId] = useState<number | null>(null)
   
@@ -89,6 +90,12 @@ export default function NotificationsDashboard() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    const interval = setInterval(() => fetchData(true), 15_000)
+    return () => clearInterval(interval)
+  }, [autoRefresh])
 
   const handlePurge = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -292,7 +299,7 @@ export default function NotificationsDashboard() {
       <div className="space-y-4">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-black text-white uppercase tracking-wider">Historique des 100 derniers événements</h3>
+            <h3 className="text-lg font-black text-white uppercase tracking-wider">Historique des 200 derniers événements</h3>
             <button
               onClick={() => fetchData(true)}
               disabled={refreshing}
@@ -300,6 +307,17 @@ export default function NotificationsDashboard() {
               title="Rafraîchir"
             >
               <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+            </button>
+            <button
+              onClick={() => setAutoRefresh(prev => !prev)}
+              className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition ${
+                autoRefresh
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-white/5 text-gray-400 border-white/10 hover:text-white'
+              }`}
+              title="Auto-rafraîchir toutes les 15 secondes"
+            >
+              Auto {autoRefresh ? 'ON' : 'OFF'}
             </button>
           </div>
           <div className="relative w-full md:w-80">

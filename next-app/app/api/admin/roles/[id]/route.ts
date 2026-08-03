@@ -19,13 +19,21 @@ export async function GET(
 
   const { id } = await params
   const [role] = await db.select().from(roles).where(eq(roles.id, id)).limit(1)
-  // TODO: Fetch permissions separately if needed
 
   if (!role) {
     return NextResponse.json({ error: 'Role not found' }, { status: 404 })
   }
 
-  return NextResponse.json(role)
+  const perms = await db.select().from(permissions).where(eq(permissions.roleId, id))
+
+  return NextResponse.json({
+    ...role,
+    permissions: perms.map(p => ({
+      action: p.action,
+      subject: p.subject,
+      conditions: p.conditions ? JSON.parse(p.conditions) : undefined,
+    })),
+  })
 }
 
 export async function PUT(
@@ -38,7 +46,7 @@ export async function PUT(
   }
 
   const { id } = await params
-  const { name, description, permissions } = await request.json()
+  const { name, description, permissions: permissionList } = await request.json()
 
   try {
     // Check if role is system role and prevent name change
@@ -55,14 +63,14 @@ export async function PUT(
     }).where(eq(roles.id, id)).returning()
 
     // If permissions are provided, update them
-    if (permissions) {
+    if (permissionList) {
       // First delete all existing permissions
       await db.delete(permissions).where(eq(permissions.roleId, id))
 
       // Then create new ones
-      if (permissions.length > 0) {
+      if (permissionList.length > 0) {
         await db.insert(permissions).values(
-          permissions.map((p: { action: string; subject: string; conditions?: unknown }) => ({
+          permissionList.map((p: { action: string; subject: string; conditions?: unknown }) => ({
             roleId: id,
             action: p.action,
             subject: p.subject,

@@ -9,6 +9,8 @@ services:
       - DATABASE_URL=file:/data/db/prod.db
       - NEXTAUTH_URL=http://localhost:3008 # L'URL publique de votre site
       - NEXTAUTH_SECRET=change_me_secret_key_123 # IMPORTANT : Changez ceci pour sécuriser votre installation
+      - PLAYER_INTEGRATION_API_KEY=${PLAYER_INTEGRATION_API_KEY:-}
+      - PLAYER_INTEGRATION_USER_EMAIL=${PLAYER_INTEGRATION_USER_EMAIL:-}
     volumes:
       - ./data/db:/data/db
     user: root

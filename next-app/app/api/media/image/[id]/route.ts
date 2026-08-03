@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, getMediaServerServiceForUser } from '@/lib/auth'
 import { getSetting } from '@/lib/settings'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
@@ -35,7 +35,7 @@ export async function GET(
     let finalTmdbId = tmdbId
     let finalMediaType = mediaType
 
-    // If tmdbId is missing, try to get it from Emby first
+    // If tmdbId is missing, try to get it from the media server first
     if (!finalTmdbId) {
       const cached = embyToTmdbCache.get(`${id}`)
       if (cached) {
@@ -43,37 +43,23 @@ export async function GET(
         finalMediaType = cached.mediaType
       } else {
         try {
-          const embyBaseUrl = await getSetting('emby_url')
-          const embyApiKey = await getSetting('emby_api_key')
+          const mediaService = await getMediaServerServiceForUser()
           
-          if (embyBaseUrl && embyApiKey) {
-            const lookupUrl = `${embyBaseUrl.replace(/\/$/, '')}/Items/${id}?api_key=${embyApiKey}`
-            const embyRes = await fetch(lookupUrl, { redirect: 'manual' })
+          if (mediaService) {
+            const item = await mediaService.getItemDetails(id)
             
-            if (embyRes.status === 307 || embyRes.status === 301 || embyRes.status === 302) {
-              warn(`[Image Proxy]: Emby redirected to ${embyRes.headers.get('location')} for metadata. API Key might be invalid or instance needs login. URL: ${lookupUrl}`)
-            } else if (embyRes.ok) {
-              const contentType = embyRes.headers.get('content-type') || ''
-              if (contentType.includes('application/json')) {
-                 const item = await embyRes.json()
-                 const foundTmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TMDB
-                 if (foundTmdbId) {
-                   finalTmdbId = String(foundTmdbId)
-                   finalMediaType = (item.Type === 'Series' || item.Type === 'Episode') ? 'tv' : 'movie'
-                   embyToTmdbCache.set(`${id}`, { tmdbId: finalTmdbId, mediaType: finalMediaType as any })
-                   log(`[Image Proxy]: Found missing TMDB ID for ${id}: ${finalTmdbId} (${finalMediaType})`)
-                 }
-               } else if (contentType.includes('text/html')) {
-                 warn(`[Image Proxy]: Emby metadata lookup returned HTML. URL: ${lookupUrl}`)
-               } else {
-                 warn(`[Image Proxy]: Emby returned non-JSON content-type for metadata: ${contentType}`)
-               }
-            } else {
-              warn(`[Image Proxy]: Emby metadata lookup failed with status ${embyRes.status} for ${lookupUrl}`)
+            if (item) {
+              const foundTmdbId = item.ProviderIds?.Tmdb || item.ProviderIds?.TMDB
+              if (foundTmdbId) {
+                finalTmdbId = String(foundTmdbId)
+                finalMediaType = (item.Type === 'Series' || item.Type === 'Episode') ? 'tv' : 'movie'
+                embyToTmdbCache.set(`${id}`, { tmdbId: finalTmdbId, mediaType: finalMediaType as any })
+                log(`[Image Proxy]: Found missing TMDB ID for ${id}: ${finalTmdbId} (${finalMediaType})`)
+              }
             }
           }
         } catch (e) {
-          warn(`[Image Proxy]: Failed to lookup TMDB ID for ${id} from Emby`)
+          warn(`[Image Proxy]: Failed to lookup TMDB ID for ${id} from media server`)
         }
       }
     }
@@ -160,19 +146,17 @@ export async function GET(
       }
     }
 
-    // Fallback to Emby
-    let embyBaseUrl = await getSetting('emby_url')
-    let embyApiKey = await getSetting('emby_api_key')
-
-    log(`[Image Proxy]: Emby settings: url=${embyBaseUrl}, hasKey=${!!embyApiKey}`)
-
-    if (!embyBaseUrl || !embyApiKey) {
-      error('[Image Proxy]: Emby not configured', { embyBaseUrl, hasApiKey: !!embyApiKey })
-      return new NextResponse('Emby not configured', { status: 500 })
+    // Fallback to media server (Emby or Jellyfin) for direct image
+    const mediaService = await getMediaServerServiceForUser()
+    
+    if (!mediaService) {
+      error('[Image Proxy]: No media server configured')
+      return new NextResponse('Media server not configured', { status: 500 })
     }
 
     // Clean up baseUrl
-    const baseUrl = embyBaseUrl.split('/web/')[0].replace(/\/$/, '')
+    const baseUrl = mediaService.getBaseUrl().split('/web/')[0].replace(/\/$/, '')
+    const apiKey = mediaService.getApiKey()
     // Try both /Items and /emby/Items
     const urlsToTry = [
       `${baseUrl}/Items/${id}/Images/${type}`,
@@ -182,35 +166,35 @@ export async function GET(
     for (const imageUrl of urlsToTry) {
       try {
         const queryParams = new URLSearchParams({
-          api_key: embyApiKey,
+          api_key: apiKey,
         })
         if (maxHeight) queryParams.append('maxHeight', maxHeight)
         if (maxWidth) queryParams.append('maxWidth', maxWidth)
         if (quality) queryParams.append('quality', quality)
 
         const fetchUrl = `${imageUrl}?${queryParams.toString()}`
-        const embyRes = await fetch(fetchUrl, {
+        const imgRes = await fetch(fetchUrl, {
           headers: {
             'Accept': 'image/*, */*'
           },
           redirect: 'manual',
-          next: { revalidate: 3600 } // Cache for 1 hour
+          next: { revalidate: 3600 }
         })
 
-        if (embyRes.status === 307 || embyRes.status === 301 || embyRes.status === 302) {
-          warn(`[Image Proxy]: Emby redirected to ${embyRes.headers.get('location')} for image. URL: ${fetchUrl}`)
+        if (imgRes.status === 307 || imgRes.status === 301 || imgRes.status === 302) {
+          warn(`[Image Proxy]: Media server redirected to ${imgRes.headers.get('location')} for image. URL: ${fetchUrl}`)
           continue
         }
 
-        if (embyRes.ok) {
-          const contentType = embyRes.headers.get('content-type') || ''
+        if (imgRes.ok) {
+          const contentType = imgRes.headers.get('content-type') || ''
           if (!contentType.startsWith('image/')) {
-            warn(`[Image Proxy]: Emby returned non-image content-type: ${contentType} for ${fetchUrl}`)
+            warn(`[Image Proxy]: Media server returned non-image content-type: ${contentType} for ${fetchUrl}`)
             continue
           }
           
-          const buffer = await embyRes.arrayBuffer()
-          log(`[Image Proxy]: Success from Emby ${fetchUrl} (${contentType})`)
+          const buffer = await imgRes.arrayBuffer()
+          log(`[Image Proxy]: Success from media server ${fetchUrl} (${contentType})`)
 
           return new NextResponse(buffer, {
             headers: {
@@ -219,7 +203,7 @@ export async function GET(
             }
           })
         } else {
-          warn(`[Image Proxy]: Emby returned ${embyRes.status} for ${fetchUrl}`)
+          warn(`[Image Proxy]: Media server returned ${imgRes.status} for ${fetchUrl}`)
         }
       } catch (fetchError: any) {
         warn(`[Image Proxy]: Failed for ${imageUrl}: ${fetchError.message}`)

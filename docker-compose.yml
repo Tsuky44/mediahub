@@ -13,11 +13,13 @@ services:
       - NODE_ENV=production
       - NEXTAUTH_URL=http://localhost:3008
       - NEXTAUTH_SECRET=fc6d0136203923971842095817349502934851029384
+      - PLAYER_INTEGRATION_API_KEY=${PLAYER_INTEGRATION_API_KEY:-}
+      - PLAYER_INTEGRATION_USER_EMAIL=${PLAYER_INTEGRATION_USER_EMAIL:-}
       # - DOCKER_HOST=unix:///var/run/docker.sock
     # env_file:
     #   - ./next-app/.env
     volumes:
-      - ./data:/data/db
+      - ./data/db:/data/db
       - ./tokens:/app/.config  # Persist tracker tokens/cookies between restarts
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped

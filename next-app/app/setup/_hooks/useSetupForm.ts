@@ -4,9 +4,14 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 
+type ServerType = 'emby' | 'jellyfin'
+
 interface FormData {
+  server_type: ServerType
   emby_url: string
   emby_api_key: string
+  jellyfin_url: string
+  jellyfin_api_key: string
 }
 
 export function useSetupForm() {
@@ -15,8 +20,11 @@ export function useSetupForm() {
   const [mode, setMode] = useState<'configure' | 'restore'>('configure')
 
   const [formData, setFormData] = useState<FormData>({
+    server_type: 'emby',
     emby_url: '',
     emby_api_key: '',
+    jellyfin_url: '',
+    jellyfin_api_key: '',
   })
 
   const [restorePassword, setRestorePassword] = useState('')
@@ -25,6 +33,10 @@ export function useSetupForm() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
+  }
+
+  const setServerType = (type: ServerType) => {
+    setFormData(prev => ({ ...prev, server_type: type }))
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,7 +61,8 @@ export function useSetupForm() {
         throw new Error(data.error || 'Une erreur est survenue')
       }
 
-      toast.success('Configuration terminée ! Connectez-vous avec votre compte Emby.')
+      const providerName = formData.server_type === 'jellyfin' ? 'Jellyfin' : 'Emby'
+      toast.success(`Configuration terminée ! Connectez-vous avec votre compte ${providerName}.`)
       router.push('/login')
       router.refresh()
     } catch (error: unknown) {
@@ -100,6 +113,7 @@ export function useSetupForm() {
     mode,
     setMode,
     formData,
+    setServerType,
     restorePassword,
     showRestorePassword,
     setShowRestorePassword,

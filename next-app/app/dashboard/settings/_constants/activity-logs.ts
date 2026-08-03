@@ -45,4 +45,5 @@ export const ACTION_LABELS: Readonly<Record<string, string>> = {
     REQUEST_DELETE: 'Suppression de demande',
     DOCKER_ACTION: 'Action Docker',
     SYNC_USERS: 'Synchronisation Utilisateurs',
+    SECURITY_ALERT: 'Alerte sécurité',
 }

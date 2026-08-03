@@ -24,11 +24,13 @@ export interface ActivityLogUser {
  */
 export interface ActivityLog {
     id: number
+    userId?: number | null
     action: string
     details: string | null
     entity?: string | null
     entityId?: string | null
     ipAddress?: string | null
+    userAgent?: string | null
     createdAt: string | Date
     user?: ActivityLogUser | null
 }
@@ -48,6 +50,17 @@ export interface ActivityLogDetails {
     mediaType?: string
     season?: number | string
     provider?: string
+    type?: string
+    tmdbId?: string | number
+    name?: string
+    email?: string
+    firstName?: string
+    inviter?: string
+    description?: string
+    count?: number
+    targetUserId?: number
+    groupId?: string
+    action?: string
     [key: string]: unknown
 }
 

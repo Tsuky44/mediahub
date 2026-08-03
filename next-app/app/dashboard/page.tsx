@@ -31,7 +31,7 @@ export default async function DashboardPage() {
 
   const data = await fetchDashboardData(user, ability)
 
-  if (!data.embyUrl) {
+  if (!data.mediaServerUrl) {
     const isBaseAdmin = data.userRole === 'admin'
     if (isBaseAdmin) {
       return (
@@ -41,7 +41,7 @@ export default async function DashboardPage() {
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Configuration incomplète</h2>
           <p className="text-gray-400 max-w-md mb-6">
-            L'instance doit être configurée avec l'URL d'Emby pour afficher les données du tableau de bord.
+            L'instance doit être configurée avec l'URL d'Emby ou Jellyfin pour afficher les données du tableau de bord.
           </p>
           <Link
             href="/dashboard/settings"

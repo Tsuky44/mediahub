@@ -2,7 +2,7 @@
 
 import { getSetting } from '@/lib/settings'
 import { testEmbyConnection } from './downloads/file-actions'
-import { getCurrentUser, getEmbyServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getMediaServerServiceForUser, getMediaServerType, getTmdbServiceForUser } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 import { UnraidService } from '@/lib/services/unraid'
 import { exec } from 'child_process'
@@ -113,11 +113,11 @@ export async function getDashboardStats() {
 
     // Patch 9: Cache serveur 30s — évite d'appeler Emby + Unraid à chaque client
     return await remember('dashboard_stats', 30 * 1000, async () => {
-    const embyService = await getEmbyServiceForUser()
-    if (!embyService) return null
+    const mediaService = await getMediaServerServiceForUser()
+    if (!mediaService) return null
 
     // Get Library Stats
-    const libraryStats = await embyService.getLibraryStats()
+    const libraryStats = await mediaService.getLibraryStats()
 
     // Get Disk Usage
     let diskUsage = { total: '0', used: '0', free: '0', percent: 0 }
@@ -190,15 +190,14 @@ export async function checkServicesHealth() {
 
     // Patch 10: Cache serveur 20s — évite un appel HTTP Emby toutes les 30s par client connecté
     return await remember('services_health', 20 * 1000, async () => {
-      const [embyUrl, embyKey] = await Promise.all([
-        getSetting('emby_url'),
-        getSetting('emby_api_key'),
-      ])
+      const mediaService = await getMediaServerServiceForUser()
+      const serverType = await getMediaServerType()
 
-      const embyRes = embyUrl && embyKey ? await testEmbyConnection(embyUrl, embyKey) : { success: false }
+      const isOnline = mediaService ? true : false
 
       return {
-        emby: embyRes.success ? 'online' : 'offline'
+        emby: isOnline ? 'online' : 'offline',
+        serverType: serverType || undefined,
       }
     })
   } catch (e) {

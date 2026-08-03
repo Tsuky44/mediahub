@@ -28,6 +28,18 @@ export async function GET(request: NextRequest) {
         return new NextResponse('Missing path', { status: 400 });
     }
 
+    // Protection contre le Path Traversal
+    const normalizedPath = path.replace(/\\/g, '/');
+    const isTraversal = 
+        normalizedPath.split('/').some(segment => segment === '..') || 
+        normalizedPath.startsWith('/') || 
+        normalizedPath.includes('//');
+
+    if (isTraversal) {
+        console.warn(`[SMB Download] Tentative de Path Traversal bloquée pour le chemin: "${path}"`);
+        return new NextResponse('Forbidden: Path traversal attempt detected', { status: 403 });
+    }
+
     try {
         const smbService = await getSmbServiceForUser();
         if (!smbService) {

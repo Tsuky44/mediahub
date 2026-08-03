@@ -1,6 +1,7 @@
 'use client'
 
 import { Check, Loader2 } from 'lucide-react'
+import { useMediaServerType } from '@/app/dashboard/_hooks/useMediaServerType'
 
 import type {
     AccountRequest,
@@ -30,6 +31,8 @@ export default function ApprovalModal({
     onCancel,
     onConfirm,
 }: ApprovalModalProps) {
+    const serverType = useMediaServerType()
+    const serverName = serverType === 'jellyfin' ? 'Jellyfin' : 'Emby'
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-[#1a1b26] border border-white/10 rounded-xl p-6 w-full max-w-md shadow-2xl space-y-4">
@@ -44,14 +47,14 @@ export default function ApprovalModal({
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-300">
-                            Nom d&apos;utilisateur Emby
+                            Nom d&apos;utilisateur {serverName}
                         </label>
                         <input
                             type="text"
                             value={customName}
                             onChange={e => onCustomNameChange(e.target.value)}
                             className="w-full bg-black/20 border border-white/10 rounded-lg p-2 text-white focus:outline-none focus:border-indigo-500"
-                            placeholder="Nom du compte Emby"
+                            placeholder={`Nom du compte ${serverName}`}
                         />
                     </div>
 
@@ -74,7 +77,7 @@ export default function ApprovalModal({
                         <p className="text-xs text-gray-500">
                             Si sélectionné, le nouvel utilisateur aura les mêmes accès et
                             restrictions que l&apos;utilisateur choisi. De plus, le compte sera
-                            automatiquement lié à Emby Connect.
+                            automatiquement lié à {serverName} Connect.
                         </p>
                     </div>
                 </div>

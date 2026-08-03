@@ -15,10 +15,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 1. Fetch 100 recent events with their deliveries
+    // 1. Fetch 200 recent events with their deliveries
     const events = await db.query.notificationEvents.findMany({
       orderBy: [desc(notificationEvents.createdAt), desc(notificationEvents.id)],
-      limit: 100,
+      limit: 200,
       with: {
         deliveries: true,
       },

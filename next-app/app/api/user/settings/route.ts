@@ -67,12 +67,18 @@ export async function POST(request: NextRequest) {
         unraid_api_key,
         docker_host,
         type,
-        request_all_seasons_enabled
+        request_all_seasons_enabled,
+        webhook_sonarr_secret,
+        webhook_radarr_secret,
+        webhook_emby_secret
     } = body
 
     // Update settings in DB
-    const updateSetting = async (key: string, value: any) => {
+    const updateSetting = async (key: string, value: any, options?: { skipEmpty?: boolean }) => {
         if (value !== undefined) {
+            if (options?.skipEmpty && (value === '' || value === null)) {
+                return
+            }
             // Convert boolean to string
             if (typeof value === 'boolean') {
                 await setSetting(key, String(value))
@@ -112,14 +118,14 @@ export async function POST(request: NextRequest) {
     await updateSetting('prowlarr_url', prowlarr_url)
     await updateSetting('prowlarr_api_key', prowlarr_api_key)
     
-    await updateSetting('emby_url', emby_url)
-    await updateSetting('emby_api_key', emby_api_key)
+    await updateSetting('emby_url', emby_url, { skipEmpty: true })
+    await updateSetting('emby_api_key', emby_api_key, { skipEmpty: true })
     
     await updateSetting('plex_url', plex_url)
     await updateSetting('plex_token', plex_token)
     
-    await updateSetting('jellyfin_url', jellyfin_url)
-    await updateSetting('jellyfin_api_key', jellyfin_api_key)
+    await updateSetting('jellyfin_url', jellyfin_url, { skipEmpty: true })
+    await updateSetting('jellyfin_api_key', jellyfin_api_key, { skipEmpty: true })
     
     await updateSetting('auth_emby_enabled', auth_emby_enabled)
     await updateSetting('auth_plex_enabled', auth_plex_enabled)
@@ -133,6 +139,10 @@ export async function POST(request: NextRequest) {
     await updateSetting('docker_host', docker_host)
     
     await updateSetting('type', type)
+
+    await updateSetting('webhook_sonarr_secret', webhook_sonarr_secret)
+    await updateSetting('webhook_radarr_secret', webhook_radarr_secret)
+    await updateSetting('webhook_emby_secret', webhook_emby_secret)
 
     await logAction(
         parseInt((session.user as any).id),

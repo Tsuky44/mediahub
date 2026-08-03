@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ShareIcon, ClockIcon, CheckIcon, ClipboardIcon } from '@heroicons/react/24/outline'
+import { ShareIcon, ClockIcon, CheckIcon, ClipboardIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 
 interface ShareFileModalProps {
     isOpen: boolean
     filePath: string
     token?: string
     onClose: () => void
-    onCreate: (days?: number) => Promise<void> | void
+    onCreate: (days?: number, password?: string) => Promise<void> | void
 }
 
 const DURATION_OPTIONS: Array<{ label: string; days?: number }> = [
@@ -25,6 +25,8 @@ const COPY_FEEDBACK_MS = 2000
 export function ShareFileModal({ isOpen, filePath, token, onClose, onCreate }: ShareFileModalProps) {
     const [mounted, setMounted] = useState(false)
     const [copied, setCopied] = useState(false)
+    const [usePassword, setUsePassword] = useState(false)
+    const [password, setPassword] = useState('')
 
     useEffect(() => {
         setMounted(true)
@@ -64,7 +66,7 @@ export function ShareFileModal({ isOpen, filePath, token, onClose, onCreate }: S
                                 {DURATION_OPTIONS.map((opt, i) => (
                                     <button
                                         key={i}
-                                        onClick={() => onCreate(opt.days)}
+                                        onClick={() => onCreate(opt.days, usePassword ? password : undefined)}
                                         className={`flex items-center justify-center px-4 py-3.5 ${
                                             opt.days === undefined
                                                 ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30'
@@ -74,6 +76,30 @@ export function ShareFileModal({ isOpen, filePath, token, onClose, onCreate }: S
                                         <ClockIcon className="w-4 h-4 mr-2 opacity-70" /> {opt.label}
                                     </button>
                                 ))}
+                            </div>
+
+                            <div className="pt-2 border-t border-white/5">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={usePassword}
+                                        onChange={(e) => setUsePassword(e.target.checked)}
+                                        className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className="text-sm text-gray-300 flex items-center gap-1.5">
+                                        <LockClosedIcon className="w-4 h-4 text-amber-400" />
+                                        Protéger par mot de passe
+                                    </span>
+                                </label>
+                                {usePassword && (
+                                    <input
+                                        type="text"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        placeholder="Mot de passe du lien"
+                                        className="mt-3 w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all text-sm"
+                                    />
+                                )}
                             </div>
                         </div>
                     ) : (

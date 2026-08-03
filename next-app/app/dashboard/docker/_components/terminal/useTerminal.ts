@@ -53,8 +53,10 @@ export function useTerminal(containerId: string, containerName?: string) {
     log(`[Terminal] Connecting to ${wsUrl || 'relative host'}`)
 
     const socket = io(wsUrl || undefined, {
-      transports: ['websocket'],
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
       reconnectionAttempts: 5,
+      withCredentials: true,
     })
 
     socketRef.current = socket

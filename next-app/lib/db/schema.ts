@@ -220,6 +220,19 @@ export const watchEvents = sqliteTable('watch_events', {
 }));
 
 // ============================================================================
+// MEDIA LAST PLAYED (cache de la date de dernière lecture par item)
+// ============================================================================
+// Alimentée par un backfill depuis Emby (UserData.LastPlayedDate), source
+// complète et historique. Stocke la date la plus récente tous utilisateurs
+// confondus, par itemId (film ou épisode). Lue par la colonne "Regardé".
+export const mediaLastPlayed = sqliteTable('media_last_played', {
+  itemId: text('item_id').primaryKey(),
+  itemType: text('item_type'),
+  lastPlayedAt: integer('last_played_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
+});
+
+// ============================================================================
 // SETTINGS
 // ============================================================================
 export const settings = sqliteTable('settings', {
@@ -345,6 +358,7 @@ export const fileShares = sqliteTable('file_shares', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   filePath: text('file_path').notNull(),
   token: text('token').notNull().unique(),
+  password: text('password'),
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
 });

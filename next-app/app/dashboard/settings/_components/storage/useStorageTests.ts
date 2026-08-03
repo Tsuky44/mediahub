@@ -24,7 +24,7 @@ export function useStorageTests(formData: SettingsFormData) {
     setStorageResult(null)
     try {
       const res = await testStorageConnection({
-        protocol,
+        protocol: protocol as 'smb' | 'ftp' | 'local',
         host: formData.storage_host,
         port: formData.storage_port,
         share: protocol === 'smb' ? formData.storage_share : '',

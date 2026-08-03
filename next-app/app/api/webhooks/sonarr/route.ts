@@ -7,10 +7,11 @@
  * Import gÃ©rÃ© sÃ©parÃ©ment pour dÃ©tecter saison complÃ¨te vs partielle.
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyWebhookSecret } from '@/lib/webhooks/verify-secret';
 import { db } from '@/lib/db/drizzle';
 import { mediaRequests } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne, like } from 'drizzle-orm';
 import { dispatch } from '@/lib/notifications-v2/dispatcher';
 import { logger } from '@/lib/logger';
 import { NOTIFICATION_EVENTS, type NotificationEvent } from '@/lib/notifications-v2/types';
@@ -153,41 +154,17 @@ async function handleImportEvent(body: any) {
     pendingQueueSeasons.add(qSeasonNum);
   }
 
-  // Tenter le dispatch groupÃ© (multi-saisons) — le helper consulte Sonarr lui-même
-  // pour connaître l'état de TOUTES les saisons demandées.
-  const { tryDispatchGroupedAvailability } = await import('@/lib/notifications-v2/utils/grouped-availability');
-  const grouped = await tryDispatchGroupedAvailability({
-    tmdbId,
-    tvdbId: series.tvdbId,
-    title,
-    overview,
-    posterPath,
-    requester,
-    pendingInQueueSeasons: [...pendingQueueSeasons],
-  });
+  // NE PAS dispatcher directement MEDIA_AVAILABLE ici.
+  // On met a jour le status des requests (5=available, 4=partial) et on laisse
+  // l'AvailabilityPoller gerer la notification avec dedup + logique grouped seasons.
+  // Cela evite les race conditions avec MEDIA_REQUESTED et les notifs en desordre.
 
-  // Si le helper a gÃrÃ toutes les saisons en mode groupÃ, on s'arrÃªte
-  if (grouped.dispatched) {
-    return NextResponse.json({ success: true });
-  }
-
-  // Si une demande groupÃe a ÃtÃ dÃtectÃe (mÃªme en attente de queue),
-  // on bloque le fallback pour toutes les saisons couvertes par ce groupe.
-  const groupedSeasonsSet = new Set(grouped.groupedSeasons);
-
-  // Fallback mono-saison : dispatcher individuellement pour chaque saison
-  // (demandes sans seasons[] groupÃes, ou demande d'une saison unique)
   for (const [seasonNumber, episodeNumbers] of Object.entries(groupedEpisodes)) {
     const seasonNum = parseInt(seasonNumber);
     const importedCount = episodeNumbers.length;
 
     if (pendingQueueSeasons.has(seasonNum)) {
-      logger.info(`[SonarrWebhook V2] Season ${seasonNum}: still in Sonarr queue â†â€™ skipping`);
-      continue;
-    }
-
-    if (grouped.isGrouped && groupedSeasonsSet.has(seasonNum)) {
-      logger.info(`[SonarrWebhook V2] Season ${seasonNum}: part of grouped request (waiting) â†â€™ skipping fallback`);
+      logger.info(`[SonarrWebhook V2] Season ${seasonNum}: still in Sonarr queue, skipping`);
       continue;
     }
 
@@ -198,23 +175,21 @@ async function handleImportEvent(body: any) {
     const isComplete = (totalEpisodes > 0 && fileCount >= totalEpisodes)
       || (totalEpisodes > 0 && importedCount >= totalEpisodes);
 
-    if (isComplete) {
-      logger.info(`[SonarrWebhook V2] Season ${seasonNum} complete (queue empty) -> MEDIA_AVAILABLE`);
-      await dispatch(NOTIFICATION_EVENTS.MEDIA_AVAILABLE, {
-        media: { tmdbId, mediaType: 'tv', title: `${title} - Saison ${seasonNum}`, overview, posterPath, seasonNumber: seasonNum },
-        requester,
-      });
-    } else {
-      logger.info(`[SonarrWebhook V2] Season ${seasonNum} partial (${fileCount}/${totalEpisodes}) -> SEASON_PARTIALLY_AVAILABLE`);
-      await dispatch(NOTIFICATION_EVENTS.SEASON_PARTIALLY_AVAILABLE, {
-        media: { tmdbId, mediaType: 'tv', title: `${title} - Saison ${seasonNum} (partielle)`, overview, posterPath, seasonNumber: seasonNum },
-        requester,
-      });
-    }
+    // Update request status: 5=available, 4=partial
+    // The AvailabilityPoller will dispatch the notification with proper dedup
+    const newStatus = isComplete ? 5 : 4;
+    await db.update(mediaRequests)
+      .set({ status: newStatus, updatedAt: new Date() })
+      .where(and(
+        eq(mediaRequests.tmdbId, tmdbId),
+        eq(mediaRequests.mediaType, 'tv'),
+        like(mediaRequests.metadata || '', `%"seasons":[${seasonNum}]%`),
+        ne(mediaRequests.status, 5)
+      ));
 
-    // Optionnel : Notification par épisode si activée dans la config.
-    // On passe par l'EpisodeImportBatcher qui regroupe les imports d'épisodes successifs (packs)
-    // sur une fenêtre de 10s pour éviter d'envoyer des notifications individuelles si tout s'importe d'un coup.
+    logger.info(`[SonarrWebhook V2] Season ${seasonNum}: ${isComplete ? 'complete' : 'partial'} (${fileCount}/${totalEpisodes}) -> request status=${newStatus}. AvailabilityPoller will dispatch.`);
+
+    // Episode-level notification for partial seasons (via batcher)
     if (!isComplete) {
       const { episodeImportBatcher } = await import('@/lib/notifications-v2/utils/episode-import-batcher');
       for (const epNum of episodeNumbers) {
@@ -233,8 +208,14 @@ async function handleImportEvent(body: any) {
   return NextResponse.json({ success: true });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const isValid = await verifyWebhookSecret(req, 'webhook_sonarr_secret');
+    if (!isValid) {
+      logger.warn('[SonarrWebhook] Tentative d\'accès non autorisée (secret invalide ou absent)');
+      return NextResponse.json({ error: 'Unauthorized. Invalid secret.' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { eventType, series, episodes } = body;
 

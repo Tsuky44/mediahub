@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getSetting } from '@/lib/settings'
 import { EmbyService } from '@/lib/services/emby'
 import { defineAbilityFor } from '@/lib/ability'
+import { enrichViewingStatsWithWatchEvents, aggregatedLastPlayedDate, upsertItemLastPlayedCache, type ViewingStatLike } from '@/lib/services/item-viewing-stats'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,56 +51,16 @@ export async function GET(request: Request) {
     // 1. Get viewing status for all users
     const viewingStats = await embyService.getItemStateForAllUsers(itemId)
 
-    // Enhance viewingStats with Prisma EmbyActivityLog data (ALWAYS use internal DB for date as requested)
-    /*
-    for (const stat of viewingStats) {
-        try {
-            // Find latest activity for this user and this item (or series)
-            // We use episode IDs if available (Series), or itemId (Movie/Episode)
-            // We also check mediaInfo just in case
-            const whereClause: any = {
-                embyUserId: stat.userId
-            }
+    // Enrichissement watch_events (logique partagée avec la colonne "Regardé").
+    await enrichViewingStatsWithWatchEvents(itemId, viewingStats as ViewingStatLike[])
 
-            if (stat.episodeIds && stat.episodeIds.length > 0) {
-                // For Series: Check if any episode was played
-                whereClause.itemId = { in: stat.episodeIds }
-            } else {
-                // For Movies/Episodes: Check exact item ID or if mediaInfo contains it
-                whereClause.OR = [
-                    { itemId: itemId },
-                    { mediaInfo: { contains: itemId } }
-                ]
-            }
-
-            const lastLog = await prisma.embyActivityLog.findFirst({
-                where: whereClause,
-                orderBy: {
-                    startTime: 'desc'
-                }
-            })
-
-            if (lastLog) {
-                // Always overwrite with DB data as it's the source of truth for history
-                stat.lastPlayedDate = lastLog.startTime.toISOString()
-                
-                // If it's an episode, update the text to show the last watched episode
-                if (lastLog.itemType === 'Episode' && lastLog.mediaInfo) {
-                    try {
-                        const info = JSON.parse(lastLog.mediaInfo)
-                        if (info.seasonIndex !== undefined && info.episodeIndex !== undefined) {
-                            stat.episodeText = `Dernier : S${info.seasonIndex}E${info.episodeIndex}`
-                        }
-                    } catch (e) {
-                        // Ignore parse error
-                    }
-                }
-            }
-        } catch (e) {
-            console.error(`Failed to fetch activity log for user ${stat.userId} item ${itemId}:`, e)
-        }
-    }
-    */
+    // Met à jour le cache pour accélérer les prochains chargements de la liste.
+    const aggregatedDate = aggregatedLastPlayedDate(viewingStats as ViewingStatLike[])
+    await upsertItemLastPlayedCache(
+        itemId,
+        type === 'Series' ? 'Series' : 'Movie',
+        aggregatedDate
+    )
 
     // 2. If Series, get seasons details
     let seasons: any[] = []

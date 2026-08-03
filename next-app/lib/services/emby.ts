@@ -338,6 +338,14 @@ export class EmbyService {
     return `${this.baseUrl}/Items/${itemId}/Images/Primary?width=${width}&quality=90`
   }
 
+  getBaseUrl() {
+    return this.baseUrl
+  }
+
+  getApiKey() {
+    return this.apiKey
+  }
+
   async getPublicItems(limit: number = 20) {
     try {
       const users = await this.getUsers()
@@ -528,6 +536,43 @@ export class EmbyService {
     }
   }
 
+  /**
+   * Récupère la date de dernière lecture par item (itemId -> date ISO) depuis
+   * le plugin Emby "Playback Reporting" (table PlaybackActivity), via une seule
+   * requête SQL agrégée côté serveur. C'est la même source que la partie stats.
+   *
+   * NB: Emby ne renvoie pas LastPlayedDate dans les requêtes de liste standard
+   * (UserData allégé), et le plugin a une rétention limitée (~quelques mois) :
+   * les lectures plus anciennes ne seront donc pas présentes ici.
+   *
+   * Les dates PlaybackActivity ont le format "YYYY-MM-DD HH:MM:SS.fffffff" (UTC).
+   */
+  async getPlaybackActivityDates(): Promise<Record<string, string>> {
+    const map: Record<string, string> = {}
+    try {
+      const data = await this.getCustomQuery(
+        'SELECT ItemId, MAX(DateCreated) FROM PlaybackActivity GROUP BY ItemId'
+      )
+      const rows: Array<Array<unknown>> = data?.results || []
+      for (const row of rows) {
+        const itemId = row[0] != null ? String(row[0]) : null
+        const rawDate = row[1] != null ? String(row[1]) : null
+        if (!itemId || !rawDate) continue
+
+        // Normalise "2026-07-08 13:40:20.1554178" -> ISO UTC
+        const normalized = rawDate.includes('T')
+          ? rawDate
+          : rawDate.replace(' ', 'T').replace(/(\.\d{3})\d*$/, '$1') + (rawDate.endsWith('Z') ? '' : 'Z')
+        const d = new Date(normalized)
+        if (isNaN(d.getTime())) continue
+        map[itemId] = d.toISOString()
+      }
+    } catch (e) {
+      warn('[EmbyService] getPlaybackActivityDates failed (plugin Playback Reporting requis):', (e as Error).message)
+    }
+    return map
+  }
+
   async deleteItem(itemId: string) {
     try {
       const client = await this.getClient()
@@ -611,7 +656,11 @@ export class EmbyService {
                         ParentId: itemId,
                         Recursive: true,
                         IncludeItemTypes: 'Episode',
-                        Fields: 'UserData,ParentIndexNumber,IndexNumber,RunTimeTicks'
+                        Fields: 'UserData,ParentIndexNumber,IndexNumber,RunTimeTicks',
+                        // Trié par date de lecture décroissante : le premier épisode
+                        // "vu" (ou en cours) rencontré est donc le plus récent.
+                        SortBy: 'DatePlayed',
+                        SortOrder: 'Descending'
                     }
                 })
                 
@@ -632,6 +681,10 @@ export class EmbyService {
                 }
 
                 let lastPlayedEpisode: Record<string, unknown> | null = null
+                // Épisode le plus récemment vu/en cours (le 1er de la liste triée
+                // par DatePlayed qui a une activité). Sert de repli quand Emby ne
+                // renvoie pas LastPlayedDate dans les requêtes de liste.
+                let mostRecentActiveEpisode: Record<string, unknown> | null = null
                 
                 const seasonStats = new Map<number, { total: number, played: number }>()
 
@@ -647,6 +700,7 @@ export class EmbyService {
                     // Global Stats
                     if (ep.RunTimeTicks) totalDuration += ep.RunTimeTicks
 
+                    const hasActivity = ep.UserData?.Played || ep.UserData?.PlaybackPositionTicks > 0
                     if (ep.UserData?.Played) {
                         playedCount++
                         sStat.played++
@@ -655,7 +709,13 @@ export class EmbyService {
                          if (ep.RunTimeTicks) playedDuration += ep.UserData.PlaybackPositionTicks
                     }
 
-                    // Last Played
+                    // Liste triée par DatePlayed desc : le 1er épisode avec activité
+                    // est le plus récent.
+                    if (hasActivity && !mostRecentActiveEpisode) {
+                        mostRecentActiveEpisode = ep
+                    }
+
+                    // Last Played (présent uniquement si Emby ne l'a pas retiré)
                     if (ep.UserData?.LastPlayedDate) {
                         const d = new Date(ep.UserData.LastPlayedDate)
                         if (!isNaN(d.getTime())) {
@@ -664,6 +724,25 @@ export class EmbyService {
                                 lastPlayedEpisode = ep
                             }
                         }
+                    }
+                }
+
+                // Emby ne renvoie pas LastPlayedDate dans les requêtes de liste :
+                // on lit alors la vraie date via une lecture unitaire de l'épisode
+                // le plus récemment vu par cet utilisateur.
+                if (!lastPlayedDate && mostRecentActiveEpisode) {
+                    try {
+                        const epDetail = await this.getItemDetails(String(mostRecentActiveEpisode.Id), String(user.Id))
+                        const lpd = epDetail?.UserData?.LastPlayedDate
+                        if (lpd) {
+                            const d = new Date(lpd)
+                            if (!isNaN(d.getTime())) {
+                                lastPlayedDate = d
+                                lastPlayedEpisode = mostRecentActiveEpisode
+                            }
+                        }
+                    } catch (e) {
+                        // lecture unitaire échouée : on laisse null
                     }
                 }
 

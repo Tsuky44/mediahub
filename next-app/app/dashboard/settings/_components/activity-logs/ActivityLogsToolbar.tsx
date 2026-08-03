@@ -3,6 +3,7 @@
 import { RefreshCw, User as UserIcon, Filter } from 'lucide-react'
 
 import { ACTION_FILTER_OPTIONS } from '../../_constants/activity-logs'
+import { formatLogUserOptionLabel } from '../../_utils/activity-logs'
 import type {
     ActivityLogUserOption,
     ActivityLogsFilters,
@@ -52,7 +53,7 @@ export default function ActivityLogsToolbar({
                         <option value="">Tous les utilisateurs</option>
                         {users.map(u => (
                             <option key={u.id} value={u.id}>
-                                {u.name} ({u.email})
+                                {formatLogUserOptionLabel(u.name, u.email)}
                             </option>
                         ))}
                     </select>

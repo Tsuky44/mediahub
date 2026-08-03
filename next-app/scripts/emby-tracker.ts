@@ -10,11 +10,76 @@ import { Server } from 'socket.io';
 import http from 'http';
 import Docker from 'dockerode';
 import { Writable, Readable, Duplex } from 'stream';
+import { decode, getToken } from 'next-auth/jwt';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
-const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
+const error = (...args: unknown[]) => { console.error(...args); };
+const warn = (...args: unknown[]) => { console.warn(...args); };
+
+function usesSecureSessionCookie(): boolean {
+  if (process.env.NEXTAUTH_URL?.startsWith('https://')) return true;
+  return process.env.NODE_ENV === 'production';
+}
+
+function parseCookieHeader(header?: string): Record<string, string> {
+  if (!header) return {};
+  const cookies: Record<string, string> = {};
+  for (const part of header.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx === -1) continue;
+    const name = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    try {
+      cookies[name] = decodeURIComponent(value);
+    } catch {
+      cookies[name] = value;
+    }
+  }
+  return cookies;
+}
+
+/** Réassemble les cookies NextAuth chunkés (session-token.0, .1, …). */
+function getSessionTokenFromCookies(cookies: Record<string, string>): string | null {
+  const cookieName = usesSecureSessionCookie()
+    ? '__Secure-next-auth.session-token'
+    : 'next-auth.session-token';
+
+  if (cookies[cookieName]) return cookies[cookieName];
+
+  const chunks: string[] = [];
+  let i = 0;
+  while (cookies[`${cookieName}.${i}`]) {
+    chunks.push(cookies[`${cookieName}.${i}`]);
+    i++;
+  }
+  return chunks.length > 0 ? chunks.join('') : null;
+}
+
+async function authenticateSocket(socket: any) {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    warn('[Tracker] NEXTAUTH_SECRET manquant — auth socket impossible');
+    return null;
+  }
+
+  const secureCookie = usesSecureSessionCookie();
+
+  // 1. getToken (gère les cookies chunkés si headers présents)
+  const fromGetToken = await getToken({
+    req: socket.request,
+    secret,
+    secureCookie,
+  });
+  if (fromGetToken?.sub) return fromGetToken;
+
+  // 2. Fallback : parse manuel du header Cookie (certains proxies le transmettent ainsi)
+  const cookieHeader = socket.request?.headers?.cookie as string | undefined;
+  const rawToken = getSessionTokenFromCookies(parseCookieHeader(cookieHeader));
+  if (!rawToken) return null;
+
+  return decode({ token: rawToken, secret });
+}
 
 
 const dockerOptions: Record<string, string> = {};
@@ -55,6 +120,32 @@ const server = http.createServer();
 // Utilisation de '*' par défaut pour une compatibilité totale dans le conteneur unifié.
 const CORS_ORIGIN = '*';
 
+// Auth socket : optionnelle à la connexion, obligatoire uniquement pour les actions sensibles
+// (terminal Docker, logs). Les sessions en direct sont en lecture seule.
+const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+async function attachSessionIfPresent(socket: any): Promise<void> {
+  const clientAddress = socket.handshake.address as string;
+
+  if (LOOPBACK_ADDRESSES.has(clientAddress) && socket.handshake.auth?.isServer) {
+    socket.data.isServer = true;
+    log('[Tracker] Internal server socket connected');
+    return;
+  }
+
+  const decoded = await authenticateSocket(socket);
+  if (decoded?.sub) {
+    socket.data.userId = decoded.sub;
+    socket.data.email = decoded.email;
+    log(`[Tracker] Session attachée pour ${decoded.email}`);
+  }
+}
+
+function requireAuthenticatedSocket(socket: any): boolean {
+  if (socket.data.userId) return true;
+  return false;
+}
+
 const io = new Server(server, {
   cors: {
     origin: CORS_ORIGIN,
@@ -73,15 +164,18 @@ if (!isFullSync) {
     });
 }
 
-io.on('connection', (socket) => {
-  const userId = socket.handshake.query.userId as string;
+io.on('connection', async (socket) => {
+  await attachSessionIfPresent(socket);
+
+  const userId = socket.data.userId as string;
+  const email = socket.data.email as string;
   
   if (userId) {
       if (!userSockets.has(userId)) {
           userSockets.set(userId, new Set());
       }
       userSockets.get(userId)?.add(socket.id);
-      log(`[Tracker] User ${userId} connected on socket ${socket.id}`);
+      log(`[Tracker] User ${email} (${userId}) connected on socket ${socket.id}`);
   } else {
       log(`[Tracker] Client connected without userId: ${socket.id}`);
   }
@@ -122,8 +216,12 @@ io.on('connection', (socket) => {
       });
   });
 
-  // Server Broadcast Handler
+  // Server Broadcast Handler (interne uniquement)
   socket.on('server_broadcast_notification', (data: { userIds: (string|number)[], notification: Record<string, unknown> }) => {
+    if (!socket.data.isServer) {
+      warn(`[Tracker] server_broadcast_notification refusé (non-interne): ${socket.id}`);
+      return;
+    }
     log(`[Tracker] Broadcasting notification to users: ${data.userIds.join(', ')}`);
     data.userIds.forEach(uid => {
         const uidStr = String(uid);
@@ -144,6 +242,10 @@ io.on('connection', (socket) => {
   let terminalExec: unknown = null;
 
   socket.on('start_terminal_session', async (rawContainerId: unknown) => {
+    if (!requireAuthenticatedSocket(socket)) {
+      socket.emit('terminal_error', 'Non autorisé');
+      return;
+    }
     try {
       const containerId = String(rawContainerId).trim();
       log(`[Tracker] Client ${socket.id} requested terminal for container: "${containerId}"`);
@@ -237,6 +339,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('subscribe_docker_logs', async (rawContainerId: unknown) => {
+    if (!requireAuthenticatedSocket(socket)) {
+      socket.emit('docker_log_error', 'Non autorisé');
+      return;
+    }
     try {
       const containerId = String(rawContainerId).trim();
       log(`[Tracker] Client ${socket.id} subscribed to logs for container: "${containerId}"`);
