@@ -14,6 +14,7 @@ export function getBonusLabel(trackerName: string): string {
   if (name.includes('torr9') || name.includes('tor9')) return 'Jetons'
   if (name.includes('abnormal') || name.includes('abn')) return 'Réputation'
   if (name.includes('gemini')) return 'Bonus'
+  if (name.includes('tr4ker') || name.includes('traker')) return 'Crédits'
   return 'Points'
 }
 

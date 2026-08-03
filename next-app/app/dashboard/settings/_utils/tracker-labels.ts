@@ -5,7 +5,7 @@ export const TRACKER_TYPES: TrackerTypeMeta[] = [
     { id: 'gazelle', name: 'Gazelle (RED, OPS, etc.)', description: 'Trackers basés sur Gazelle' },
     { id: 'unit3d', name: 'Unit3d (BLU, Aither, etc.)', description: 'Trackers basés sur Unit3d' },
     { id: 'jackett', name: 'Jackett/Prowlarr', description: 'Via Jackett ou Prowlarr' },
-    { id: 'scraper', name: 'Scraper (C411, LaCale, etc.)', description: 'Trackers français nécessitant login' },
+    { id: 'scraper', name: 'Scraper (C411, TR4KER, etc.)', description: 'Trackers français (login ou clé API)' },
     { id: 'custom', name: 'API Personnalisée', description: 'Configuration manuelle' },
 ]
 
@@ -19,6 +19,7 @@ export function getBonusLabel(trackerName: string): string {
     if (name.includes('torr9') || name.includes('tor9')) return 'Jetons'
     if (name.includes('abnormal') || name.includes('abn')) return 'Réputation'
     if (name.includes('gemini')) return 'Bonus'
+    if (name.includes('tr4ker') || name.includes('traker')) return 'Crédits'
     return 'Points'
 }
 

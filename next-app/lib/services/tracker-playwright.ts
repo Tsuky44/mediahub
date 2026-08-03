@@ -899,6 +899,73 @@ export async function scrapeGemini(apiToken: string): Promise<PlaywrightStats | 
 }
 
 /**
+ * TR4KER (tr4ker.net) - French semi-private tracker
+ * Auth: X-Api-Key header (clé API dans Mon compte > Paramètres)
+ * Endpoint: GET /api/me
+ * Ratio = (uploaded + bonus_upload) / (downloaded + bonus_download)
+ */
+export async function scrapeTr4ker(
+  apiKey: string,
+  baseUrl: string = 'https://tr4ker.net'
+): Promise<PlaywrightStats | null> {
+  const root = baseUrl.replace(/\/$/, '') || 'https://tr4ker.net'
+  const API_URL = `${root}/api/me`
+
+  try {
+    log('[TR4KER] Fetching stats from API...')
+
+    const response = await fetch(API_URL, {
+      method: 'GET',
+      headers: {
+        'User-Agent': defaultUserAgent,
+        'Accept': 'application/json',
+        'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+        'X-Api-Key': apiKey,
+      },
+      signal: AbortSignal.timeout(30000),
+    })
+
+    if (!response.ok) {
+      error(`[TR4KER] API error: HTTP ${response.status} ${response.statusText}`)
+      return null
+    }
+
+    const data = await response.json()
+    const user = data.user || data.data || data
+
+    const uploadedRaw = parseStatsValue(user.uploaded ?? 0)
+    const downloadedRaw = parseStatsValue(user.downloaded ?? 0)
+    const bonusUpload = parseStatsValue(user.bonus_upload ?? 0)
+    const bonusDownload = parseStatsValue(user.bonus_download ?? 0)
+    const money = parseFloat(String(user.money ?? 0)) || 0
+
+    // Match TR4KER UI: ratio uses upload/download including bonus bytes
+    const uploaded = Math.floor(uploadedRaw + bonusUpload)
+    const downloaded = Math.floor(downloadedRaw + bonusDownload)
+    const ratio = downloaded > 0 ? uploaded / downloaded : (uploaded > 0 ? 999 : 0)
+
+    log('[TR4KER] Parsed:', {
+      uploaded,
+      downloaded,
+      ratio: Number(ratio.toFixed(4)),
+      bonus: money,
+      bonusUpload,
+      bonusDownload,
+    })
+
+    return {
+      uploaded,
+      downloaded,
+      ratio,
+      bonus: money,
+    }
+  } catch (e) {
+    error('[TR4KER] Error:', (e as Error).message)
+    return null
+  }
+}
+
+/**
  * Abnormal (abn.lol) - French tracker scraped via Playwright
  * Parses stats from home page header: UP, DOWN, RATIO, POINTS DE RÉPUTATION
  */

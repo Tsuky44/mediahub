@@ -187,6 +187,29 @@ async function fetchScraperStats(config: TrackerConfig): Promise<TrackerStats | 
       }
       return null
     }
+
+    // TR4KER uses X-Api-Key only (no login needed)
+    if (nameLower.includes('tr4ker') || nameLower.includes('traker')) {
+      log('[TrackerStats] Using TR4KER API')
+      const token = config.apiKey || config.passkey
+      if (!token) {
+        error('[TrackerStats] TR4KER requires an API key (apiKey or passkey)')
+        return null
+      }
+      const { scrapeTr4ker } = await import('./tracker-playwright')
+      const stats = await scrapeTr4ker(token, config.baseUrl || 'https://tr4ker.net')
+
+      if (stats) {
+        return {
+          uploaded: stats.uploaded,
+          downloaded: stats.downloaded,
+          ratio: stats.ratio,
+          bonusPoints: stats.bonus,
+          lastUpdated: Date.now()
+        }
+      }
+      return null
+    }
     
     // Abnormal (abn.lol) - Playwright scraper with login/password
     if (nameLower.includes('abnormal') || nameLower.includes('abn')) {

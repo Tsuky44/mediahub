@@ -179,7 +179,8 @@ export async function testTrackerConnection(
     if (config.type === 'scraper') {
       const nameLower = (config.name || '').toLowerCase()
       // These trackers use API token (apiKey/passkey) - no login needed
-      const useApiToken = nameLower.includes('gemini') || 
+      const useApiToken = nameLower.includes('gemini') ||
+                          nameLower.includes('tr4ker') || nameLower.includes('traker') ||
                           nameLower.includes('tos') || nameLower.includes('theoldschool') || 
                           nameLower.includes('old school') || nameLower.includes('oldschool')
       
@@ -215,7 +216,16 @@ export async function testTrackerConnection(
     } else {
       let errorMsg = 'Impossible de récupérer les statistiques.'
       if (config.type === 'scraper') {
-        errorMsg += ' Vérifiez que votre login et mot de passe sont corrects. Le site peut avoir changé sa structure.'
+        const nameLower = (config.name || '').toLowerCase()
+        const useApiToken = nameLower.includes('gemini') ||
+                            nameLower.includes('tr4ker') || nameLower.includes('traker') ||
+                            nameLower.includes('tos') || nameLower.includes('theoldschool') ||
+                            nameLower.includes('old school') || nameLower.includes('oldschool')
+        if (useApiToken) {
+          errorMsg += ' Vérifiez votre clé API et l\'URL du tracker.'
+        } else {
+          errorMsg += ' Vérifiez que votre login et mot de passe sont corrects. Le site peut avoir changé sa structure.'
+        }
       } else {
         errorMsg += ' Vérifiez votre clé API et l\'URL.'
       }
@@ -335,7 +345,7 @@ export async function importTrackersFromProwlarr(): Promise<{
         const nameLower = indexer.name.toLowerCase()
         
         // French trackers that need scraping
-        const frenchTrackers = ['c411', 'c441', 'lacale', 'theoldschool', 'tor9', 'abnormal']
+        const frenchTrackers = ['c411', 'c441', 'lacale', 'theoldschool', 'tor9', 'abnormal', 'tr4ker', 'traker']
         const isFrenchTracker = frenchTrackers.some(ft => nameLower.includes(ft))
         
         if (impl.includes('gazelle')) type = 'gazelle'
