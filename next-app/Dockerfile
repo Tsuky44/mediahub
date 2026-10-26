@@ -64,11 +64,44 @@ RUN \
 
 # No need to copy init script - using direct SQL in entrypoint.sh
 
-# Production image, copy all the files and run next
-FROM base AS runner
+# Dépendances de PRODUCTION uniquement pour l'image finale.
+# On repart des node_modules déjà installés (modules natifs déjà compilés) et on
+# retire les devDependencies (TypeScript, ESLint, Tailwind…) ainsi que le
+# compilateur SWC (~110 Mo) qui ne sert qu'au build : le serveur standalone de
+# Next ne l'utilise jamais à l'exécution.
+FROM deps AS prod-deps
+RUN pnpm prune --prod \
+  && rm -rf node_modules/.pnpm/@next+swc-*
+
+# Base d'exécution : Node seul (pnpm n'est utile qu'au build)
+FROM node:20.18.3-alpine AS runtime-base
+
+# Assemblage de /app dans une étape à part : l'image finale n'en reçoit qu'UNE
+# copie (avant, les node_modules du standalone puis ceux du build étaient
+# empilés dans deux couches successives).
+FROM runtime-base AS assemble
+WORKDIR /app
+COPY --from=builder /app/public ./public
+RUN mkdir .next
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/data ./data
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/lib ./lib
+COPY --from=builder /app/entrypoint.sh ./entrypoint.sh
+# node_modules de production (dont tsx et les dépendances du tracker)
+COPY --from=prod-deps /app/node_modules ./node_modules
+# Ensure Unix line endings and executable permission
+RUN sed -i 's/\r$//' ./entrypoint.sh && chmod +x ./entrypoint.sh
+
+# Production image
+FROM runtime-base AS runner
 WORKDIR /app
 
-# Install OpenSSL for SQLite (better-sqlite3), Playwright dependencies, and Docker CLI
+# OpenSSL/SQLite (better-sqlite3) et Chromium pour Playwright (scraping des trackers).
+# Retirés : docker-cli (l'app parle à Docker via l'API/socket avec dockerode, jamais
+# via la CLI) et les polices CJK/emoji (uniquement utiles au rendu visuel de pages
+# asiatiques dans Chromium, qui ne sert ici qu'à lire le contenu des pages).
 RUN apk add --no-cache \
   openssl \
   sqlite \
@@ -78,10 +111,7 @@ RUN apk add --no-cache \
   harfbuzz \
   ca-certificates \
   ttf-freefont \
-  font-noto \
-  font-noto-cjk \
-  font-noto-emoji \
-  docker-cli
+  font-noto
 
 # Tell Playwright to use system Chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
@@ -92,25 +122,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-# Automatically leverage output traces to reduce image size
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/data ./data
-COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
-COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
-COPY --from=builder --chown=nextjs:nodejs /app/entrypoint.sh ./entrypoint.sh
-
-# Copy full node_modules from builder to have tsx and tracker dependencies
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
-
-# Ensure Unix line endings and executable permission
-RUN sed -i 's/\r$//' ./entrypoint.sh && chmod +x ./entrypoint.sh
+# Application assemblée (une seule couche)
+COPY --from=assemble --chown=nextjs:nodejs /app ./
 
 USER nextjs
 
