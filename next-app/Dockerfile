@@ -89,6 +89,8 @@ COPY --from=builder /app/data ./data
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/entrypoint.sh ./entrypoint.sh
+# Changelog local : affiché dans « Mise à jour » (le dépôt GitHub est privé)
+COPY --from=builder /app/CHANGELOG.md ./CHANGELOG.md
 # node_modules de production (dont tsx et les dépendances du tracker)
 COPY --from=prod-deps /app/node_modules ./node_modules
 # Ensure Unix line endings and executable permission

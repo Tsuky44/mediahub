@@ -5,6 +5,7 @@ import type { Session } from "next-auth"
 import { Toaster } from "react-hot-toast"
 import { AbilityProvider } from "./AbilityProvider"
 import { QueryProvider } from "./QueryProvider"
+import { DeploymentGuard } from "./DeploymentGuard"
 import SupportChatbot from "@/components/global/SupportChatbot"
 
 // `session` est résolue côté serveur (layout racine) : useSession() et les permissions
@@ -12,6 +13,7 @@ import SupportChatbot from "@/components/global/SupportChatbot"
 export function Providers({ children, session }: { children: React.ReactNode; session?: Session | null }) {
   return (
     <SessionProvider session={session}>
+      <DeploymentGuard />
       <QueryProvider>
         <AbilityProvider>
           {children}

@@ -11,7 +11,7 @@
 
 import { db } from '@/lib/db/drizzle'
 import { mediaRequests, users, notificationEvents } from '@/lib/db/schema'
-import { eq, desc, and } from 'drizzle-orm'
+import { eq, desc, and, ne } from 'drizzle-orm'
 import { logger } from '@/lib/logger'
 import { ConfigStore } from '../config/config-store'
 import { dispatch } from '../dispatcher'
@@ -88,26 +88,18 @@ export class AvailabilityPoller {
       return
     }
 
-    // Récupérer la queue Sonarr une seule fois pour tout le tick
-    let sonarrQueueByTvdbId = new Map<number, Set<number>>() // tvdbId → Set<seasonNumber en queue>
-    try {
-      const sonarr = await getSonarrService()
-      if (sonarr) {
-        const queue = await sonarr.getQueue().catch(() => [])
-        for (const q of queue) {
-          const tvdbId = q.series?.tvdbId
-          if (!tvdbId) continue
-          const seasonNum = q.episode?.seasonNumber ?? q.seasonNumber
-          if (seasonNum == null) continue
-          const tState = (q.trackedDownloadState || '').toLowerCase()
-          if (tState === 'completed' || tState === 'imported' || tState === 'failed') continue
-          if (!sonarrQueueByTvdbId.has(tvdbId)) sonarrQueueByTvdbId.set(tvdbId, new Set())
-          sonarrQueueByTvdbId.get(tvdbId)!.add(seasonNum)
-        }
-      }
-    } catch (e) {
-      logger.warn('[NotificationsV2][AvailabilityPoller] Failed to fetch Sonarr queue:', e)
-    }
+    // La logique groupée n'agrège que les demandes TV encore non disponibles
+    // (tryDispatchGroupedAvailability ignore status=5) : on ne l'appelle que pour
+    // les séries qui en ont une, au lieu de tout recalculer à chaque tick.
+    const pendingTvRows = await db
+      .selectDistinct({ tmdbId: mediaRequests.tmdbId })
+      .from(mediaRequests)
+      .where(and(eq(mediaRequests.mediaType, 'tv'), ne(mediaRequests.status, 5)))
+    const tmdbIdsWithPendingTv = new Set(pendingTvRows.map((r) => r.tmdbId))
+
+    // Queue Sonarr : chargée au plus une fois par tick, et seulement si une demande groupée en a besoin
+    let sonarrQueue: Promise<Map<number, Set<number>>> | null = null
+    const getSonarrQueueByTvdbId = () => (sonarrQueue ??= this.loadSonarrQueueByTvdbId())
 
     // Grouper les requêtes disponibles par (tmdbId, userId) pour les demandes multi-saisons TV
     // Une demande multi-saisons (S1+S2) doit produire une seule notif globale.
@@ -155,6 +147,9 @@ export class AvailabilityPoller {
 
       // Demande TV multi-saisons → logique groupée
       if (rep.mediaType === 'tv' && allRequestedSeasons.length > 1) {
+        // Aucune demande en cours pour cette série → rien à grouper
+        if (!tmdbIdsWithPendingTv.has(rep.tmdbId)) continue
+
         // Résoudre tmdbId → tvdbId pour vérifier la queue Sonarr
         let tvdbId: number | undefined
         try {
@@ -168,7 +163,7 @@ export class AvailabilityPoller {
         } catch {}
 
         const pendingInQueueSeasons = tvdbId
-          ? [...(sonarrQueueByTvdbId.get(tvdbId) ?? [])]
+          ? [...((await getSonarrQueueByTvdbId()).get(tvdbId) ?? [])]
           : []
 
         const prospectKey = buildDedupKey(
@@ -226,5 +221,29 @@ export class AvailabilityPoller {
         logger.error(`[NotificationsV2][AvailabilityPoller] Failed to dispatch MEDIA_AVAILABLE for req #${rep.id}: ${result.error}`)
       }
     }
+  }
+
+  /** tvdbId → saisons encore en cours de téléchargement dans la queue Sonarr */
+  private async loadSonarrQueueByTvdbId(): Promise<Map<number, Set<number>>> {
+    const byTvdbId = new Map<number, Set<number>>()
+    try {
+      const sonarr = await getSonarrService()
+      if (sonarr) {
+        const queue = await sonarr.getQueue().catch(() => [])
+        for (const q of queue) {
+          const tvdbId = q.series?.tvdbId
+          if (!tvdbId) continue
+          const seasonNum = q.episode?.seasonNumber ?? q.seasonNumber
+          if (seasonNum == null) continue
+          const tState = (q.trackedDownloadState || '').toLowerCase()
+          if (tState === 'completed' || tState === 'imported' || tState === 'failed') continue
+          if (!byTvdbId.has(tvdbId)) byTvdbId.set(tvdbId, new Set())
+          byTvdbId.get(tvdbId)!.add(seasonNum)
+        }
+      }
+    } catch (e) {
+      logger.warn('[NotificationsV2][AvailabilityPoller] Failed to fetch Sonarr queue:', e)
+    }
+    return byTvdbId
   }
 }

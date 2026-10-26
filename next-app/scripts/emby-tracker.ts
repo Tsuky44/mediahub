@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 // Load environment variables before other imports
-dotenv.config();
+dotenv.config({ quiet: true });
 
 import WebSocket from 'ws';
 import { EmbyService } from '../lib/services/emby';
