@@ -37,10 +37,6 @@ interface EmbyApiEpisode {
   };
 }
 
-interface EmbyApiSystemInfo {
-  Id?: string;
-}
-
 const EMPTY_PROGRESS: MediaEmbyProgress = {
   embyUserId: null,
   embyItem: null,
@@ -102,8 +98,7 @@ export async function fetchMediaEmbyProgress(params: {
     if (embyItem?.ServerId) {
       embyServerId = embyItem.ServerId
     } else {
-      const sysInfo = (await mediaService.getSystemInfo()) as EmbyApiSystemInfo | null
-      if (sysInfo) embyServerId = sysInfo.Id || null
+      embyServerId = await mediaService.getServerId()
     }
 
     if (embyItem) {

@@ -1,12 +1,24 @@
 import axios, { type AxiosInstance } from 'axios'
 import https from 'https'
 import { getHttpsAgent, keepAliveHttpAgent } from '../http-agents'
+// Imports relatifs : ce fichier est aussi chargé par le tracker (tsx, sans tsconfig dans l'image)
+import { createMemoCache } from '../cache'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
 const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
 const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
+
+// Index id TMDB -> id Emby des éléments visibles par un utilisateur (par type), partagé
+// entre toutes les fiches média. Les données de visionnage (UserData) ne sont jamais
+// mises en cache : l'élément trouvé est relu en direct.
+interface TmdbIndex { ids: Map<string, string>; builtAt: number }
+const tmdbIndexes = createMemoCache({ max: 200, ttl: 10 * 60_000 })
+// Un id TMDB absent de l'index n'est considéré absent d'Emby que si l'index a moins d'1 min
+const TMDB_INDEX_NOT_FOUND_TTL_MS = 60_000
+// Id du serveur (statique) mis en cache par URL
+const serverIds = createMemoCache({ max: 20, ttl: 60 * 60_000 })
 
 export class EmbyService {
   private baseUrl: string
@@ -473,20 +485,73 @@ export class EmbyService {
     }
   }
 
+  /** Index léger (sans UserData ni images) des mêmes 1000 éléments que la recherche historique. */
+  private async getTmdbIndex(userId: string, type: string, refresh: boolean): Promise<TmdbIndex> {
+      const key = `${this.baseUrl}|${userId}|${type}`
+      if (refresh) tmdbIndexes.delete(key)
+      return tmdbIndexes.get<TmdbIndex>(key, async () => {
+          const allItems = await this.getUserItems(userId, {
+              IncludeItemTypes: type,
+              Recursive: true,
+              Fields: 'ProviderIds',
+              EnableUserData: false,
+              EnableImages: false,
+              Limit: 1000
+          })
+          const ids = new Map<string, string>()
+          for (const i of (allItems.Items ?? []) as Record<string, unknown>[]) {
+              const providerIds = i.ProviderIds as Record<string, string> | undefined
+              const tmdb = providerIds?.Tmdb ? String(providerIds.Tmdb) : null
+              // Premier élément correspondant, comme le find() historique
+              if (tmdb && i.Id != null && !ids.has(tmdb)) ids.set(tmdb, String(i.Id))
+          }
+          return { ids, builtAt: Date.now() }
+      // Index vide = Emby injoignable ou bibliothèque vide : non mis en cache
+      }, { cacheIf: (index) => index.ids.size > 0 })
+  }
+
   async getItemByTmdbId(userId: string, tmdbId: number, type: 'Movie' | 'Series' | 'Episode') {
-      const allItems = await this.getUserItems(userId, {
-          IncludeItemTypes: type,
-          Recursive: true,
-          Fields: 'UserData,ProviderIds',
-          Limit: 1000
+      // Relit l'élément avec exactement les mêmes paramètres que la recherche historique
+      const fetchItem = async (itemId: string) => {
+          const items = await this.getUserItems(userId, {
+              IncludeItemTypes: type,
+              Recursive: true,
+              Fields: 'UserData,ProviderIds',
+              Limit: 1000,
+              Ids: itemId
+          })
+          const match = items.Items?.find((i: Record<string, unknown>) => {
+              const providerIds = i.ProviderIds as Record<string, string> | undefined
+              return providerIds?.Tmdb && String(providerIds.Tmdb) === String(tmdbId)
+          })
+          return match || null
+      }
+
+      let index = await this.getTmdbIndex(userId, type, false)
+      let itemId = index.ids.get(String(tmdbId))
+
+      // Absent d'un index ancien : il a peut-être été ajouté depuis -> index rafraîchi
+      if (!itemId && Date.now() - index.builtAt > TMDB_INDEX_NOT_FOUND_TTL_MS) {
+          index = await this.getTmdbIndex(userId, type, true)
+          itemId = index.ids.get(String(tmdbId))
+      }
+      if (!itemId) return null
+
+      const item = await fetchItem(itemId)
+      if (item) return item
+
+      // Élément supprimé ou remplacé depuis la création de l'index
+      index = await this.getTmdbIndex(userId, type, true)
+      itemId = index.ids.get(String(tmdbId))
+      return itemId ? fetchItem(itemId) : null
+  }
+
+  /** Id du serveur (stable) : mis en cache 1 h au lieu d'appeler /System/Info/Public à chaque fiche. */
+  async getServerId(): Promise<string | null> {
+      return serverIds.get(this.baseUrl, async () => {
+          const sysInfo = await this.getSystemInfo() as { Id?: string } | null
+          return sysInfo?.Id || null
       })
-      
-      const match = allItems.Items?.find((i: Record<string, unknown>) => {
-          const providerIds = i.ProviderIds as Record<string, string> | undefined
-          return providerIds?.Tmdb && String(providerIds.Tmdb) === String(tmdbId)
-      })
-      
-      return match || null
   }
 
   async toggleFavorite(userId: string, itemId: string, isFavorite: boolean) {

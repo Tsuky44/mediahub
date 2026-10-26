@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useInView } from 'react-intersection-observer'
 import { MediaCard } from '@/components/global/MediaCard'
 import { fetchEmbyMedia } from './actions'
@@ -24,6 +24,18 @@ export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, wat
     rootMargin: '1000px',
   })
 
+  // Préchargement de la page suivante (même principe que la page Demandes)
+  const prefetchRef = useRef<{ key: string; promise: ReturnType<typeof fetchEmbyMedia> } | null>(null)
+  const pageKey = (p: number) => JSON.stringify([p, type, query ?? null, !!favoritesOnly, !!watchLaterOnly])
+  const getPage = (p: number) => {
+    const prefetched = prefetchRef.current
+    if (prefetched?.key === pageKey(p)) {
+      prefetchRef.current = null
+      return prefetched.promise
+    }
+    return fetchEmbyMedia(p, type, query, favoritesOnly, watchLaterOnly)
+  }
+
   useEffect(() => {
     setItems(initialItems)
     setPage(1)
@@ -35,13 +47,12 @@ export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, wat
     
     setLoading(true)
     const nextPage = page + 1
-    const data = await fetchEmbyMedia(nextPage, type, query, favoritesOnly, watchLaterOnly)
+    const data = await getPage(nextPage)
     
     if (data.results.length > 0) {
         setItems(prev => {
-            const newItems = data.results.filter((newItem: any) => 
-                !prev.some((existingItem: any) => existingItem.id === newItem.id)
-            )
+            const existingIds = new Set(prev.map((existingItem: any) => existingItem.id))
+            const newItems = data.results.filter((newItem: any) => !existingIds.has(newItem.id))
             return [...prev, ...newItems]
         })
         setPage(nextPage)
@@ -59,6 +70,17 @@ export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, wat
       loadMore()
     }
   }, [inView])
+
+  // Lance le chargement de la page suivante en arrière-plan dès que la page courante est affichée
+  useEffect(() => {
+    if (!hasMore || loading) return
+    const key = pageKey(page + 1)
+    if (prefetchRef.current?.key === key) return
+    const promise = fetchEmbyMedia(page + 1, type, query, favoritesOnly, watchLaterOnly)
+    promise.catch(() => {}) // l'erreur éventuelle remontera au moment de l'utilisation
+    prefetchRef.current = { key, promise }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, hasMore, loading, type, query, favoritesOnly, watchLaterOnly])
 
   return (
     <div className="space-y-6">
