@@ -19,6 +19,11 @@ import {
 import type { UserStat } from '../_components/UserStatsCard'
 import type { ActivityData } from '../_components/StatsCharts'
 
+// RecentHistory n'affiche que les 50 entrées les plus récentes (les mises à jour
+// temps réel ne touchent que le haut de la liste) : inutile de sérialiser tout
+// l'historique de la période vers le navigateur.
+const HISTORY_PAYLOAD_LIMIT = 200
+
 export interface StatsDataResult {
   hasGlobalView: boolean
   hasSelfView: boolean
@@ -99,7 +104,7 @@ export async function fetchStatsData(
   const { hourlyActivity, orderedDailyActivity, monthlyActivity } = computeActivityHistograms(historyArray, period)
 
   const embySessions: unknown[] = []
-  const aggregatedHistory = consolidateHistory(historyArray, [], itemDurations)
+  const aggregatedHistory = consolidateHistory(historyArray, [], itemDurations).slice(0, HISTORY_PAYLOAD_LIMIT)
 
   const { userStatsMap, totalWatchTimeSeconds } = computeUserStats(
     historyArray,
