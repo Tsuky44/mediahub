@@ -83,7 +83,9 @@ export function StreamingCard({
                     title={provider.provider_name}
                   >
                     <img
-                      src={`https://image.tmdb.org/t/p/original${provider.logo_path}`}
+                      loading="lazy"
+                      decoding="async"
+                      src={`https://image.tmdb.org/t/p/w185${provider.logo_path}`}
                       alt={provider.provider_name}
                       className="w-full h-full object-contain rounded-xl"
                     />

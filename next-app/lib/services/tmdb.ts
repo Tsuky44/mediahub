@@ -1,8 +1,17 @@
 import { createAxiosClient } from '@/lib/http-client'
 import { cached } from '@/lib/cache-service'
-import { CACHE_TTL, TIMEOUT } from '@/lib/constants'
+import { createMemoCache } from '@/lib/cache'
+import { CACHE_TTL, MS, TIMEOUT } from '@/lib/constants'
 import { getSetting } from '@/lib/settings'
 import { logger } from '@/lib/logger'
+
+// Caches process-wide partagés par toutes les instances de TmdbService.
+// - responses : réponses JSON TMDB (copie à la lecture : certains appelants enrichissent les objets)
+// - posters   : poster_path par média (chaînes, très sollicité par les listes)
+const responses = createMemoCache({ max: 1500, ttl: CACHE_TTL.API_STATIC, clone: true })
+const posters = createMemoCache({ max: 20_000, ttl: MS.DAY })
+
+let serviceInstance: { apiKey: string; service: TmdbService } | null = null
 
 export async function getTmdbService() {
   // 1. Primary Hardcoded Key
@@ -17,7 +26,11 @@ export async function getTmdbService() {
   }
 
   if (!apiKey) return null
-  return new TmdbService(apiKey)
+  // Réutilise l'instance (et donc le client HTTP keep-alive) tant que la clé ne change pas
+  if (serviceInstance?.apiKey !== apiKey) {
+    serviceInstance = { apiKey, service: new TmdbService(apiKey) }
+  }
+  return serviceInstance.service
 }
 
 interface DiscoverParams {
@@ -37,7 +50,6 @@ interface DiscoverParams {
 export class TmdbService {
   private apiKey: string
   private client: ReturnType<typeof createAxiosClient>
-  private static posterPathCache = new Map<string, string>()
 
   constructor(apiKey: string) {
     this.apiKey = apiKey
@@ -60,11 +72,18 @@ export class TmdbService {
     return this.client
   }
 
-  async getExternalIds(type: 'movie' | 'tv', id: number) {
-    const client = this.getClient()
-    try {
-      const response = await client.get(`/${type}/${id}/external_ids`)
+  /** GET mis en cache (dédupliqué en vol). Les erreurs ne sont jamais mises en cache. */
+  private cachedGet(url: string, params: Record<string, unknown> | undefined, ttl: number) {
+    const key = `${url}?${JSON.stringify(params ?? {})}`
+    return responses.get(key, async () => {
+      const response = await this.client.get(url, params ? { params } : undefined)
       return response.data
+    }, { ttl })
+  }
+
+  async getExternalIds(type: 'movie' | 'tv', id: number) {
+    try {
+      return await this.cachedGet(`/${type}/${id}/external_ids`, undefined, MS.DAY)
     } catch (e) {
       logger.error(`[TMDB] Failed to get external IDs for ${type}/${id}`, e)
       return null
@@ -72,12 +91,8 @@ export class TmdbService {
   }
 
   async findByExternalId(externalId: string | number, source: 'imdb_id' | 'tvdb_id') {
-    const client = this.getClient()
     try {
-      const response = await client.get(`/find/${externalId}`, {
-        params: { external_source: source }
-      })
-      return response.data
+      return await this.cachedGet(`/find/${externalId}`, { external_source: source }, MS.DAY)
     } catch (e) {
       logger.error(`[TMDB] Failed to find by external ID ${externalId}`, e)
       return null
@@ -85,28 +100,16 @@ export class TmdbService {
   }
 
   async searchMulti(query: string, page = 1) {
-    const client = this.getClient()
-    const response = await client.get('/search/multi', {
-      params: { query, page }
-    })
-    return response.data
+    return this.cachedGet('/search/multi', { query, page }, CACHE_TTL.API_DYNAMIC)
   }
 
   async search(type: 'movie' | 'tv', query: string, page = 1) {
-    const client = this.getClient()
-    const response = await client.get(`/search/${type}`, {
-      params: { query, page }
-    })
-    return response.data
+    return this.cachedGet(`/search/${type}`, { query, page }, CACHE_TTL.API_DYNAMIC)
   }
 
   async getTrending(type: 'all' | 'movie' | 'tv' = 'movie', page = 1) {
-    const client = this.getClient()
     try {
-      const response = await client.get(`/trending/${type}/week`, {
-        params: { page }
-      })
-      return response.data
+      return await this.cachedGet(`/trending/${type}/week`, { page }, CACHE_TTL.API_DYNAMIC)
     } catch (error) {
       const err = error as { message?: string; response?: { data?: unknown } }
       logger.error(`[TMDB] getTrending failed: ${err.message}`, err.response?.data)
@@ -115,8 +118,6 @@ export class TmdbService {
   }
 
   async discover(type: 'movie' | 'tv', params: DiscoverParams = {}) {
-    const client = this.getClient()
-
     const queryParams: Record<string, unknown> = {
       page: params.page || 1,
       sort_by: params.sort_by || 'popularity.desc',
@@ -134,10 +135,7 @@ export class TmdbService {
     if (params.watch_region) queryParams.watch_region = params.watch_region
     if (params.watch_providers && params.watch_providers.length > 0) queryParams.with_watch_providers = params.watch_providers.join('|')
 
-    const response = await client.get(`/discover/${type}`, {
-      params: queryParams
-    })
-    return response.data
+    return this.cachedGet(`/discover/${type}`, queryParams, CACHE_TTL.API_DYNAMIC)
   }
 
   async discoverMixed(params: DiscoverParams = {}) {
@@ -227,38 +225,27 @@ export class TmdbService {
     }, { memoryTtl: CACHE_TTL.API_STATIC, tags: ['tmdb-static'] })
   }
 
-  private posterPathCache = new Map<string, string>()
-
   async getPosterPath(id: number, type: 'movie' | 'tv') {
-    const cacheKey = `${type}-${id}`
-    if (this.posterPathCache.has(cacheKey)) {
-      return this.posterPathCache.get(cacheKey)
-    }
-
     try {
-      const client = this.getClient()
-      const response = await client.get(`/${type}/${id}`)
-      const path = response.data.poster_path
-      if (path) {
-        this.posterPathCache.set(cacheKey, path)
-      }
-      return path
+      return await posters.get<string | null>(`${type}-${id}`, async () => {
+        const response = await this.getClient().get(`/${type}/${id}`)
+        return response.data.poster_path ?? null
+      })
     } catch (e) {
       return null
     }
   }
 
   async getDetails(id: number, type: 'movie' | 'tv') {
-    const client = this.getClient()
     try {
-      const response = await client.get(`/${type}/${id}`, {
-        params: {
-          language: 'fr-FR',
-          append_to_response: `videos,images,${type === 'tv' ? 'aggregate_credits' : 'credits'},watch/providers,keywords,external_ids,recommendations,similar`,
-          include_image_language: 'fr,en,null'
-        }
-      })
-      return response.data
+      const details = await this.cachedGet(`/${type}/${id}`, {
+        language: 'fr-FR',
+        append_to_response: `videos,images,${type === 'tv' ? 'aggregate_credits' : 'credits'},watch/providers,keywords,external_ids,recommendations,similar`,
+        include_image_language: 'fr,en,null'
+      }, CACHE_TTL.API_STATIC)
+      // Alimente le cache des posters (évite un appel getPosterPath ultérieur)
+      if (details?.poster_path) posters.set(`${type}-${id}`, details.poster_path)
+      return details
     } catch (e) {
       logger.error(`Failed to get ${type} details`, e)
       return null
@@ -266,12 +253,8 @@ export class TmdbService {
   }
 
   async getSeasonDetails(tvId: number, seasonNumber: number) {
-    const client = this.getClient()
     try {
-      const response = await client.get(`/tv/${tvId}/season/${seasonNumber}`, {
-        params: { language: 'fr-FR' }
-      })
-      return response.data
+      return await this.cachedGet(`/tv/${tvId}/season/${seasonNumber}`, { language: 'fr-FR' }, CACHE_TTL.API_STATIC)
     } catch (e) {
       logger.error(`Failed to fetch season ${seasonNumber} for tv ${tvId}`, e)
       return null
@@ -279,10 +262,8 @@ export class TmdbService {
   }
 
   async getCollectionDetails(collectionId: number) {
-    const client = this.getClient()
     try {
-      const response = await client.get(`/collection/${collectionId}`)
-      return response.data
+      return await this.cachedGet(`/collection/${collectionId}`, undefined, CACHE_TTL.API_STATIC)
     } catch (e) {
       logger.error(`Failed to fetch collection ${collectionId}`, e)
       return null
@@ -290,12 +271,8 @@ export class TmdbService {
   }
 
   async getRecommendations(id: number, type: 'movie' | 'tv', page = 1) {
-    const client = this.getClient()
     try {
-      const response = await client.get(`/${type}/${id}/recommendations`, {
-        params: { page }
-      })
-      return response.data
+      return await this.cachedGet(`/${type}/${id}/recommendations`, { page }, CACHE_TTL.API_STATIC)
     } catch (e) {
       logger.error(`Failed to get recommendations for ${type} ${id}`, e)
       return { results: [] }
@@ -303,12 +280,8 @@ export class TmdbService {
   }
 
   async getSimilar(id: number, type: 'movie' | 'tv', page = 1) {
-    const client = this.getClient()
     try {
-      const response = await client.get(`/${type}/${id}/similar`, {
-        params: { page }
-      })
-      return response.data
+      return await this.cachedGet(`/${type}/${id}/similar`, { page }, CACHE_TTL.API_STATIC)
     } catch (e) {
       logger.error(`Failed to get similar for ${type} ${id}`, e)
       return { results: [] }
@@ -316,21 +289,16 @@ export class TmdbService {
   }
 
   async getPersonDetails(id: number) {
-    const client = this.getClient()
     try {
-      const response = await client.get(`/person/${id}`, {
-        params: {
-          append_to_response: 'combined_credits,external_ids,images',
-          language: 'fr-FR'
-        }
-      })
-      return response.data
+      return await this.cachedGet(`/person/${id}`, {
+        append_to_response: 'combined_credits,external_ids,images',
+        language: 'fr-FR'
+      }, CACHE_TTL.API_STATIC)
     } catch (error) {
       const e = error as { response?: { status?: number } }
       if (e.response?.status === 404) {
         try {
-          const simpleResponse = await client.get(`/person/${id}`)
-          return simpleResponse.data
+          return await this.cachedGet(`/person/${id}`, undefined, CACHE_TTL.API_STATIC)
         } catch (innerError) {
           logger.error(`Total failure for person ${id}`, innerError)
           return null

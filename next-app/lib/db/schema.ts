@@ -187,6 +187,7 @@ export const mediaRequests = sqliteTable('media_requests', {
   userStatusIdx: index('media_requests_user_status_idx').on(table.userId, table.status),
   mediaTypeStatusIdx: index('media_requests_media_type_status_idx').on(table.mediaType, table.status),
   tmdbIdx: index('media_requests_tmdb_idx').on(table.tmdbId),
+  requestedAtIdx: index('media_requests_requested_at_idx').on(table.requestedAt),
 }));
 
 // ============================================================================
@@ -217,6 +218,7 @@ export const watchEvents = sqliteTable('watch_events', {
   tmdbId: text('tmdb_id'),
 }, (table) => ({
   uniqueEmbyItemPlayed: uniqueIndex('watch_events_emby_item_played_unique').on(table.embyUserId, table.itemId, table.playedAt),
+  playedAtIdx: index('watch_events_played_at_idx').on(table.playedAt),
 }));
 
 // ============================================================================
@@ -257,7 +259,9 @@ export const auditLogs = sqliteTable('audit_logs', {
   userAgent: text('user_agent'),
   details: text('details'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
-});
+}, (table) => ({
+  createdAtIdx: index('audit_logs_created_at_idx').on(table.createdAt),
+}));
 
 // ============================================================================
 // PERMISSIONS

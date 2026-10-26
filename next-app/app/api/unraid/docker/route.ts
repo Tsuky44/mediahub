@@ -1,7 +1,6 @@
 
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { UnraidService } from '@/lib/services/unraid'
 import { DockerService } from '@/lib/services/docker'
 import { db } from '@/lib/db/drizzle'
@@ -18,7 +17,7 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   const user = session?.user as any
   const ability = defineAbilityFor(user)

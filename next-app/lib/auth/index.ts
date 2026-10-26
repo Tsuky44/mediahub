@@ -4,6 +4,7 @@ import { db } from "@/lib/db/drizzle"
 import { users, roles } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 import { cookies } from "next/headers"
+import { cache } from "react"
 // Import providers
 import { localProvider } from "./providers/local"
 import { embyProvider } from "./providers/emby"
@@ -165,13 +166,20 @@ export const authOptions: NextAuthOptions = {
   }
 }
 
+/**
+ * Session de la requête courante, mémoïsée par requête (React cache).
+ * Le callback `session` fait un aller-retour DB (rôle + permissions + impersonation) :
+ * layout, page, server actions et composants qui l'appellent ne paient ce coût qu'une fois.
+ */
+export const getSession = cache(() => getServerSession(authOptions))
+
 export async function getCurrentUser() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   return session?.user
 }
 
 export async function getRealUser() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) return null
 
   if (session.user.isImpersonated) {

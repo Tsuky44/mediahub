@@ -2,14 +2,13 @@
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
 import { eq, inArray } from 'drizzle-orm'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   if (!session || !session.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

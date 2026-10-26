@@ -1,9 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useGlobalStats } from '../_hooks/useGlobalStats'
 import { TorrentStatsBar } from './torrent-stats/TorrentStatsBar'
-import { TrackerStatsModal } from './torrent-stats/TrackerStatsModal'
+
+// Modal (graphiques recharts) chargée seulement au premier clic
+const TrackerStatsModal = dynamic(
+    () => import('./torrent-stats/TrackerStatsModal').then(mod => mod.TrackerStatsModal),
+    { ssr: false }
+)
 
 /**
  * Affiche la barre de stats globales qBittorrent (vitesse, session, ratio)
@@ -13,13 +19,23 @@ import { TrackerStatsModal } from './torrent-stats/TrackerStatsModal'
 export function TorrentStats() {
     const { stats, loading } = useGlobalStats()
     const [isModalOpen, setIsModalOpen] = useState(false)
+    // Une fois ouverte, la modal reste montée (conserve son état comme avant)
+    const [hasOpenedModal, setHasOpenedModal] = useState(false)
 
     if (loading || !stats) return null
 
     return (
         <>
-            <TorrentStatsBar stats={stats} onOpenSessionModal={() => setIsModalOpen(true)} />
-            <TrackerStatsModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+            <TorrentStatsBar
+                stats={stats}
+                onOpenSessionModal={() => {
+                    setHasOpenedModal(true)
+                    setIsModalOpen(true)
+                }}
+            />
+            {hasOpenedModal && (
+                <TrackerStatsModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+            )}
         </>
     )
 }

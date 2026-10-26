@@ -221,6 +221,8 @@ export function MediaInfoCard({ mediaInfo, torrentHash, parsed, relatedRequests 
                   <div key={actor.name} className="flex flex-col items-center text-center p-2 rounded-lg bg-white/5">
                     {actor.profile_path ? (
                       <img
+                        loading="lazy"
+                        decoding="async"
                         src={`https://image.tmdb.org/t/p/w200${actor.profile_path}`}
                         alt={actor.name}
                         className="w-14 h-14 rounded-full object-cover mb-2"

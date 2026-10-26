@@ -51,6 +51,8 @@ export function NotificationItem({ notification, onMarkAsRead, onDelete }: Notif
       {notification.posterPath ? (
         <div className="flex-shrink-0 w-20 h-28 rounded-xl overflow-hidden bg-gray-800 border border-gray-700 shadow-lg">
           <img
+            loading="lazy"
+            decoding="async"
             src={`https://image.tmdb.org/t/p/w185${notification.posterPath}`}
             alt={notification.title}
             className="w-full h-full object-cover"

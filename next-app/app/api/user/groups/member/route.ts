@@ -1,15 +1,14 @@
 ﻿import { db } from '@/lib/db/drizzle'
 import { userGroupMembers } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 import { logAction } from '@/lib/audit'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session) {
         return new NextResponse('Unauthorized', { status: 401 })
     }
@@ -55,7 +54,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session) {
         return new NextResponse('Unauthorized', { status: 401 })
     }

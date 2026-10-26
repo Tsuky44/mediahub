@@ -1,5 +1,5 @@
 import axios from 'axios'
-import https from 'https'
+import { insecureHttpsAgent, keepAliveHttpAgent } from '@/lib/http-agents'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -10,9 +10,7 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 export class JellyfinService {
   private baseUrl: string
   private apiKey: string
-  private httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-  })
+  private httpsAgent = insecureHttpsAgent
 
   constructor(baseUrl: string, apiKey: string) {
     // Remove trailing slash and /web/... if present
@@ -32,6 +30,7 @@ export class JellyfinService {
         api_key: this.apiKey
       },
       timeout,
+      httpAgent: keepAliveHttpAgent,
       httpsAgent: this.httpsAgent,
       maxRedirects: 5, 
       validateStatus: (status) => status >= 200 && status < 400,
@@ -58,6 +57,7 @@ export class JellyfinService {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
+            httpAgent: keepAliveHttpAgent,
             httpsAgent: this.httpsAgent,
             timeout: 15000, 
             maxRedirects: 5

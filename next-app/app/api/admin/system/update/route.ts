@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { db } from '@/lib/db/drizzle';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -20,7 +19,7 @@ export const dynamic = 'force-dynamic';
 // GET: Check for updates
 export async function GET(req: Request) {
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getSession();
         
         // Check admin permissions
         if (!session?.user?.email) {
@@ -51,7 +50,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     console.log('[UpdateAPI] POST request received');
     try {
-        const session = await getServerSession(authOptions);
+        const session = await getSession();
         console.log('[UpdateAPI] Session:', session?.user?.email ? 'authenticated' : 'none');
         
         if (!session?.user?.email) {

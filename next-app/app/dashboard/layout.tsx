@@ -1,9 +1,7 @@
 import { Navbar } from '@/components/global/Navbar'
-import { db } from '@/lib/db/drizzle'
-import { settings } from '@/lib/db/schema'
-import { inArray } from 'drizzle-orm'
 import { getCurrentUser } from '@/lib/auth'
 import { SystemMessageDisplay } from '@/components/global/SystemMessageDisplay'
+import { getDashboardConfig } from './_services/dashboard-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,27 +10,14 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const user = await getCurrentUser()
+  const [user, config] = await Promise.all([getCurrentUser(), getDashboardConfig()])
   const isImpersonated = user?.isImpersonated
   const impersonatedRole = user?.role
 
   // Check enabled features based on configuration
-  const settingsList = await db.query.settings.findMany({
-    where: inArray(settings.key, ['qbittorrent_url', 'smb_host', 'docker_host', 'unraid_url']),
-    columns: {
-      key: true,
-      value: true
-    }
-  })
-
-  const hasQbit = !!settingsList.find(s => s.key === 'qbittorrent_url' && s.value)
-  const hasSmb = !!settingsList.find(s => s.key === 'smb_host' && s.value)
-  const hasDocker = !!settingsList.find(s => s.key === 'docker_host' && s.value)
-  const hasUnraid = !!settingsList.find(s => s.key === 'unraid_url' && s.value)
-
   const configStatus = {
-    hasDownloads: hasQbit || hasSmb,
-    hasDocker: hasDocker || hasUnraid
+    hasDownloads: config.hasDownloads,
+    hasDocker: config.hasDocker
   }
 
   return (

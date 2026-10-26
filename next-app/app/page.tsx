@@ -1,5 +1,4 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { isAppConfigured } from '@/lib/setup'
 
@@ -11,7 +10,7 @@ export default async function Home() {
     redirect('/setup')
   }
 
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   if (session) {
       redirect('/dashboard')

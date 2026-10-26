@@ -3,8 +3,7 @@ import { InfiniteEmbyList } from './InfiniteEmbyList'
 import { SearchInput } from '@/components/global/SearchInput'
 import { Suspense } from 'react'
 import { RecentlyWatched } from './RecentlyWatched'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 import { redirect } from 'next/navigation'
 
@@ -14,7 +13,7 @@ import { MediaTypeTabs } from './_components/MediaTypeTabs'
 export const dynamic = 'force-dynamic'
 
 export default async function MediaPage({ searchParams }: { searchParams: Promise<any> }) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const ability = defineAbilityFor(session?.user)
 
   if (!ability.can('read', 'Library')) {

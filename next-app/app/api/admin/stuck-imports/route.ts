@@ -6,8 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 import { getStuckImportDetector, type StuckItem } from '@/lib/notifications-v2/pollers/stuck-import-detector'
 import { getRadarrService } from '@/lib/services/radarr'
@@ -22,7 +21,7 @@ interface StuckItemResponse extends StuckItem {
 // GET /api/admin/stuck-imports - Liste les imports bloqués
 export async function GET(): Promise<NextResponse> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     const user = session?.user
     
     if (!user) {
@@ -76,7 +75,7 @@ export async function GET(): Promise<NextResponse> {
 // ou { action: 'refresh' }
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     const user = session?.user
     
     if (!user) {

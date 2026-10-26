@@ -1,5 +1,4 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 import { computeStatsPeriod, type StatsPeriodParams, type StatsPeriod } from '../_utils/stats-period'
 import {
@@ -56,7 +55,7 @@ export interface StatsDataResult {
 export async function fetchStatsData(
   searchParams: StatsPeriodParams
 ): Promise<StatsDataResult | { restricted: true; message: string; linkHref: string; linkLabel: string }> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
 
   if (!session || !session.user) {
     return { restricted: true, message: 'Veuillez vous connecter pour voir les statistiques.', linkHref: '/api/auth/signin', linkLabel: 'Se connecter' }

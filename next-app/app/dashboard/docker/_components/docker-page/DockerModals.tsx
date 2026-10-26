@@ -1,10 +1,14 @@
 'use client'
 
-import LogViewer from '../LogViewer'
-import GroupManager from '../GroupManager'
-import ContainerStats from '../ContainerStats'
-import TerminalViewer from '../TerminalViewer'
-import ContainerDetails from '../ContainerDetails'
+import dynamic from 'next/dynamic'
+
+// Modales chargées à la demande : leur code (xterm, socket.io, graphiques…)
+// n'alourdit plus le chargement initial de la page Docker.
+const LogViewer = dynamic(() => import('../LogViewer'), { ssr: false })
+const GroupManager = dynamic(() => import('../GroupManager'), { ssr: false })
+const ContainerStats = dynamic(() => import('../ContainerStats'), { ssr: false })
+const TerminalViewer = dynamic(() => import('../TerminalViewer'), { ssr: false })
+const ContainerDetails = dynamic(() => import('../ContainerDetails'), { ssr: false })
 
 import type { DockerContainer, DockerGroup } from '../../_types/docker'
 

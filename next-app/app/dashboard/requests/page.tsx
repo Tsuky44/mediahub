@@ -3,15 +3,14 @@ import { InfiniteMediaList } from './InfiniteMediaList'
 import { SearchInput } from '@/components/global/SearchInput'
 import { Suspense } from 'react'
 import { fetchUserRecommendations } from '../media/actions'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { defineAbilityFor } from '@/lib/ability'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DiscoverPage({ searchParams }: { searchParams: Promise<{ q?: string; filter?: string; sort_by?: string; start_date?: string; end_date?: string; genres?: string; language?: string; watch_region?: string; watch_providers?: string }> }) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const user = session?.user as any
   const ability = defineAbilityFor(user)

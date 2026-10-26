@@ -1,7 +1,6 @@
 import { db } from '@/lib/db/drizzle'
 import { users, userGroupMembers } from '@/lib/db/schema'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
@@ -12,7 +11,7 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session || (session.user as any).role !== 'admin') {
         return new NextResponse('Unauthorized', { status: 401 })
     }

@@ -2,8 +2,7 @@
 import { db } from '@/lib/db/drizzle'
 import { users, roles } from '@/lib/db/schema'
 import { eq, or, asc } from 'drizzle-orm'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
 import bcrypt from 'bcryptjs'
 import { logger } from '@/lib/logger'
@@ -11,7 +10,7 @@ import { logger } from '@/lib/logger'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   if (!session || !session.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -30,7 +29,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   if (!session || !session.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -95,7 +94,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   if (!session || !session.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

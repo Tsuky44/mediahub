@@ -1,7 +1,14 @@
 ﻿'use client'
 
+import dynamic from 'next/dynamic'
 import { Activity, CalendarDays } from 'lucide-react'
-import { ActivityChart } from './stats-charts/ActivityChart'
+
+// recharts (~110 Ko gzip) chargé en différé : le reste de la page s'affiche sans l'attendre.
+// Le placeholder garde la même hauteur que le graphique (pas de saut de mise en page).
+const ActivityChart = dynamic(
+  () => import('./stats-charts/ActivityChart').then(mod => mod.ActivityChart),
+  { ssr: false, loading: () => <div className="h-[300px] w-full animate-pulse rounded-2xl bg-white/[0.03]" /> }
+)
 
 export interface ActivityData {
   name: string

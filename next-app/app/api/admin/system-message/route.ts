@@ -2,14 +2,13 @@
 import { db } from '@/lib/db/drizzle'
 import { settings } from '@/lib/db/schema'
 import { inArray, eq } from 'drizzle-orm'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 // GET: Get current system message settings
 export async function GET() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   if (!session?.user || (session.user as any).role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -36,7 +35,7 @@ export async function GET() {
 
 // POST: Update system message settings
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   if (!session?.user || (session.user as any).role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

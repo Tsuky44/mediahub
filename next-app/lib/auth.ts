@@ -2,6 +2,7 @@
 // All auth logic has been moved to the auth/ directory for better maintainability
 export {
   authOptions,
+  getSession,
   getCurrentUser,
   getRealUser,
 } from './auth/index'

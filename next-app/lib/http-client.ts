@@ -4,6 +4,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError, AxiosResponse } from 'axios';
 import { logger } from '@/lib/logger';
 import { RETRY, TIMEOUT } from '@/lib/constants';
+import { keepAliveHttpAgent, strictHttpsAgent } from '@/lib/http-agents';
 
 export interface ResilientClientOptions {
   baseURL: string;
@@ -47,7 +48,7 @@ export function createAxiosClient(opts: ResilientClientOptions): AxiosInstance {
     baseDelayMs = RETRY.BASE_DELAY_MS, serviceName = 'Service',
     circuitBreakerThreshold = 5, circuitBreakerResetMs = 30_000, dedupe = true } = opts;
 
-  const inst = axios.create({ baseURL, timeout, headers });
+  const inst = axios.create({ baseURL, timeout, headers, httpAgent: keepAliveHttpAgent, httpsAgent: strictHttpsAgent });
   const breaker = breakers.get(serviceName) ?? new CircuitBreaker(circuitBreakerThreshold, circuitBreakerResetMs, serviceName);
   breakers.set(serviceName, breaker);
 
@@ -79,7 +80,8 @@ export function createAxiosClient(opts: ResilientClientOptions): AxiosInstance {
   const originalGet = inst.get.bind(inst);
   inst.get = async function<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
     if (!dedupe) return originalGet<T>(url, config) as Promise<AxiosResponse<T>>;
-    const key = getKey('GET', url, config?.params, undefined);
+    // baseURL inclus : deux services peuvent exposer le même chemin relatif
+    const key = getKey('GET', `${baseURL}${url}`, config?.params, undefined);
     if (inFlight.has(key)) {
       logger.debug(`[HTTP] Dedup GET ${url} for ${serviceName}`);
       return inFlight.get(key) as Promise<AxiosResponse<T>>;

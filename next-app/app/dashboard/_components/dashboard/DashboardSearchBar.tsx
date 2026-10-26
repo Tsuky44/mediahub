@@ -82,6 +82,8 @@ export function DashboardSearchBar({
                   <div className="w-10 h-14 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
                     {result.poster ? (
                       <img
+                        loading="lazy"
+                        decoding="async"
                         src={result.poster}
                         alt={result.title}
                         className="w-full h-full object-cover"

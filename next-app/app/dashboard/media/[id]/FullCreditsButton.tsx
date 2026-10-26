@@ -115,6 +115,8 @@ export default function FullCreditsButton({ cast, crew, children }: FullCreditsB
                                             <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-800 flex-shrink-0 border border-white/5">
                                                 {actor.profile_path ? (
                                                     <img 
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} 
                                                         alt={actor.name}
                                                         className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
@@ -150,6 +152,8 @@ export default function FullCreditsButton({ cast, crew, children }: FullCreditsB
                                                 <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-800 flex-shrink-0 border border-white/5">
                                                     {member.profile_path ? (
                                                         <img 
+                                                            loading="lazy"
+                                                            decoding="async"
                                                             src={`https://image.tmdb.org/t/p/w185${member.profile_path}`} 
                                                             alt={member.name}
                                                             className="w-full h-full object-cover group-hover:scale-110 transition duration-300"

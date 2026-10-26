@@ -1,8 +1,7 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { importJellyseerrRequests } from '@/lib/jellyseerr-import'
 import { db } from '@/lib/db/drizzle'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { revalidatePath } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +13,7 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   // Si c'est une requÃªte cron (vÃ©rification via header par exemple)
   const authHeader = request.headers.get('authorization')

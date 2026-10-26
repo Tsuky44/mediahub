@@ -1,7 +1,10 @@
 'use server'
 
-import { getWatchLaterList, isInWatchLater } from './watch-later-actions'
+import { getWatchLaterList, areInWatchLater } from './watch-later-actions'
 import { getCurrentUser, getMediaServerServiceForUser, getMediaServerUserId, getTmdbServiceForUser } from '@/lib/auth'
+import { createMemoCache } from '@/lib/cache'
+import { MS } from '@/lib/constants'
+import type { EmbyService } from '@/lib/services/emby'
 import { db } from '@/lib/db/drizzle'
 import { users, mediaRequests, watchEvents } from '@/lib/db/schema'
 import { eq, or, and, gte, desc, sql, count } from 'drizzle-orm'
@@ -13,6 +16,17 @@ const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 't
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
 const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
 const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
+
+// SeriesId (serveur média) → id TMDB : stable, inutile de redemander la série à chaque rendu
+const seriesTmdbIds = createMemoCache({ max: 5000, ttl: MS.HOUR })
+
+async function getSeriesTmdbId(mediaService: EmbyService, seriesId: string, userId: string): Promise<string | undefined> {
+    return seriesTmdbIds.get<string | undefined>(seriesId, async () => {
+        const series = await mediaService.getItemDetails(seriesId, userId)
+        const tmdbId = series?.ProviderIds?.Tmdb
+        return tmdbId ? String(tmdbId) : undefined
+    })
+}
 
 
 export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false) {
@@ -64,6 +78,13 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
         })
 
         const items = Array.isArray(data.Items) ? data.Items : []
+
+        // Statut "à regarder plus tard" de toute la page en UNE requête (au lieu d'une par item)
+        const watchLaterKeys = new Set(await areInWatchLater(
+            items
+                .filter((item: EmbyItem) => item.Id != null)
+                .map((item: EmbyItem) => ({ id: String(item.Id), mediaType: item.Type === 'Movie' ? 'movie' : 'tv' }))
+        ))
         
         // Fetch TMDB poster paths in parallel for the current page
         const enrichedItems = await Promise.all(items.map(async (item: EmbyItem) => {
@@ -80,7 +101,7 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
                 poster_path = mediaService.getItemImageUrl(String(item.Id))
             }
 
-            const isWatchLaterItem = item.Id != null ? await isInWatchLater(String(item.Id), itemType) : false
+            const isWatchLaterItem = item.Id != null && watchLaterKeys.has(`${itemType}:${item.Id}`)
 
             return {
                 id: item.Id,
@@ -150,21 +171,13 @@ export async function fetchRecentlyWatchedItems() {
 
         log('[fetchRecentlyWatchedItems] Found unique items count:', uniqueItems.length)
         
-        // Optimisation : Utiliser un cache local pour les détails des séries afin d'éviter les appels redondants
-        const seriesDetailsCache = new Map<string, EmbyItem | undefined>()
-        
         const enrichedItems = await Promise.all(uniqueItems.map(async (item: EmbyItem) => {
             let tmdbId = item.ProviderIds?.Tmdb
             const itemType = item.Type === 'Movie' ? 'movie' : (item.Type === 'Series' ? 'tv' : 'tv')
             
             let poster_path = null
             if (item.Type === 'Episode' && item.SeriesId) {
-                let series = seriesDetailsCache.get(String(item.SeriesId))
-                if (!series) {
-                    series = await mediaService.getItemDetails(String(item.SeriesId), userId)
-                    seriesDetailsCache.set(String(item.SeriesId), series)
-                }
-                const seriesTmdbId = series?.ProviderIds?.Tmdb
+                const seriesTmdbId = await getSeriesTmdbId(mediaService, String(item.SeriesId), userId)
                 if (seriesTmdbId && tmdbService) {
                     poster_path = await tmdbService.getPosterPath(parseInt(String(seriesTmdbId)), 'tv')
                     tmdbId = seriesTmdbId
@@ -229,19 +242,16 @@ export async function fetchUserRecommendations(page: number = 1) {
 
         const mediaUserId = getMediaServerUserId(dbUser)
 
-        // 1. Get user's recent watch history from media server
-        let history: EmbyItem[] = []
-        if (mediaUserId && mediaService) {
-            const data = await mediaService.getRecentlyPlayedItems(mediaUserId, 15)
-            history = Array.isArray(data.Items) ? data.Items : []
-        }
-
-        // 2. Get user's recent requests from local DB
-        const requests = await db.query.mediaRequests.findMany({
-            where: or(eq(mediaRequests.requesterEmail, user.email), eq(mediaRequests.userId, dbUser.id)),
-            orderBy: [desc(mediaRequests.requestedAt)],
-            limit: 10
-        })
+        // 1. Historique récent (serveur média) + 2. demandes récentes (DB locale), en parallèle
+        const [historyData, requests] = await Promise.all([
+            mediaUserId && mediaService ? mediaService.getRecentlyPlayedItems(mediaUserId, 15) : null,
+            db.query.mediaRequests.findMany({
+                where: or(eq(mediaRequests.requesterEmail, user.email), eq(mediaRequests.userId, dbUser.id)),
+                orderBy: [desc(mediaRequests.requestedAt)],
+                limit: 10
+            }),
+        ])
+        const history: EmbyItem[] = Array.isArray(historyData?.Items) ? historyData.Items : []
 
         // Combine history and requests to find seed TMDB IDs
         const seeds: { id: number; type: 'movie' | 'tv' }[] = []
@@ -253,8 +263,7 @@ export async function fetchUserRecommendations(page: number = 1) {
                 const type = item.Type === 'Movie' ? 'movie' : (item.Type === 'Series' || item.Type === 'Episode' ? 'tv' : null)
                 
                 if (item.Type === 'Episode' && item.SeriesId && mediaUserId && mediaService) {
-                    const series = await mediaService.getItemDetails(String(item.SeriesId), mediaUserId)
-                    tmdbId = series?.ProviderIds?.Tmdb
+                    tmdbId = await getSeriesTmdbId(mediaService, String(item.SeriesId), mediaUserId)
                 }
 
                 if (tmdbId && type) {
@@ -374,22 +383,23 @@ export async function fetchServerTrends(page: number = 1) {
 
         const topRequestedArray = Array.isArray(topRequested) ? topRequested : []
 
-        // 3. Unify and enrich
+        // 3. Unify and enrich (appels serveur média / TMDB en parallèle, ordre conservé)
         const trendItems: Array<Record<string, unknown>> = []
         const seenTmdbIds = new Set<string>()
 
         // Process watched items first
         if (mediaService && topWatchedArray.length > 0) {
-            for (const watch of topWatchedArray) {
+            const watchedItems = await Promise.all(topWatchedArray.map(async (watch) => {
                 try {
                     const itemDetails = await mediaService.getItemDetails(watch.itemId)
                     const tmdbId = itemDetails.ProviderIds?.Tmdb
                     const mediaType = watch.itemType?.toLowerCase() === 'series' || watch.itemType?.toLowerCase() === 'episode' ? 'tv' : 'movie'
-                    
-                    if (tmdbId) {
-                        seenTmdbIds.add(tmdbId)
-                        const poster_path = await tmdbService.getPosterPath(parseInt(String(tmdbId)), mediaType)
-                        trendItems.push({
+                    if (!tmdbId) return null
+
+                    const poster_path = await tmdbService.getPosterPath(parseInt(String(tmdbId)), mediaType)
+                    return {
+                        tmdbKey: String(tmdbId),
+                        item: {
                             id: watch.itemId,
                             title: watch.itemName || watch.seriesName,
                             name: watch.itemName || watch.seriesName,
@@ -397,33 +407,41 @@ export async function fetchServerTrends(page: number = 1) {
                             media_type: mediaType,
                             tmdbId: parseInt(String(tmdbId)),
                             trendingReason: 'Populaire sur le serveur'
-                        })
+                        }
                     }
                 } catch (e) {
-                    continue
+                    return null
                 }
+            }))
+            for (const watched of watchedItems) {
+                if (!watched) continue
+                seenTmdbIds.add(watched.tmdbKey)
+                trendItems.push(watched.item)
             }
         }
 
         // Add requested items that aren't already there
-        for (const req of topRequestedArray) {
-            if (seenTmdbIds.has(req.tmdbId)) continue
-            
-            try {
-                const mediaType = req.mediaType as 'movie' | 'tv'
-                const poster_path = await tmdbService.getPosterPath(parseInt(req.tmdbId), mediaType)
-                trendItems.push({
-                    id: req.tmdbId,
-                    title: req.title,
-                    name: req.title,
-                    poster_path,
-                    media_type: mediaType,
-                    tmdbId: parseInt(req.tmdbId),
-                    trendingReason: 'Fortement demandé'
-                })
-            } catch (e) {
-                continue
-            }
+        const requestedItems = await Promise.all(topRequestedArray
+            .filter(req => !seenTmdbIds.has(req.tmdbId))
+            .map(async (req) => {
+                try {
+                    const mediaType = req.mediaType as 'movie' | 'tv'
+                    const poster_path = await tmdbService.getPosterPath(parseInt(req.tmdbId), mediaType)
+                    return {
+                        id: req.tmdbId,
+                        title: req.title,
+                        name: req.title,
+                        poster_path,
+                        media_type: mediaType,
+                        tmdbId: parseInt(req.tmdbId),
+                        trendingReason: 'Fortement demandé'
+                    }
+                } catch (e) {
+                    return null
+                }
+            }))
+        for (const item of requestedItems) {
+            if (item) trendItems.push(item)
         }
 
         return {

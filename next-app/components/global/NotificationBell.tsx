@@ -309,6 +309,8 @@ export function NotificationBell() {
                             {n.posterPath ? (
                               <div className="relative w-12 h-18 rounded-lg overflow-hidden bg-gray-800 border border-gray-700 shadow-md">
                                 <img
+                                  loading="lazy"
+                                  decoding="async"
                                   src={`https://image.tmdb.org/t/p/w92${n.posterPath}`}
                                   alt={n.title}
                                   className="w-full h-full object-cover"

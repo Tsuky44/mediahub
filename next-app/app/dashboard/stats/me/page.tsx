@@ -6,8 +6,7 @@ import { ChevronLeft, ChevronRight, Clock, Play, Activity, TrendingUp, Calendar,
 import Link from 'next/link'
 import { formatDistanceToNow, startOfMonth, endOfMonth, differenceInDays, startOfYear, endOfYear, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
 import { watchEvents } from '@/lib/db/schema'
 import { eq, gte, lte, and, desc, inArray } from 'drizzle-orm'
@@ -133,7 +132,7 @@ interface UserStatsPageProps {
 }
 
 export default async function UserStatsPage({ searchParams }: UserStatsPageProps) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   if (!session?.user) {
     redirect('/api/auth/signin')
   }

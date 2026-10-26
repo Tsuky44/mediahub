@@ -1,5 +1,6 @@
-import axios from 'axios'
+import axios, { type AxiosInstance } from 'axios'
 import https from 'https'
+import { getHttpsAgent, keepAliveHttpAgent } from '@/lib/http-agents'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
@@ -11,6 +12,8 @@ export class EmbyService {
   private baseUrl: string
   private apiKey: string
   private httpsAgent: https.Agent
+  /** Un client axios par timeout, réutilisé (évite axios.create à chaque appel). */
+  private clients = new Map<number, AxiosInstance>()
 
   /**
    * @param skipSslVerify - Si true (défaut), ignore les erreurs de certificat SSL (comportement historique).
@@ -20,7 +23,7 @@ export class EmbyService {
     // Remove trailing slash and /web/... if present
     this.baseUrl = baseUrl.split('/web/')[0].replace(/\/$/, '')
     this.apiKey = apiKey
-    this.httpsAgent = new https.Agent({ rejectUnauthorized: !skipSslVerify })
+    this.httpsAgent = getHttpsAgent(skipSslVerify)
     
     if (!this.baseUrl || !this.apiKey) {
       throw new Error('Emby configuration missing: URL or API Key is null')
@@ -28,12 +31,15 @@ export class EmbyService {
   }
 
   async getClient(timeout: number = 10000) {
-    return axios.create({
+    const existing = this.clients.get(timeout)
+    if (existing) return existing
+    const client = axios.create({
       baseURL: this.baseUrl,
       params: {
         api_key: this.apiKey
       },
       timeout,
+      httpAgent: keepAliveHttpAgent,
       httpsAgent: this.httpsAgent,
       maxRedirects: 5, // Allow some redirects
       validateStatus: (status) => status >= 200 && status < 400, // Allow 3xx
@@ -43,6 +49,8 @@ export class EmbyService {
         'X-Emby-Token': this.apiKey // Some proxies/Emby versions prefer this
       }
     })
+    this.clients.set(timeout, client)
+    return client
   }
 
   async getLibraryStats() {

@@ -20,6 +20,8 @@ export function ContainerIcon({ container }: ContainerIconProps) {
         >
             {container.icon ? (
                 <img
+                    loading="lazy"
+                    decoding="async"
                     src={container.icon}
                     alt={container.name}
                     className="w-full h-full object-contain"

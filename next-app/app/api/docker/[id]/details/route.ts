@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { DockerService } from '@/lib/services/docker';
 import { defineAbilityFor } from '@/lib/ability';
 
@@ -10,7 +9,7 @@ export async function GET(
 ) {
     try {
         const { id } = await params;
-        const session = await getServerSession(authOptions);
+        const session = await getSession();
         
         const user = session?.user as any
         const ability = defineAbilityFor(user)

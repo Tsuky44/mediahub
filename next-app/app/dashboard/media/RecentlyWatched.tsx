@@ -36,6 +36,8 @@ export function RecentlyWatched({ items }: { items: RecentlyWatchedItem[] }) {
                         <div className="aspect-[2/3] relative overflow-hidden bg-gray-900">
                             {item.poster_path ? (
                                 <img 
+                                    loading="lazy"
+                                    decoding="async"
                                     src={item.poster_path.startsWith('http') ? item.poster_path : `https://image.tmdb.org/t/p/w500${item.poster_path}`}
                                     alt={item.title}
                                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"

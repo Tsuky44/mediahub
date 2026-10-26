@@ -59,6 +59,9 @@ const sqlite: Database.Database = isBuildPhase
       instance.pragma('foreign_keys = ON');
       instance.pragma('busy_timeout = 10000');
       instance.pragma('temp_store = MEMORY');
+      // Lectures plus rapides : cache de pages de 32 Mo + I/O mappées en mémoire (256 Mo max)
+      instance.pragma('cache_size = -32000');
+      instance.pragma('mmap_size = 268435456');
       globalForDb.__mediahubSqlite = instance;
       return instance;
     })())
@@ -187,6 +190,7 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
       `CREATE INDEX IF NOT EXISTS "media_requests_user_status_idx" ON "media_requests" ("user_id", "status");`,
       `CREATE INDEX IF NOT EXISTS "media_requests_media_type_status_idx" ON "media_requests" ("media_type", "status");`,
       `CREATE INDEX IF NOT EXISTS "media_requests_tmdb_idx" ON "media_requests" ("tmdb_id");`,
+      `CREATE INDEX IF NOT EXISTS "media_requests_requested_at_idx" ON "media_requests" ("requested_at");`,
     ],
   },
   {
@@ -270,6 +274,8 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
     );`,
     indexes: [
       `CREATE UNIQUE INDEX IF NOT EXISTS "watch_events_emby_item_played_unique" ON "watch_events" ("emby_user_id", "item_id", "played_at");`,
+      // Stats : filtrage par période + tri chronologique
+      `CREATE INDEX IF NOT EXISTS "watch_events_played_at_idx" ON "watch_events" ("played_at");`,
     ],
   },
   {
@@ -305,6 +311,9 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
       "details" TEXT,
       "created_at" INTEGER NOT NULL
     );`,
+    indexes: [
+      `CREATE INDEX IF NOT EXISTS "audit_logs_created_at_idx" ON "audit_logs" ("created_at");`,
+    ],
   },
   {
     name: 'permissions',

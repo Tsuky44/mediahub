@@ -3,8 +3,7 @@
 import { Torrent } from '@/lib/services/qbittorrent'
 import { QBittorrentCache } from '@/lib/services/qbittorrent-cache'
 import { revalidatePath } from 'next/cache'
-import { getServerSession } from 'next-auth'
-import { authOptions, getStorageServiceForUser } from '@/lib/auth'
+import { getSession, getStorageServiceForUser } from '@/lib/auth'
 import { getQBittorrentService } from '@/lib/services/qbittorrent'
 import { db } from '@/lib/db/drizzle'
 import { trackerStatsLogs, dailyTrackerStats } from '@/lib/db/schema'
@@ -14,7 +13,7 @@ import { defineAbilityFor } from '@/lib/ability'
 import { logger } from '@/lib/logger'
 
 export async function checkAccess(permission?: string) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const user = session?.user
   
   if (!user) {
