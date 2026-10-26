@@ -127,6 +127,19 @@ export function useInfiniteMedia(
 
   const { ref, inView } = useInView({ rootMargin: '1000px' })
   const router = useRouter()
+
+  // Préchargement de la page suivante : quand le bas de la liste est atteint,
+  // ses éléments sont déjà chargés et s'affichent sans attendre le serveur.
+  const prefetchRef = useRef<{ key: string; promise: ReturnType<typeof fetchMedia> } | null>(null)
+  const pageKey = (p: number) => JSON.stringify([p, initialType, initialSearch ?? null, activeFilters])
+  const getPage = (p: number) => {
+    const prefetched = prefetchRef.current
+    if (prefetched?.key === pageKey(p)) {
+      prefetchRef.current = null
+      return prefetched.promise
+    }
+    return fetchMedia(p, initialType, initialSearch, activeFilters)
+  }
   
   // Track previous type for genre mapping
   const prevTypeRef = useRef(initialType)
@@ -263,17 +276,16 @@ export function useInfiniteMedia(
 
     setLoading(true)
     const nextPage = page + 1
-    const data = await fetchMedia(nextPage, initialType, initialSearch, activeFilters)
+    const data = await getPage(nextPage)
 
     if (data.results.length > 0) {
       setItems(prev => {
-        const newItems = data.results.filter(
-          (newItem: any) => !prev.some((existingItem: any) => existingItem.id === newItem.id)
-        )
+        const existingIds = new Set(prev.map((existingItem: any) => existingItem.id))
+        const newItems = data.results.filter((newItem: any) => !existingIds.has(newItem.id))
         return [...prev, ...newItems]
       })
       setPage(nextPage)
-      if (page >= (data.total_pages || 1000)) {
+      if (nextPage >= (data.total_pages || 1000)) {
         setHasMore(false)
       }
     } else {
@@ -281,6 +293,17 @@ export function useInfiniteMedia(
     }
     setLoading(false)
   }
+
+  // Lance le chargement de la page suivante en arrière-plan dès que la page courante est affichée
+  useEffect(() => {
+    if (!hasMore || loading) return
+    const key = pageKey(page + 1)
+    if (prefetchRef.current?.key === key) return
+    const promise = fetchMedia(page + 1, initialType, initialSearch, activeFilters)
+    promise.catch(() => {}) // l'erreur éventuelle remontera au moment de l'utilisation
+    prefetchRef.current = { key, promise }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, hasMore, loading, initialType, initialSearch, activeFilters])
 
   useEffect(() => {
     if (inView) {

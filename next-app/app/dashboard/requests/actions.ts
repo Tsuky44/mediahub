@@ -3,7 +3,13 @@
 import { getTmdbServiceForUser } from '@/lib/auth'
 import { getWatchLaterList, areInWatchLater } from '../media/watch-later-actions'
 import { fetchUserRecommendations, fetchServerTrends } from '../media/actions'
-import { getMediaAvailability } from '@/lib/services/media-status'
+import { getMediaAvailability, type MediaAvailability } from '@/lib/services/media-status'
+
+// Les cartes n'affichent que le statut : inutile d'envoyer au navigateur l'objet
+// Radarr/Sonarr complet (`details`, plusieurs Ko par carte).
+function toCardStatus({ details: _details, ...status }: MediaAvailability) {
+    return status
+}
 
 export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations' | 'trends', search?: string, filters?: any) {
   try {
@@ -47,7 +53,7 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
                 title: item.title,
                 poster_path: item.posterPath,
                 media_type: item.mediaType,
-                media_status: availability,
+                media_status: toCardStatus(availability),
                 isWatchLater: true
             }
         }))
@@ -72,24 +78,34 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
           }))
           .filter((i: any) => i.mediaType === 'movie' || i.mediaType === 'tv')
 
-      const watchLaterStatuses = await areInWatchLater(itemsToCheck)
+      const mediaTypeOf = (item: any) => {
+          const mediaType = item.media_type || (type === 'all' ? undefined : type)
+          return mediaType === 'movie' || mediaType === 'tv' ? mediaType : null
+      }
+
+      // "À regarder plus tard" (1 requête SQL) et disponibilités (cache 60 s) en parallèle
+      const [watchLaterStatuses, availabilities] = await Promise.all([
+          areInWatchLater(itemsToCheck),
+          Promise.all(data.results.map(async (item: any) => {
+              const mediaType = mediaTypeOf(item)
+              if (!mediaType) return null
+              try {
+                  return toCardStatus(await getMediaAvailability(item.id, mediaType))
+              } catch (e) {
+                  return null
+              }
+          })),
+      ])
       const watchLaterSet = new Set(watchLaterStatuses)
 
-      const enrichedResults = await Promise.all(data.results.map(async (item: any) => {
-          const mediaType = item.media_type || (type === 'all' ? undefined : type)
-          if (!mediaType || (mediaType !== 'movie' && mediaType !== 'tv')) {
-              return item
-          }
-          
-          try {
-              // Availability check (cached)
-              const availability = await getMediaAvailability(item.id, mediaType)
-              const isWatchLater = watchLaterSet.has(`${mediaType}:${item.id}`)
-              return { ...item, media_status: availability, isWatchLater }
-          } catch (e) {
-              return item
-          }
-      }))
+      const enrichedResults = data.results.map((item: any, index: number) => {
+          const mediaType = mediaTypeOf(item)
+          const availability = availabilities[index]
+          // Type inconnu ou disponibilité en erreur : l'item est renvoyé tel quel (comme avant)
+          if (!mediaType || !availability) return item
+          const isWatchLater = watchLaterSet.has(`${mediaType}:${item.id}`)
+          return { ...item, media_status: availability, isWatchLater }
+      })
       return { ...data, results: enrichedResults }
   }
 

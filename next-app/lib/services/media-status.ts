@@ -20,7 +20,9 @@ export async function getMediaAvailability(tmdbId: number, mediaType: 'movie' | 
                 const radarrService = await getRadarrServiceForUser()
                 if (!radarrService) return { status: 'unknown' as MediaStatus, available: false }
 
-                const movie = await radarrService.getMovieByTmdbId(tmdbId)
+                // Lecture locale de la bibliothèque Radarr (rapide) ; lookup complet seulement si Radarr ne répond pas
+                const movie = await radarrService.getLibraryMovieByTmdbId(tmdbId)
+                    .catch(() => radarrService.getMovieByTmdbId(tmdbId))
                 
                 // If movie has no ID, it's not in the library
                 if (!movie || !movie.id) return { status: 'unknown' as MediaStatus, available: false }
