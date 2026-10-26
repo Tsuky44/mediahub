@@ -1,0 +1,12 @@
+# Dépendances (installées via npm/pnpm, jamais commitées)
+node_modules/
+
+# Fichiers système / éditeur
+.DS_Store
+Thumbs.db
+
+# Logs et dumps locaux
+*.log
+logs_*.txt
+publish-log.txt
+*.backup
