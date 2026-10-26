@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { insecureHttpsAgent, keepAliveHttpAgent } from '@/lib/http-agents'
+import { insecureHttpsAgent, keepAliveHttpAgent } from '../http-agents'
 
 export class JellyseerrService {
   private baseUrl: string;

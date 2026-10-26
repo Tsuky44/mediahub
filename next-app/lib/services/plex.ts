@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { insecureHttpsAgent, keepAliveHttpAgent } from '@/lib/http-agents'
+import { insecureHttpsAgent, keepAliveHttpAgent } from '../http-agents'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };

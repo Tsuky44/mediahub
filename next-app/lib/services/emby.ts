@@ -1,6 +1,6 @@
 import axios, { type AxiosInstance } from 'axios'
 import https from 'https'
-import { getHttpsAgent, keepAliveHttpAgent } from '@/lib/http-agents'
+import { getHttpsAgent, keepAliveHttpAgent } from '../http-agents'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
