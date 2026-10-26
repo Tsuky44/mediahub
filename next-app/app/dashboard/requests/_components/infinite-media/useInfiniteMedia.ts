@@ -6,6 +6,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { fetchMedia } from '../../actions'
 import type { MediaFiltersValue } from '@/components/global/media-filters/_types/media-filters'
 import { mapGenres } from '@/components/global/media-filters/_utils/genre-mapping'
+import { preloadPosters } from '@/components/global/media-card/preloadPosters'
 
 const CACHE_KEY = 'infinite-media-cache'
 
@@ -125,7 +126,8 @@ export function useInfiniteMedia(
   })
   const [showFilters, setShowFilters] = useState(false)
 
-  const { ref, inView } = useInView({ rootMargin: '1000px' })
+  // Déclenché bien avant le bas de la liste : les éléments (déjà préchargés) sont ajoutés hors écran
+  const { ref, inView } = useInView({ rootMargin: '2500px' })
   const router = useRouter()
 
   // Préchargement de la page suivante : quand le bas de la liste est atteint,
@@ -300,17 +302,20 @@ export function useInfiniteMedia(
     const key = pageKey(page + 1)
     if (prefetchRef.current?.key === key) return
     const promise = fetchMedia(page + 1, initialType, initialSearch, activeFilters)
-    promise.catch(() => {}) // l'erreur éventuelle remontera au moment de l'utilisation
+    // Affiches téléchargées en même temps que les données ; l'erreur éventuelle remontera à l'utilisation
+    promise.then((data) => preloadPosters(data.results ?? [])).catch(() => {})
     prefetchRef.current = { key, promise }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, hasMore, loading, initialType, initialSearch, activeFilters])
 
   useEffect(() => {
-    if (inView) {
+    // Rejoué après chaque page : tant que le bas de liste reste proche, on enchaîne
+    // (une page préchargée arrive instantanément, le déclencheur ne sort jamais de l'écran)
+    if (inView && !loading && hasMore) {
       loadMore()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inView])
+  }, [inView, loading, hasMore, page])
 
   const handleFilterChange = (type: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations') => {
     if (type === initialType) return

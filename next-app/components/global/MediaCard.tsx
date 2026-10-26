@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import Link from 'next/link'
 import { Film } from 'lucide-react'
 import { useMediaCardActions, type MediaCardItem } from './media-card/useMediaCardActions'
@@ -10,7 +11,9 @@ import { MediaCardActions } from './media-card/MediaCardActions'
 
 export interface MediaItem extends MediaCardItem {}
 
-export function MediaCard({ item, showFavoriteButton = false }: { item: MediaItem, showFavoriteButton?: boolean }) {
+// memo : dans les listes infinies, les cartes déjà affichées ne sont pas recalculées
+// à chaque ajout de page (coût constant au lieu de croître avec la longueur de la liste)
+export const MediaCard = memo(function MediaCard({ item, showFavoriteButton = false }: { item: MediaItem, showFavoriteButton?: boolean }) {
   const {
     isFavorite,
     isWatchLater,
@@ -57,4 +60,4 @@ export function MediaCard({ item, showFavoriteButton = false }: { item: MediaIte
       />
     </div>
   )
-}
+})

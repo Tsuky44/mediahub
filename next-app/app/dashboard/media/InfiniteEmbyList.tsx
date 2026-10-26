@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useInView } from 'react-intersection-observer'
 import { MediaCard } from '@/components/global/MediaCard'
 import { fetchEmbyMedia } from './actions'
+import { preloadPosters } from '@/components/global/media-card/preloadPosters'
 import { Loader2 } from 'lucide-react'
 
 interface InfiniteEmbyListProps {
@@ -20,8 +21,9 @@ export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, wat
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(false)
   
+  // Déclenché bien avant le bas de la liste : les éléments (déjà préchargés) sont ajoutés hors écran
   const { ref, inView } = useInView({
-    rootMargin: '1000px',
+    rootMargin: '2500px',
   })
 
   // Préchargement de la page suivante (même principe que la page Demandes)
@@ -66,10 +68,13 @@ export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, wat
   }
 
   useEffect(() => {
-    if (inView) {
+    // Rejoué après chaque page : tant que le bas de liste reste proche, on enchaîne
+    // (une page préchargée arrive instantanément, le déclencheur ne sort jamais de l'écran)
+    if (inView && !loading && hasMore) {
       loadMore()
     }
-  }, [inView])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView, loading, hasMore, page])
 
   // Lance le chargement de la page suivante en arrière-plan dès que la page courante est affichée
   useEffect(() => {
@@ -77,7 +82,8 @@ export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, wat
     const key = pageKey(page + 1)
     if (prefetchRef.current?.key === key) return
     const promise = fetchEmbyMedia(page + 1, type, query, favoritesOnly, watchLaterOnly)
-    promise.catch(() => {}) // l'erreur éventuelle remontera au moment de l'utilisation
+    // Affiches téléchargées en même temps que les données ; l'erreur éventuelle remontera à l'utilisation
+    promise.then((data) => preloadPosters(data.results ?? [])).catch(() => {})
     prefetchRef.current = { key, promise }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, hasMore, loading, type, query, favoritesOnly, watchLaterOnly])
