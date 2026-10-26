@@ -11,6 +11,21 @@ function toCardStatus({ details: _details, ...status }: MediaAvailability) {
     return status
 }
 
+// Un Radarr/Sonarr lent ne doit jamais bloquer toute la page : au-delà de ce délai la
+// carte s'affiche sans badge de statut (comme en cas d'erreur). Le calcul continue en
+// arrière-plan et alimente le cache : le statut apparaît au chargement suivant.
+const STATUS_TIME_BUDGET_MS = 2500
+
+function withTimeBudget<T>(promise: Promise<T>): Promise<T | null> {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => resolve(null), STATUS_TIME_BUDGET_MS)
+        promise.then(
+            (value) => { clearTimeout(timer); resolve(value) },
+            (error) => { clearTimeout(timer); reject(error) },
+        )
+    })
+}
+
 export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations' | 'trends', search?: string, filters?: any) {
   try {
     const tmdbService = await getTmdbServiceForUser()
@@ -46,14 +61,14 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
         const watchLaterItems = await getWatchLaterList()
         // Format for MediaCard
         const results = await Promise.all(watchLaterItems.map(async (item) => {
-            const availability = await getMediaAvailability(parseInt(item.tmdbId || item.mediaId), item.mediaType as 'movie' | 'tv')
+            const availability = await withTimeBudget(getMediaAvailability(parseInt(item.tmdbId || item.mediaId), item.mediaType as 'movie' | 'tv'))
             return {
                 id: item.mediaId,
                 tmdbId: item.tmdbId,
                 title: item.title,
                 poster_path: item.posterPath,
                 media_type: item.mediaType,
-                media_status: toCardStatus(availability),
+                media_status: availability ? toCardStatus(availability) : undefined,
                 isWatchLater: true
             }
         }))
@@ -90,7 +105,8 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
               const mediaType = mediaTypeOf(item)
               if (!mediaType) return null
               try {
-                  return toCardStatus(await getMediaAvailability(item.id, mediaType))
+                  const availability = await withTimeBudget(getMediaAvailability(item.id, mediaType))
+                  return availability ? toCardStatus(availability) : null
               } catch (e) {
                   return null
               }

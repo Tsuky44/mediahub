@@ -282,30 +282,9 @@ export class SonarrService {
     }, { memoryTtl: CACHE_TTL.API_STATIC, tags: ['sonarr-static'] })
   }
 
-  /**
-   * Série de la BIBLIOTHÈQUE Sonarr (ou null). `GET /series?tvdbId=` lit la base
-   * locale de Sonarr au lieu d'interroger SkyHook comme `/series/lookup`.
-   * Retourne undefined si Sonarr ne répond pas (l'appelant repasse par le lookup).
-   */
-  private async getLibrarySeriesByTvdbId(tvdbId: number): Promise<SonarrSeries | null | undefined> {
-    try {
-      const response = await this.getClient().get('/series', { params: { tvdbId } })
-      const series: SonarrSeries[] = Array.isArray(response.data) ? response.data : []
-      // Filtre local : reste correct même si une version de Sonarr ignorait le paramètre
-      return series.find((s) => s.tvdbId === tvdbId) ?? null
-    } catch (e) {
-      logger.warn(`[Sonarr] Library check failed for ${tvdbId}, falling back to lookup:`, (e as Error).message)
-      return undefined
-    }
-  }
-
   async getSeriesByTvdbId(tvdbId: number): Promise<SonarrSeries | null> {
     const client = this.getClient()
     if (!client) return null
-
-    // Ne retourne que des séries de la bibliothèque : la lecture locale suffit
-    const librarySeries = await this.getLibrarySeriesByTvdbId(tvdbId)
-    if (librarySeries !== undefined) return librarySeries
     
     try {
       // Use /series/lookup to find the series by TVDB ID

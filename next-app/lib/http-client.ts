@@ -89,7 +89,10 @@ export function createAxiosClient(opts: ResilientClientOptions): AxiosInstance {
     try { breaker.check(); } catch (e) { return Promise.reject(e); }
     const p = originalGet<T>(url, config) as Promise<AxiosResponse<T>>;
     inFlight.set(key, p);
-    p.finally(() => inFlight.delete(key));
+    // then(cleanup, cleanup) et non finally() : finally() crée une promesse qui rejette
+    // sans gestionnaire et déclenche des "unhandledRejection" (l'erreur reste remontée via p)
+    const cleanup = () => { inFlight.delete(key); };
+    p.then(cleanup, cleanup);
     return p;
   } as AxiosInstance['get'];
 
