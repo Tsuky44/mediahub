@@ -4,6 +4,7 @@ import { defineAbilityFor } from '@/lib/ability'
 import { getSetting } from '@/lib/settings'
 import { EmbyService } from '@/lib/services/emby'
 import { refreshStaleLastPlayedDates, type StorageMediaRef } from '@/lib/services/item-viewing-stats'
+import { invalidateStorageDates } from '@/lib/services/storage-list'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
         }
 
         const result = await refreshStaleLastPlayedDates(embyService, mediaRefs)
+        invalidateStorageDates()
 
         return NextResponse.json({ success: true, type: typeFilter, ...result })
     } catch (err) {

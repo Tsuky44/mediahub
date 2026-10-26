@@ -14,6 +14,16 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Barre de progression indéterminée (`animate-indeterminate`) */
+@theme {
+  --animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
+
+  @keyframes indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(250%); }
+  }
+}
+
 body {
   background: radial-gradient(circle at top center, #2d3e5a 0%, #020617 100%);
   color: var(--foreground);

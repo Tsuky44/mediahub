@@ -4,6 +4,7 @@ import { getSetting } from '@/lib/settings'
 import { EmbyService } from '@/lib/services/emby'
 import { defineAbilityFor } from '@/lib/ability'
 import { enrichViewingStatsWithWatchEvents, aggregatedLastPlayedDate, upsertItemLastPlayedCache, type ViewingStatLike } from '@/lib/services/item-viewing-stats'
+import { invalidateStorageDates } from '@/lib/services/storage-list'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +61,7 @@ export async function GET(request: Request) {
         type === 'Series' ? 'Series' : 'Movie',
         aggregatedDate
     )
+    invalidateStorageDates()
 
     // 2. If Series, get seasons details
     let seasons: any[] = []

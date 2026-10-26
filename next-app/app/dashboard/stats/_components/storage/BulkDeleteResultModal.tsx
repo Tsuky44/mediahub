@@ -6,6 +6,8 @@ import { formatBytes } from '../../_utils/storage-formatters'
 interface BulkDeleteResultModalProps {
     successCount: number
     failedCount: number
+    /** Médias non traités (suppression interrompue) */
+    skippedCount?: number
     freedBytes: number
     onClose: () => void
 }
@@ -17,6 +19,7 @@ interface BulkDeleteResultModalProps {
 export function BulkDeleteResultModal({
     successCount,
     failedCount,
+    skippedCount = 0,
     freedBytes,
     onClose,
 }: BulkDeleteResultModalProps) {
@@ -31,7 +34,7 @@ export function BulkDeleteResultModal({
                     </div>
 
                     <h3 className="text-xl font-bold text-white mb-2">
-                        Suppression terminée
+                        {skippedCount > 0 ? 'Suppression interrompue' : 'Suppression terminée'}
                     </h3>
 
                     <p className="text-gray-400 text-sm mb-6">
@@ -39,6 +42,11 @@ export function BulkDeleteResultModal({
                         {failedCount > 0 && (
                             <span className="text-amber-400">
                                 {' '}• {failedCount} en échec
+                            </span>
+                        )}
+                        {skippedCount > 0 && (
+                            <span className="text-gray-500">
+                                {' '}• {skippedCount} non traité{skippedCount > 1 ? 's' : ''}
                             </span>
                         )}
                     </p>

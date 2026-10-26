@@ -135,12 +135,13 @@ export async function getCachedLastPlayedDatesForStorage(
         result[id] = dateForItem(id)
     }
 
+    // Un seul passage sur les épisodes (au lieu d'un par série)
+    const wantedSeries = new Set(seriesIds)
     for (const seriesId of seriesIds) {
-        let max = dateForItem(seriesId)
-        for (const [epId, sId] of episodeToSeries) {
-            if (sId === seriesId) max = laterIsoDate(max, dateForItem(epId))
-        }
-        result[seriesId] = max
+        result[seriesId] = dateForItem(seriesId)
+    }
+    for (const [epId, sId] of episodeToSeries) {
+        if (wantedSeries.has(sId)) result[sId] = laterIsoDate(result[sId], dateForItem(epId))
     }
 
     return result
