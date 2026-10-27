@@ -100,23 +100,14 @@ RUN sed -i 's/\r$//' ./entrypoint.sh && chmod +x ./entrypoint.sh
 FROM runtime-base AS runner
 WORKDIR /app
 
-# OpenSSL/SQLite (better-sqlite3) et Chromium pour Playwright (scraping des trackers).
+# OpenSSL/SQLite (better-sqlite3) et certificats.
 # Retirés : docker-cli (l'app parle à Docker via l'API/socket avec dockerode, jamais
-# via la CLI) et les polices CJK/emoji (uniquement utiles au rendu visuel de pages
-# asiatiques dans Chromium, qui ne sert ici qu'à lire le contenu des pages).
+# via la CLI) et Chromium + polices (ne servaient qu'au scraping des stats des
+# trackers, fonctionnalité supprimée).
 RUN apk add --no-cache \
   openssl \
   sqlite \
-  chromium \
-  nss \
-  freetype \
-  harfbuzz \
-  ca-certificates \
-  ttf-freefont \
-  font-noto
-
-# Tell Playwright to use system Chromium
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+  ca-certificates
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

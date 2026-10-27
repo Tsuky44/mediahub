@@ -8,7 +8,6 @@ import {
     UserPlus,
     Activity,
     BellRing,
-    BarChart3,
     Tv,
     Download,
     Bot,
@@ -35,7 +34,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     },
     {
         title: 'Monitoring & Outils',
-        tabs: ['messages', 'trackers', 'logs', 'support'],
+        tabs: ['messages', 'logs', 'support'],
     },
 ] as const
 
@@ -58,7 +57,6 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     { id: 'requests', label: 'Demandes', icon: UserPlus, permissionKey: 'requests' },
     { id: 'linking', label: 'Lier', icon: LinkIcon, permissionKey: 'linking' },
     { id: 'messages', label: 'Messages Système', icon: MessageSquare, permissionKey: 'messages' },
-    { id: 'trackers', label: 'Trackers', icon: BarChart3, permissionKey: 'trackers' },
     { id: 'logs', label: 'Activité', icon: Activity, permissionKey: 'logs' },
     { id: 'support', label: 'Support & Tickets', icon: LifeBuoy, permissionKey: 'support' },
 ] as const

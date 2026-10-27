@@ -207,8 +207,6 @@ export const prisma = {
   // notification: createTableProxy(schema.notifications, 'notifications'), // V1 notifications supprimées
   mediaSubscription: createTableProxy(schema.mediaSubscriptions, 'mediaSubscriptions'),
   watchEvent: createTableProxy(schema.watchEvents, 'watchEvents'),
-  dailyTrackerStat: createTableProxy(schema.dailyTrackerStats, 'dailyTrackerStats'),
-  trackerStatsLog: createTableProxy(schema.trackerStatsLogs, 'trackerStatsLogs'),
   session: createTableProxy(schema.sessions, 'sessions'),
   account: createTableProxy(schema.accounts, 'accounts'),
   verificationToken: createTableProxy(schema.verificationTokens, 'verificationTokens'),

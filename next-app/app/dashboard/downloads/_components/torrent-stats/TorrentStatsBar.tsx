@@ -1,16 +1,15 @@
 'use client'
 
-import { Activity, ArrowDown, ArrowUp, Users, Clock, Globe, HardDrive, ExternalLink } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, Users, Clock, Globe, HardDrive } from 'lucide-react'
 import { formatStatsSize, formatStatsSpeed, formatRatio } from '../../_utils/stats-formatters'
 import type { GlobalStats } from '../../_hooks/useGlobalStats'
 
 interface TorrentStatsBarProps {
     stats: GlobalStats
-    onOpenSessionModal: () => void
 }
 
-/** Barre horizontale des stats globales : vitesse/connexions, session (cliquable), global. */
-export function TorrentStatsBar({ stats, onOpenSessionModal }: TorrentStatsBarProps) {
+/** Barre horizontale des stats globales : vitesse/connexions, session, global. */
+export function TorrentStatsBar({ stats }: TorrentStatsBarProps) {
     const globalRatio = stats.alltime_dl > 0 ? stats.alltime_ul / stats.alltime_dl : 0
     const dlSpeed = formatStatsSpeed(stats.dl_info_speed).split(' ')
     const upSpeed = formatStatsSpeed(stats.up_info_speed).split(' ')
@@ -55,13 +54,7 @@ export function TorrentStatsBar({ stats, onOpenSessionModal }: TorrentStatsBarPr
                 </div>
             </div>
 
-            <button
-                onClick={onOpenSessionModal}
-                className="md:col-span-1 bg-black/40 backdrop-blur-md border border-white/5 rounded-2xl p-3 flex flex-col justify-between hover:bg-white/10 hover:border-purple-500/30 transition-all group text-left relative overflow-hidden"
-            >
-                <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <ExternalLink className="w-2.5 h-2.5 text-purple-400" />
-                </div>
+            <div className="md:col-span-1 bg-black/40 backdrop-blur-md border border-white/5 rounded-2xl p-3 flex flex-col justify-between hover:bg-white/5 transition-colors group">
                 <div className="flex items-center gap-2 mb-2">
                     <Clock className="w-3.5 h-3.5 text-purple-400" />
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Session</span>
@@ -76,7 +69,7 @@ export function TorrentStatsBar({ stats, onOpenSessionModal }: TorrentStatsBarPr
                         <p className="text-xs font-bold text-white font-mono">{formatStatsSize(stats.up_info_data)}</p>
                     </div>
                 </div>
-            </button>
+            </div>
 
             <div className="md:col-span-2 bg-black/40 backdrop-blur-md border border-white/5 rounded-2xl p-3 flex flex-col justify-between hover:bg-white/5 transition-colors group">
                 <div className="flex items-center gap-2 mb-2">

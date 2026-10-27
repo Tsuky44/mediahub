@@ -17,7 +17,6 @@ export type SettingsTabId =
     | 'logs'
     | 'notifications'
     | 'notifications-v2'
-    | 'trackers'
     | 'support'
 
 /**
@@ -41,7 +40,6 @@ export interface SettingsTabPermissions {
     requests: boolean
     logs: boolean
     notifications: boolean
-    trackers: boolean
     support: boolean
 }
 

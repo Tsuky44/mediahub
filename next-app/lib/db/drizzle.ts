@@ -4,8 +4,7 @@ import * as schema from './schema';
 import { resolve, dirname } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 
-// Patch BigInt pour JSON.stringify / NextResponse.json()
-// Nécessaire car les modèles ont des champs BigInt (DailyTrackerStat, TrackerStatsLog)
+// Patch BigInt pour JSON.stringify / NextResponse.json() (valeurs bigint éventuelles)
 if (!(BigInt.prototype as any).toJSON) {
   (BigInt.prototype as any).toJSON = function () {
     return Number(this);
@@ -437,38 +436,6 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
     ],
   },
   {
-    name: 'daily_tracker_stats',
-    ddl: `CREATE TABLE IF NOT EXISTS "daily_tracker_stats" (
-      "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-      "date" INTEGER NOT NULL,
-      "tracker" TEXT NOT NULL,
-      "total_uploaded" BLOB NOT NULL DEFAULT (X'0000000000000000'),
-      "total_downloaded" BLOB NOT NULL DEFAULT (X'0000000000000000'),
-      "created_at" INTEGER NOT NULL,
-      "updated_at" INTEGER NOT NULL
-    );`,
-    indexes: [
-      `CREATE UNIQUE INDEX IF NOT EXISTS "daily_tracker_stats_date_tracker_unique" ON "daily_tracker_stats" ("date", "tracker");`,
-      `CREATE INDEX IF NOT EXISTS "daily_tracker_stats_date_idx" ON "daily_tracker_stats" ("date");`,
-    ],
-  },
-  {
-    name: 'tracker_stats_logs',
-    ddl: `CREATE TABLE IF NOT EXISTS "tracker_stats_logs" (
-      "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-      "tracker" TEXT NOT NULL,
-      "total_uploaded" BLOB NOT NULL,
-      "total_downloaded" BLOB NOT NULL,
-      "uploaded_diff" BLOB NOT NULL DEFAULT (X'0000000000000000'),
-      "downloaded_diff" BLOB NOT NULL DEFAULT (X'0000000000000000'),
-      "timestamp" INTEGER NOT NULL
-    );`,
-    indexes: [
-      `CREATE INDEX IF NOT EXISTS "tracker_stats_logs_timestamp_idx" ON "tracker_stats_logs" ("timestamp");`,
-      `CREATE INDEX IF NOT EXISTS "tracker_stats_logs_tracker_timestamp_idx" ON "tracker_stats_logs" ("tracker", "timestamp");`,
-    ],
-  },
-  {
     name: 'support_categories',
     ddl: `CREATE TABLE IF NOT EXISTS "support_categories" (
       "id" TEXT PRIMARY KEY NOT NULL,
@@ -599,26 +566,6 @@ function runMigrations(db: Database.Database): void {
     }
   }
 
-  // 4) Migration ponctuelle des BLOB BigInt (anciennes colonnes en INTEGER)
-  for (const tableName of ['tracker_stats_logs', 'daily_tracker_stats'] as const) {
-    try {
-      const tableInfo = db
-        .prepare(`PRAGMA table_info("${tableName}")`)
-        .all() as Array<{ name: string; type: string }>;
-      const uploadedCol = tableInfo.find((c) => c.name === 'total_uploaded');
-      if (uploadedCol && uploadedCol.type.toUpperCase() !== 'BLOB') {
-        console.log(`[Drizzle] Migrating ${tableName}: INTEGER bigint -> BLOB`);
-        db.exec(`ALTER TABLE "${tableName}" RENAME TO "${tableName}_old";`);
-        const def = TABLE_DEFINITIONS.find((d) => d.name === tableName)!;
-        db.exec(def.ddl);
-        if (def.indexes) for (const idx of def.indexes) db.exec(idx);
-        db.exec(`DROP TABLE "${tableName}_old";`);
-      }
-    } catch (err) {
-      console.warn(`[Drizzle] Skipped BLOB migration on ${tableName}:`, (err as Error).message);
-    }
-  }
-
   // 5) Migration one-shot : aligner les timestamps en millisecondes.
   //    Les tables créées par Drizzle (avant ce patch) stockaient en SECONDES
   //    alors que tout le reste (legacy Prisma) est en MILLISECONDES.
@@ -631,8 +578,6 @@ function runMigrations(db: Database.Database): void {
   if (!alreadyApplied) {
     const SEC_THRESHOLD = 100_000_000_000; // 10^11 ms = ~1973 ; toute valeur < c'est en secondes
     const tablesToFix: Array<{ table: string; columns: string[] }> = [
-      { table: 'daily_tracker_stats', columns: ['date', 'created_at', 'updated_at'] },
-      { table: 'tracker_stats_logs', columns: ['timestamp'] },
       { table: 'notification_events', columns: ['created_at', 'dispatched_at'] },
       { table: 'notification_deliveries', columns: ['created_at', 'sent_at', 'next_retry_at'] },
     ];

@@ -2,7 +2,6 @@
 
 import { TorrentManager } from '../TorrentManager'
 import { TorrentStats } from '../TorrentStats'
-import { TrackerStatsCardLazy } from '../TrackerStatsCardLazy'
 
 interface QbitPanelProps {
   permissions: {
@@ -16,7 +15,6 @@ interface QbitPanelProps {
 export function QbitPanel({ permissions, hasProwlarr }: QbitPanelProps) {
   return (
     <div className="space-y-6">
-      <TrackerStatsCardLazy />
       <TorrentStats />
       <div className="bg-white/5 backdrop-blur-md rounded-3xl border border-white/5 p-4 shadow-xl">
         <TorrentManager

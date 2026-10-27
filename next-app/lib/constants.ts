@@ -26,7 +26,6 @@ export const CACHE_TTL = {
   SETTINGS: MS.THIRTY_MINUTES,        // 30 min for DB settings reads
   API_STATIC: MS.THIRTY_MINUTES,       // 30 min for profiles/root folders
   API_DYNAMIC: MS.FIVE_MINUTES,        // 5 min for trending/discover
-  TRACKER_STATS: MS.TWO_HOURS,       // 2 hours for tracker ratio stats
   HEALTH_CHECK: MS.FIVE_MINUTES,      // 5 min for service health pings
 } as const;
 
@@ -44,7 +43,6 @@ export const TIMEOUT = {
   EMBY: 10_000,
   QBITTORRENT: 10_000,
   DOCKER: 15_000,
-  TRACKER: 30_000,
   WEBHOOK: 10_000,
 } as const;
 
