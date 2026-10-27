@@ -14,6 +14,7 @@ import { StorageManagerHeader } from './storage-manager/StorageManagerHeader'
 import { StorageFilterBar } from './storage-manager/StorageFilterBar'
 import { useStorageManager } from './storage-manager/useStorageManager'
 import { countActiveFilters } from '../_utils/storage-filters'
+import { formatBytes } from '../_utils/storage-formatters'
 
 export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
     const [activeTab, setActiveTab] = useState<'Movie' | 'Series'>('Movie')
@@ -92,6 +93,10 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
     const selectedItems = useMemo(
         () => items.filter(i => selectedIds.has(i.id)),
         [items, selectedIds]
+    )
+    const selectedSize = useMemo(
+        () => selectedItems.reduce((acc, i) => acc + (i.size || 0), 0),
+        [selectedItems]
     )
 
     const toggleSelect = (id: string) => {
@@ -173,6 +178,9 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
             <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-white">
                     {selectedIds.size} média{selectedIds.size > 1 ? 's' : ''} sélectionné{selectedIds.size > 1 ? 's' : ''}
+                    <span className="ml-2 text-purple-300 font-semibold" title="Espace libéré si la sélection est supprimée">
+                        • {formatBytes(selectedSize)}
+                    </span>
                 </span>
                 <button
                     onClick={() => setSelectedIds(new Set())}

@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Eye, Send, CalendarPlus, HardDrive, RotateCcw, Loader2 } from 'lucide-react'
 import type { StorageDateFilter, StorageDateFilterMode, StorageFilters } from '../../_types/storage'
 import { countActiveFilters, DEFAULT_STORAGE_FILTERS } from '../../_utils/storage-filters'
 import { formatBytes } from '../../_utils/storage-formatters'
+import { FilterSelect, type FilterSelectOption } from './FilterSelect'
 
 interface StorageFilterBarProps {
     filters: StorageFilters
@@ -15,36 +16,51 @@ interface StorageFilterBarProps {
     refreshing: boolean
 }
 
-type ModeOption = { value: StorageDateFilterMode; label: string }
+type ModeOption = { value: StorageDateFilterMode; label: string; hint: (months: number) => string }
 
 const WATCHED_MODES: ModeOption[] = [
-    { value: 'any', label: 'Peu importe' },
-    { value: 'never', label: 'Jamais' },
-    { value: 'olderOrNever', label: 'Jamais ou il y a plus de' },
-    { value: 'olderThan', label: 'Il y a plus de' },
-    { value: 'within', label: 'Dans les derniers' },
+    { value: 'any', label: 'Peu importe', hint: () => 'Aucun filtre' },
+    { value: 'never', label: 'Jamais', hint: () => 'Jamais lu par aucun utilisateur' },
+    { value: 'olderOrNever', label: 'Jamais ou il y a plus de', hint: m => `Jamais regardé, ou pas depuis ${m} mois` },
+    { value: 'olderThan', label: 'Il y a plus de', hint: m => `Regardé, mais pas depuis ${m} mois` },
+    { value: 'within', label: 'Dans les derniers', hint: m => `Regardé au cours des ${m} derniers mois` },
 ]
 
 const REQUESTED_MODES: ModeOption[] = [
-    { value: 'any', label: 'Peu importe' },
-    { value: 'never', label: 'Jamais demandé' },
-    { value: 'olderOrNever', label: 'Jamais ou il y a plus de' },
-    { value: 'olderThan', label: 'Il y a plus de' },
-    { value: 'within', label: 'Dans les derniers' },
+    { value: 'any', label: 'Peu importe', hint: () => 'Aucun filtre' },
+    { value: 'never', label: 'Jamais demandé', hint: () => 'Présent sans aucune demande' },
+    { value: 'olderOrNever', label: 'Jamais ou il y a plus de', hint: m => `Jamais demandé, ou demandé il y a plus de ${m} mois` },
+    { value: 'olderThan', label: 'Il y a plus de', hint: m => `Demandé il y a plus de ${m} mois` },
+    { value: 'within', label: 'Dans les derniers', hint: m => `Demandé au cours des ${m} derniers mois` },
 ]
 
 const ADDED_MODES: ModeOption[] = [
-    { value: 'any', label: 'Peu importe' },
-    { value: 'olderThan', label: 'Il y a plus de' },
-    { value: 'within', label: 'Dans les derniers' },
+    { value: 'any', label: 'Peu importe', hint: () => 'Aucun filtre' },
+    { value: 'olderThan', label: 'Il y a plus de', hint: m => `Ajouté au serveur il y a plus de ${m} mois` },
+    { value: 'within', label: 'Dans les derniers', hint: m => `Ajouté au cours des ${m} derniers mois` },
 ]
 
-const SIZE_OPTIONS = [0, 1, 5, 10, 20, 50, 100]
+const SIZE_OPTIONS: FilterSelectOption<number>[] = [0, 1, 5, 10, 20, 50, 100].map(gb => ({
+    value: gb,
+    label: gb === 0 ? 'Toutes' : `${gb} Go et plus`,
+}))
 
 const needsMonths = (mode: StorageDateFilterMode) => mode !== 'any' && mode !== 'never'
 
-const selectClass =
-    'bg-transparent text-sm text-white focus:outline-none cursor-pointer [&>option]:bg-gray-900'
+const chipClass = (active: boolean) =>
+    `flex items-center gap-2 shrink-0 rounded-xl border px-3 py-1.5 transition-colors ${
+        active ? 'border-purple-500/40 bg-purple-500/10' : 'border-white/10 bg-black/30 hover:border-white/20'
+    }`
+
+/** Icône + libellé du filtre, dans le bouton du menu */
+function ChipLabel({ icon, label, active }: { icon: React.ReactNode; label: string; active: boolean }) {
+    return (
+        <span className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${active ? 'text-purple-300' : 'text-gray-500'}`}>
+            {icon}
+            {label}
+        </span>
+    )
+}
 
 /** Nombre de mois (les filtres sont envoyés à l'API après une courte pause de saisie). */
 function MonthsInput({ value, onCommit }: { value: number; onCommit: (months: number) => void }) {
@@ -86,25 +102,18 @@ function DateFilterControl({
     onChange: (filter: StorageDateFilter) => void
 }) {
     const active = filter.mode !== 'any'
+    const chipRef = useRef<HTMLDivElement>(null)
     return (
-        <div
-            className={`flex items-center gap-2 shrink-0 rounded-xl border px-3 py-1.5 transition-colors ${
-                active ? 'border-purple-500/40 bg-purple-500/10' : 'border-white/10 bg-black/30'
-            }`}
-        >
-            <span className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${active ? 'text-purple-300' : 'text-gray-500'}`}>
-                {icon}
-                {label}
-            </span>
-            <select
+        <div ref={chipRef} className={chipClass(active)}>
+            <FilterSelect
                 value={filter.mode}
-                onChange={e => onChange({ ...filter, mode: e.target.value as StorageDateFilterMode })}
-                className={selectClass}
+                options={modes.map(m => ({ value: m.value, label: m.label, hint: m.hint(filter.months) }))}
+                onChange={mode => onChange({ ...filter, mode })}
+                ariaLabel={`Filtre ${label}`}
+                anchorRef={chipRef}
             >
-                {modes.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-            </select>
+                <ChipLabel icon={icon} label={label} active={active} />
+            </FilterSelect>
             {needsMonths(filter.mode) && (
                 <MonthsInput value={filter.months} onCommit={months => onChange({ ...filter, months })} />
             )}
@@ -119,6 +128,7 @@ function DateFilterControl({
 export function StorageFilterBar({ filters, onChange, resultCount, resultSize, refreshing }: StorageFilterBarProps) {
     const activeCount = countActiveFilters(filters)
     const minSizeActive = filters.minSizeGb > 0
+    const sizeChipRef = useRef<HTMLDivElement>(null)
 
     return (
         <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide md:flex-wrap md:overflow-visible">
@@ -143,24 +153,16 @@ export function StorageFilterBar({ filters, onChange, resultCount, resultSize, r
                 modes={ADDED_MODES}
                 onChange={added => onChange({ ...filters, added })}
             />
-            <div
-                className={`flex items-center gap-2 shrink-0 rounded-xl border px-3 py-1.5 transition-colors ${
-                    minSizeActive ? 'border-purple-500/40 bg-purple-500/10' : 'border-white/10 bg-black/30'
-                }`}
-            >
-                <span className={`flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${minSizeActive ? 'text-purple-300' : 'text-gray-500'}`}>
-                    <HardDrive size={14} />
-                    Taille
-                </span>
-                <select
+            <div ref={sizeChipRef} className={chipClass(minSizeActive)}>
+                <FilterSelect
                     value={filters.minSizeGb}
-                    onChange={e => onChange({ ...filters, minSizeGb: Number(e.target.value) })}
-                    className={selectClass}
+                    options={SIZE_OPTIONS}
+                    onChange={minSizeGb => onChange({ ...filters, minSizeGb })}
+                    ariaLabel="Filtre Taille"
+                    anchorRef={sizeChipRef}
                 >
-                    {SIZE_OPTIONS.map(gb => (
-                        <option key={gb} value={gb}>{gb === 0 ? 'Toutes' : `${gb} Go et plus`}</option>
-                    ))}
-                </select>
+                    <ChipLabel icon={<HardDrive size={14} />} label="Taille" active={minSizeActive} />
+                </FilterSelect>
             </div>
 
             {activeCount > 0 && (

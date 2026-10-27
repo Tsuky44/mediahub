@@ -14,13 +14,19 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* Barre de progression indéterminée (`animate-indeterminate`) */
+/* Barre de progression indéterminée (`animate-indeterminate`), ouverture de menu (`animate-pop-in`) */
 @theme {
   --animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
+  --animate-pop-in: pop-in 140ms ease-out;
 
   @keyframes indeterminate {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(250%); }
+  }
+
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to { opacity: 1; transform: none; }
   }
 }
 
