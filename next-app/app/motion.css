@@ -154,10 +154,7 @@
 }
 
 @layer components {
-  /* Changement de page : fondu du contenu, puis titre et sous-titre */
-  .onyx-page {
-    animation: onyx-page-in 360ms var(--ease-out-onyx) backwards;
-  }
+  /* Arrivée d'une page : le titre sort du flou, puis le sous-titre monte */
   .onyx-page :is(h1, .onyx-title) {
     animation: onyx-focus-pull 760ms var(--ease-out-onyx) backwards;
   }
@@ -290,6 +287,46 @@
   }
 }
 
+/* Changement de page (View Transitions, voir app/dashboard/template.tsx) :
+   l'ancienne page recule et se brouille, la nouvelle monte du bas. La barre de
+   navigation et le fond ne bougent pas : seule la paire « onyx-page » est animée. */
+/* Le reste de l'écran (barre de navigation, fond) bascule sans fondu : l'ancienne
+   image reste affichée tant que la nouvelle n'est pas prête, puis elle la recouvre. */
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-old(onyx-nav),
+::view-transition-new(onyx-nav) {
+  animation: none;
+}
+/* La barre de navigation a son propre calque, le temps de la transition seulement :
+   elle reste au-dessus de la page (dont l'image de fond passe sous elle). */
+:root:active-view-transition .onyx-scroll-progress {
+  view-transition-name: onyx-nav;
+}
+::view-transition-group(onyx-page) {
+  animation-duration: 520ms;
+  animation-timing-function: var(--ease-out-onyx);
+}
+::view-transition-old(onyx-page) {
+  animation: onyx-vt-out 240ms var(--ease-onyx) both;
+}
+::view-transition-new(onyx-page) {
+  animation: onyx-vt-in 520ms var(--ease-out-onyx) 90ms both;
+}
+@keyframes onyx-vt-out {
+  to {
+    opacity: 0;
+    scale: 0.97;
+    filter: blur(8px);
+  }
+}
+@keyframes onyx-vt-in {
+  from {
+    opacity: 0;
+    translate: 0 28px;
+  }
+}
+
 /* Défilement : fine ligne d'encre sous la barre de navigation */
 .onyx-scroll-progress::after {
   content: "";
@@ -321,11 +358,16 @@
 
 /* Une fenêtre en position fixe ouverte dans un élément encore en mouvement serait
    placée par rapport à lui : dès qu'elle apparaît, l'élément arrête son animation. */
-:is(.onyx-page, .onyx-stagger > *, .onyx-reveal, .onyx-ignite):has(.fixed) {
+:is(.onyx-stagger > *, .onyx-reveal, .onyx-ignite):has(.fixed) {
   animation: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
   *,
   *::before,
   *::after {

@@ -19,7 +19,7 @@ export function CountUp({ value, className }: { value: string | number; classNam
   useEffect(() => {
     const el = ref.current
     const node = el?.firstChild
-    const match = text.match(/^(\d+(?:[.,]\d+)?)([\s\S]{0,12})$/)
+    const match = text.match(/^(\d+(?:[.,]\d+)?)([\s\S]{0,20})$/)
     if (played.current || !el || !node || node.nodeType !== Node.TEXT_NODE || !match) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const [, num, after] = match

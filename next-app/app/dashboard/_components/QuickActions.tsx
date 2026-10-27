@@ -67,7 +67,7 @@ export function QuickActions({
 
       {canViewStats && (
         <div
-          className={`onyx-stagger grid grid-cols-1 md:grid-cols-2 ${gridColsClass} gap-4 *:onyx-lift`}
+          className={`onyx-stagger grid grid-cols-1 md:grid-cols-2 ${gridColsClass} gap-3 *:onyx-lift`}
         >
           <ServerStatusCard
             servicesStatus={servicesStatus}

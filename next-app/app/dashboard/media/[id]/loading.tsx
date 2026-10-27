@@ -1,7 +1,7 @@
-import { MediaDetailSkeleton } from '@/components/ui/skeletons'
+import { MediaHeroSkeleton } from '@/components/ui/skeletons'
 
 export default function Loading() {
   return (
-    <MediaDetailSkeleton />
+    <MediaHeroSkeleton />
   )
 }
