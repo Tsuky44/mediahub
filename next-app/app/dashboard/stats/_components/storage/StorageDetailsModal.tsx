@@ -32,7 +32,7 @@ export function StorageDetailsModal({
       onClick={onClose}
     >
       <div
-        className="relative bg-[#0A0A0A]/95 backdrop-blur-2xl border border-white/10 rounded-3xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-white/10 animate-in zoom-in-95 duration-200"
+        className="relative bg-[#0e1010]/95 backdrop-blur-2xl border border-white/10 rounded-3xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl ring-1 ring-white/10 animate-in zoom-in-95 duration-200"
         onClick={e => e.stopPropagation()}
       >
         <button

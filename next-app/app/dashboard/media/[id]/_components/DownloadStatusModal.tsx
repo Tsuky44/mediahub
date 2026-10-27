@@ -183,7 +183,7 @@ export function DownloadStatusModal({
         <div className="border-t border-gray-800 p-4 bg-gray-950 flex justify-end">
           <button 
             onClick={onClose}
-            className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:scale-105 active:scale-95 cursor-pointer"
+            className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl transition-all shadow-[0_0_15px_rgba(232,230,228,0.12)] hover:scale-105 active:scale-95 cursor-pointer"
           >
             Fermer
           </button>

@@ -27,7 +27,7 @@ export function BatchActionsBar({
 
     return createPortal(
         <div className={clsx(
-            "fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] bg-[#0A0A0A]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-2 flex items-center gap-2 transition-all duration-300 origin-bottom",
+            "fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] bg-[#0e1010]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-2 flex items-center gap-2 transition-all duration-300 origin-bottom",
             selectedCount > 0 ? "translate-y-0 opacity-100 scale-100" : "translate-y-24 opacity-0 scale-90 pointer-events-none"
         )}>
             <div className="px-3 py-1 bg-white/5 rounded-xl border border-white/5 text-xs font-bold text-white flex items-center gap-2 mr-2">

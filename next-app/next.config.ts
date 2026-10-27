@@ -96,7 +96,7 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  serverExternalPackages: ['ws', '@microsoft/signalr'],
+  serverExternalPackages: ['ws'],
 };
 
 export default nextConfig;

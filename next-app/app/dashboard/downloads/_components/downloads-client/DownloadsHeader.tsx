@@ -26,7 +26,7 @@ export function DownloadsHeader({
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-black/40 backdrop-blur-xl border border-white/10 p-4 rounded-3xl shadow-2xl">
       <div className="flex items-center gap-4 px-2">
-        <div className="p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 shadow-[0_0_15px_-5px_rgba(99,102,241,0.5)]">
+        <div className="p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 shadow-[0_0_15px_-5px_rgba(232,230,228,0.2)]">
           <CloudArrowDownIcon className="w-6 h-6 text-indigo-400" />
         </div>
         <h2 className="text-2xl font-black text-white tracking-tight">Téléchargements</h2>

@@ -33,7 +33,7 @@ export function StatsCharts({ hourlyActivity, dailyActivity, monthlyActivity }: 
             </div>
             <h3 className="text-lg font-bold text-white tracking-wide">Activité par heure</h3>
           </div>
-          <ActivityChart data={hourlyActivity} title="Activité par heure" color="#6366F1" />
+          <ActivityChart data={hourlyActivity} title="Activité par heure" color="#e8e6e4" />
         </div>
 
         <div className="rounded-3xl bg-black/20 backdrop-blur-md p-6 shadow-xl border border-white/5 ring-1 ring-white/5 transition-all duration-300 hover:bg-white/[0.03] hover:border-emerald-500/20 hover:shadow-2xl hover:shadow-emerald-500/10">
@@ -43,7 +43,7 @@ export function StatsCharts({ hourlyActivity, dailyActivity, monthlyActivity }: 
             </div>
             <h3 className="text-lg font-bold text-white tracking-wide">Activité par jour</h3>
           </div>
-          <ActivityChart data={dailyActivity} title="Activité par jour" color="#10B981" />
+          <ActivityChart data={dailyActivity} title="Activité par jour" color="#8faf86" />
         </div>
 
         {monthlyActivity && (
@@ -54,7 +54,7 @@ export function StatsCharts({ hourlyActivity, dailyActivity, monthlyActivity }: 
               </div>
               <h3 className="text-lg font-bold text-white tracking-wide">Activité par mois</h3>
             </div>
-            <ActivityChart data={monthlyActivity} title="Activité par mois" color="#8B5CF6" fontSize={10} />
+            <ActivityChart data={monthlyActivity} title="Activité par mois" color="#b8b5b2" fontSize={10} />
           </div>
         )}
       </div>

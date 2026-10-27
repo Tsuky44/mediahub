@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import clsx from 'clsx'
-import { Loader2, Eye, EyeOff } from 'lucide-react'
-import { getProviderIcon, getProviderLabel, getProviderSubmitClasses, type LoginProvider } from '../_utils/login-providers'
+import { Eye, EyeOff } from 'lucide-react'
+import { OnyxTrack } from '@/components/ui/onyx'
+import { getProviderIcon, getProviderLabel, type LoginProvider } from '../_utils/login-providers'
 
 interface CredentialsFormProps {
     provider: LoginProvider
@@ -44,7 +44,7 @@ export function CredentialsForm({
                         placeholder={`Votre identifiant ${label}`}
                         value={username}
                         onChange={(e) => onUsernameChange(e.target.value)}
-                        className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm pl-10 pr-4 py-3 transition-all duration-300"
+                        className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-white/30 focus:ring-white/20 sm:text-sm pl-10 pr-4 py-3 transition-all duration-300"
                     />
                 </div>
             </div>
@@ -63,7 +63,7 @@ export function CredentialsForm({
                         required
                         value={password}
                         onChange={(e) => onPasswordChange(e.target.value)}
-                        className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3 pr-10 transition-all duration-300"
+                        className="block w-full rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-white/30 focus:ring-white/20 sm:text-sm px-4 py-3 pr-10 transition-all duration-300"
                     />
                     <button
                         type="button"
@@ -80,17 +80,16 @@ export function CredentialsForm({
                 <button
                     type="submit"
                     disabled={loading}
-                    className={clsx(
-                        'flex w-full justify-center rounded-2xl border border-transparent px-4 py-3 text-sm font-bold text-white shadow-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 active:scale-[0.98]',
-                        getProviderSubmitClasses(provider),
-                    )}
+                    aria-busy={loading}
+                    className="relative flex w-full justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/15 px-4 py-3 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.15)] hover:bg-white/20 disabled:cursor-wait transition-[background-color,scale] duration-300 ease-onyx active:scale-[0.98]"
                 >
-                    {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : `Se connecter avec ${label}`}
+                    {loading ? 'Connexion' : `Se connecter avec ${label}`}
+                    {loading && <OnyxTrack className="absolute inset-x-6 bottom-1.5" />}
                 </button>
 
                 <div className="mt-4 text-center">
                     <a href="/request-access" className="text-sm text-gray-400 hover:text-white transition-colors">
-                        Pas encore de compte ? <span className="text-indigo-400">Faire une demande</span>
+                        Pas encore de compte ? <span className="text-white underline decoration-white/30 underline-offset-4">Faire une demande</span>
                     </a>
                 </div>
             </div>

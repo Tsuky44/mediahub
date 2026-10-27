@@ -47,7 +47,7 @@ export function FileManagerTable({
                         <tr>
                             <td colSpan={4} className="px-4 py-12 text-center">
                                 <div className="flex flex-col items-center">
-                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-3 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-3 shadow-[0_0_10px_rgba(232,230,228,0.2)]" />
                                     <span className="text-gray-400 text-sm animate-pulse">Chargement des fichiers...</span>
                                 </div>
                             </td>

@@ -38,7 +38,6 @@ export function RequestCard({
 
     const { posterPath, fallbackPosterPath } = resolvePosterUrls(tmdbId, mediaType, request.media?.posterPath)
     const currentStatus = getStatusInfo(request.status)
-    const StatusIcon = currentStatus.icon
     const requesterName =
         request.requestedBy?.displayName ||
         request.requestedBy?.email?.split('@')[0] ||

@@ -101,8 +101,8 @@ export default function TorrentRowFooter({
                                 className={clsx(
                                     'h-full transition-all duration-1000 rounded-full relative overflow-hidden',
                                     isPaused ? 'bg-gray-600' :
-                                    isUploading ? 'bg-gradient-to-r from-emerald-600 to-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]' :
-                                    'bg-gradient-to-r from-blue-600 to-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]'
+                                    isUploading ? 'bg-gradient-to-r from-emerald-600 to-emerald-400 shadow-[0_0_15px_rgba(119,153,109,0.3)]' :
+                                    'bg-gradient-to-r from-blue-600 to-blue-400 shadow-[0_0_15px_rgba(232,230,228,0.12)]'
                                 )}
                                 style={{ width: `${(torrent.progress * 100).toFixed(1)}%` }}
                             >

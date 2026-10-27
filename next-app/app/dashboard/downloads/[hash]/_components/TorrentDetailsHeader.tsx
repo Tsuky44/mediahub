@@ -37,7 +37,7 @@ export function TorrentDetailsHeader({ torrent, parsed }: TorrentDetailsHeaderPr
                       'Téléchargement'
 
   return (
-    <div className="sticky top-0 z-50 bg-[#0f172a]/80 backdrop-blur-xl border-b border-white/5">
+    <div className="sticky top-0 z-50 bg-[#121414]/80 backdrop-blur-xl border-b border-white/5">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">

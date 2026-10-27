@@ -32,7 +32,7 @@ export function MediaCardActions({
         disabled={isTogglingWatchLater}
         className={`p-2.5 rounded-full backdrop-blur-md transition-all duration-300 hover:scale-110 border ${
           isWatchLater
-            ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 hover:bg-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.2)]'
+            ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 hover:bg-blue-500/30 shadow-[0_0_15px_rgba(232,230,228,0.08)]'
             : 'bg-gray-900/60 border-white/10 text-gray-400 hover:bg-gray-800/80 hover:text-white hover:border-white/20'
         }`}
         title={isWatchLater ? 'Retirer de la liste' : 'À regarder plus tard'}

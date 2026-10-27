@@ -60,7 +60,7 @@ export default function WatchLaterButton({
             className={clsx(
                 "p-3 rounded-full border transition-all duration-300 flex items-center justify-center hover:scale-105 active:scale-95",
                 isWatchLater 
-                    ? "bg-blue-500/20 border-blue-500/50 text-blue-400 hover:bg-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.2)]" 
+                    ? "bg-blue-500/20 border-blue-500/50 text-blue-400 hover:bg-blue-500/30 shadow-[0_0_15px_rgba(232,230,228,0.08)]" 
                     : "bg-gray-800/40 border-white/10 text-gray-400 hover:bg-gray-700/60 hover:text-white hover:border-white/20 backdrop-blur-md"
             )}
             title={isWatchLater ? "Retirer de À regarder plus tard" : "Ajouter à À regarder plus tard"}

@@ -35,7 +35,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
     : null
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white">
+    <div className="min-h-screen bg-[#121414] text-white">
       {/* Backdrop Section */}
       <div className="relative h-[40vh] w-full overflow-hidden">
         {backdropUrl && (
@@ -45,7 +45,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
               alt={collection.name} 
               className="h-full w-full object-cover opacity-40"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] to-transparent"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#121414] to-transparent"></div>
           </>
         )}
         <div className="absolute bottom-0 left-0 p-8 md:p-12 w-full max-w-[1600px] mx-auto right-0">

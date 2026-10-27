@@ -85,7 +85,7 @@ export default function FullCreditsButton({ cast, crew, children }: FullCreditsB
 
             {isOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-[#1e293b] w-full max-w-4xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                    <div className="bg-[#1f2121] w-full max-w-4xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 border-b border-white/5">
                             <h2 className="text-2xl font-bold text-white">Équipe complète</h2>

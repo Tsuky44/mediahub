@@ -74,7 +74,7 @@ export function WelcomePopup({ show, userRole }: WelcomePopupProps) {
             closing ? "opacity-0" : "opacity-100"
         )}>
             <div className={clsx(
-                "bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl transition-all duration-300 transform",
+                "bg-[#1a1c1c] border border-white/10 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl transition-all duration-300 transform",
                 closing ? "scale-95 translate-y-4" : "scale-100 translate-y-0"
             )}>
                 {/* Header */}

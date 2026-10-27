@@ -65,7 +65,7 @@ export default async function PersonPage({ params }: PersonPageProps) {
                     className="absolute inset-0 bg-cover bg-center opacity-30 blur-sm"
                     style={{ backgroundImage: `url(https://image.tmdb.org/t/p/original${sortedCredits[0]?.backdrop_path || ''})` }}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/60 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0e1010] via-[#0e1010]/60 to-transparent" />
             </div>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-32 relative z-10">

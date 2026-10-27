@@ -1,16 +1,12 @@
 'use client'
 
 import { Tv, User as UserIcon } from 'lucide-react'
+import { OnyxBeam, OnyxTrack } from '@/components/ui/onyx'
+import type { StatusInfo } from '../_utils/request-status'
 
 interface RequestCardMetaProps {
   mediaType: 'movie' | 'tv'
-  statusInfo: {
-    bg: string
-    border: string
-    color: string
-    label: string
-    icon: React.ComponentType<{ className?: string }>
-  }
+  statusInfo: StatusInfo
   seasons?: number[]
   requesterName: string
 }
@@ -20,11 +16,13 @@ export function RequestCardMeta({ mediaType, statusInfo, seasons, requesterName 
 
   return (
     <div className="flex flex-wrap items-center gap-y-2 gap-x-4">
-      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${statusInfo.bg} ${statusInfo.border} ${statusInfo.color}`}>
-        <StatusIcon className="w-4 h-4" />
-        <span className="text-sm font-bold uppercase tracking-wide">
+      <div className={`relative overflow-hidden flex items-center gap-2 px-3 py-1.5 rounded-full border ${statusInfo.bg} ${statusInfo.border} ${statusInfo.color}`}>
+        {statusInfo.motion === 'beam' && <OnyxBeam />}
+        <StatusIcon className={`w-4 h-4 ${statusInfo.iconColor}`} />
+        <span className="text-xs font-semibold uppercase tracking-[0.1em]">
           {statusInfo.label}
         </span>
+        {statusInfo.motion === 'track' && <OnyxTrack className="absolute inset-x-3 bottom-0.5 h-0.5" />}
       </div>
 
       {mediaType === 'tv' && seasons && seasons.length > 0 && (

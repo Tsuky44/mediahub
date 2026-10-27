@@ -3,9 +3,10 @@ import { cn } from '@/lib/utils'
 // Squelettes partagés (Server Components, zéro JS client) utilisés par les
 // loading.tsx et les fallbacks <Suspense> : l'écran réagit instantanément à
 // chaque navigation pendant que le serveur streame la page.
+// `onyx-skeleton` (globals.css) : le reflet du faisceau traverse la surface en 1400 ms.
 
 export function SkeletonBlock({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse rounded-lg bg-gray-800/50 border border-gray-700/30', className)} />
+  return <div className={cn('onyx-skeleton rounded-lg border border-white/5', className)} />
 }
 
 export function PageHeaderSkeleton({ withSearch = false }: { withSearch?: boolean }) {

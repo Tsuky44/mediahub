@@ -74,7 +74,7 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
   const logoPath = bestLogo?.file_path
 
   return (
-    <div className="relative min-h-screen bg-[#0f172a] text-gray-300 overflow-x-hidden font-sans selection:bg-indigo-500/30">
+    <div className="relative min-h-screen bg-[#121414] text-gray-300 overflow-x-hidden font-sans selection:bg-indigo-500/30">
       <MediaBackdrop backdropUrl={backdropUrl} alt={title} />
 
       <div className="relative z-10 mx-auto max-w-[1600px] px-4 py-12 sm:px-8 lg:px-12">
@@ -161,8 +161,8 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
                               className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
                               style={{
                                 width: `${userProgress.playedPercentage}%`,
-                                background: 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
-                                boxShadow: '0 0 8px rgba(168,85,247,0.6)',
+                                background: 'linear-gradient(90deg, #9a9794, #e8e6e4)',
+                                boxShadow: '0 0 8px rgba(232,230,228,0.24)',
                               }}
                             />
                           </div>

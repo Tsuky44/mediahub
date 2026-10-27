@@ -21,10 +21,15 @@ export function Providers({ children, session }: { children: React.ReactNode; se
             position="bottom-right"
             toastOptions={{
               style: {
-                background: '#18181b',
-                color: '#fff',
-                border: '1px solid #27272a',
+                background: 'rgb(30 32 32 / 0.92)',
+                color: '#e8e6e4',
+                border: '1px solid rgb(232 230 228 / 0.12)',
+                borderRadius: '16px',
+                backdropFilter: 'blur(20px)',
+                boxShadow: '0 30px 60px rgb(0 0 0 / 0.5)',
               },
+              success: { iconTheme: { primary: '#e8e6e4', secondary: '#121414' } },
+              error: { iconTheme: { primary: '#ffb4ab', secondary: '#121414' } },
             }}
           />
           <SupportChatbot />

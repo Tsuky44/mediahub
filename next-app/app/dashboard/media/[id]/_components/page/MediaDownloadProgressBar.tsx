@@ -62,8 +62,8 @@ export function MediaDownloadProgressBar({
           className="absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out"
           style={{
             width: `${status.progress}%`,
-            background: 'linear-gradient(90deg, #6366f1, #818cf8)',
-            boxShadow: '0 0 8px rgba(99,102,241,0.5)',
+            background: 'linear-gradient(90deg, #9a9794, #e8e6e4)',
+            boxShadow: '0 0 8px rgba(232,230,228,0.2)',
           }}
         />
       </div>

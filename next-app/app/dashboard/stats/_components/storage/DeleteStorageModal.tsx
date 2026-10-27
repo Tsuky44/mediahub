@@ -29,7 +29,7 @@ export function DeleteStorageModal({
 
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[60] backdrop-blur-md animate-in fade-in duration-200">
-            <div className="bg-[#0A0A0A]/95 border border-red-500/30 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden ring-1 ring-red-500/20 animate-in zoom-in-95 duration-200">
+            <div className="bg-[#0e1010]/95 border border-red-500/30 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden ring-1 ring-red-500/20 animate-in zoom-in-95 duration-200">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 to-red-500 overflow-hidden">
                     {isDeleting && (
                         <div className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/70 to-transparent animate-indeterminate" />
