@@ -85,7 +85,8 @@ COPY --from=builder /app/public ./public
 RUN mkdir .next
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/data ./data
+# Dossier de la base (créée au premier démarrage par Drizzle, jamais embarquée dans l'image)
+RUN mkdir -p data/db
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/entrypoint.sh ./entrypoint.sh

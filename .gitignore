@@ -10,3 +10,10 @@ Thumbs.db
 logs_*.txt
 publish-log.txt
 *.backup
+
+# Bases SQLite locales et données d'exécution (jamais versionnées)
+*.db
+*.db-shm
+*.db-wal
+next-app/data/
+next-app/.config/

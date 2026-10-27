@@ -4,7 +4,7 @@ This is test a [Next.js](https://nextjs.org) project bootstrapped with [`create-
 
 First, run the development server:
 
-```bash![alt text](image.png)
+```bash
 npm run dev
 # or
 yarn dev

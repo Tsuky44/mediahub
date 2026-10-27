@@ -9,3 +9,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 prisma/dev.db
+data/db
+*.db
+*.db-shm
+*.db-wal
