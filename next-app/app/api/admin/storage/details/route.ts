@@ -5,8 +5,33 @@ import { EmbyService } from '@/lib/services/emby'
 import { defineAbilityFor } from '@/lib/ability'
 import { enrichViewingStatsWithWatchEvents, aggregatedLastPlayedDate, upsertItemLastPlayedCache, type ViewingStatLike } from '@/lib/services/item-viewing-stats'
 import { invalidateStorageDates } from '@/lib/services/storage-list'
+import type { StorageMediaInfo } from '@/app/dashboard/stats/_types/storage'
 
 export const dynamic = 'force-dynamic'
+
+function yearOf(value: unknown): number | null {
+    if (!value) return null
+    const year = new Date(value as string).getFullYear()
+    return isNaN(year) ? null : year
+}
+
+/** Métadonnées Emby -> fiche affichée en tête du détail. */
+function toMediaInfo(item: Record<string, unknown>): StorageMediaInfo {
+    const ticks = Number(item.RunTimeTicks) || 0
+    return {
+        overview: (item.Overview as string) || null,
+        year: (item.ProductionYear as number) || yearOf(item.PremiereDate),
+        endYear: yearOf(item.EndDate),
+        status: (item.Status as string) || null,
+        genres: (item.Genres as string[]) ?? [],
+        studios: ((item.Studios as Array<{ Name?: string }>) ?? []).map(s => s.Name).filter((n): n is string => !!n).slice(0, 3),
+        communityRating: typeof item.CommunityRating === 'number' ? item.CommunityRating : null,
+        officialRating: (item.OfficialRating as string) || null,
+        // 1 tick = 100 ns
+        runtimeMinutes: ticks ? Math.round(ticks / 600_000_000) : null,
+        path: (item.Path as string) || null,
+    }
+}
 
 export async function GET(request: Request) {
   try {
@@ -48,30 +73,36 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Item ID is required or not found' }, { status: 400 })
     }
 
-    // 1. Get viewing status for all users
-    const viewingStats = await embyService.getItemStateForAllUsers(itemId)
+    const id = itemId
 
-    // Enrichissement watch_events (logique partagée avec la colonne "Regardé").
-    await enrichViewingStatsWithWatchEvents(itemId, viewingStats as ViewingStatLike[])
+    // Activité, saisons et fiche du média chargées en parallèle
+    const loadViewingStats = async () => {
+        const viewingStats = await embyService.getItemStateForAllUsers(id)
 
-    // Met à jour le cache pour accélérer les prochains chargements de la liste.
-    const aggregatedDate = aggregatedLastPlayedDate(viewingStats as ViewingStatLike[])
-    await upsertItemLastPlayedCache(
-        itemId,
-        type === 'Series' ? 'Series' : 'Movie',
-        aggregatedDate
-    )
-    invalidateStorageDates()
+        // Enrichissement watch_events (logique partagée avec la colonne "Regardé").
+        await enrichViewingStatsWithWatchEvents(id, viewingStats as ViewingStatLike[])
 
-    // 2. If Series, get seasons details
-    let seasons: any[] = []
-    if (type === 'Series') {
-        seasons = await embyService.getSeasonDetails(itemId)
+        // Met à jour le cache pour accélérer les prochains chargements de la liste.
+        const aggregatedDate = aggregatedLastPlayedDate(viewingStats as ViewingStatLike[])
+        await upsertItemLastPlayedCache(
+            id,
+            type === 'Series' ? 'Series' : 'Movie',
+            aggregatedDate
+        )
+        invalidateStorageDates()
+        return viewingStats
     }
+
+    const [viewingStats, seasons, rawInfo] = await Promise.all([
+        loadViewingStats(),
+        type === 'Series' ? embyService.getSeasonDetails(id) : Promise.resolve([]),
+        embyService.getItemInfo(id),
+    ])
 
     return NextResponse.json({
         viewingStats,
-        seasons
+        seasons,
+        info: rawInfo ? toMediaInfo(rawInfo) : null,
     })
 
   } catch (error: any) {

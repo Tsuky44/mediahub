@@ -126,7 +126,10 @@ export async function GET(
         }
 
         if (posterPath) {
-          const tmdbImageUrl = `https://image.tmdb.org/t/p/w500${posterPath}`
+          // Taille TMDB adaptée à l'affichage demandé (vignettes de liste : w92)
+          const width = Number(maxWidth) || 0
+          const tmdbSize = !width ? 'w500' : width <= 92 ? 'w92' : width <= 185 ? 'w185' : width <= 342 ? 'w342' : 'w500'
+          const tmdbImageUrl = `https://image.tmdb.org/t/p/${tmdbSize}${posterPath}`
           log(`[Image Proxy]: Fetching from TMDB: ${tmdbImageUrl}`)
           
           const tmdbRes = await fetch(tmdbImageUrl)

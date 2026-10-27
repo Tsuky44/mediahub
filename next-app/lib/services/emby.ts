@@ -455,6 +455,23 @@ export class EmbyService {
     }
   }
 
+  /** Métadonnées complètes d'un élément (fiche du gestionnaire de stockage). */
+  async getItemInfo(itemId: string): Promise<Record<string, unknown> | null> {
+    try {
+      const client = await this.getClient(10000)
+      const response = await client.get('/Items', {
+        params: {
+          Ids: itemId,
+          Fields: 'Overview,Genres,Studios,Path,DateCreated,ProviderIds,PremiereDate,EndDate,Status,CommunityRating,OfficialRating,ProductionYear,RunTimeTicks',
+        },
+      })
+      return response.data?.Items?.[0] ?? null
+    } catch (e) {
+      error('[EmbyService] getItemInfo failed:', e)
+      return null
+    }
+  }
+
   async getItemDetails(itemId: string, userId?: string) {
     try {
       const client = await this.getClient(3000)

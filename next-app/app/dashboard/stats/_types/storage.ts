@@ -44,9 +44,25 @@ export interface SeasonDetail {
     path: string
 }
 
+/** Fiche du média (métadonnées Emby) affichée en tête du détail. */
+export interface StorageMediaInfo {
+    overview: string | null
+    year: number | null
+    endYear: number | null
+    /** Séries : `Continuing` / `Ended` */
+    status: string | null
+    genres: string[]
+    studios: string[]
+    communityRating: number | null
+    officialRating: string | null
+    runtimeMinutes: number | null
+    path: string | null
+}
+
 export interface ItemDetails {
     viewingStats: ViewingStat[]
     seasons: SeasonDetail[]
+    info?: StorageMediaInfo | null
 }
 
 export interface DeleteTarget {

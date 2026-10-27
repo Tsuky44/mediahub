@@ -15,7 +15,10 @@ export function SeasonsSection({ seasons, canDelete, onDeleteSeason }: SeasonsSe
     <div className="space-y-4">
       <h4 className="text-sm uppercase tracking-wider text-gray-500 font-semibold flex items-center gap-2">
         <Tv size={16} />
-        Saisons ({seasons.length})
+        Saisons et épisodes
+        <span className="normal-case tracking-normal font-normal text-gray-400">
+          ({seasons.length} saison{seasons.length > 1 ? 's' : ''} • {seasons.reduce((acc, s) => acc + (s.episodesCount || 0), 0)} épisodes)
+        </span>
       </h4>
       <div className="bg-white/5 rounded-xl overflow-hidden border border-white/5">
         {/* Desktop Table */}

@@ -506,6 +506,7 @@ export function mapEmbyItemToStorageRow(
     return {
         ...base,
         episodesCount: extras?.episodesCount ?? (item._episodesCount as number) ?? 0,
+        tmdbId: providers?.Tmdb,
         tvdbId: providers?.Tvdb,
         size: extras?.size ?? (item._size as number) ?? size,
     }
