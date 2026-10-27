@@ -1,6 +1,7 @@
 'use client'
 
 import { LayoutGrid } from 'lucide-react'
+import { CountUp } from '@/components/ui/count-up'
 import type { DashboardStats } from '../../_types/dashboard'
 
 interface LibraryStatsCardProps {
@@ -22,7 +23,7 @@ export function LibraryStatsCard({ stats }: LibraryStatsCardProps) {
             Films
           </div>
           <div className="text-lg font-bold text-white leading-none">
-            {stats?.library?.movies || '--'}
+            <CountUp value={stats?.library?.movies || '--'} />
           </div>
         </div>
         <div className="bg-gray-800/30 p-2 rounded-xl border border-gray-800/50">
@@ -30,7 +31,7 @@ export function LibraryStatsCard({ stats }: LibraryStatsCardProps) {
             Séries
           </div>
           <div className="text-lg font-bold text-white leading-none">
-            {stats?.library?.series || '--'}
+            <CountUp value={stats?.library?.series || '--'} />
           </div>
         </div>
       </div>

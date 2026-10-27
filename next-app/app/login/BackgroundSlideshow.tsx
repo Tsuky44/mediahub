@@ -33,8 +33,11 @@ export default function BackgroundSlideshow({ images }: { images: string[] }) {
               // On utilise une opacité de 0.7 max pour que l'image soit déjà un peu sombre de base
               opacity: isActive ? 1 : 0,
               zIndex: isActive ? 1 : 0,
-              transform: isActive ? 'scale(1.02)' : 'scale(1)',
+              // Lent travelling avant pendant les 10 s où l'image est affichée
+              transform: isActive ? 'scale(1.1)' : 'scale(1)',
               transitionProperty: 'opacity, transform',
+              transitionDuration: isActive ? '2000ms, 12000ms' : '2000ms, 0ms',
+              transitionTimingFunction: 'ease-in-out, linear',
             }}
           />
         )

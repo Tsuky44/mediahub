@@ -42,7 +42,7 @@ export function RequestListItems({
 
     return (
         <>
-            <div className="grid grid-cols-1 gap-6">
+            <div className="onyx-stagger grid grid-cols-1 gap-6">
                 {visibleItems.map((request: any) => (
                     <RequestCard
                         key={request.id}

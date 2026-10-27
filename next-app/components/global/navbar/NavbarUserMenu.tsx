@@ -45,7 +45,7 @@ export function NavbarUserMenu({ isOpen, onToggle }: NavbarUserMenuProps) {
         </button>
 
         {isOpen && (
-          <div className="absolute right-0 mt-2 w-56 origin-top-right rounded-xl bg-gray-900 border border-gray-800 shadow-2xl py-1 z-[60] overflow-hidden backdrop-blur-xl bg-gray-900/95">
+          <div className="animate-pop-in absolute right-0 mt-2 w-56 origin-top-right rounded-xl bg-gray-900 border border-gray-800 shadow-2xl py-1 z-[60] overflow-hidden backdrop-blur-xl bg-gray-900/95">
             <div className="px-4 py-3 border-b border-gray-800 bg-gray-800/50">
               <p className="text-sm font-semibold text-white truncate">
                 {session.user.name}

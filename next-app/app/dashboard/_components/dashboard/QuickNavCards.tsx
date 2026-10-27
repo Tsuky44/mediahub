@@ -16,7 +16,7 @@ export function QuickNavCards() {
           </div>
           <span className="font-medium text-sm text-gray-200">Demandes</span>
         </div>
-        <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-white transition-colors" />
+        <ArrowRight className="onyx-nudge w-4 h-4 text-gray-600 group-hover:text-white transition-colors" />
       </Link>
 
       <Link
@@ -31,7 +31,7 @@ export function QuickNavCards() {
             Téléchargements
           </span>
         </div>
-        <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-white transition-colors" />
+        <ArrowRight className="onyx-nudge w-4 h-4 text-gray-600 group-hover:text-white transition-colors" />
       </Link>
     </div>
   )

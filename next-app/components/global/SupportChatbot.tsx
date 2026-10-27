@@ -69,7 +69,7 @@ export default function SupportChatbot() {
       {!isOpen && (
         <button
           onClick={open}
-          className="fixed bottom-6 left-6 z-50 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full p-4 shadow-lg shadow-indigo-500/20 transition-all hover:scale-105"
+          className="onyx-breathe fixed bottom-6 left-6 z-50 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full p-4 shadow-lg shadow-indigo-500/20 transition-[scale,rotate] duration-300 ease-spring hover:scale-110 hover:-rotate-6"
           aria-label="Ouvrir le support"
         >
           <MessageCircle size={24} />

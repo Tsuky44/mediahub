@@ -74,14 +74,14 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
   const logoPath = bestLogo?.file_path
 
   return (
-    <div className="relative min-h-screen bg-[#121414] text-gray-300 overflow-x-hidden font-sans selection:bg-indigo-500/30">
+    <div className="relative min-h-screen bg-[#0c0d0d] text-gray-300 overflow-x-hidden font-sans selection:bg-indigo-500/30">
       <MediaBackdrop backdropUrl={backdropUrl} alt={title} />
 
       <div className="relative z-10 mx-auto max-w-[1600px] px-4 py-12 sm:px-8 lg:px-12">
         {/* Header Section (Hero Backdrop Layout) */}
         <div className="relative flex flex-col justify-end min-h-[35vh] md:min-h-[50vh] pt-16 pb-6 mb-12">
           <div className="max-w-6xl space-y-6">
-            <div className="space-y-4">
+            <div className="onyx-stagger space-y-4">
               <MediaAvailabilityBadges status={availability.status} />
               <MediaTitleHeader
                 title={title}
@@ -122,7 +122,7 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
         </div>
 
         {/* Content Body Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-12">
+        <div className="onyx-reveal grid grid-cols-1 xl:grid-cols-12 gap-12">
           <MediaOverviewSection
             overview={overview}
             director={director}
@@ -158,10 +158,10 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
                         <div className="flex items-center gap-3 w-full sm:w-64">
                           <div className="flex-1 relative h-2 rounded-full overflow-hidden bg-gray-800/60 border border-white/5">
                             <div
-                              className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+                              className="onyx-grow absolute inset-y-0 left-0 rounded-full transition-all duration-700"
                               style={{
                                 width: `${userProgress.playedPercentage}%`,
-                                background: 'linear-gradient(90deg, #9a9794, #e8e6e4)',
+                                background: 'linear-gradient(90deg, #9a9794, #f2f0ed)',
                                 boxShadow: '0 0 8px rgba(232,230,228,0.24)',
                               }}
                             />

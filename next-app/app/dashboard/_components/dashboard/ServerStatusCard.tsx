@@ -5,6 +5,7 @@ import { useAbility } from '@casl/react'
 import { Activity, HardDrive } from 'lucide-react'
 import { AbilityContext } from '@/components/providers/AbilityContext'
 import { MediaManagerModal } from '@/components/global/MediaManagerModal'
+import { CountUp } from '@/components/ui/count-up'
 import type {
   DashboardStats,
   ServicesHealth,
@@ -40,9 +41,11 @@ export function ServerStatusCard({
             <div className="flex items-center gap-2">
               <div
                 className={`w-2 h-2 rounded-full ${
-                  isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+                  isOnline ? 'bg-green-500' : 'bg-red-500'
                 }`}
-              />
+              >
+                {isOnline && <span className="block h-full w-full rounded-full bg-green-500 animate-onyx-ping" />}
+              </div>
               <span className="text-sm text-gray-300">{serverName}</span>
             </div>
             <span
@@ -72,12 +75,12 @@ export function ServerStatusCard({
                   <span className="text-[11px]">Stockage</span>
                 </div>
                 <span className="text-[11px] text-gray-300 font-medium">
-                  {stats.disk.used} / {stats.disk.total}
+                  <CountUp value={`${stats.disk.used} / ${stats.disk.total}`} />
                 </span>
               </div>
               <div className="w-full bg-gray-800/50 rounded-full h-1.5 overflow-hidden">
                 <div
-                  className={`h-full transition-all duration-1000 ${
+                  className={`onyx-grow h-full transition-all duration-1000 ${
                     stats.disk.percent > 90
                       ? 'bg-red-500'
                       : stats.disk.percent > 70

@@ -16,7 +16,7 @@ export function TopItemsTabs({ movies, series, title = "Contenus les plus vus" }
   const currentItems = activeTab === 'movies' ? movies : series
 
   return (
-    <div className="space-y-4">
+    <div className="onyx-reveal space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h2 className="text-xl font-semibold text-white flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-yellow-500" />
@@ -49,7 +49,7 @@ export function TopItemsTabs({ movies, series, title = "Contenus les plus vus" }
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="onyx-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3 *:onyx-lift">
         {currentItems.map((item, index) => (
           <TopItemCard
             key={item.Id || item.ItemId || index}

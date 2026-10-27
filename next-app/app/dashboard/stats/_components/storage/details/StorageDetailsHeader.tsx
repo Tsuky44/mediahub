@@ -56,7 +56,7 @@ export function StorageDetailsHeader({ item, info, seasons, loading }: StorageDe
         className="absolute inset-0 bg-cover bg-center scale-125 blur-2xl opacity-40"
         style={{ backgroundImage: `url("${storagePosterUrl(item, 342)}")` }}
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-[#0e1010]/70 to-[#0e1010]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-[#080909]/70 to-[#080909]" />
 
       <div className="relative flex flex-col sm:flex-row gap-5 p-6 pt-8">
         <StoragePoster

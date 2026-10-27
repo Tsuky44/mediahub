@@ -441,7 +441,7 @@ export default async function UserStatsPage({ searchParams }: UserStatsPageProps
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="onyx-stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 *:onyx-lift">
         <StatCard 
           title="Temps de visionnage" 
           value={`${hours}h ${minutes}m`}

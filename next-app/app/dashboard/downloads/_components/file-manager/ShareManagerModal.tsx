@@ -54,7 +54,7 @@ export function ShareManagerModal({ isOpen, onClose }: ShareManagerModalProps) {
 
     return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-            <div className="bg-[#0e1010]/95 backdrop-blur-xl rounded-3xl shadow-2xl shadow-indigo-500/10 max-w-2xl w-full border border-white/10 overflow-hidden ring-1 ring-white/10 scale-100 animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col">
+            <div className="bg-[#080909]/95 backdrop-blur-xl rounded-3xl shadow-2xl shadow-indigo-500/10 max-w-2xl w-full border border-white/10 overflow-hidden ring-1 ring-white/10 scale-100 animate-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent opacity-50" />
 
                 <div className="p-6 border-b border-white/5 flex items-center gap-4">

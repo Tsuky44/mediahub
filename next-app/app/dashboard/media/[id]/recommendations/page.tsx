@@ -63,7 +63,7 @@ export default async function RecommendationsPage({
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            <div className="onyx-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                 {recommendations.map((item: any) => (
                     <MediaCard 
                         key={item.id} 

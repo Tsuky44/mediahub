@@ -46,7 +46,7 @@ export default function LoginForm({ enabledProviders = DEFAULT_PROVIDERS }: Logi
                     <ProviderSelector enabled={enabledProviders} current={provider} onChange={setProvider} />
                 )}
 
-                <form className="space-y-6" onSubmit={handleSubmit}>
+                <form className="onyx-stagger space-y-6" onSubmit={handleSubmit}>
                     {error && (
                         <div className="rounded-md bg-red-900/50 p-4 border border-red-900 animate-in fade-in slide-in-from-top-2">
                             <h3 className="text-sm font-medium text-red-200">{error}</h3>

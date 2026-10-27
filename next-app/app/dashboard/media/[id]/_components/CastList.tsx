@@ -20,7 +20,7 @@ export function CastList({ cast }: CastListProps) {
     return (
         <div>
             <h3 className="text-xl font-bold text-white mb-4">Têtes d'affiche</h3>
-            <div className="flex overflow-x-auto gap-4 pb-4">
+            <div className="onyx-stagger flex overflow-x-auto gap-4 pb-4">
                 {cast.map((actor) => (
                     <Link 
                         key={actor.id} 

@@ -42,7 +42,7 @@ export function CalendarGrid({
       </div>
 
       {/* Days Grid */}
-      <div className="grid grid-cols-7 auto-rows-fr h-full">
+      <div className="onyx-stagger grid grid-cols-7 auto-rows-fr h-full">
         {calendarDays.map((day, dayIdx) => {
           const dayEvents = getDayEvents(day)
           const isCurrentMonth = isSameMonth(day, date)
@@ -62,7 +62,7 @@ export function CalendarGrid({
                   className={cn(
                     'text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full',
                     isTodayDate
-                      ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40'
+                      ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40 animate-pop-in'
                       : isCurrentMonth
                         ? 'text-gray-400 group-hover:text-gray-200'
                         : 'text-gray-700'

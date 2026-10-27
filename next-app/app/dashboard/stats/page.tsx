@@ -67,7 +67,7 @@ export default async function StatsPage({ searchParams }: StatsPageProps) {
 
       <StatsPeriodNav period={data.period} />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="onyx-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Temps de visionnage"
           value={`${data.totalHours}h`}

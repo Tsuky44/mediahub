@@ -97,7 +97,7 @@ export default async function TorrentDetailsPage({ params }: TorrentDetailsPageP
   const trackerUrl = torrentPageUrl || trackerInfo?.baseUrl || null
 
   return (
-    <div className="min-h-screen bg-[#121414] text-gray-300">
+    <div className="min-h-screen bg-[#0c0d0d] text-gray-300">
       <TorrentDetailsHeader torrent={torrent} parsed={parsed} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

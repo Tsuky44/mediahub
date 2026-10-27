@@ -25,7 +25,7 @@ export function BulkDeleteResultModal({
 }: BulkDeleteResultModalProps) {
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[60] backdrop-blur-md animate-in fade-in duration-200">
-            <div className="bg-[#0e1010]/95 border border-emerald-500/30 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden ring-1 ring-emerald-500/20 animate-in zoom-in-95 duration-200">
+            <div className="bg-[#080909]/95 border border-emerald-500/30 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden ring-1 ring-emerald-500/20 animate-in zoom-in-95 duration-200">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600 to-emerald-400" />
 
                 <div className="flex flex-col items-center text-center pt-2">

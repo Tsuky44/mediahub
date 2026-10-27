@@ -78,7 +78,7 @@ export default async function LoginPage() {
               alt="MediaHub Logo" 
               width={160} 
               height={160}
-              className="drop-shadow-2xl object-contain grayscale brightness-150 transition-[filter] duration-700 ease-onyx group-hover:grayscale-0 group-hover:brightness-100"
+              className="animate-onyx-float drop-shadow-2xl object-contain grayscale brightness-150 transition-[filter] duration-700 ease-onyx group-hover:grayscale-0 group-hover:brightness-100"
               priority
             />
           </div>

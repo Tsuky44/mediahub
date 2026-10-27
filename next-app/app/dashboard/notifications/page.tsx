@@ -46,7 +46,7 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="onyx-stagger space-y-4">
         {notifications.map(notification => (
           <NotificationItem
             key={notification.id}

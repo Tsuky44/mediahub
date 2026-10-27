@@ -65,7 +65,7 @@ export default async function PersonPage({ params }: PersonPageProps) {
                     className="absolute inset-0 bg-cover bg-center opacity-30 blur-sm"
                     style={{ backgroundImage: `url(https://image.tmdb.org/t/p/original${sortedCredits[0]?.backdrop_path || ''})` }}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0e1010] via-[#0e1010]/60 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#080909] via-[#080909]/60 to-transparent" />
             </div>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-32 relative z-10">
@@ -142,7 +142,7 @@ export default async function PersonPage({ params }: PersonPageProps) {
                                 <span className="text-gray-500 text-sm font-medium">{sortedCredits.length} titres</span>
                             </div>
 
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            <div className="onyx-stagger grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                                 {sortedCredits.slice(0, 50).map((item: any) => (
                                     <Link 
                                         key={`${item.media_type}-${item.id}`} 

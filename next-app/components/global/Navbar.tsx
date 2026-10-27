@@ -41,7 +41,7 @@ export function Navbar({ configStatus, impersonation }: NavbarProps) {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 w-full bg-onyx-bg/85 backdrop-blur-[30px] border-b border-white/[0.06] supports-[backdrop-filter]:bg-onyx-bg/65">
+      <nav className="onyx-scroll-progress sticky top-0 z-50 w-full bg-onyx-bg/85 backdrop-blur-[30px] border-b border-white/[0.06] supports-[backdrop-filter]:bg-onyx-bg/65">
         {impersonation && (
           <ImpersonationBannerClient roleName={impersonation.role} />
         )}

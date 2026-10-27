@@ -59,10 +59,10 @@ export function MediaDownloadProgressBar({
 
       <div className="relative h-2 w-full bg-gray-850 rounded-full overflow-hidden border border-white/5 mb-1.5">
         <div
-          className="absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out"
+          className="onyx-sheen absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out"
           style={{
             width: `${status.progress}%`,
-            background: 'linear-gradient(90deg, #9a9794, #e8e6e4)',
+            background: 'linear-gradient(90deg, #9a9794, #f2f0ed)',
             boxShadow: '0 0 8px rgba(232,230,228,0.2)',
           }}
         />

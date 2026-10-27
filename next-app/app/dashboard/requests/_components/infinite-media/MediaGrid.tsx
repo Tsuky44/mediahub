@@ -25,7 +25,7 @@ interface MediaGridProps {
 
 export function MediaGrid({ items, loading, hasMore, initialType, triggerRef }: MediaGridProps) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+    <div className="onyx-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {items.map(item => (
         <MediaCard key={item.id} item={withMediaType(item, initialType)} />
       ))}

@@ -64,7 +64,7 @@ export function Recommendations({ items, showTitle = true }: { items: Recommenda
                 <div 
                     ref={scrollRef}
                     onScroll={handleScroll}
-                    className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide px-1 scroll-smooth snap-x snap-mandatory"
+                    className="onyx-stagger flex gap-4 overflow-x-auto pb-4 scrollbar-hide px-1 scroll-smooth snap-x snap-mandatory"
                 >
                     {items.map((item) => (
                         <div key={`${item.media_type}-${item.id}`} className="flex-shrink-0 w-[150px] sm:w-[180px] snap-start">

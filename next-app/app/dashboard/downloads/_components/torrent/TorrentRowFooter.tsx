@@ -106,7 +106,8 @@ export default function TorrentRowFooter({
                                 )}
                                 style={{ width: `${(torrent.progress * 100).toFixed(1)}%` }}
                             >
-                                <div className="absolute inset-0 bg-white/20 animate-[shimmer_2s_infinite]" />
+                                {/* Reflet qui parcourt la barre tant que le transfert avance */}
+                                {!isPaused && <div className="onyx-sheen absolute inset-0" />}
                             </div>
                         </div>
                     )}

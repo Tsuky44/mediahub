@@ -53,7 +53,7 @@ export function SystemMessageDisplay() {
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
-        className="bg-[#121414] border border-indigo-500/30 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in-95 duration-200"
+        className="bg-[#0c0d0d] border border-indigo-500/30 rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
       >

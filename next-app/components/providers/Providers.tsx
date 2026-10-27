@@ -22,14 +22,14 @@ export function Providers({ children, session }: { children: React.ReactNode; se
             toastOptions={{
               style: {
                 background: 'rgb(30 32 32 / 0.92)',
-                color: '#e8e6e4',
+                color: '#f2f0ed',
                 border: '1px solid rgb(232 230 228 / 0.12)',
                 borderRadius: '16px',
                 backdropFilter: 'blur(20px)',
                 boxShadow: '0 30px 60px rgb(0 0 0 / 0.5)',
               },
-              success: { iconTheme: { primary: '#e8e6e4', secondary: '#121414' } },
-              error: { iconTheme: { primary: '#ffb4ab', secondary: '#121414' } },
+              success: { iconTheme: { primary: '#f2f0ed', secondary: '#0c0d0d' } },
+              error: { iconTheme: { primary: '#ffb4ab', secondary: '#0c0d0d' } },
             }}
           />
           <SupportChatbot />

@@ -56,7 +56,7 @@ export function TransfersCard({
                 <div
                   className={`${
                     torrent.dlspeed > 0 ? 'bg-blue-500' : 'bg-green-500'
-                  } h-full transition-all duration-500`}
+                  } h-full transition-all duration-500 ${torrent.dlspeed > 0 ? 'onyx-sheen' : ''}`}
                   style={{ width: `${torrent.progress * 100}%` }}
                 />
               </div>
@@ -81,9 +81,9 @@ export function TransfersCard({
       <div className="mt-4 pt-3 border-t border-gray-800/50">
         <Link
           href="/dashboard/downloads"
-          className="text-[10px] text-blue-400 hover:text-blue-300 font-medium flex items-center justify-center gap-1"
+          className="group text-[10px] text-blue-400 hover:text-blue-300 font-medium flex items-center justify-center gap-1"
         >
-          Voir les téléchargements <ArrowRight className="w-3 h-3" />
+          Voir les téléchargements <ArrowRight className="onyx-nudge w-3 h-3" />
         </Link>
       </div>
     </div>
