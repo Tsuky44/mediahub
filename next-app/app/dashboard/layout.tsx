@@ -17,7 +17,6 @@ export default async function DashboardLayout({
   // Check enabled features based on configuration
   const configStatus = {
     hasDownloads: config.hasDownloads,
-    hasDocker: config.hasDocker
   }
 
   return (

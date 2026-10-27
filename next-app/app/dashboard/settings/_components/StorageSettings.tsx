@@ -3,7 +3,6 @@ import { useStorageTests } from './storage/useStorageTests'
 import { StorageConnectionForm } from './storage/StorageConnectionForm'
 import { LegacySmbMigration } from './storage/LegacySmbMigration'
 import { UnraidSettings } from './storage/UnraidSettings'
-import { DockerSettings } from './storage/DockerSettings'
 
 interface Props {
   formData: SettingsFormData
@@ -59,8 +58,6 @@ export const StorageSettings = ({ formData, updateField }: Props) => {
         loading={unraidLoading}
         result={unraidResult}
       />
-
-      <DockerSettings formData={formData} onUpdateField={updateField} />
     </div>
   )
 }

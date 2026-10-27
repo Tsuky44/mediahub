@@ -47,7 +47,7 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     { id: 'media', label: 'Média & Intégrations', icon: Tv, permissionKey: 'media' },
     { id: 'downloads', label: 'Téléchargements', icon: Download, permissionKey: 'downloads' },
     { id: 'automation', label: 'Automatisation', icon: Bot, permissionKey: 'automation' },
-    { id: 'storage', label: 'Stockage & Docker', icon: HardDrive, permissionKey: 'storage' },
+    { id: 'storage', label: 'Stockage', icon: HardDrive, permissionKey: 'storage' },
     { id: 'backup', label: 'Sauvegarde', icon: Database, permissionKey: 'backup' },
     { id: 'maintenance', label: 'Maintenance', icon: Wrench, permissionKey: 'maintenance' },
     { id: 'notifications-v2', label: 'Notifications', icon: BellRing, permissionKey: 'notifications' },

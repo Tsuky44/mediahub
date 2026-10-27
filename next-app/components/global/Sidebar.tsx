@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Film, ListPlus, Settings, LogOut, BarChart2, CloudDownload, Container } from 'lucide-react'
+import { Home, Film, ListPlus, Settings, LogOut, BarChart2, CloudDownload } from 'lucide-react'
 import Image from 'next/image'
 import { signOut, useSession } from 'next-auth/react'
 import clsx from 'clsx'
@@ -15,7 +15,6 @@ const navigation = [
   { name: 'Statistiques', href: '/dashboard/stats', icon: BarChart2 },
   { name: 'Demandes', href: '/dashboard/requests', icon: ListPlus },
   { name: 'Téléchargements', href: '/dashboard/downloads', icon: CloudDownload },
-  { name: 'Docker', href: '/dashboard/docker', icon: Container },
 ]
 
 export function Sidebar() {
@@ -26,9 +25,6 @@ export function Sidebar() {
   const filteredNavigation = navigation.filter(item => {
     if (item.href === '/dashboard/downloads') {
       return ability.can('read', 'Downloads')
-    }
-    if (item.href === '/dashboard/docker') {
-      return ability.can('read', 'Docker')
     }
     if (item.href === '/dashboard/requests') {
        return ability.can('read', 'MediaRequest')

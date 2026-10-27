@@ -42,7 +42,6 @@ const initialFormData: SettingsFormData = {
   auth_local_enabled: true,
   unraid_url: '',
   unraid_api_key: '',
-  docker_host: '',
   request_all_seasons_enabled: false,
   webhook_sonarr_secret: '',
   webhook_radarr_secret: '',

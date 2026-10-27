@@ -64,7 +64,6 @@ export async function POST(request: NextRequest) {
         auth_local_enabled,
         unraid_url,
         unraid_api_key,
-        docker_host,
         type,
         request_all_seasons_enabled,
         webhook_sonarr_secret,
@@ -134,8 +133,6 @@ export async function POST(request: NextRequest) {
 
     await updateSetting('unraid_url', unraid_url)
     await updateSetting('unraid_api_key', unraid_api_key)
-    
-    await updateSetting('docker_host', docker_host)
     
     await updateSetting('type', type)
 

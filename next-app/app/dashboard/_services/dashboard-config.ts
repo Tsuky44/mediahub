@@ -9,15 +9,12 @@ const CONFIG_KEYS = [
   'jellyfin_url',
   'qbittorrent_url',
   'smb_host',
-  'docker_host',
-  'unraid_url',
   'welcome_message_enabled',
 ]
 
 export interface DashboardConfig {
   mediaServerUrl: string | null
   hasDownloads: boolean
-  hasDocker: boolean
   welcomeEnabled: boolean
 }
 
@@ -36,7 +33,6 @@ export const getDashboardConfig = cache(async (): Promise<DashboardConfig> => {
   return {
     mediaServerUrl: byKey.get('emby_url') || byKey.get('jellyfin_url') || null,
     hasDownloads: has('qbittorrent_url') || has('smb_host'),
-    hasDocker: has('docker_host') || has('unraid_url'),
     // Activé par défaut tant que le setting n'a jamais été enregistré
     welcomeEnabled: byKey.has('welcome_message_enabled')
       ? byKey.get('welcome_message_enabled') === 'true'

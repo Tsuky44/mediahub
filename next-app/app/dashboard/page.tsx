@@ -79,7 +79,7 @@ export default async function DashboardPage() {
           initialTorrents={activeTorrents}
           userName={user?.name || ''}
           isAdmin={isAdminOrUserPlus}
-          configStatus={{ hasDownloads: config.hasDownloads, hasDocker: config.hasDocker }}
+          configStatus={{ hasDownloads: config.hasDownloads }}
         />
       </div>
 

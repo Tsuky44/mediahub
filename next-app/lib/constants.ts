@@ -42,7 +42,6 @@ export const TIMEOUT = {
   RADARR: 30_000,
   EMBY: 10_000,
   QBITTORRENT: 10_000,
-  DOCKER: 15_000,
   WEBHOOK: 10_000,
 } as const;
 

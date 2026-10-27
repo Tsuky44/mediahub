@@ -1,6 +1,5 @@
 import {
   BarChart3,
-  Container,
   Download,
   Film,
   Home,
@@ -14,5 +13,4 @@ export const NAVIGATION_ITEMS: NavItem[] = [
   { name: 'Ma médiathèque', href: '/dashboard/media', icon: Film },
   { name: 'Statistiques', href: '/dashboard/stats', icon: BarChart3 },
   { name: 'Téléchargements', href: '/dashboard/downloads', icon: Download },
-  { name: 'Docker', href: '/dashboard/docker', icon: Container },
 ]

@@ -8,7 +8,6 @@ export interface NavItem {
 
 export interface NavbarConfigStatus {
   hasDownloads: boolean
-  hasDocker: boolean
 }
 
 export interface NavbarImpersonation {
