@@ -7,7 +7,7 @@ export default function MediaAvailabilityBadges({
 }: MediaAvailabilityBadgesProps) {
   if (!status) return null
   return (
-    <div className="flex flex-wrap gap-2 mb-3">
+    <div className="hidden sm:flex flex-wrap gap-2 mb-3">
       {(status === 'pending' || status === 'processing') && (
         <span className="bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm">
           Demandé

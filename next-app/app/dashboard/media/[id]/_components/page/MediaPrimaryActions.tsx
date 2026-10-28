@@ -53,9 +53,13 @@ export default function MediaPrimaryActions({
   canTriggerSearch,
   canInteractiveSearch,
 }: MediaPrimaryActionsProps) {
+  const canPlay = Boolean(embyItem && embyServerId && embyUrl)
   return (
-    <div className="flex flex-col gap-5 pt-4 border-t border-white/5 w-full">
-      <div className="flex flex-wrap items-center gap-4">
+    <div className="flex flex-col gap-3 sm:gap-5 pt-4 border-t border-white/5 w-full">
+      {/* Téléphone : « Lire » (ou « Demander »), bande-annonce et menu sur la première
+          ligne ; le statut et « Compléter » passent dessous */}
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+        <div className={canPlay ? 'order-last w-full sm:order-none sm:w-auto' : 'min-w-0 flex-1 sm:flex-none'}>
         <RequestButton
           tmdbId={tmdbId}
           mediaType={mediaType}
@@ -68,12 +72,15 @@ export default function MediaPrimaryActions({
           requestAllSeasonsEnabled={requestAllSeasonsEnabled}
           tvdbId={details.external_ids?.tvdb_id}
         />
-        {embyItem && embyServerId && embyUrl && (
-          <PlayButton
-            embyUrl={embyUrl.split('/web/')[0].replace(/\/$/, '')}
-            embyItemId={embyItem.Id}
-            serverId={embyServerId}
-          />
+        </div>
+        {canPlay && embyUrl && embyServerId && (
+          <div className="min-w-0 flex-1 sm:flex-none">
+            <PlayButton
+              embyUrl={embyUrl.split('/web/')[0].replace(/\/$/, '')}
+              embyItemId={embyItem.Id}
+              serverId={embyServerId}
+            />
+          </div>
         )}
         {trailer && (
           <TrailerButton youtubeId={trailer.key} title={title} />

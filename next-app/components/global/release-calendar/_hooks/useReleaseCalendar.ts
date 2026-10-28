@@ -12,6 +12,8 @@ import {
   isSameDay,
   subMonths,
   addMonths,
+  subWeeks,
+  addWeeks,
   parseISO,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -30,6 +32,11 @@ export function useReleaseCalendar() {
   const startDate = startOfWeek(monthStart, { locale: fr })
   const endDate = endOfWeek(monthEnd, { locale: fr })
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate })
+  // Vue téléphone : la semaine qui contient `date` (toujours comprise dans la grille du mois)
+  const weekDays = eachDayOfInterval({
+    start: startOfWeek(date, { locale: fr }),
+    end: endOfWeek(date, { locale: fr }),
+  })
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ['calendar', startDate.toISOString(), endDate.toISOString()],
@@ -46,11 +53,11 @@ export function useReleaseCalendar() {
     staleTime: 60_000,
   })
 
-  const handleNavigate = useCallback((action: 'PREV' | 'NEXT' | 'TODAY') => {
+  const handleNavigate = useCallback((action: 'PREV' | 'NEXT' | 'TODAY', unit: 'month' | 'week' = 'month') => {
     setDate(prev => {
-      if (action === 'PREV') return subMonths(prev, 1)
-      if (action === 'NEXT') return addMonths(prev, 1)
-      return new Date()
+      if (action === 'TODAY') return new Date()
+      if (unit === 'week') return action === 'PREV' ? subWeeks(prev, 1) : addWeeks(prev, 1)
+      return action === 'PREV' ? subMonths(prev, 1) : addMonths(prev, 1)
     })
   }, [])
 
@@ -81,6 +88,7 @@ export function useReleaseCalendar() {
     date,
     isLoading,
     calendarDays,
+    weekDays,
     hoveredEvent,
     mousePos,
     showMovies,

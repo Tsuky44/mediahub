@@ -1,17 +1,18 @@
 'use client'
 
-import { format } from 'date-fns'
+import { endOfWeek, format, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isPhoneScreen } from '@/lib/screen'
 
 interface CalendarHeaderProps {
   date: Date
   isLoading: boolean
   showMovies: boolean
   showSeries: boolean
-  onNavigate: (action: 'PREV' | 'NEXT' | 'TODAY') => void
+  onNavigate: (action: 'PREV' | 'NEXT' | 'TODAY', unit?: 'month' | 'week') => void
   onToggleMovies: () => void
   onToggleSeries: () => void
 }
@@ -25,12 +26,19 @@ export function CalendarHeader({
   onToggleMovies,
   onToggleSeries,
 }: CalendarHeaderProps) {
+  // Téléphone : une semaine à la fois ; écran plus large : un mois
+  const navigate = (action: 'PREV' | 'NEXT' | 'TODAY') => onNavigate(action, isPhoneScreen() ? 'week' : 'month')
+  const weekStart = startOfWeek(date, { locale: fr })
+  const weekEnd = endOfWeek(date, { locale: fr })
+  const weekLabel = `${format(weekStart, 'd MMM', { locale: fr })} – ${format(weekEnd, 'd MMM', { locale: fr })}`
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pb-3 px-1 relative z-10">
       {/* Titre et mois sur une ligne */}
       <div className="flex items-baseline gap-3 min-w-0">
         <h2 className="onyx-title text-2xl font-bold text-white tracking-tight">Calendrier</h2>
-        <span className="capitalize text-sm font-medium text-gray-400">{format(date, 'MMMM yyyy', { locale: fr })}</span>
+        <span className="hidden md:inline capitalize text-sm font-medium text-gray-400">{format(date, 'MMMM yyyy', { locale: fr })}</span>
+        <span className="md:hidden text-sm font-medium text-gray-400">{weekLabel}</span>
         {isLoading && <Loader2 className="w-4 h-4 self-center animate-spin text-indigo-400" />}
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -38,8 +46,8 @@ export function CalendarHeader({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => onNavigate('PREV')}
-            aria-label="Mois précédent"
+            onClick={() => navigate('PREV')}
+            aria-label="Période précédente"
             className="h-7 w-7 text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -47,7 +55,7 @@ export function CalendarHeader({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onNavigate('TODAY')}
+            onClick={() => navigate('TODAY')}
             className="h-7 px-2.5 text-xs font-medium text-gray-300 hover:text-white hover:bg-white/5 rounded-md transition-colors"
           >
             Aujourd&apos;hui
@@ -55,8 +63,8 @@ export function CalendarHeader({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => onNavigate('NEXT')}
-            aria-label="Mois suivant"
+            onClick={() => navigate('NEXT')}
+            aria-label="Période suivante"
             className="h-7 w-7 text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors"
           >
             <ChevronRight className="h-4 w-4" />

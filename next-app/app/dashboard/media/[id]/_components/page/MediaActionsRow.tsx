@@ -445,7 +445,7 @@ export default function MediaActionsRow(props: MediaActionsRowProps) {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={clsx(
-          'flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border shadow-sm transition-all duration-300',
+          'flex h-[42px] w-[42px] sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full border shadow-sm transition-all duration-300',
           isOpen
             ? 'border-indigo-500/50 bg-indigo-600/20 text-indigo-400'
             : 'border-white/10 bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white',

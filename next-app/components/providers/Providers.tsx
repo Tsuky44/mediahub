@@ -18,7 +18,7 @@ export function Providers({ children, session }: { children: React.ReactNode; se
         <AbilityProvider>
           {children}
           <Toaster
-            position="bottom-right"
+            position="bottom-center"
             toastOptions={{
               style: {
                 background: 'rgb(30 32 32 / 0.92)',

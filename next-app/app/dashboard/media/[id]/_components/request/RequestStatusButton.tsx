@@ -20,8 +20,10 @@ interface RequestStatusButtonProps {
   onStatusClick?: () => void
 }
 
+// Téléphone : plus bas et plus serré (texte 14 px, icônes 16 px), les pastilles se
+// partagent la largeur ; à partir de `sm`, taille d'origine.
 const pill =
-  'relative inline-flex items-center gap-2 overflow-hidden rounded-full border px-6 py-3 font-semibold backdrop-blur-xl transition-[background-color,border-color,scale] duration-300 ease-onyx'
+  'relative inline-flex flex-auto sm:flex-none whitespace-nowrap items-center justify-center sm:justify-start gap-2 overflow-hidden rounded-full border px-3.5 py-2.5 text-[13px] sm:px-6 sm:py-3 sm:text-base font-semibold backdrop-blur-xl transition-[background-color,border-color,scale] duration-300 ease-onyx [&_svg]:size-4 sm:[&_svg]:size-5'
 /** Bouton principal de l'app : verre blanc à 15 %, arête haute éclairée */
 const glass =
   'border-white/20 bg-white/15 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.15)] hover:bg-white/20 hover:scale-[1.04] active:scale-[0.98]'
@@ -63,7 +65,7 @@ export function RequestStatusButton({
   if (phase === 'idle' || phase === 'error' || !canRequest) {
     if (status === 'partial') {
       return (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <button type="button" onClick={onStatusClick} className={cn(pill, statusPill)}>
             <CircleDashed className="h-5 w-5 text-amber-400" />
             Partiellement disponible
@@ -75,7 +77,7 @@ export function RequestStatusButton({
 
     if (status === 'available') {
       return (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <button type="button" onClick={onStatusClick} className={cn(pill, statusPill)}>
             <OnyxBeam />
             <Check className="h-5 w-5 text-green-400" />
@@ -88,7 +90,7 @@ export function RequestStatusButton({
 
     if (status === 'unreleased') {
       return (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <button type="button" onClick={onStatusClick} className={cn(pill, statusPill)}>
             <CalendarClock className="h-5 w-5 text-gray-100" />
             En attente de sortie
@@ -103,7 +105,7 @@ export function RequestStatusButton({
 
     if (status === 'pending' || status === 'processing') {
       return (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <button type="button" onClick={onStatusClick} className={cn(pill, statusPill, 'pb-4')}>
             En cours de traitement
             <OnyxTrack tone="amber" className="absolute inset-x-6 bottom-2" />
@@ -119,13 +121,13 @@ export function RequestStatusButton({
 
   const busy = phase === 'sending' || phase === 'done'
   return (
-    <div className="relative">
+    <div className="relative w-full sm:w-auto">
       <button
         type="button"
         onClick={onPrimaryClick}
         disabled={busy}
         aria-busy={phase === 'sending'}
-        className={cn(pill, glass, 'min-w-[15rem] justify-center px-8 disabled:hover:scale-100')}
+        className={cn(pill, glass, 'w-full sm:w-auto sm:min-w-[15rem] sm:justify-center sm:px-8 disabled:hover:scale-100')}
       >
         {phase === 'done' && (
           <span aria-hidden className="absolute inset-0 origin-left bg-onyx-ink animate-onyx-fill" />

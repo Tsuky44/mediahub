@@ -1,10 +1,14 @@
 'use client'
 
 import { useRef, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { useSupportChat } from '@/hooks/useSupportChat'
 import { MessageCircle, X, Send, Bot, User, Loader2, ImagePlus, X as XIcon } from 'lucide-react'
 
 export default function SupportChatbot() {
+  // À droite partout, sauf sur la page Demander où le bouton des filtres occupe la droite
+  const pathname = usePathname()
+  const side = pathname === '/dashboard/requests' ? 'left-6' : 'right-6'
   const {
     isOpen,
     messages,
@@ -69,7 +73,7 @@ export default function SupportChatbot() {
       {!isOpen && (
         <button
           onClick={open}
-          className="onyx-breathe fixed bottom-6 left-6 z-50 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full p-4 shadow-lg shadow-indigo-500/20 transition-[scale,rotate] duration-300 ease-spring hover:scale-110 hover:-rotate-6"
+          className={`onyx-breathe fixed bottom-6 ${side} z-50 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full p-4 shadow-lg shadow-indigo-500/20 transition-[scale,rotate] duration-300 ease-spring hover:scale-110 hover:-rotate-6`}
           aria-label="Ouvrir le support"
         >
           <MessageCircle size={24} />
@@ -78,7 +82,7 @@ export default function SupportChatbot() {
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-6 left-6 z-50 w-[380px] max-w-[calc(100vw-3rem)] h-[560px] max-h-[calc(100vh-3rem)] bg-gray-900 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className={`fixed bottom-6 ${side} z-50 w-[380px] max-w-[calc(100vw-3rem)] h-[560px] max-h-[calc(100vh-3rem)] bg-gray-900 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden`}>
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-indigo-500/10 border-b border-white/5">
             <div className="flex items-center gap-2">

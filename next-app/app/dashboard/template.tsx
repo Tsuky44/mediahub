@@ -1,15 +1,44 @@
 'use client'
 
-import { ViewTransition } from 'react'
+import { ViewTransition, useEffect } from 'react'
+import { PHONE_QUERY } from '@/lib/screen'
+
+let guardInstalled = false
+let transitionsDisabled = false
+
+/**
+ * Sur un écran de téléphone, pas de transition de page : sur mobile, elle décalait
+ * les boutons flottants au défilement. React démarre une transition dès qu'un
+ * <ViewTransition> est monté ; on lui présente donc le navigateur comme ne gérant
+ * pas les View Transitions (chemin prévu par React : la page change normalement).
+ */
+function installPhoneTransitionGuard() {
+  if (guardInstalled) return
+  guardInstalled = true
+  const query = window.matchMedia(PHONE_QUERY)
+  const apply = () => {
+    if (query.matches && !transitionsDisabled) {
+      Object.defineProperty(document, 'startViewTransition', { value: undefined, configurable: true, writable: true })
+      transitionsDisabled = true
+    } else if (!query.matches && transitionsDisabled) {
+      // La méthode du prototype redevient visible
+      delete (document as Partial<Pick<Document, 'startViewTransition'>>).startViewTransition
+      transitionsDisabled = false
+    }
+  }
+  apply()
+  query.addEventListener('change', apply)
+}
 
 /**
  * Remonté à chaque navigation. Les navigations de Next étant des transitions React,
  * l'ancienne et la nouvelle page forment une paire « onyx-page » animée par le
  * navigateur (View Transitions, voir app/motion.css) : l'ancienne recule et
  * s'estompe, la nouvelle monte. Les rafraîchissements de données ne déclenchent
- * rien (default="none"). Sans prise en charge, la page change simplement.
+ * rien (default="none"). Les animations d'entrée des pages restent partout.
  */
 export default function DashboardTemplate({ children }: { children: React.ReactNode }) {
+  useEffect(installPhoneTransitionGuard, [])
   return (
     <ViewTransition name="onyx-page" default="none" share="auto">
       <div className="onyx-page">{children}</div>
