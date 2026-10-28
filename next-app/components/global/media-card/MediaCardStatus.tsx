@@ -9,12 +9,16 @@ interface MediaCardStatusProps {
 }
 
 /**
- * Pastille de statut sur l'affiche : vert (disponible), jaune (partiellement
- * disponible ; en cours de traitement, qui pulse), blanc (demandé mais pas encore sorti).
+ * Pastille de statut sur l'affiche : vert (disponible), demi-pastille jaune
+ * (partiellement disponible), jaune qui pulse (en cours de traitement), blanc
+ * (demandé mais pas encore sorti).
  */
 const DOTS: Record<string, { className: string; label: string }> = {
   available: { className: 'bg-green-400', label: 'Disponible' },
-  partial: { className: 'bg-amber-400', label: 'Partiellement disponible' },
+  partial: {
+    className: 'bg-[linear-gradient(90deg,var(--color-amber-400)_50%,var(--onyx-track)_50%)]',
+    label: 'Partiellement disponible',
+  },
   pending: { className: 'bg-amber-400 animate-pulse', label: 'En cours de traitement' },
   processing: { className: 'bg-amber-400 animate-pulse', label: 'En cours de traitement' },
   unreleased: { className: 'bg-onyx-ink', label: 'En attente de sortie' },
