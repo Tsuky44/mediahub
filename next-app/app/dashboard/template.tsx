@@ -34,8 +34,9 @@ function installPhoneTransitionGuard() {
  * Remonté à chaque navigation. Les navigations de Next étant des transitions React,
  * l'ancienne et la nouvelle page forment une paire « onyx-page » animée par le
  * navigateur (View Transitions, voir app/motion.css) : l'ancienne recule et
- * s'estompe, la nouvelle monte. Les rafraîchissements de données ne déclenchent
- * rien (default="none"). Les animations d'entrée des pages restent partout.
+ * s'estompe pendant que les blocs de la nouvelle arrivent un à un. Les
+ * rafraîchissements de données ne déclenchent rien (default="none"). Sur
+ * téléphone, seule l'arrivée des blocs est jouée (onyx-arrive, partout).
  */
 export default function DashboardTemplate({ children }: { children: React.ReactNode }) {
   useEffect(installPhoneTransitionGuard, [])

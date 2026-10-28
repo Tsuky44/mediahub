@@ -47,6 +47,43 @@
 @keyframes onyx-page-in {
   from { opacity: 0; }
 }
+/* Arrivée d'une page : chaque bloc monte et se pose */
+@keyframes onyx-arrive {
+  from {
+    opacity: 0;
+    translate: 0 28px;
+    scale: 0.975;
+  }
+}
+/* Comète qui longe la bordure de la barre de navigation */
+@keyframes onyx-comet {
+  from {
+    translate: -100% 0;
+    opacity: 0;
+  }
+  18%,
+  78% {
+    opacity: 1;
+  }
+  to {
+    translate: 290% 0;
+    opacity: 0;
+  }
+}
+/* Lueur qui s'ouvre sous la barre puis s'éteint */
+@keyframes onyx-arrival-glow {
+  from {
+    opacity: 0;
+    scale: 0.5 0.3;
+  }
+  35% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 1.15 1;
+  }
+}
 /* Mise au point de la caméra : le titre sort du flou */
 @keyframes onyx-focus-pull {
   from {
@@ -162,6 +199,48 @@
     animation: onyx-rise 640ms var(--ease-out-onyx) backwards;
     animation-delay: 120ms;
   }
+  /* ...et les blocs de la page arrivent l'un après l'autre. Spécificité nulle : un bloc
+     qui a déjà sa propre animation la garde. */
+  :where(.onyx-page > * > :not(.fixed)) {
+    animation: onyx-arrive 760ms var(--ease-out-onyx) backwards;
+    animation-delay: var(--onyx-arrive-delay, 0ms);
+  }
+  :where(.onyx-page > * > :nth-child(2)) { --onyx-arrive-delay: 70ms; }
+  :where(.onyx-page > * > :nth-child(3)) { --onyx-arrive-delay: 140ms; }
+  :where(.onyx-page > * > :nth-child(4)) { --onyx-arrive-delay: 210ms; }
+  :where(.onyx-page > * > :nth-child(5)) { --onyx-arrive-delay: 280ms; }
+  :where(.onyx-page > * > :nth-child(n + 6)) { --onyx-arrive-delay: 340ms; }
+
+  /* Signal d'arrivée dans la barre de navigation (rejoué à chaque page, voir Navbar) :
+     une comète longe la bordure et une lueur éclaire le haut de la page */
+  .onyx-arrival {
+    position: absolute;
+    inset: 100% 0 auto;
+    height: 12rem;
+    margin-top: -6px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .onyx-arrival::before {
+    content: "";
+    position: absolute;
+    inset: 0 12%;
+    background: radial-gradient(50% 55% at 50% 0%, rgb(242 240 237 / 0.08), transparent);
+    transform-origin: 50% 0;
+    opacity: 0;
+    animation: onyx-arrival-glow 1300ms var(--ease-out-onyx) backwards;
+  }
+  .onyx-arrival > span {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    width: 35%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--onyx-ink), transparent);
+    box-shadow: 0 0 10px rgb(242 240 237 / 0.45);
+    opacity: 0;
+    animation: onyx-comet 1000ms cubic-bezier(0.65, 0, 0.35, 1) backwards;
+  }
 
   /* Apparition en cascade des enfants (grilles, listes, cartes) */
   .onyx-stagger > :not(.fixed) {
@@ -230,10 +309,27 @@
     animation: onyx-breathe 2.8s var(--ease-out-onyx) infinite;
     pointer-events: none;
   }
-  /* L'onde se tait pendant que la bulle traverse l'écran (SupportChatbot) */
-  .onyx-breathe[data-drop]::before {
-    animation: none;
-    opacity: 0;
+  /* Traversée en goutte de la bulle d'aide (SupportChatbot) : les formes sont fusionnées
+     par le filtre #onyx-goo, le calque n'existe que le temps de la traversée */
+  .onyx-goo {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 50;
+    height: 8rem;
+    pointer-events: none;
+    filter: url(#onyx-goo);
+    display: none;
+  }
+  .onyx-goo[data-on] {
+    display: block;
+  }
+  .onyx-goo > span {
+    position: absolute;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
   }
 
   /* Icône qui avance au survol du parent (flèches « Voir tout »…) */
@@ -293,8 +389,9 @@
 }
 
 /* Changement de page (View Transitions, voir app/dashboard/template.tsx) :
-   l'ancienne page recule et se brouille, la nouvelle monte du bas. La barre de
-   navigation et le fond ne bougent pas : seule la paire « onyx-page » est animée. */
+   l'ancienne page recule et se brouille pendant que les blocs de la nouvelle arrivent
+   d'eux-mêmes (onyx-arrive). La barre de navigation et le fond ne bougent pas : seule
+   la paire « onyx-page » est animée. */
 /* Le reste de l'écran (barre de navigation, fond) bascule sans fondu : l'ancienne
    image reste affichée tant que la nouvelle n'est pas prête, puis elle la recouvre. */
 ::view-transition-old(root),
@@ -316,19 +413,13 @@
   animation: onyx-vt-out 240ms var(--ease-onyx) both;
 }
 ::view-transition-new(onyx-page) {
-  animation: onyx-vt-in 520ms var(--ease-out-onyx) 90ms both;
+  animation: none;
 }
 @keyframes onyx-vt-out {
   to {
     opacity: 0;
     scale: 0.97;
     filter: blur(8px);
-  }
-}
-@keyframes onyx-vt-in {
-  from {
-    opacity: 0;
-    translate: 0 28px;
   }
 }
 
@@ -363,7 +454,7 @@
 
 /* Une fenêtre en position fixe ouverte dans un élément encore en mouvement serait
    placée par rapport à lui : dès qu'elle apparaît, l'élément arrête son animation. */
-:is(.onyx-stagger > *, .onyx-reveal, .onyx-ignite):has(.fixed) {
+:is(.onyx-stagger > *, .onyx-reveal, .onyx-ignite, .onyx-page > * > *):has(.fixed) {
   animation: none !important;
 }
 
@@ -394,6 +485,9 @@
   }
   .onyx-ignite::before {
     content: none !important;
+  }
+  .onyx-arrival {
+    display: none;
   }
   body::before,
   body::after,

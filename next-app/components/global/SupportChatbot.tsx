@@ -6,35 +6,78 @@ import { useSupportChat } from '@/hooks/useSupportChat'
 import { isPhoneScreen } from '@/lib/screen'
 import { MessageCircle, X, Send, Bot, User, Loader2, ImagePlus, X as XIcon } from 'lucide-react'
 
-const DROP_MS = 720
+const DROP_MS = 850
+const DROP_FRAMES = 72
+
+const smooth = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x))
+
+/** Ressort amorti : de 0 à 1, vitesse nulle au départ, léger dépassement puis repos */
+function spring(t: number) {
+  if (t <= 0) return 0
+  const w = 10
+  const z = 0.7
+  const wd = w * Math.sqrt(1 - z * z)
+  return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t))
+}
 
 /**
- * Traversée de la bulle d'un bord à l'autre, façon goutte (Dynamic Island) : prise d'élan,
- * l'avant file et étire la bulle, l'arrière rattrape, puis elle s'écrase contre le bord et
- * rebondit avant de redevenir ronde. L'icône est contre-étirée pour ne pas se déformer.
+ * Traversée de la bulle en goutte (téléphone). La bulle se détache de son bord en y laissant
+ * un reste qui se résorbe, file suivie de deux gouttelettes, dépasse un peu son bord d'arrivée,
+ * puis les gouttelettes la rejoignent et elle tremble avant de se poser. Le filtre #onyx-goo
+ * fusionne ces formes comme un liquide. Positions et déformations sont calculées image par
+ * image (interpolation linéaire) : le mouvement ne marque aucun arrêt en route.
  */
-function dropFrames(dx: number, size: number) {
-  const dir = Math.sign(dx)
-  const dist = Math.abs(dx)
-  const stretch = Math.min(size + dist * 0.45, size * 2.6)
-  // [instant, centre parcouru depuis l'ancienne place, largeur, échelle verticale, easing vers l'étape suivante]
-  const steps: [number, number, number, number, string][] = [
-    [0, 0, size, 1, 'ease-out'],
-    [0.14, -4, size * 0.9, 1.1, 'cubic-bezier(0.55, 0, 0.45, 1)'],
-    [0.5, dist * 0.55, stretch, 0.78, 'cubic-bezier(0.3, 0, 0.2, 1)'],
-    [0.72, dist + 6, size * 1.3, 0.9, 'ease-in-out'],
-    [0.86, dist + 3, size * 0.88, 1.1, 'ease-in-out'],
-    [0.94, dist - 1, size * 1.03, 0.98, 'ease-in-out'],
-    [1, dist, size, 1, 'linear'],
-  ]
-  const body: Keyframe[] = []
-  const icon: Keyframe[] = []
-  for (const [offset, center, width, sy, easing] of steps) {
-    const sx = width / size
-    body.push({ offset, easing, transform: `translateX(${dir * (center - dist)}px) scale(${sx}, ${sy})` })
-    icon.push({ offset, easing, transform: `scale(${1 / sx}, ${1 / sy})` })
+function dropAnimations(blobs: HTMLElement[], from: number, to: number, size: number, bottom: number) {
+  const [rest, tail2, tail1, main] = blobs
+  const icon = main.firstElementChild
+  const dir = Math.sign(to - from)
+  const T = DROP_MS / 1000
+  // Atterrissage exact : le reste d'oscillation s'éteint sur le dernier quart
+  const land = (t: number) => 1 - smooth((t - 0.75 * T) / (0.25 * T))
+  const travel = (t: number, lag: number) => 1 - (1 - spring(t - 0.06 - lag)) * land(t)
+  // Prise d'élan : la goutte recule et se tasse avant de partir
+  const windup = (t: number) => (t < 0.2 ? Math.sin((Math.PI * t) / 0.2) ** 2 : 0)
+  const times = Array.from({ length: DROP_FRAMES }, (_, i) => (i / (DROP_FRAMES - 1)) * T)
+  const h = 0.004
+  const speed = times.map((t) => (travel(t + h, 0) - travel(t - h, 0)) / (2 * h))
+  const vmax = Math.max(...speed.map(Math.abs))
+  const arrival = times.find((t) => travel(t, 0) >= 1) ?? T
+
+  const tails: [HTMLElement, number, number][] = [[tail1, 0.6, 0.035], [tail2, 0.42, 0.07]]
+  const place = (el: HTMLElement, k: number) => {
+    el.style.width = el.style.height = `${size * k}px`
+    el.style.bottom = `${bottom + (size * (1 - k)) / 2}px`
   }
-  return { body, icon }
+  place(rest, 1)
+  place(main, 1)
+  for (const [el, k] of tails) place(el, k)
+
+  const mainFrames: Keyframe[] = []
+  const iconFrames: Keyframe[] = []
+  const restFrames: Keyframe[] = []
+  const tailFrames: Keyframe[][] = tails.map(() => [])
+  times.forEach((t, i) => {
+    const v = speed[i] / vmax
+    const after = t - arrival
+    const wobble = after > 0 ? -0.14 * Math.exp(-7 * after) * Math.sin((2 * Math.PI * after) / 0.24) : 0
+    const sx = 1 + (0.2 * Math.abs(v) - 0.1 * windup(t) + wobble) * land(t)
+    const sy = 1 / sx
+    const center = from + (to - from) * travel(t, 0) - dir * 6 * windup(t)
+    mainFrames.push({ transform: `translateX(${center - size / 2}px) scale(${sx}, ${sy})` })
+    iconFrames.push({ transform: `translateX(${-dir * 4 * v}px) scale(${1 / sx}, ${1 / sy})` })
+    const shrink = t < 0.34 ? 0.5 + 0.5 * Math.cos((Math.PI * t) / 0.34) : 0
+    restFrames.push({ transform: `translateX(${from + dir * 10 * smooth(t / 0.3) - size / 2}px) scale(${shrink})` })
+    tails.forEach(([, k, lag], j) => {
+      tailFrames[j].push({ transform: `translateX(${from + (to - from) * travel(t, lag) - (size * k) / 2}px)` })
+    })
+  })
+  const timing = { duration: DROP_MS, easing: 'linear' }
+  return [
+    main.animate(mainFrames, timing),
+    rest.animate(restFrames, timing),
+    ...tails.map(([el], j) => el.animate(tailFrames[j], timing)),
+    ...(icon ? [icon.animate(iconFrames, timing)] : []),
+  ]
 }
 
 export default function SupportChatbot() {
@@ -63,28 +106,43 @@ export default function SupportChatbot() {
   const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const gooRef = useRef<HTMLDivElement>(null)
   const lastPhoneLeft = useRef(phoneLeft)
-  const drop = useRef<Animation[]>([])
+  const stopDrop = useRef<(() => void) | null>(null)
 
   // Changement de bord sur téléphone : la bulle traverse l'écran en goutte
   useLayoutEffect(() => {
     if (lastPhoneLeft.current === phoneLeft) return
     lastPhoneLeft.current = phoneLeft
-    drop.current.forEach((a) => a.cancel())
-    drop.current = []
+    stopDrop.current?.()
     const button = buttonRef.current
-    if (!button || !isPhoneScreen() || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const goo = gooRef.current
+    if (!button || !goo || !isPhoneScreen() || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const box = button.getBoundingClientRect()
     // left-6 et right-6 sont symétriques : l'ancienne place est le reflet de la nouvelle
-    const dx = box.left - (document.documentElement.clientWidth - box.right)
-    if (Math.abs(dx) < 1) return
-    const { body, icon } = dropFrames(dx, box.width)
-    const travel = button.animate(body, { duration: DROP_MS })
-    drop.current = [travel]
-    const svg = button.firstElementChild
-    if (svg) drop.current.push(svg.animate(icon, { duration: DROP_MS }))
-    button.dataset.drop = ''
-    travel.onfinish = travel.oncancel = () => { delete button.dataset.drop }
+    const oldLeft = document.documentElement.clientWidth - box.right
+    if (Math.abs(box.left - oldLeft) < 1) return
+    const anims = dropAnimations(
+      Array.from(goo.children) as HTMLElement[],
+      oldLeft + box.width / 2,
+      box.left + box.width / 2,
+      box.width,
+      parseFloat(getComputedStyle(button).bottom)
+    )
+    // La vraie bulle attend à l'arrivée pendant que sa goutte traverse
+    goo.dataset.on = ''
+    button.style.visibility = 'hidden'
+    let live = true
+    const stop = () => {
+      if (!live) return
+      live = false
+      stopDrop.current = null
+      anims.forEach((a) => a.cancel())
+      delete goo.dataset.on
+      button.style.visibility = ''
+    }
+    stopDrop.current = stop
+    anims[0].onfinish = stop
   }, [phoneLeft])
 
   useEffect(() => {
@@ -137,6 +195,23 @@ export default function SupportChatbot() {
           <MessageCircle size={24} />
         </button>
       )}
+
+      {/* Goutte de la traversée (téléphone) : reste, gouttelettes, goutte principale */}
+      <div ref={gooRef} aria-hidden className="onyx-goo">
+        <span className="bg-indigo-500" />
+        <span className="bg-indigo-500" />
+        <span className="bg-indigo-500" />
+        <span className="bg-indigo-500 text-white">
+          <MessageCircle size={24} />
+        </span>
+      </div>
+      <svg aria-hidden className="pointer-events-none fixed h-0 w-0">
+        <filter id="onyx-goo" colorInterpolationFilters="sRGB">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur" />
+          <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="goo" />
+          <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+        </filter>
+      </svg>
 
       {/* Chat Panel */}
       {isOpen && (

@@ -45,6 +45,10 @@ export function Navbar({ configStatus, impersonation }: NavbarProps) {
         {impersonation && (
           <ImpersonationBannerClient roleName={impersonation.role} />
         )}
+        {/* Rejoué à chaque changement de page (clé) : comète et lueur d'arrivée */}
+        <span key={pathname} aria-hidden className="onyx-arrival">
+          <span />
+        </span>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-4">
