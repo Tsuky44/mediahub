@@ -230,6 +230,11 @@
     animation: onyx-breathe 2.8s var(--ease-out-onyx) infinite;
     pointer-events: none;
   }
+  /* L'onde se tait pendant que la bulle traverse l'écran (SupportChatbot) */
+  .onyx-breathe[data-drop]::before {
+    animation: none;
+    opacity: 0;
+  }
 
   /* Icône qui avance au survol du parent (flèches « Voir tout »…) */
   .group:hover .onyx-nudge {

@@ -1,14 +1,47 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useLayoutEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { useSupportChat } from '@/hooks/useSupportChat'
+import { isPhoneScreen } from '@/lib/screen'
 import { MessageCircle, X, Send, Bot, User, Loader2, ImagePlus, X as XIcon } from 'lucide-react'
 
+const DROP_MS = 720
+
+/**
+ * Traversée de la bulle d'un bord à l'autre, façon goutte (Dynamic Island) : prise d'élan,
+ * l'avant file et étire la bulle, l'arrière rattrape, puis elle s'écrase contre le bord et
+ * rebondit avant de redevenir ronde. L'icône est contre-étirée pour ne pas se déformer.
+ */
+function dropFrames(dx: number, size: number) {
+  const dir = Math.sign(dx)
+  const dist = Math.abs(dx)
+  const stretch = Math.min(size + dist * 0.45, size * 2.6)
+  // [instant, centre parcouru depuis l'ancienne place, largeur, échelle verticale, easing vers l'étape suivante]
+  const steps: [number, number, number, number, string][] = [
+    [0, 0, size, 1, 'ease-out'],
+    [0.14, -4, size * 0.9, 1.1, 'cubic-bezier(0.55, 0, 0.45, 1)'],
+    [0.5, dist * 0.55, stretch, 0.78, 'cubic-bezier(0.3, 0, 0.2, 1)'],
+    [0.72, dist + 6, size * 1.3, 0.9, 'ease-in-out'],
+    [0.86, dist + 3, size * 0.88, 1.1, 'ease-in-out'],
+    [0.94, dist - 1, size * 1.03, 0.98, 'ease-in-out'],
+    [1, dist, size, 1, 'linear'],
+  ]
+  const body: Keyframe[] = []
+  const icon: Keyframe[] = []
+  for (const [offset, center, width, sy, easing] of steps) {
+    const sx = width / size
+    body.push({ offset, easing, transform: `translateX(${dir * (center - dist)}px) scale(${sx}, ${sy})` })
+    icon.push({ offset, easing, transform: `scale(${1 / sx}, ${1 / sy})` })
+  }
+  return { body, icon }
+}
+
 export default function SupportChatbot() {
-  // À droite partout, sauf sur la page Demander où le bouton des filtres occupe la droite
+  // Écran large : à gauche. Téléphone : à droite, sauf sur Demander où le bouton des filtres occupe la droite
   const pathname = usePathname()
-  const side = pathname === '/dashboard/requests' ? 'left-6' : 'right-6'
+  const phoneLeft = pathname === '/dashboard/requests'
+  const side = phoneLeft ? 'left-6' : 'right-6 md:right-auto md:left-6'
   const {
     isOpen,
     messages,
@@ -29,6 +62,30 @@ export default function SupportChatbot() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const lastPhoneLeft = useRef(phoneLeft)
+  const drop = useRef<Animation[]>([])
+
+  // Changement de bord sur téléphone : la bulle traverse l'écran en goutte
+  useLayoutEffect(() => {
+    if (lastPhoneLeft.current === phoneLeft) return
+    lastPhoneLeft.current = phoneLeft
+    drop.current.forEach((a) => a.cancel())
+    drop.current = []
+    const button = buttonRef.current
+    if (!button || !isPhoneScreen() || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const box = button.getBoundingClientRect()
+    // left-6 et right-6 sont symétriques : l'ancienne place est le reflet de la nouvelle
+    const dx = box.left - (document.documentElement.clientWidth - box.right)
+    if (Math.abs(dx) < 1) return
+    const { body, icon } = dropFrames(dx, box.width)
+    const travel = button.animate(body, { duration: DROP_MS })
+    drop.current = [travel]
+    const svg = button.firstElementChild
+    if (svg) drop.current.push(svg.animate(icon, { duration: DROP_MS }))
+    button.dataset.drop = ''
+    travel.onfinish = travel.oncancel = () => { delete button.dataset.drop }
+  }, [phoneLeft])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -72,6 +129,7 @@ export default function SupportChatbot() {
       {/* Floating Button */}
       {!isOpen && (
         <button
+          ref={buttonRef}
           onClick={open}
           className={`onyx-breathe fixed bottom-6 ${side} z-50 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full p-4 shadow-lg shadow-indigo-500/20 transition-[scale,rotate] duration-300 ease-spring hover:scale-110 hover:-rotate-6`}
           aria-label="Ouvrir le support"
