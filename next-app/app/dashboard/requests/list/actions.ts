@@ -319,6 +319,9 @@ export async function fetchUserRequests(page: number, pageSize: number = 20) {
                 externalId: req.externalId,
                 type: req.mediaType,
                 status: status,
+                // Demandé mais pas encore sorti : affiché « En attente de sortie »
+                awaitingRelease: availability.status === 'unreleased' && status < 4,
+                releaseDate: availability.releaseDate,
                 createdAt: req.requestedAt,
                 isOnEmby: req.isOnEmby,
                 embyItemId: req.embyItemId,

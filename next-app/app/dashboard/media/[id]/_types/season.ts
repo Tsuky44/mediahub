@@ -23,7 +23,7 @@ export interface Episode {
     }
 }
 
-export type SeasonStatusValue = 'unknown' | 'available' | 'partial' | 'pending' | 'processing'
+export type SeasonStatusValue = 'unknown' | 'available' | 'partial' | 'pending' | 'processing' | 'unreleased'
 
 export interface SeasonStatus {
     seasonNumber: number

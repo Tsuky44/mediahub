@@ -7,6 +7,7 @@ import { fetchRecentlyWatchedItems, fetchUserRecommendations } from '../media/ac
 import type { RecentlyWatchedItem } from '../media/RecentlyWatched'
 import type { RecommendationItem } from '../media/Recommendations'
 import type { MediaRequest } from '../_components/recent-requests/useRecentRequests'
+import { getReleaseWait } from '@/lib/services/media-status'
 
 // Chargeurs indépendants du dashboard : chaque section est streamée séparément
 // (Suspense) pour qu'un service lent (Emby, TMDB…) ne bloque pas toute la page.
@@ -46,10 +47,17 @@ export async function loadRecentRequests(): Promise<MediaRequest[]> {
         }
       }
 
+      // Pas encore disponible : le média est-il simplement en attente de sa sortie ?
+      const tmdbIdNum = parseInt(String(req.tmdbId))
+      const releaseWait = req.status < 4 && !isNaN(tmdbIdNum) && (req.mediaType === 'movie' || req.mediaType === 'tv')
+        ? await getReleaseWait(tmdbIdNum, req.mediaType)
+        : { awaitingRelease: false }
+
       return {
         id: String(req.id || ''),
         type: req.mediaType,
         status: req.status,
+        ...releaseWait,
         media: {
           title: req.title,
           posterPath: posterPath,

@@ -8,9 +8,14 @@ export default function MediaAvailabilityBadges({
   if (!status) return null
   return (
     <div className="flex flex-wrap gap-2 mb-3">
-      {status === 'pending' && (
-        <span className="bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm shadow-[0_0_10px_rgba(232,230,228,0.08)]">
+      {(status === 'pending' || status === 'processing') && (
+        <span className="bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm">
           Demandé
+        </span>
+      )}
+      {status === 'unreleased' && (
+        <span className="bg-white/10 border border-white/25 text-gray-100 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm">
+          Demandé · en attente de sortie
         </span>
       )}
       {status === 'available' && (
@@ -19,7 +24,7 @@ export default function MediaAvailabilityBadges({
         </span>
       )}
       {status === 'partial' && (
-        <span className="bg-purple-500/20 border border-purple-500/30 text-purple-400 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm shadow-[0_0_10px_rgba(232,230,228,0.08)]">
+        <span className="bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider backdrop-blur-sm">
           Partiellement disponible
         </span>
       )}

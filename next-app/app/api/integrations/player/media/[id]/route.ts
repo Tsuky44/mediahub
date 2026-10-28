@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { defineAbilityFor } from '@/lib/ability'
 import { authenticatePlayerIntegration } from '@/lib/integrations/player-integration-auth'
-import { getMediaAvailability } from '@/lib/services/media-status'
+import { getMediaAvailability, toPlayerStatus } from '@/lib/services/media-status'
 import { getTmdbService } from '@/lib/services/tmdb'
 
 interface TmdbGenre {
@@ -51,7 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         name: season.name || `Saison ${season.season_number}`,
         episodeCount: season.episode_count || 0,
         posterPath: season.poster_path || null,
-        status: seasonStatus?.status || 'unknown',
+        status: seasonStatus ? toPlayerStatus(seasonStatus.status) : 'unknown',
       }
     })
 
@@ -66,7 +66,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     rating: details.vote_average || 0,
     runtime: details.runtime || details.episode_run_time?.[0] || null,
     genres: ((details.genres || []) as TmdbGenre[]).map((genre) => genre.name),
-    status: availability.status,
+    status: toPlayerStatus(availability.status),
+    awaitingRelease: availability.status === 'unreleased',
+    expectedReleaseDate: availability.releaseDate ?? null,
     seasons,
   })
 }

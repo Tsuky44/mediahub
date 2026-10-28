@@ -1,6 +1,6 @@
 export type ManageMediaType = 'movie' | 'tv'
 
-export type ServiceAvailabilityStatus = 'available' | 'partial' | 'pending' | 'processing' | 'unknown'
+export type ServiceAvailabilityStatus = 'available' | 'partial' | 'pending' | 'processing' | 'unreleased' | 'unknown'
 
 export interface ManageMediaRequest {
     id: number

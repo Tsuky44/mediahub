@@ -45,7 +45,7 @@ export const MediaCard = memo(function MediaCard({ item, showFavoriteButton = fa
             </div>
           )}
 
-          <MediaCardStatus status={item.media_status?.status} message={item.media_status?.message} />
+          <MediaCardStatus status={item.media_status?.status} message={item.media_status?.message} releaseDate={item.media_status?.releaseDate} />
           <MediaCardOverlay title={title} mediaType={item.media_type} overview={item.overview} />
         </div>
       </Link>

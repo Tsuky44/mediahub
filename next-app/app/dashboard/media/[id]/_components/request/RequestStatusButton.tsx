@@ -1,12 +1,15 @@
 'use client'
 
-import { Check, CircleDashed, Download, Plus } from 'lucide-react'
+import { CalendarClock, Check, CircleDashed, Download, Plus } from 'lucide-react'
 import { useMediaServerType } from '@/app/dashboard/_hooks/useMediaServerType'
 import { OnyxBeam, OnyxTrack, type OnyxPhase } from '@/components/ui/onyx'
 import { cn } from '@/lib/utils'
+import { formatReleaseDate } from '@/lib/release-date'
 
 interface RequestStatusButtonProps {
   status: string
+  /** Date de sortie attendue (statut « unreleased ») */
+  releaseDate?: string
   phase: OnyxPhase
   error: string | null
   canRequest: boolean
@@ -43,6 +46,7 @@ const PRIMARY_LABEL: Record<OnyxPhase, string> = {
 
 export function RequestStatusButton({
   status,
+  releaseDate,
   phase,
   error,
   canRequest,
@@ -61,7 +65,7 @@ export function RequestStatusButton({
       return (
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={onStatusClick} className={cn(pill, statusPill)}>
-            <CircleDashed className="h-5 w-5 text-gray-400" />
+            <CircleDashed className="h-5 w-5 text-amber-400" />
             Partiellement disponible
           </button>
           {canRequest && isTv && <SecondaryButton onClick={onSeasonClick} label="Compléter" />}
@@ -82,12 +86,27 @@ export function RequestStatusButton({
       )
     }
 
+    if (status === 'unreleased') {
+      return (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={onStatusClick} className={cn(pill, statusPill)}>
+            <CalendarClock className="h-5 w-5 text-gray-100" />
+            En attente de sortie
+            {releaseDate && (
+              <span className="font-normal text-gray-400">· {formatReleaseDate(releaseDate)}</span>
+            )}
+          </button>
+          {canRequest && isTv && <SecondaryButton onClick={onSeasonClick} label="Demander plus" />}
+        </div>
+      )
+    }
+
     if (status === 'pending' || status === 'processing') {
       return (
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={onStatusClick} className={cn(pill, statusPill, 'pb-4')}>
             En cours de traitement
-            <OnyxTrack className="absolute inset-x-6 bottom-2" />
+            <OnyxTrack tone="amber" className="absolute inset-x-6 bottom-2" />
           </button>
           {canRequest && isTv && <SecondaryButton onClick={onSeasonClick} label="Demander plus" />}
         </div>

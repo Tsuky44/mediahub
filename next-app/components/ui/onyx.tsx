@@ -65,13 +65,18 @@ export function useOnyxPhase() {
 }
 
 /** Barre indéterminée du splash : piste de 4 px, segment de 35 % en boucle de 1400 ms. */
-export function OnyxTrack({ className }: { className?: string }) {
+export function OnyxTrack({ className, tone = 'ink' }: { className?: string; tone?: 'ink' | 'amber' }) {
   return (
     <span
       aria-hidden
       className={cn('block h-1 overflow-hidden rounded-full bg-onyx-track', className)}
     >
-      <span className="block h-full w-[35%] rounded-full bg-onyx-ink animate-indeterminate" />
+      <span
+        className={cn(
+          'block h-full w-[35%] rounded-full animate-indeterminate',
+          tone === 'amber' ? 'bg-amber-400' : 'bg-onyx-ink'
+        )}
+      />
     </span>
   )
 }

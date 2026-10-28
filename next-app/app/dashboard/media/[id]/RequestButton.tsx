@@ -13,6 +13,8 @@ interface RequestButtonProps {
   mediaType: 'movie' | 'tv'
   title: string
   initialStatus: string
+  /** Date de sortie attendue quand le média demandé n'est pas encore sorti */
+  releaseDate?: string
   seasons?: any[]
   seasonStatuses?: any[]
   canRequest?: boolean
@@ -25,6 +27,7 @@ export default function RequestButton({
   mediaType,
   title,
   initialStatus,
+  releaseDate,
   seasons,
   seasonStatuses,
   canRequest = false,
@@ -77,6 +80,7 @@ export default function RequestButton({
     <>
       <RequestStatusButton
         status={status}
+        releaseDate={releaseDate}
         phase={phase}
         error={error}
         canRequest={canRequest}

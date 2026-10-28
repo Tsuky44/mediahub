@@ -61,6 +61,7 @@ export default function MediaPrimaryActions({
           mediaType={mediaType}
           title={title}
           initialStatus={availability.status}
+          releaseDate={availability.releaseDate}
           seasons={details.seasons}
           seasonStatuses={availability.seasons || []}
           canRequest={ability.can('create', 'MediaRequest')}

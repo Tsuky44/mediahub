@@ -14,7 +14,9 @@ export interface MediaCardItem {
   media_status?: {
     available: boolean
     status: string
-    message: string
+    message?: string
+    /** Date de sortie attendue quand le statut est « unreleased » */
+    releaseDate?: string
   }
   tmdbId?: string | number
   isFavorite?: boolean

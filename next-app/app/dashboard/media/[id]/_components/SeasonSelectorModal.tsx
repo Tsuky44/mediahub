@@ -17,7 +17,7 @@ interface Season {
 
 interface SeasonStatus {
     seasonNumber: number
-    status: 'unknown' | 'available' | 'partial' | 'pending' | 'processing'
+    status: 'unknown' | 'available' | 'partial' | 'pending' | 'processing' | 'unreleased'
 }
 
 interface SeasonSelectorModalProps {
@@ -40,7 +40,7 @@ export function SeasonSelectorModal({ isOpen, onClose, title, tmdbId, seasons, s
     // Filter out seasons that are already available or pending
     const isSeasonAvailableOrPending = (seasonNumber: number) => {
         const status = seasonStatuses.find(s => s.seasonNumber === seasonNumber)?.status
-        return status === 'available' || status === 'partial' || status === 'processing' || status === 'pending'
+        return status === 'available' || status === 'partial' || status === 'processing' || status === 'pending' || status === 'unreleased'
     }
 
     const availableSeasonsToRequest = seasons.filter(s => s.season_number > 0 && !isSeasonAvailableOrPending(s.season_number))
