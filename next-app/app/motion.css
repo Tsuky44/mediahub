@@ -104,7 +104,7 @@
     left: 8vw;
     width: 52vw;
     height: 46vh;
-    background: radial-gradient(closest-side, rgb(242 240 237 / 0.075), transparent);
+    background: radial-gradient(closest-side, rgb(212 220 242 / 0.08), transparent);
     animation: onyx-drift 2.6s var(--ease-out-onyx) backwards;
   }
   body::after {
@@ -112,7 +112,7 @@
     right: 4vw;
     width: 40vw;
     height: 36vh;
-    background: radial-gradient(closest-side, rgb(242 240 237 / 0.045), transparent);
+    background: radial-gradient(closest-side, rgb(234 175 88 / 0.04), transparent);
     animation: onyx-drift-2 3.2s var(--ease-out-onyx) backwards;
   }
 
@@ -373,6 +373,14 @@
   *::after {
     animation-delay: 0ms !important;
     transition-delay: 0ms !important;
+  }
+  /* Aucune animation décorative : le contenu s'affiche dès la première image, même
+     si la page est encore occupée à démarrer. Seuls les indicateurs de chargement
+     (rotation, barre indéterminée) continuent de bouger. */
+  *:not(.animate-spin, .animate-indeterminate),
+  *::before,
+  *::after {
+    animation-name: none !important;
   }
   .onyx-ignite,
   .onyx-reveal,

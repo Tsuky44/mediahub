@@ -101,19 +101,20 @@
   --color-stone-900: var(--color-gray-900);
   --color-stone-950: var(--color-gray-950);
 
-  /* Encre : l'accent de l'app est la lumière (encre sur graphite), jamais une teinte.
+  /* Accent : la lumière de l'app (encre sur graphite), à peine bleutée pour
+     sortir du pur monochrome (teinte 224°, saturation faible).
      Remplace indigo, violet, bleu, cyan, rose… */
-  --color-indigo-50: #fdfcfb;
-  --color-indigo-100: #f9f8f6;
-  --color-indigo-200: #f5f3f1;
-  --color-indigo-300: #f2f0ed;
-  --color-indigo-400: #f2f0ed;
-  --color-indigo-500: #f2f0ed;
-  --color-indigo-600: #e4e1dd;
-  --color-indigo-700: #cfccc8;
-  --color-indigo-800: #3a3c3b;
-  --color-indigo-900: #232525;
-  --color-indigo-950: #161818;
+  --color-indigo-50: #f8f9fc;
+  --color-indigo-100: #f1f3f9;
+  --color-indigo-200: #eceff6;
+  --color-indigo-300: #e5e9f2;
+  --color-indigo-400: #dde2ee;
+  --color-indigo-500: #d4d9e8;
+  --color-indigo-600: #c5ccdd;
+  --color-indigo-700: #acb4c8;
+  --color-indigo-800: #353840;
+  --color-indigo-900: #23252a;
+  --color-indigo-950: #17181c;
   --color-purple-50: var(--color-indigo-50);
   --color-purple-100: var(--color-indigo-100);
   --color-purple-200: var(--color-indigo-200);
