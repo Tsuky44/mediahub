@@ -1,6 +1,8 @@
 'use client'
 
-import { X, ArrowDownCircle, Download, FolderOpen, HardDrive, Cpu, CheckCircle } from 'lucide-react'
+import { X, ArrowDownCircle, Download, FolderOpen, HardDrive, Cpu, CheckCircle, CalendarClock, Hourglass } from 'lucide-react'
+import { OnyxTrack } from '@/components/ui/onyx'
+import { formatReleaseDate } from '@/lib/release-date'
 import { useDownloadStatus } from '../_hooks/useDownloadStatus'
 import { getStatusText, getStatusColor } from '../_utils/download-status'
 import { MovieDownloadProgress } from './MovieDownloadProgress'
@@ -14,6 +16,48 @@ interface DownloadStatusModalProps {
   mediaType: 'movie' | 'tv'
   tvdbId?: number
   title?: string
+  /** Statut du média (« unreleased » : demandé mais pas encore sorti) */
+  mediaStatus?: string
+  releaseDate?: string
+}
+
+/** Rien en téléchargement : on explique pourquoi au lieu de laisser un chargement sans fin. */
+function NothingDownloading({ mediaType, mediaStatus, releaseDate, onClose }: {
+  mediaType: 'movie' | 'tv'
+  mediaStatus?: string
+  releaseDate?: string
+  onClose: () => void
+}) {
+  const service = mediaType === 'movie' ? 'Radarr' : 'Sonarr'
+  const unreleased = mediaStatus === 'unreleased'
+  const Icon = unreleased ? CalendarClock : Hourglass
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="onyx-glass-2 w-full max-w-md rounded-3xl p-7 flex flex-col items-center text-center gap-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={`h-12 w-12 rounded-full flex items-center justify-center ${unreleased ? 'bg-white/10 text-gray-100' : 'bg-amber-500/15 text-amber-400'}`}>
+          <Icon className="h-6 w-6" />
+        </div>
+        <h3 className="text-lg font-bold text-white">
+          {unreleased ? 'En attente de sortie' : 'Aucun téléchargement en cours'}
+        </h3>
+        <p className="text-sm text-gray-400 leading-relaxed">
+          {unreleased
+            ? `${mediaType === 'movie' ? 'Ce film' : 'Cette série'} est surveillé${mediaType === 'movie' ? '' : 'e'} par ${service}. Le téléchargement démarrera automatiquement dès sa sortie${releaseDate ? ` (prévue le ${formatReleaseDate(releaseDate)})` : ''}.`
+            : `${service} recherche une version disponible : le téléchargement démarrera dès qu'une source sera trouvée.`}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-2 px-5 py-2 text-sm font-semibold rounded-full border border-white/20 bg-white/15 text-white hover:bg-white/20 transition-colors"
+        >
+          Fermer
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export function DownloadStatusModal({
@@ -23,21 +67,28 @@ export function DownloadStatusModal({
   mediaType,
   tvdbId,
   title,
+  mediaStatus,
+  releaseDate,
 }: DownloadStatusModalProps) {
-  const { status, loading } = useDownloadStatus(tmdbId, mediaType, tvdbId, title)
+  // Interrogé seulement quand la fenêtre est ouverte
+  const { status, loading } = useDownloadStatus(tmdbId, mediaType, tvdbId, title, isOpen)
 
   if (!isOpen) return null
 
-  // Loading state
-  if (loading || !status) {
+  // Première réponse en attente
+  if (loading) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-        <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-gray-900 border border-gray-800 p-8 shadow-2xl flex flex-col items-center justify-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-500" />
-          <p className="text-sm text-gray-400">Chargement des informations de téléchargement...</p>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+        <div className="onyx-glass-2 w-full max-w-md rounded-3xl p-8 flex flex-col items-center justify-center gap-4">
+          <OnyxTrack className="w-40" />
+          <p className="text-sm text-gray-400">Chargement des informations de téléchargement</p>
         </div>
       </div>
     )
+  }
+
+  if (!status) {
+    return <NothingDownloading mediaType={mediaType} mediaStatus={mediaStatus} releaseDate={releaseDate} onClose={onClose} />
   }
 
   const color = getStatusColor(status.status)

@@ -98,6 +98,8 @@ export default function RequestButton({
         mediaType={mediaType}
         tvdbId={tvdbId}
         title={title}
+        mediaStatus={status}
+        releaseDate={releaseDate}
       />
       {isTv && seasons && seasonStatuses && (
         <SeasonSelectorModal
