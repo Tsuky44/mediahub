@@ -20,7 +20,7 @@ export function MediaInfoCard({ mediaInfo, torrentHash, parsed, relatedRequests 
       {/* Backdrop image if available */}
       {mediaInfo.backdropUrl && (
         <div className="relative h-48 sm:h-64">
-          <img
+          <img loading="lazy"
             src={mediaInfo.backdropUrl}
             alt={mediaInfo.title}
             className="w-full h-full object-cover"
@@ -34,7 +34,7 @@ export function MediaInfoCard({ mediaInfo, torrentHash, parsed, relatedRequests 
           {/* Poster */}
           {mediaInfo.posterUrl && (
             <div className="shrink-0">
-              <img
+              <img loading="lazy"
                 src={mediaInfo.posterUrl}
                 alt={mediaInfo.title}
                 className="w-32 sm:w-40 rounded-xl shadow-lg"

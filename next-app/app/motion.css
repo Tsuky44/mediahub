@@ -429,26 +429,57 @@
    la paire « onyx-page » est animée. */
 /* Le reste de l'écran (barre de navigation, fond) bascule sans fondu : l'ancienne
    image reste affichée tant que la nouvelle n'est pas prête, puis elle la recouvre. */
-::view-transition-old(root),
-::view-transition-new(root),
 ::view-transition-old(onyx-nav),
 ::view-transition-new(onyx-nav) {
   animation: none;
+}
+::view-transition-old(onyx-nav) {
+  opacity: 0;
 }
 /* La barre de navigation a son propre calque, le temps de la transition seulement :
    elle reste au-dessus de la page (dont l'image de fond passe sous elle). */
 :root:active-view-transition .onyx-scroll-progress {
   view-transition-name: onyx-nav;
 }
-::view-transition-group(onyx-page) {
-  animation-duration: 520ms;
-  animation-timing-function: var(--ease-out-onyx);
-}
-::view-transition-old(onyx-page) {
-  animation: onyx-vt-out 240ms var(--ease-onyx) both;
-}
+/* La View Transition ne joue que la sortie, brève, de l'ancienne page : tant qu'une transition
+   dure, React retient l'affichage du contenu qui arrive. La nouvelle page s'affiche aussitôt et
+   joue son arrivée elle-même (plus bas, sur .onyx-page), sans rien retenir.
+   L'ancienne page est l'image de l'écran (« root », au-dessus de la nouvelle) : le navigateur
+   ne photographie que ce qui est visible, pas toute la hauteur de la page (template.tsx). */
+::view-transition-group(root),
+::view-transition-group(onyx-page),
+::view-transition-old(onyx-page),
 ::view-transition-new(onyx-page) {
   animation: none;
+}
+::view-transition-old(root) {
+  z-index: 1;
+  mix-blend-mode: normal;
+  animation: onyx-vt-out 240ms var(--ease-onyx) both;
+}
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation: none;
+}
+.onyx-vt-anchor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+/* La bulle d'aide reste en place pendant la transition (elle fait partie de l'écran) */
+:root:active-view-transition .onyx-breathe {
+  view-transition-name: onyx-bubble;
+}
+::view-transition-group(onyx-bubble),
+::view-transition-old(onyx-bubble),
+::view-transition-new(onyx-bubble) {
+  animation: none;
+}
+::view-transition-old(onyx-bubble) {
+  opacity: 0;
 }
 @keyframes onyx-vt-out {
   to {
@@ -462,33 +493,34 @@
    - sections voisines de la barre de navigation : la page glisse dans le sens du menu ;
    - vers une fiche : plongée, l'ancienne page passe derrière nous, la nouvelle approche ;
    - en ressortant d'une fiche : remontée, l'inverse. */
-:root[data-onyx-nav="next"]::view-transition-old(onyx-page) {
-  animation: onyx-vt-out-left 380ms cubic-bezier(0.4, 0, 1, 1) both;
+:root[data-onyx-nav="next"]::view-transition-old(root) {
+  animation: onyx-vt-out-left 260ms cubic-bezier(0.4, 0, 1, 1) both;
 }
-:root[data-onyx-nav="next"]::view-transition-new(onyx-page) {
-  animation: onyx-vt-in-right 640ms var(--ease-out-onyx) 60ms both;
+:root[data-onyx-nav="prev"]::view-transition-old(root) {
+  animation: onyx-vt-out-right 260ms cubic-bezier(0.4, 0, 1, 1) both;
 }
-:root[data-onyx-nav="prev"]::view-transition-old(onyx-page) {
-  animation: onyx-vt-out-right 380ms cubic-bezier(0.4, 0, 1, 1) both;
-}
-:root[data-onyx-nav="prev"]::view-transition-new(onyx-page) {
-  animation: onyx-vt-in-left 640ms var(--ease-out-onyx) 60ms both;
-}
-:root:is([data-onyx-nav="dive"], [data-onyx-nav="hero"])::view-transition-old(onyx-page) {
+:root:is([data-onyx-nav="dive"], [data-onyx-nav="hero"])::view-transition-old(root) {
   transform-origin: 50% 40vh;
-  animation: onyx-vt-dive-out 440ms cubic-bezier(0.4, 0, 1, 1) both;
+  animation: onyx-vt-dive-out 280ms cubic-bezier(0.4, 0, 1, 1) both;
 }
-:root:is([data-onyx-nav="dive"], [data-onyx-nav="hero"])::view-transition-new(onyx-page) {
+:root[data-onyx-nav="rise"]::view-transition-old(root) {
   transform-origin: 50% 40vh;
-  animation: onyx-vt-dive-in 680ms var(--ease-out-onyx) 80ms both;
+  animation: onyx-vt-rise-out 260ms cubic-bezier(0.4, 0, 1, 1) both;
 }
-:root[data-onyx-nav="rise"]::view-transition-old(onyx-page) {
-  transform-origin: 50% 40vh;
-  animation: onyx-vt-rise-out 400ms cubic-bezier(0.4, 0, 1, 1) both;
+/* Arrivée de la nouvelle page (la page quittée est marquée data-onyx-leaving au clic) */
+:root[data-onyx-nav="next"] .onyx-page:not([data-onyx-leaving]) {
+  animation: onyx-vt-in-right 640ms var(--ease-out-onyx) 40ms backwards;
 }
-:root[data-onyx-nav="rise"]::view-transition-new(onyx-page) {
+:root[data-onyx-nav="prev"] .onyx-page:not([data-onyx-leaving]) {
+  animation: onyx-vt-in-left 640ms var(--ease-out-onyx) 40ms backwards;
+}
+:root:is([data-onyx-nav="dive"], [data-onyx-nav="hero"]) .onyx-page:not([data-onyx-leaving]) {
   transform-origin: 50% 40vh;
-  animation: onyx-vt-rise-in 640ms var(--ease-out-onyx) 60ms both;
+  animation: onyx-vt-dive-in 680ms var(--ease-out-onyx) 60ms backwards;
+}
+:root[data-onyx-nav="rise"] .onyx-page:not([data-onyx-leaving]) {
+  transform-origin: 50% 40vh;
+  animation: onyx-vt-rise-in 640ms var(--ease-out-onyx) 40ms backwards;
 }
 @keyframes onyx-vt-out-left {
   to { opacity: 0; translate: -96px 0; scale: 0.98; filter: blur(6px); }
@@ -515,36 +547,44 @@
   from { opacity: 0; scale: 1.07; }
 }
 
-/* Plongée dans une fiche depuis une affiche : la carte cliquée (son cadre, coins compris) part
-   aussitôt vers le haut de l'écran en grandissant, sans temps d'arrêt, et se dissout dans la
-   fiche qui approche derrière elle (déplacement et échelle calculés au clic par MotionDirector). */
-:root[data-onyx-nav="hero"]:active-view-transition [data-onyx-hero] {
+/* Plongée depuis une affiche : une copie de la carte (MotionDirector) se soulève dès le clic et
+   s'avance au centre pendant que la page quittée s'assombrit ; elle se dissout quand la fiche est
+   là. Elle bouge dans un calque fixe plein écran qui, pendant la transition, a sa propre paire
+   « onyx-hero » au-dessus des pages, affichée telle quelle (toujours animée) ; la barre de
+   navigation reste au-dessus de tout. */
+:root[data-onyx-nav="hero"] .onyx-page[data-onyx-leaving] {
+  filter: brightness(0.45) saturate(0.85);
+  transition: filter 380ms var(--ease-out-onyx);
+}
+.onyx-hero-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
   view-transition-name: onyx-hero;
+}
+.onyx-hero-ghost {
+  overflow: hidden;
+  transform-origin: 50% 50%;
+}
+.onyx-hero-ghost,
+.onyx-hero-ghost * {
+  animation: none !important;
+  transition: none !important;
 }
 ::view-transition-group(onyx-nav) {
   z-index: 3;
 }
 ::view-transition-group(onyx-hero) {
   z-index: 2;
+  animation: none;
 }
 ::view-transition-old(onyx-hero) {
-  animation: onyx-hero-fly 720ms cubic-bezier(0.32, 0, 0.18, 1) both;
+  animation: none;
+  opacity: 0;
 }
-@keyframes onyx-hero-fly {
-  from {
-    opacity: 1;
-    filter: blur(0);
-  }
-  55% {
-    opacity: 0.9;
-    filter: blur(1px);
-  }
-  to {
-    translate: var(--onyx-hero-x, 0px) var(--onyx-hero-y, 0px);
-    scale: var(--onyx-hero-scale, 3);
-    opacity: 0;
-    filter: blur(14px);
-  }
+::view-transition-new(onyx-hero) {
+  animation: none;
 }
 
 /* Écran large : fenêtres, menus et panneaux plus vivants. Hors couche (@layer) pour passer
@@ -697,7 +737,7 @@
 
 /* Une fenêtre en position fixe ouverte dans un élément encore en mouvement serait
    placée par rapport à lui : dès qu'elle apparaît, l'élément arrête son animation. */
-:is(.onyx-stagger > *, .onyx-reveal, .onyx-ignite, .onyx-page > * > *):has(.fixed) {
+:is(.onyx-stagger > *, .onyx-reveal, .onyx-ignite, .onyx-page > * > *, .onyx-page):has(.fixed) {
   animation: none !important;
 }
 

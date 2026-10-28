@@ -1,4 +1,5 @@
 import { getSession } from '@/lib/auth'
+import { createMemoCache } from '@/lib/cache'
 import { defineAbilityFor } from '@/lib/ability'
 import { computeStatsPeriod, type StatsPeriodParams, type StatsPeriod } from '../_utils/stats-period'
 import {
@@ -23,6 +24,8 @@ import type { ActivityData } from '../_components/StatsCharts'
 // temps réel ne touchent que le haut de la liste) : inutile de sérialiser tout
 // l'historique de la période vers le navigateur.
 const HISTORY_PAYLOAD_LIMIT = 200
+
+const statsResults = createMemoCache({ max: 200, ttl: 30_000, stale: 10 * 60_000, clone: true })
 
 export interface StatsDataResult {
   hasGlobalView: boolean
@@ -90,49 +93,90 @@ export async function fetchStatsData(
     now
   )
 
-  const [userGroupMap, providerIdToLocalUserMap, historyRaw] = await Promise.all([
-    fetchUserGroupMap(),
-    fetchProviderIdToLocalUserMap(),
-    fetchWatchHistory(startDate, endDate, user, hasGlobalView, hasSelfView),
-  ])
+  // Calculs lourds (tout l'historique de la période, en mémoire) : résultat gardé 30 s par
+  // utilisateur et par période, puis servi le temps d'être recalculé en arrière-plan
+  const cacheKey = JSON.stringify([user.id, hasGlobalView, hasSelfView, sourceFilter, params])
+  const {
+    mostViewedMovies,
+    mostViewedSeries,
+    hourlyActivity,
+    orderedDailyActivity,
+    monthlyActivity,
+    embySessions,
+    topUsers,
+    allUsersPeriod,
+    totalHours,
+    totalPlays,
+    hasRealData,
+    lastActivityLabel,
+    topUsersPeriodLabel,
+    oldestYear,
+    currentYear,
+    aggregatedHistory,
+  } = await statsResults.get(cacheKey, async () => {
+    const [userGroupMap, providerIdToLocalUserMap, historyRaw] = await Promise.all([
+      fetchUserGroupMap(),
+      fetchProviderIdToLocalUserMap(),
+      fetchWatchHistory(startDate, endDate, user, hasGlobalView, hasSelfView),
+    ])
 
-  const historyArray = normalizeWatchEvents(historyRaw)
-  const itemDurations = computeItemDurations(historyArray)
-  backfillSeriesInfo(historyArray)
+    const historyArray = normalizeWatchEvents(historyRaw)
+    const itemDurations = computeItemDurations(historyArray)
+    backfillSeriesInfo(historyArray)
 
-  const { mostViewedMovies, mostViewedSeries } = aggregateMostViewed(historyArray, itemDurations)
-  const { hourlyActivity, orderedDailyActivity, monthlyActivity } = computeActivityHistograms(historyArray, period)
+    const { mostViewedMovies, mostViewedSeries } = aggregateMostViewed(historyArray, itemDurations)
+    const { hourlyActivity, orderedDailyActivity, monthlyActivity } = computeActivityHistograms(historyArray, period)
 
-  const embySessions: unknown[] = []
-  const aggregatedHistory = consolidateHistory(historyArray, [], itemDurations).slice(0, HISTORY_PAYLOAD_LIMIT)
+    const embySessions: unknown[] = []
+    const aggregatedHistory = consolidateHistory(historyArray, [], itemDurations).slice(0, HISTORY_PAYLOAD_LIMIT)
 
-  const { userStatsMap, totalWatchTimeSeconds } = computeUserStats(
-    historyArray,
-    itemDurations,
-    providerIdToLocalUserMap,
-    userGroupMap
-  )
+    const { userStatsMap, totalWatchTimeSeconds } = computeUserStats(
+      historyArray,
+      itemDurations,
+      providerIdToLocalUserMap,
+      userGroupMap
+    )
 
-  const topUsers = Array.from(userStatsMap.values()).sort((a: any, b: any) => b.duration - a.duration).slice(0, 3)
-  const allUsersPeriod = Array.from(userStatsMap.values()).sort((a: any, b: any) => b.duration - a.duration)
+    const topUsers = Array.from(userStatsMap.values()).sort((a: any, b: any) => b.duration - a.duration).slice(0, 3)
+    const allUsersPeriod = Array.from(userStatsMap.values()).sort((a: any, b: any) => b.duration - a.duration)
 
-  const totalHours = Math.round(totalWatchTimeSeconds / 3600)
-  const totalPlays = historyArray.length
-  const hasRealData = historyArray.length > 0
+    const totalHours = Math.round(totalWatchTimeSeconds / 3600)
+    const totalPlays = historyArray.length
+    const hasRealData = historyArray.length > 0
 
-  let lastActivityLabel = 'Aucune'
-  if (historyArray.length > 0) {
-    const lastDate = new Date(historyArray[0].ActivityDateInserted || historyArray[0].DateCreated || '')
-    if (!isNaN(lastDate.getTime())) {
-      lastActivityLabel = lastDate.toISOString()
+    let lastActivityLabel = 'Aucune'
+    if (historyArray.length > 0) {
+      const lastDate = new Date(historyArray[0].ActivityDateInserted || historyArray[0].DateCreated || '')
+      if (!isNaN(lastDate.getTime())) {
+        lastActivityLabel = lastDate.toISOString()
+      }
     }
-  }
 
-  const topUsersPeriodLabel =
-    period === 'week' ? 'cette semaine' : period === 'year' ? 'cette année' : period === 'all' ? "tout l'historique" : 'ce mois'
+    const topUsersPeriodLabel =
+      period === 'week' ? 'cette semaine' : period === 'year' ? 'cette année' : period === 'all' ? "tout l'historique" : 'ce mois'
 
-  const oldestYear = !hasRealData ? await fetchOldestWatchEventYear() : null
-  const currentYear = !hasRealData && period === 'year' ? (params.year ? parseInt(params.year) : now.getFullYear()) : null
+    const oldestYear = !hasRealData ? await fetchOldestWatchEventYear() : null
+    const currentYear = !hasRealData && period === 'year' ? (params.year ? parseInt(params.year) : now.getFullYear()) : null
+
+    return {
+      mostViewedMovies,
+      mostViewedSeries,
+      hourlyActivity,
+      orderedDailyActivity,
+      monthlyActivity,
+      embySessions,
+      topUsers,
+      allUsersPeriod,
+      totalHours,
+      totalPlays,
+      hasRealData,
+      lastActivityLabel,
+      topUsersPeriodLabel,
+      oldestYear,
+      currentYear,
+      aggregatedHistory,
+    }
+  })
 
   return {
     hasGlobalView,

@@ -40,7 +40,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
       <div className="relative h-[40vh] w-full overflow-hidden">
         {backdropUrl && (
           <>
-            <img 
+            <img loading="lazy" 
               src={backdropUrl} 
               alt={collection.name} 
               className="h-full w-full object-cover opacity-40"

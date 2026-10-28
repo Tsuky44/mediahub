@@ -42,13 +42,20 @@ function installPhoneTransitionGuard() {
  * Next ne remonte ce gabarit que si la rubrique change (/dashboard/media → fiche
  * reste dans « media ») : la clé sur l'adresse donne aussi une paire ancienne /
  * nouvelle page dans une même rubrique (médiathèque → fiche, fiche → fiche).
+ *
+ * Le <ViewTransition> n'enveloppe qu'une ancre minuscule : il déclenche la transition
+ * sans que le navigateur photographie la page entière (toute sa hauteur, coûteux à
+ * chaque navigation). C'est l'image de l'écran (« root ») qui joue la sortie.
  */
 export default function DashboardTemplate({ children }: { children: React.ReactNode }) {
   useEffect(installPhoneTransitionGuard, [])
   const pathname = usePathname()
   return (
-    <ViewTransition key={pathname} name="onyx-page" default="none" share="auto">
-      <div className="onyx-page">{children}</div>
-    </ViewTransition>
+    <>
+      <ViewTransition key={`vt:${pathname}`} name="onyx-page" default="none" share="auto">
+        <span aria-hidden className="onyx-vt-anchor" />
+      </ViewTransition>
+      <div key={pathname} className="onyx-page">{children}</div>
+    </>
   )
 }

@@ -14,7 +14,11 @@ export default function MediaBackdrop({
   return (
     <div className="absolute inset-x-0 top-0 h-[70vh] md:h-[88vh] overflow-hidden z-0 pointer-events-none">
       {backdropUrl && (
+        // lazy : React n'attend pas son décodage pour afficher la fiche ; elle reste chargée
+        // en priorité (dans l'écran dès l'arrivée)
         <img
+          loading="lazy"
+          fetchPriority="high"
           src={backdropUrl}
           alt={alt}
           className="absolute inset-0 h-full w-full object-cover object-[center_25%] opacity-80 animate-onyx-kenburns"

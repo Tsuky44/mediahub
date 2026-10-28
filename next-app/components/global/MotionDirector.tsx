@@ -8,10 +8,12 @@ import { isPhoneScreen } from '@/lib/screen'
 /**
  * Mise en scène des changements de page et des fenêtres sur écran large (voir app/motion.css).
  *
- * Pages : au clic sur un lien, le sens du trajet est posé sur <html data-onyx-nav> avant la
- * View Transition : glissé vers la droite ou la gauche entre sections voisines de la barre de
- * navigation, plongée vers une fiche (l'affiche cliquée s'envole et grandit vers le centre de
- * l'écran), remontée quand on en ressort.
+ * Pages : au clic sur un lien, le sens du trajet est posé sur <html data-onyx-nav> : glissé vers
+ * la droite ou la gauche entre sections voisines de la barre de navigation, plongée vers une fiche
+ * (l'affiche cliquée s'avance au centre dès le clic), remontée quand on en ressort. La View
+ * Transition ne joue que la sortie de l'ancienne page, brève : tant qu'elle dure, React retient
+ * l'affichage du contenu qui arrive. L'arrivée de la nouvelle page est jouée sur la page
+ * elle-même (motion.css), sans rien bloquer.
  *
  * Fenêtres : elles jaillissent du bouton cliqué et y retournent en se fermant. La fermeture
  * est jouée sur une copie inerte, puisque React a déjà retiré la fenêtre.
@@ -51,15 +53,18 @@ function navKind(from: string, to: string): Exclude<NavKind, 'hero'> | null {
 }
 
 // État partagé dans un objet : un simple `let` relu dans un délai peut être figé à la compilation
-const nav: { token: number; hero: Element | null } = { token: 0, hero: null }
-const HERO_VARS = ['--onyx-hero-x', '--onyx-hero-y', '--onyx-hero-scale']
+const nav: { token: number; ghost: HeroGhost | null } = { token: 0, ghost: null }
+
+interface HeroGhost {
+  layer: HTMLElement
+  poster: HTMLElement
+  frame: HTMLElement
+  flight: Animation
+}
 
 function clearNav() {
-  const root = document.documentElement
-  delete root.dataset.onyxNav
-  HERO_VARS.forEach((name) => root.style.removeProperty(name))
-  nav.hero?.removeAttribute('data-onyx-hero')
-  nav.hero = null
+  delete document.documentElement.dataset.onyxNav
+  document.querySelectorAll('.onyx-page[data-onyx-leaving]').forEach((el) => el.removeAttribute('data-onyx-leaving'))
 }
 
 /** Efface le sens après `delay`, sauf si un autre trajet a commencé entre-temps */
@@ -70,23 +75,90 @@ function clearNavLater(delay: number) {
   }, delay)
 }
 
-function prepareNav(kind: NavKind, image?: Element) {
+/**
+ * Plongée depuis une affiche : une copie de la carte (son cadre, sans les textes de survol)
+ * se soulève dès le clic, sans attendre le serveur, et s'avance au centre de l'écran pendant
+ * que la page quittée s'assombrit. Elle se dissout quand la fiche est arrivée derrière elle.
+ * La copie bouge à l'intérieur d'un calque fixe plein écran : pendant la transition de page, ce
+ * calque garde la même place et son contenu reste animé, l'affiche ne se fige donc jamais.
+ */
+function launchHero(frame: HTMLElement) {
+  const box = frame.getBoundingClientRect()
+  if (!box.width || !box.height) return
+  const style = getComputedStyle(frame)
+  const layer = document.createElement('div')
+  layer.className = 'onyx-hero-layer'
+  layer.setAttribute('aria-hidden', 'true')
+  const poster = frame.cloneNode(true) as HTMLElement
+  poster.removeAttribute('id')
+  poster.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'))
+  poster.inert = true
+  poster.classList.add('onyx-hero-ghost')
+  Object.assign(poster.style, {
+    position: 'absolute',
+    left: `${box.left}px`,
+    top: `${box.top}px`,
+    width: `${box.width}px`,
+    height: `${box.height}px`,
+    margin: '0',
+    borderRadius: style.borderTopLeftRadius === '0px' ? '12px' : style.borderTopLeftRadius,
+  })
+  layer.appendChild(poster)
+  document.body.appendChild(layer)
+  frame.style.visibility = 'hidden'
+  // Pose : centrée, à une hauteur d'affiche confortable (pas d'agrandissement démesuré)
+  const scale = Math.min(Math.max((innerHeight * 0.56) / box.height, 1), 2.4)
+  const dx = Math.round(innerWidth / 2 - (box.left + box.width / 2))
+  const dy = Math.round(innerHeight * 0.46 - (box.top + box.height / 2))
+  const pose = `translate(${dx}px, ${dy}px) scale(${scale.toFixed(3)})`
+  const flight = poster.animate(
+    [
+      { transform: 'none', boxShadow: '0 0 0 rgb(0 0 0 / 0)' },
+      { transform: 'translateY(-4px) scale(1.04)', boxShadow: '0 18px 40px rgb(0 0 0 / 0.45)', offset: 0.18 },
+      { transform: pose, boxShadow: '0 40px 100px rgb(0 0 0 / 0.65)' },
+    ],
+    { duration: 380, easing: 'cubic-bezier(0.25, 0.9, 0.3, 1)', fill: 'forwards' }
+  )
+  nav.ghost = { layer, poster, frame, flight }
+}
+
+/**
+ * La fiche est là : la copie de l'affiche se fond aussitôt dans la page (flou et fondu), tout en
+ * finissant sa course, sans temps d'arrêt devant la fiche.
+ */
+function dissolveHero(restore = false) {
+  const ghost = nav.ghost
+  if (!ghost) return
+  nav.ghost = null
+  if (restore) ghost.frame.style.visibility = ''
+  const out = ghost.poster.animate(
+    [
+      { opacity: 1, filter: 'blur(0px)' },
+      { opacity: 0.85, filter: 'blur(2px)', offset: 0.3 },
+      { opacity: 0, filter: 'blur(16px)' },
+    ],
+    { duration: 420, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }
+  )
+  const remove = () => ghost.layer.remove()
+  out.onfinish = remove
+  out.oncancel = remove
+}
+
+function prepareNav(kind: NavKind, frame?: HTMLElement) {
   clearNav()
-  const root = document.documentElement
-  root.dataset.onyxNav = kind
-  if (image) {
-    // L'affiche cliquée sort de la page (paire « onyx-hero ») et file vers le haut de l'écran
-    // en grandissant, pendant que la fiche approche derrière elle
-    const box = image.getBoundingClientRect()
-    root.style.setProperty('--onyx-hero-x', `${Math.round(innerWidth / 2 - (box.left + box.width / 2))}px`)
-    root.style.setProperty('--onyx-hero-y', `${Math.round(innerHeight * 0.4 - (box.top + box.height / 2))}px`)
-    root.style.setProperty('--onyx-hero-scale', `${Math.min(innerWidth / Math.max(box.width, 1), 6).toFixed(2)}`)
-    nav.hero = image
-    image.setAttribute('data-onyx-hero', '')
-  }
+  dissolveHero(true)
+  document.documentElement.dataset.onyxNav = kind
+  // La page quittée est marquée : l'arrivée animée ne concerne que la nouvelle page
+  document.querySelectorAll('.onyx-page').forEach((el) => el.setAttribute('data-onyx-leaving', ''))
+  if (frame) launchHero(frame)
   nav.token++
+  const token = nav.token
   // Filet de sécurité si le clic ne mène finalement nulle part
-  clearNavLater(5000)
+  window.setTimeout(() => {
+    if (token !== nav.token) return
+    clearNav()
+    dissolveHero(true)
+  }, 6000)
 }
 
 /**
@@ -120,7 +192,7 @@ export function prepareNavTo(href: string, hero?: Element | null) {
   if (url.origin !== location.origin) return
   const kind = navKind(location.pathname, url.pathname)
   if (!kind) return
-  if (hero && kind === 'dive' && MEDIA_PAGE.test(url.pathname)) prepareNav('hero', hero)
+  if (hero instanceof HTMLElement && kind === 'dive' && MEDIA_PAGE.test(url.pathname)) prepareNav('hero', hero)
   else prepareNav(kind)
 }
 
@@ -248,9 +320,13 @@ export function MotionDirector() {
     }
   }, [])
 
-  // La nouvelle page est là : le sens reste posé le temps de la transition, puis s'efface
+  // La nouvelle page est là : la copie de l'affiche s'y fond aussitôt ; le sens reste posé le
+  // temps de l'arrivée, puis s'efface
   useEffect(() => {
+    const token = nav.token
+    const id = window.setTimeout(() => token === nav.token && dissolveHero(), 60)
     clearNavLater(1200)
+    return () => window.clearTimeout(id)
   }, [pathname])
 
   return null

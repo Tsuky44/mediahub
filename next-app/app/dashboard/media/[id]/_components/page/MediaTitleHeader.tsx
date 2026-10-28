@@ -27,7 +27,7 @@ export default function MediaTitleHeader({
     <>
       {logoPath ? (
         <div className="max-w-[280px] sm:max-w-[340px] md:max-w-[420px] animate-fade-in mb-3">
-          <img
+          <img loading="lazy"
             src={`https://image.tmdb.org/t/p/original${logoPath}`}
             alt={title}
             className="w-full h-auto max-h-[140px] md:max-h-[180px] object-contain drop-shadow-2xl select-none"

@@ -2,6 +2,7 @@ import { Navbar } from '@/components/global/Navbar'
 import { getCurrentUser } from '@/lib/auth'
 import { SystemMessageDisplay } from '@/components/global/SystemMessageDisplay'
 import { MotionDirector } from '@/components/global/MotionDirector'
+import { IntentPrefetch } from '@/components/global/IntentPrefetch'
 import { getDashboardConfig } from './_services/dashboard-config'
 
 export const dynamic = 'force-dynamic'
@@ -31,6 +32,7 @@ export default async function DashboardLayout({
       </main>
       <SystemMessageDisplay />
       <MotionDirector />
+      <IntentPrefetch />
     </div>
   )
 }
