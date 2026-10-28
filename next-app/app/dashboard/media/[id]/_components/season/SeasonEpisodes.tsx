@@ -3,8 +3,11 @@
 import { cn } from '@/lib/utils'
 import { useSeasonEpisodes } from '../../_hooks/useSeasonEpisodes'
 import { useEpisodeHighlight } from '../../_hooks/useEpisodeHighlight'
+import { SearchActions } from '../SearchActions'
 import { EpisodeCard } from './EpisodeCard'
-import type { Season } from '../../_types/season'
+import { SeasonStatusBadges } from './SeasonStatusBadges'
+import { SeasonRequestButton } from './SeasonRequestButton'
+import type { Season, SeasonProgress } from '../../_types/season'
 
 interface SeasonEpisodesProps {
     tvId: number
@@ -12,6 +15,12 @@ interface SeasonEpisodesProps {
     title: string
     season: Season
     allSeasons: Season[]
+    status: string
+    progress?: SeasonProgress
+    canTriggerSearch?: boolean
+    canInteractiveSearch?: boolean
+    canRequest?: boolean
+    onRequested: (seasonNumber: number) => void
     /** Sens du changement de saison : 1 vers la droite, -1 vers la gauche, 0 a l'ouverture */
     dir: number
     leaving?: boolean
@@ -33,8 +42,9 @@ function EpisodeSkeleton() {
 }
 
 /**
- * Episodes d'une saison dans le panneau. A l'arrivee, les cartes glissent en cascade depuis le
- * cote de la puce choisie (ou montent a l'ouverture) ; en partant, la liste file de l'autre cote.
+ * Saison dans le panneau : en-tete (statut, recherche, demande) puis episodes. A l'arrivee, tout
+ * glisse en cascade depuis le cote de la bulle choisie (ou monte a l'ouverture) ; en partant, la
+ * saison file de l'autre cote.
  */
 export function SeasonEpisodes({
     tvId,
@@ -42,6 +52,12 @@ export function SeasonEpisodes({
     title,
     season,
     allSeasons,
+    status,
+    progress,
+    canTriggerSearch,
+    canInteractiveSearch,
+    canRequest = false,
+    onRequested,
     dir,
     leaving = false,
     highlightEpisode,
@@ -51,6 +67,7 @@ export function SeasonEpisodes({
 
     useEpisodeHighlight(loaded && !leaving, highlightEpisode)
 
+    const year = season.air_date ? new Date(season.air_date).getFullYear() : null
     const style = {
         '--onyx-sx': `${dir * 44}px`,
         '--onyx-sy': dir ? '0px' : '18px',
@@ -63,6 +80,36 @@ export function SeasonEpisodes({
             className={cn(leaving && 'onyx-season-out', className)}
             style={style}
         >
+            <div className="onyx-season-head mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-1">
+                <h3 className="text-base font-semibold text-white">{season.name}</h3>
+                <span className="text-sm text-gray-400">
+                    {season.episode_count} épisodes{year ? ` · ${year}` : ''}
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5 empty:hidden [&>span]:whitespace-nowrap">
+                    <SeasonStatusBadges status={status} progress={progress} />
+                </div>
+                <span className="flex-1" />
+                {(canTriggerSearch || canInteractiveSearch) && (
+                    <SearchActions
+                        title={title}
+                        canTriggerSearch={canTriggerSearch}
+                        canInteractiveSearch={canInteractiveSearch}
+                        mediaType="tv"
+                        tmdbId={tvId}
+                        tvdbId={tvdbId}
+                        seasons={allSeasons}
+                        initialSeason={season.season_number}
+                    />
+                )}
+                {canRequest && status === 'unknown' && (
+                    <SeasonRequestButton
+                        tvId={tvId}
+                        seasonNumber={season.season_number}
+                        title={title}
+                        onSuccess={() => onRequested(season.season_number)}
+                    />
+                )}
+            </div>
             {loading ? (
                 <div className="onyx-season-cascade space-y-3">
                     {Array.from({ length: Math.min(Math.max(season.episode_count, 1), 6) }, (_, i) => (

@@ -1,9 +1,10 @@
 'use client'
 
-import { useId, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { SeasonChip } from './season/SeasonChip'
+import { SeasonBubble } from './season/SeasonBubble'
 import { SeasonEpisodesPanel } from './season/SeasonEpisodesPanel'
+import { DROP_SIZE, TAIL_SIZES, liquidSwitch, type RowLayout } from './season/liquid'
 import { usePrefetchSeasonEpisodes } from '../_hooks/useSeasonEpisodes'
 import type { Season, SeasonProgress, SeasonStatus } from '../_types/season'
 
@@ -21,9 +22,29 @@ interface SeasonListProps {
     canRequest?: boolean
 }
 
+/** Elements de la rangee : bulles, corps liquides, goutte et gouttelettes */
+function rowParts(row: HTMLElement) {
+    return {
+        chips: [...row.querySelectorAll<HTMLElement>('[data-season]')],
+        bodies: [...row.querySelectorAll<HTMLElement>('[data-body]')],
+        drop: row.querySelector<HTMLElement>('[data-drop]')!,
+        tails: [...row.querySelectorAll<HTMLElement>('[data-tail]')],
+    }
+}
+
+/** Place finale des bulles ; les corps liquides prennent leur taille */
+function settle(parts: ReturnType<typeof rowParts>): RowLayout {
+    const layout = { x: parts.chips.map(c => c.offsetLeft), w: parts.chips.map(c => c.offsetWidth) }
+    parts.bodies.forEach((body, i) => {
+        body.style.width = `${layout.w[i]}px`
+    })
+    return layout
+}
+
 /**
- * Saisons d'une serie TV : une puce par saison, triees par numero, et un panneau d'episodes
- * dessous. Une seule saison ouverte a la fois : en ouvrir une ferme l'autre.
+ * Saisons d'une serie TV : une bulle de verre par saison, triees par numero, et un panneau
+ * d'episodes dessous. Une seule saison ouverte a la fois : en ouvrir une ferme l'autre, et la
+ * lumiere passe de l'une a l'autre en goutte (season/liquid.ts).
  * ?season et ?episode dans l'URL ouvrent la saison et mettent l'episode en evidence.
  */
 export function SeasonList({
@@ -48,59 +69,148 @@ export function SeasonList({
         setLastRequested(requestedSeason)
         if (requestedSeason !== null) setOpen(requestedSeason)
     }
+    // Saison quittee au dernier changement : la bulle choisie attend la goutte avant de s'eclairer
+    const [trail, setTrail] = useState({ open, from: null as number | null })
+    if (trail.open !== open) setTrail({ open, from: trail.open })
+    const travelling = trail.from !== null && open !== null
 
+    // Saisons demandees depuis la page (en attente sans recharger)
+    const [requested, setRequested] = useState<number[]>([])
+    const statuses: Record<number, string> = {}
+    for (const season of sortedSeasons) {
+        const number = season.season_number
+        statuses[number] = requested.includes(number)
+            ? 'pending'
+            : seasonStatuses.find(s => s.seasonNumber === number)?.status || 'unknown'
+    }
+
+    // Le panneau suit en priorite basse : la goutte part sans attendre le rendu des episodes
+    const panelOpen = useDeferredValue(open)
     const panelId = useId()
     const prefetch = usePrefetchSeasonEpisodes(tvId)
-    const chips = useRef(new Map<number, HTMLDivElement>())
     const rail = useRef<HTMLDivElement>(null)
+    const row = useRef<HTMLDivElement>(null)
+    const layout = useRef<RowLayout>({ x: [], w: [] })
+    const shown = useRef<number | null>(open)
+    const running = useRef<Animation[]>([])
+
+    useLayoutEffect(() => {
+        const el = row.current
+        if (!el) return
+        const parts = rowParts(el)
+        // Largeurs avant le changement : celles d'une animation en cours, sinon la place d'avant
+        const before = layout.current.w
+        const start = parts.chips.map((chip, i) =>
+            before[i] === undefined || running.current.some(a => (a.effect as KeyframeEffect | null)?.target === chip && a.playState === 'running')
+                ? chip.getBoundingClientRect().width
+                : before[i],
+        )
+        running.current.forEach(a => a.cancel())
+        running.current = []
+        layout.current = settle(parts)
+        const from = shown.current
+        shown.current = open
+        if (from === open || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+        const index = (n: number | null) => (n === null ? null : parts.chips.findIndex(c => Number(c.dataset.season) === n))
+        running.current = liquidSwitch(parts, index(from), index(open), start, layout.current)
+    }, [open])
+
+    // Polices chargees, fenetre redimensionnee : les corps suivent leurs bulles
+    useEffect(() => {
+        const el = row.current
+        if (!el) return
+        const observer = new ResizeObserver(() => {
+            if (!running.current.some(a => a.playState === 'running')) layout.current = settle(rowParts(el))
+        })
+        observer.observe(el)
+        return () => observer.disconnect()
+    }, [])
+
+    const anchor = (seasonNumber: number) => {
+        const el = row.current
+        if (!el) return null
+        const i = sortedSeasons.findIndex(s => s.season_number === seasonNumber)
+        const { x, w } = layout.current
+        if (i < 0 || x[i] === undefined) {
+            const chip = el.querySelector(`[data-season="${seasonNumber}"]`)
+            if (!chip) return null
+            const r = chip.getBoundingClientRect()
+            return r.left + r.width / 2
+        }
+        return el.getBoundingClientRect().left + x[i] + w[i] / 2
+    }
 
     const toggle = (seasonNumber: number) => {
         const opening = open !== seasonNumber
         setOpen(opening ? seasonNumber : null)
-        // Sur telephone, la puce choisie vient se placer dans la rangee
-        if (opening) chips.current.get(seasonNumber)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+        // Sur telephone, la bulle choisie vient se placer dans la rangee
+        if (opening) row.current?.querySelector(`[data-season="${seasonNumber}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
     }
 
     return (
         <div>
-            <div
-                ref={rail}
-                className="onyx-stagger -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pt-1 pb-3 scrollbar-hide sm:-mx-8 sm:scroll-px-8 sm:px-8 md:mx-0 md:grid md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] md:overflow-visible md:p-0"
-            >
-                {sortedSeasons.map(season => {
-                    const number = season.season_number
-                    return (
-                        <SeasonChip
-                            key={season.id}
-                            chipRef={el => {
-                                if (el) chips.current.set(number, el)
-                                else chips.current.delete(number)
-                            }}
-                            season={season}
-                            title={title}
-                            tvId={tvId}
-                            tvdbId={tvdbId}
-                            allSeasons={seasons}
-                            initialStatus={seasonStatuses.find(s => s.seasonNumber === number)?.status || 'unknown'}
-                            progress={seasonProgress.find(p => p.seasonNumber === number)}
-                            active={open === number}
-                            panelId={panelId}
-                            canTriggerSearch={canTriggerSearch}
-                            canInteractiveSearch={canInteractiveSearch}
-                            canRequest={canRequest}
-                            onToggle={() => toggle(number)}
-                            onIntent={() => prefetch(number)}
-                        />
-                    )
-                })}
+            <div ref={rail} className="onyx-season-rail -mx-4 overflow-x-auto px-4 py-3 scrollbar-hide sm:-mx-8 sm:px-8 md:mx-0 md:px-0">
+                <div
+                    ref={row}
+                    className="relative flex w-max gap-3"
+                    style={{ '--onyx-bubble-delay': travelling ? '330ms' : '60ms' } as React.CSSProperties}
+                >
+                    {/* Calque liquide : corps des bulles et goutte, fusionnes par le filtre */}
+                    <div aria-hidden className="onyx-season-goo pointer-events-none absolute -inset-3">
+                        <div className="absolute top-3 left-3 flex gap-3">
+                            {sortedSeasons.map(season => (
+                                <span
+                                    key={season.id}
+                                    data-body
+                                    data-active={open === season.season_number || undefined}
+                                    className="h-12 w-12 shrink-0 rounded-full"
+                                />
+                            ))}
+                        </div>
+                        <span data-drop className="absolute top-3 left-3 rounded-full" style={{ width: DROP_SIZE, height: DROP_SIZE }} />
+                        {TAIL_SIZES.map(size => (
+                            <span key={size} data-tail className="absolute top-3 left-3 rounded-full" style={{ width: size, height: size }} />
+                        ))}
+                    </div>
+
+                    {sortedSeasons.map(season => {
+                        const number = season.season_number
+                        return (
+                            <SeasonBubble
+                                key={season.id}
+                                season={season}
+                                status={statuses[number]}
+                                progress={seasonProgress.find(p => p.seasonNumber === number)}
+                                active={open === number}
+                                panelId={panelId}
+                                onToggle={() => toggle(number)}
+                                onIntent={() => prefetch(number)}
+                            />
+                        )
+                    })}
+                </div>
             </div>
+
+            <svg aria-hidden className="pointer-events-none absolute size-0">
+                <filter id="onyx-season-goo" x="-20%" y="-60%" width="140%" height="220%" colorInterpolationFilters="sRGB">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+                    <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="goo" />
+                    <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+                </filter>
+            </svg>
 
             <SeasonEpisodesPanel
                 id={panelId}
-                open={open}
+                open={panelOpen}
                 seasons={sortedSeasons}
-                chips={chips}
+                anchor={anchor}
                 rail={rail}
+                statuses={statuses}
+                progress={seasonProgress}
+                canTriggerSearch={canTriggerSearch}
+                canInteractiveSearch={canInteractiveSearch}
+                canRequest={canRequest}
+                onRequested={n => setRequested(r => (r.includes(n) ? r : [...r, n]))}
                 tvId={tvId}
                 tvdbId={tvdbId}
                 title={title}

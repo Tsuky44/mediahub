@@ -3,15 +3,22 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { SeasonEpisodes } from './SeasonEpisodes'
-import type { Season } from '../../_types/season'
+import type { Season, SeasonProgress } from '../../_types/season'
 
 interface SeasonEpisodesPanelProps {
     id: string
     open: number | null
     seasons: Season[]
-    /** Puces des saisons (par numero) et leur rangee : la lumiere du panneau se cale sur la puce ouverte */
-    chips: React.RefObject<Map<number, HTMLDivElement>>
+    /** Abscisse (ecran) du centre final de la bulle d'une saison : la lumiere du panneau s'y cale */
+    anchor: (seasonNumber: number) => number | null
+    /** Rangee des bulles (defilante sur telephone) */
     rail: React.RefObject<HTMLDivElement | null>
+    statuses: Record<number, string>
+    progress: SeasonProgress[]
+    canTriggerSearch?: boolean
+    canInteractiveSearch?: boolean
+    canRequest?: boolean
+    onRequested: (seasonNumber: number) => void
     tvId: number
     tvdbId?: number
     title: string
@@ -33,17 +40,23 @@ const LEAVE_MS = 320
 const CLOSE_MS = 560
 
 /**
- * Panneau des episodes, sous les puces. Il se deplie a l'ouverture et suit en douceur la hauteur
+ * Panneau des episodes, sous les bulles. Il se deplie a l'ouverture et suit en douceur la hauteur
  * de son contenu ; d'une saison a l'autre, l'ancienne liste file d'un cote pendant que la nouvelle
- * arrive de l'autre. Une lumiere glisse en haut du panneau jusque sous la puce choisie.
+ * arrive de l'autre. Une lumiere glisse en haut du panneau jusque sous la bulle choisie.
  * Hauteur et lumiere sont posees directement sur le DOM : aucun rendu React pendant l'animation.
  */
 export function SeasonEpisodesPanel({
     id,
     open,
     seasons,
-    chips,
+    anchor,
     rail,
+    statuses,
+    progress,
+    canTriggerSearch,
+    canInteractiveSearch,
+    canRequest,
+    onRequested,
     tvId,
     tvdbId,
     title,
@@ -103,17 +116,16 @@ export function SeasonEpisodesPanel({
         return () => observer.disconnect()
     }, [open, view.season])
 
-    // Lumiere sous la puce ouverte (suit aussi le defilement de la rangee sur telephone)
+    // Lumiere sous la bulle ouverte (suit aussi le defilement de la rangee sur telephone)
     useLayoutEffect(() => {
         if (open === null) return
         const row = rail.current
         const place = () => {
-            const chip = chips.current.get(open)
+            const x = anchor(open)
             const f = frame.current
             const b = beam.current
-            if (!chip || !f || !b) return
-            const c = chip.getBoundingClientRect()
-            b.style.translate = `${c.left + c.width / 2 - f.getBoundingClientRect().left}px 0`
+            if (x === null || !f || !b) return
+            b.style.translate = `${x - f.getBoundingClientRect().left}px 0`
         }
         place()
         const observer = new ResizeObserver(place)
@@ -125,11 +137,11 @@ export function SeasonEpisodesPanel({
             observer.disconnect()
             row?.removeEventListener('scroll', place)
         }
-    }, [open, chips, rail])
+    }, [open, anchor, rail])
 
     const shown = seasons.find(s => s.season_number === view.season)
     const previous = view.previous === null ? undefined : seasons.find(s => s.season_number === view.previous)
-    const layer = { tvId, tvdbId, title, allSeasons: seasons, dir: view.dir }
+    const layer = { tvId, tvdbId, title, allSeasons: seasons, canTriggerSearch, canInteractiveSearch, canRequest, onRequested, dir: view.dir }
 
     return (
         <div
@@ -165,6 +177,8 @@ export function SeasonEpisodesPanel({
                                     key={season.season_number}
                                     {...layer}
                                     season={season}
+                                    status={statuses[season.season_number] ?? 'unknown'}
+                                    progress={progress.find(p => p.seasonNumber === season.season_number)}
                                     leaving={season === previous}
                                     highlightEpisode={season === shown && season.season_number === highlightSeason ? highlightEpisode : null}
                                     className={season === previous ? 'absolute inset-x-3 top-3 sm:inset-x-4 sm:top-4' : undefined}

@@ -4,21 +4,11 @@ import { useRef, useEffect, useLayoutEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { useSupportChat } from '@/hooks/useSupportChat'
 import { isPhoneScreen } from '@/lib/screen'
+import { smooth, spring } from '@/lib/spring'
 import { MessageCircle, X, Send, Bot, User, Loader2, ImagePlus, X as XIcon } from 'lucide-react'
 
 const DROP_MS = 850
 const DROP_FRAMES = 72
-
-const smooth = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x))
-
-/** Ressort amorti : de 0 à 1, vitesse nulle au départ, léger dépassement puis repos */
-function spring(t: number) {
-  if (t <= 0) return 0
-  const w = 10
-  const z = 0.7
-  const wd = w * Math.sqrt(1 - z * z)
-  return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t))
-}
 
 /**
  * Traversée de la bulle en goutte (téléphone). La bulle se détache de son bord en y laissant
