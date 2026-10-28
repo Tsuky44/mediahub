@@ -1,58 +1,30 @@
 'use client'
 
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getSeasonDetails } from '@/app/dashboard/media/[id]/actions'
 import type { Episode } from '../_types/season'
 
-export interface UseSeasonEpisodesResult {
-    isOpen: boolean
-    episodes: Episode[]
-    loading: boolean
-    loaded: boolean
-    error: boolean
-    toggleOpen: () => void
+const seasonEpisodesQuery = (tvId: number, seasonNumber: number) => ({
+    queryKey: ['season-episodes', tvId, seasonNumber] as const,
+    queryFn: async (): Promise<Episode[]> => {
+        const data = await getSeasonDetails(tvId, seasonNumber)
+        return data?.episodes ?? []
+    },
+    staleTime: Infinity,
+})
+
+/** Episodes d'une saison (TanStack Query) : charges au premier affichage, gardes en cache. */
+export function useSeasonEpisodes(tvId: number, seasonNumber: number) {
+    const { data: episodes = [], isLoading, isSuccess, isError } = useQuery(seasonEpisodesQuery(tvId, seasonNumber))
+    return { episodes, loading: isLoading, loaded: isSuccess, error: isError }
 }
 
-const queryKey = (tvId: number, seasonNumber: number) =>
-    ['season-episodes', tvId, seasonNumber] as const
-
-/**
- * TanStack Query-powered season accordion.
- * Episodes are fetched on demand via `enabled` flag and cached indefinitely.
- */
-export function useSeasonEpisodes(
-    tvId: number,
-    seasonNumber: number,
-    initiallyOpen: boolean,
-): UseSeasonEpisodesResult {
-    const [isOpen, setIsOpen] = useState(initiallyOpen)
-
-    const {
-        data: episodes = [],
-        isLoading: loading,
-        isSuccess,
-        isError,
-    } = useQuery({
-        queryKey: queryKey(tvId, seasonNumber),
-        queryFn: async () => {
-            const data = await getSeasonDetails(tvId, seasonNumber)
-            return data?.episodes ?? []
-        },
-        enabled: isOpen,
-        staleTime: Infinity,
-    })
-
-    const toggleOpen = () => {
-        setIsOpen(prev => !prev)
-    }
-
-    return {
-        isOpen,
-        episodes,
-        loading,
-        loaded: isSuccess,
-        error: isError,
-        toggleOpen,
-    }
+/** Precharge les episodes d'une saison (survol ou focus de sa puce) : l'ouverture est immediate. */
+export function usePrefetchSeasonEpisodes(tvId: number) {
+    const queryClient = useQueryClient()
+    return useCallback(
+        (seasonNumber: number) => void queryClient.prefetchQuery(seasonEpisodesQuery(tvId, seasonNumber)),
+        [queryClient, tvId],
+    )
 }

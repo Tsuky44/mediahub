@@ -18,26 +18,27 @@ export function EpisodeCard({ episode, title, tvId, tvdbId, seasonNumber, allSea
     return (
         <div
             id={`episode-${episode.episode_number}`}
-            className="flex flex-col gap-4 rounded-lg bg-gray-800 p-4 sm:flex-row transition-all duration-500"
+            className="group/ep flex flex-col gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 transition-[background-color,border-color,box-shadow] duration-500 hover:border-white/[0.12] hover:bg-white/[0.05] sm:flex-row sm:p-4"
         >
-            <div className="relative h-32 w-full flex-shrink-0 overflow-hidden rounded-md sm:w-56 bg-gray-900">
+            <div className="relative h-32 w-full flex-shrink-0 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/[0.06] sm:w-56">
                 {episode.still_path ? (
                     <img
                         loading="lazy"
                         decoding="async"
                         src={`https://image.tmdb.org/t/p/w500${episode.still_path}`}
                         alt={episode.name}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-cover transition-[scale] duration-700 ease-out-onyx group-hover/ep:scale-[1.04] motion-reduce:transition-none"
                     />
                 ) : (
-                    <div className="flex h-full w-full items-center justify-center text-gray-600">No Image</div>
+                    <div className="flex h-full w-full items-center justify-center text-xs text-gray-600">Pas d&apos;image</div>
                 )}
-                <div className="absolute top-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-xs font-bold text-white">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
+                <div className="absolute top-2 left-2 rounded-md bg-black/60 px-1.5 py-0.5 text-xs font-bold tabular-nums text-white ring-1 ring-white/10">
                     E{episode.episode_number}
                 </div>
 
                 {episode.userData?.played && (
-                    <div className="absolute top-2 right-2 rounded bg-green-600/90 px-1.5 py-0.5 text-xs font-bold text-white shadow-sm flex items-center gap-1">
+                    <div className="absolute top-2 right-2 rounded-md bg-green-600/90 px-1.5 py-0.5 text-xs font-bold text-white shadow-sm flex items-center gap-1">
                         <Check className="h-3 w-3" />
                         <span className="hidden sm:inline">Vu</span>
                     </div>
@@ -52,7 +53,7 @@ export function EpisodeCard({ episode, title, tvId, tvdbId, seasonNumber, allSea
             <div className="flex-1">
                 <div className="flex items-start justify-between">
                     <div className="flex flex-col gap-1">
-                        <h5 className="font-bold text-white">{episode.name}</h5>
+                        <h5 className="font-semibold text-white">{episode.name}</h5>
                     </div>
                     <div className="flex items-center gap-4">
                         <span className="text-xs text-gray-500">

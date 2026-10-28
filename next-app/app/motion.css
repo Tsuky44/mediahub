@@ -76,6 +76,33 @@
     filter: blur(3px);
   }
 }
+/* Saisons d'une série (SeasonList) : épisodes qui arrivent du côté de la puce choisie,
+   liste quittée qui file de l'autre côté, puce qui s'allume, lumière qui se pose */
+@keyframes onyx-season-in {
+  from {
+    opacity: 0;
+    translate: var(--onyx-sx, 0px) var(--onyx-sy, 18px);
+    scale: 0.985;
+  }
+}
+@keyframes onyx-season-out {
+  to {
+    opacity: 0;
+    translate: calc(var(--onyx-sx, 0px) * -1) 0;
+    scale: 0.985;
+  }
+}
+@keyframes onyx-season-pop {
+  40% { scale: 1.08; }
+}
+@keyframes onyx-season-sweep {
+  from { translate: -120% 0; }
+  to { translate: 320% 0; }
+}
+@keyframes onyx-season-flare {
+  from { opacity: 0; scale: 0.5 1; }
+  30% { opacity: 1; }
+}
 /* Comète qui longe la bordure de la barre de navigation */
 @keyframes onyx-comet {
   from {
@@ -245,6 +272,42 @@
   }
   .onyx-tip-text > :nth-child(2) { animation-delay: 45ms; }
   .onyx-tip-text > :nth-child(3) { animation-delay: 90ms; }
+
+  /* Saisons : cascade des épisodes (sens donné par --onyx-sx / --onyx-sy, SeasonEpisodes) */
+  .onyx-season-cascade > * {
+    animation: onyx-season-in 620ms var(--ease-out-onyx) backwards;
+    animation-delay: var(--onyx-season-delay, 0ms);
+  }
+  .onyx-season-cascade > :nth-child(2) { --onyx-season-delay: 45ms; }
+  .onyx-season-cascade > :nth-child(3) { --onyx-season-delay: 90ms; }
+  .onyx-season-cascade > :nth-child(4) { --onyx-season-delay: 135ms; }
+  .onyx-season-cascade > :nth-child(5) { --onyx-season-delay: 180ms; }
+  .onyx-season-cascade > :nth-child(6) { --onyx-season-delay: 225ms; }
+  .onyx-season-cascade > :nth-child(7) { --onyx-season-delay: 270ms; }
+  .onyx-season-cascade > :nth-child(n + 8) { --onyx-season-delay: 300ms; }
+  .onyx-season-out {
+    animation: onyx-season-out 300ms var(--ease-onyx) both;
+    pointer-events: none;
+  }
+  /* Puce ouverte : l'affiche rebondit, un reflet la traverse une fois */
+  .onyx-season-chip[data-active] .onyx-season-poster {
+    animation: onyx-season-pop 560ms var(--ease-spring);
+  }
+  .onyx-season-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(105deg, transparent, rgb(255 255 255 / 0.1), transparent);
+    translate: -120% 0;
+  }
+  .onyx-season-chip[data-active] .onyx-season-sheen::after {
+    animation: onyx-season-sweep 1000ms var(--ease-out-onyx) 80ms backwards;
+  }
+  /* Lumière du panneau : elle s'allume sous la puce choisie */
+  .onyx-season-flare {
+    animation: onyx-season-flare 900ms var(--ease-out-onyx) backwards;
+  }
 
   /* Signal d'arrivée dans la barre de navigation (rejoué à chaque page, voir Navbar) :
      une comète longe la bordure et une lueur éclaire le haut de la page */
@@ -769,7 +832,8 @@
   .onyx-ignite::before {
     content: none !important;
   }
-  .onyx-arrival {
+  .onyx-arrival,
+  .onyx-season-out {
     display: none;
   }
   body::before,
