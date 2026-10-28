@@ -89,19 +89,47 @@ function prepareNav(kind: NavKind, image?: Element) {
   clearNavLater(5000)
 }
 
+/**
+ * Ce que l'on voit de l'affiche : son cadre (coins arrondis, découpe) plutôt que l'image seule,
+ * qui peut être agrandie au survol et déborder de sa carte.
+ */
+function posterFrame(image: Element) {
+  const imageBox = image.getBoundingClientRect()
+  const area = imageBox.width * imageBox.height
+  let frame: Element = image
+  let el = image.parentElement
+  for (let level = 0; el && level < 4; level++, el = el.parentElement) {
+    const style = getComputedStyle(el)
+    const box = el.getBoundingClientRect()
+    if (box.width * box.height > area * 2.2) break
+    if (style.overflow !== 'visible') {
+      frame = el
+      if (parseFloat(style.borderTopLeftRadius) > 0) break
+    }
+  }
+  return frame
+}
+
+/**
+ * Prépare la mise en scène d'une navigation vers `href` lancée sans lien (router.push…).
+ * `hero` : l'élément qui s'envole vers une fiche (affiche d'une infobulle…).
+ */
+export function prepareNavTo(href: string, hero?: Element | null) {
+  if (calm()) return
+  const url = new URL(href, location.href)
+  if (url.origin !== location.origin) return
+  const kind = navKind(location.pathname, url.pathname)
+  if (!kind) return
+  if (hero && kind === 'dive' && MEDIA_PAGE.test(url.pathname)) prepareNav('hero', hero)
+  else prepareNav(kind)
+}
+
 function onLinkClick(event: MouseEvent) {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || calm()) return
   const link = (event.target as Element | null)?.closest?.('a[href]')
   if (!(link instanceof HTMLAnchorElement) || (link.target && link.target !== '_self') || link.hasAttribute('download')) return
-  const url = new URL(link.href)
-  if (url.origin !== location.origin) return
-  const kind = navKind(location.pathname, url.pathname)
-  if (!kind) return
-  const poster = kind === 'dive' && MEDIA_PAGE.test(url.pathname) && link.closest('.onyx-page')
-    ? link.querySelector('img')
-    : null
-  if (poster) prepareNav('hero', poster)
-  else prepareNav(kind)
+  const image = link.closest('.onyx-page') ? link.querySelector('img') : null
+  prepareNavTo(link.href, image && posterFrame(image))
 }
 
 /* ---------- Fenêtres ---------- */

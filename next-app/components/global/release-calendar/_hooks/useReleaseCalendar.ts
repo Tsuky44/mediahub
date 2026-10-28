@@ -18,6 +18,7 @@ import {
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { getCalendarEvents, CalendarEvent } from '@/app/actions/calendar'
+import { prepareNavTo } from '@/components/global/MotionDirector'
 
 export function useReleaseCalendar() {
   const [date, setDate] = useState(new Date())
@@ -62,15 +63,19 @@ export function useReleaseCalendar() {
   }, [])
 
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
-    setHoveredEvent(null)
-    if (event.tmdbId) {
-      let url = `/dashboard/media/${event.tmdbId}?type=${event.mediaType}`
-      if (event.mediaType === 'tv' && event.seasonNumber) {
-        url += `&season=${event.seasonNumber}`
-        if (event.episodeNumber) url += `&episode=${event.episodeNumber}`
-      }
-      router.push(url)
+    if (!event.tmdbId) {
+      setHoveredEvent(null)
+      return
     }
+    let url = `/dashboard/media/${event.tmdbId}?type=${event.mediaType}`
+    if (event.mediaType === 'tv' && event.seasonNumber) {
+      url += `&season=${event.seasonNumber}`
+      if (event.episodeNumber) url += `&episode=${event.episodeNumber}`
+    }
+    // Comme depuis une affiche : celle de l'infobulle (laissée affichée jusqu'au changement
+    // de page) s'envole vers la fiche
+    prepareNavTo(url, document.querySelector('[data-onyx-tooltip-poster]'))
+    router.push(url)
   }, [router])
 
   const getDayEvents = useCallback(

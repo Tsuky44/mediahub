@@ -1,6 +1,7 @@
 'use client'
 
 import { ViewTransition, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { PHONE_QUERY } from '@/lib/screen'
 
 let guardInstalled = false
@@ -37,11 +38,16 @@ function installPhoneTransitionGuard() {
  * s'estompe pendant que les blocs de la nouvelle arrivent un à un. Les
  * rafraîchissements de données ne déclenchent rien (default="none"). Sur
  * téléphone, seule l'arrivée des blocs est jouée (onyx-arrive, partout).
+ *
+ * Next ne remonte ce gabarit que si la rubrique change (/dashboard/media → fiche
+ * reste dans « media ») : la clé sur l'adresse donne aussi une paire ancienne /
+ * nouvelle page dans une même rubrique (médiathèque → fiche, fiche → fiche).
  */
 export default function DashboardTemplate({ children }: { children: React.ReactNode }) {
   useEffect(installPhoneTransitionGuard, [])
+  const pathname = usePathname()
   return (
-    <ViewTransition name="onyx-page" default="none" share="auto">
+    <ViewTransition key={pathname} name="onyx-page" default="none" share="auto">
       <div className="onyx-page">{children}</div>
     </ViewTransition>
   )

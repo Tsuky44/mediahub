@@ -1,6 +1,7 @@
 'use client'
 
-import { Clock, Play } from 'lucide-react'
+import Link from 'next/link'
+import { Clock } from 'lucide-react'
 
 export interface RecentlyWatchedItem {
     id: string
@@ -28,7 +29,9 @@ export function RecentlyWatched({ items }: { items: RecentlyWatchedItem[] }) {
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-4">
                 {items.map((item) => (
-                    <a 
+                    // Lien du routeur (pas de rechargement complet) : la fiche s'ouvre avec la
+                    // même plongée que depuis les autres affiches
+                    <Link
                         key={item.id}
                         href={`/dashboard/media/${item.tmdbId || item.id}?type=${item.type === 'Movie' ? 'movie' : 'tv'}`}
                         className="group relative flex flex-col bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-indigo-500/50 transition-all"
@@ -65,7 +68,7 @@ export function RecentlyWatched({ items }: { items: RecentlyWatchedItem[] }) {
                                 {item.lastPlayedDate || 'Récemment'}
                             </p>
                         </div>
-                    </a>
+                    </Link>
                 ))}
             </div>
         </div>

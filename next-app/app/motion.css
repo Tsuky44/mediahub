@@ -55,6 +55,27 @@
     scale: 0.975;
   }
 }
+@keyframes onyx-tip-poster-in {
+  from {
+    opacity: 0;
+    scale: 1.14;
+    translate: 0 calc(var(--onyx-tip-dir, 1) * 16px);
+  }
+}
+@keyframes onyx-tip-poster-out {
+  to {
+    opacity: 0;
+    scale: 0.94;
+    translate: 0 calc(var(--onyx-tip-dir, 1) * -16px);
+  }
+}
+@keyframes onyx-tip-text-in {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--onyx-tip-dir, 1) * 12px);
+    filter: blur(3px);
+  }
+}
 /* Comète qui longe la bordure de la barre de navigation */
 @keyframes onyx-comet {
   from {
@@ -210,6 +231,20 @@
   :where(.onyx-page > * > :nth-child(4)) { --onyx-arrive-delay: 210ms; }
   :where(.onyx-page > * > :nth-child(5)) { --onyx-arrive-delay: 280ms; }
   :where(.onyx-page > * > :nth-child(n + 6)) { --onyx-arrive-delay: 340ms; }
+
+  /* Infobulle du calendrier, d'une sortie à l'autre (EventTooltip) : l'affiche se fond dans
+     la suivante, le texte défile dans le sens du mouvement de la souris */
+  .onyx-tip-poster-in {
+    animation: onyx-tip-poster-in 460ms var(--ease-out-onyx) backwards;
+  }
+  .onyx-tip-poster-out {
+    animation: onyx-tip-poster-out 340ms var(--ease-onyx) both;
+  }
+  .onyx-tip-text > * {
+    animation: onyx-tip-text-in 440ms var(--ease-out-onyx) backwards;
+  }
+  .onyx-tip-text > :nth-child(2) { animation-delay: 45ms; }
+  .onyx-tip-text > :nth-child(3) { animation-delay: 90ms; }
 
   /* Signal d'arrivée dans la barre de navigation (rejoué à chaque page, voir Navbar) :
      une comète longe la bordure et une lueur éclaire le haut de la page */
@@ -480,9 +515,9 @@
   from { opacity: 0; scale: 1.07; }
 }
 
-/* Plongée dans une fiche depuis une affiche : l'affiche cliquée sort de la page, se soulève,
-   puis file vers le haut de l'écran en grandissant et se dissout pendant que la fiche approche
-   derrière elle (déplacement et échelle calculés au clic par MotionDirector). */
+/* Plongée dans une fiche depuis une affiche : la carte cliquée (son cadre, coins compris) part
+   aussitôt vers le haut de l'écran en grandissant, sans temps d'arrêt, et se dissout dans la
+   fiche qui approche derrière elle (déplacement et échelle calculés au clic par MotionDirector). */
 :root[data-onyx-nav="hero"]:active-view-transition [data-onyx-hero] {
   view-transition-name: onyx-hero;
 }
@@ -493,20 +528,22 @@
   z-index: 2;
 }
 ::view-transition-old(onyx-hero) {
-  animation: onyx-hero-fly 760ms cubic-bezier(0.55, 0, 0.25, 1) both;
+  animation: onyx-hero-fly 720ms cubic-bezier(0.32, 0, 0.18, 1) both;
 }
 @keyframes onyx-hero-fly {
-  25% {
-    scale: 1.08;
-    translate: 0 -6px;
+  from {
     opacity: 1;
     filter: blur(0);
+  }
+  55% {
+    opacity: 0.9;
+    filter: blur(1px);
   }
   to {
     translate: var(--onyx-hero-x, 0px) var(--onyx-hero-y, 0px);
     scale: var(--onyx-hero-scale, 3);
     opacity: 0;
-    filter: blur(16px);
+    filter: blur(14px);
   }
 }
 
