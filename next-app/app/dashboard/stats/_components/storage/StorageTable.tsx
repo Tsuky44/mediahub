@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import type { StorageItem, StorageSort, StorageSortKey } from '../../_types/storage'
 import { StorageTableRow } from './StorageTableRow'
 import { StorageMobileItem } from './StorageMobileItem'
@@ -8,6 +8,10 @@ import { StorageMobileItem } from './StorageMobileItem'
 interface StorageTableProps {
     items: StorageItem[]
     loading: boolean
+    /** Nouveau tri / filtre en cours de chargement : la liste actuelle est estompée */
+    refreshing?: boolean
+    /** Texte affiché pendant le premier chargement */
+    loadingLabel?: string
     sort: StorageSort | null
     onSortChange: (sort: StorageSort | null) => void
     onSelect: (item: StorageItem) => void
@@ -24,6 +28,8 @@ interface StorageTableProps {
 export function StorageTable({
     items,
     loading,
+    refreshing = false,
+    loadingLabel = 'Chargement des données...',
     sort,
     onSortChange,
     onSelect,
@@ -49,7 +55,7 @@ export function StorageTable({
     const someSelected = items.some(i => selectedIds.has(i.id))
 
     return (
-        <div className="bg-black/20 backdrop-blur-md border border-white/5 rounded-3xl overflow-hidden shadow-xl">
+        <div className={`bg-black/20 backdrop-blur-md border border-white/5 rounded-3xl overflow-hidden shadow-xl transition-opacity ${refreshing ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -108,7 +114,10 @@ export function StorageTable({
                         {loading ? (
                             <tr>
                                 <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
-                                    Chargement des données...
+                                    <span className="inline-flex items-center gap-2">
+                                        <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                                        {loadingLabel}
+                                    </span>
                                 </td>
                             </tr>
                         ) : items.length === 0 ? (
@@ -136,8 +145,9 @@ export function StorageTable({
             {/* Mobile List View */}
             <div className="md:hidden divide-y divide-white/5">
                 {loading ? (
-                    <div className="px-6 py-8 text-center text-gray-400">
-                        Chargement des données...
+                    <div className="px-6 py-8 text-center text-gray-400 flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                        {loadingLabel}
                     </div>
                 ) : items.length === 0 ? (
                     <div className="px-6 py-8 text-center text-gray-400">

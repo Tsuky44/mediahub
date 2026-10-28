@@ -1,5 +1,4 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 import { notFound, redirect } from 'next/navigation'
 import { getQBittorrentService } from '@/lib/services/qbittorrent'
@@ -19,7 +18,7 @@ export default async function TorrentDetailsPage({ params }: TorrentDetailsPageP
   const { hash } = await params
 
   // Check authentication
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const user = session?.user
 
   if (!user) {
@@ -98,7 +97,7 @@ export default async function TorrentDetailsPage({ params }: TorrentDetailsPageP
   const trackerUrl = torrentPageUrl || trackerInfo?.baseUrl || null
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-gray-300">
+    <div className="min-h-screen bg-[#0c0d0d] text-gray-300">
       <TorrentDetailsHeader torrent={torrent} parsed={parsed} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

@@ -7,27 +7,25 @@ import { getSetting } from '@/lib/settings'
 import { defineAbilityFor } from '@/lib/ability'
 import { db } from '@/lib/db/drizzle'
 import { mediaRequests, episodeBatches } from '@/lib/db/schema'
-import { eq, inArray, or } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { StorageSortDir, StorageSortKey } from '@/app/dashboard/stats/_types/storage'
+import { parseFilterParams } from '@/app/dashboard/stats/_utils/storage-filters'
 import {
-    fetchMoviesPage,
-    fetchSeriesPage,
+    fetchStoragePage,
     getStorageTotalsIfCached,
     mapEmbyItemToStorageRow,
-    invalidateStorageListCache,
+    removeFromStorageCache,
     scheduleStorageCacheWarmup,
-    isFreshMovieCache,
-    isFreshSeriesCache,
+    isMovieIndexReady,
+    isSeriesIndexReady,
 } from '@/lib/services/storage-list'
-import { getCachedLastPlayedDatesForStorage } from '@/lib/services/item-viewing-stats'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
 const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
-const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
-const DEFAULT_PAGE_SIZE = 50
-const MAX_PAGE_SIZE = 100
+const DEFAULT_PAGE_SIZE = 100
+const MAX_PAGE_SIZE = 200
 const VALID_SORT_KEYS: StorageSortKey[] = ['size', 'lastPlayed', 'requested']
 const VALID_SORT_DIRS: StorageSortDir[] = ['asc', 'desc']
 
@@ -83,89 +81,31 @@ export async function GET(request: Request) {
     // Cache en arrière-plan uniquement — ne pas bloquer ni surcharger Emby pendant la page.
     scheduleStorageCacheWarmup(embyService)
 
-    const pageResult = typeFilter === 'Movie'
-      ? await fetchMoviesPage(embyService, page, limit, search, sortKey, sortDir)
-      : await fetchSeriesPage(embyService, page, limit, search, sortKey, sortDir)
+    const pageResult = await fetchStoragePage(embyService, typeFilter, {
+      page,
+      pageSize: limit,
+      search,
+      sortKey,
+      sortDir,
+      filters: parseFilterParams(searchParams),
+    })
 
     const totals = getStorageTotalsIfCached() ?? { all: 0, movies: 0, series: 0 }
 
-    const rows = pageResult.items.map(item =>
-      typeFilter === 'Movie'
+    // Dates « Regardé » / « Demandé » : calculées par storage-list, identiques à celles
+    // utilisées pour le tri et les filtres.
+    const rows = pageResult.items.map(item => {
+      const row = typeFilter === 'Movie'
         ? mapEmbyItemToStorageRow(item, 'Movie')
         : mapEmbyItemToStorageRow(item, 'Series', {
             size: item._size as number,
             episodesCount: item._episodesCount as number,
           })
-    )
-
-    const pageIds = rows.map(r => String(r.id))
-
-    // Dates "Regardé" : cache DB uniquement pour la page courante (rapide).
-    try {
-      if (pageIds.length > 0) {
-        const dates =
-          typeFilter === 'Movie'
-            ? await getCachedLastPlayedDatesForStorage(pageIds, [], new Map())
-            : await getCachedLastPlayedDatesForStorage([], pageIds, new Map())
-
-        for (const row of rows) {
-          row.lastPlayedDate = dates[String(row.id)] ?? null
-        }
-      }
-    } catch (e) {
-      warn('Storage API: last played resolution failed:', (e as Error).message)
-    }
-
-    // Dates de demande : requête ciblée sur les ids de la page uniquement.
-    try {
-      if (pageIds.length > 0) {
-        const tmdbIds = rows
-          .map(r => (r.tmdbId != null ? String(r.tmdbId) : null))
-          .filter((id): id is string => !!id)
-
-        const conditions = [inArray(mediaRequests.embyItemId, pageIds)]
-        if (tmdbIds.length > 0) conditions.push(inArray(mediaRequests.tmdbId, tmdbIds))
-
-        const requests = await db
-          .select({
-            tmdbId: mediaRequests.tmdbId,
-            embyItemId: mediaRequests.embyItemId,
-            requestedAt: mediaRequests.requestedAt,
-          })
-          .from(mediaRequests)
-          .where(or(...conditions))
-
-        const reqByEmbyId = new Map<string, number>()
-        const reqByTmdbId = new Map<string, number>()
-        for (const r of requests) {
-          const ms = r.requestedAt ? new Date(r.requestedAt).getTime() : NaN
-          if (isNaN(ms)) continue
-          if (r.embyItemId) {
-            const cur = reqByEmbyId.get(r.embyItemId)
-            if (cur === undefined || ms > cur) reqByEmbyId.set(r.embyItemId, ms)
-          }
-          if (r.tmdbId) {
-            const cur = reqByTmdbId.get(r.tmdbId)
-            if (cur === undefined || ms > cur) reqByTmdbId.set(r.tmdbId, ms)
-          }
-        }
-
-        for (const row of rows) {
-          const embyId = String(row.id)
-          const byEmby = reqByEmbyId.get(embyId)
-          if (byEmby !== undefined) {
-            row.requestedAt = new Date(byEmby).toISOString()
-            continue
-          }
-          if (typeFilter === 'Movie' && row.tmdbId != null) {
-            const byTmdb = reqByTmdbId.get(String(row.tmdbId))
-            if (byTmdb !== undefined) row.requestedAt = new Date(byTmdb).toISOString()
-          }
-        }
-      }
-    } catch (e) {
-      warn('Storage API: request date resolution failed:', (e as Error).message)
-    }
+      const id = String(row.id)
+      row.lastPlayedDate = pageResult.lastPlayed[id] ?? null
+      row.requestedAt = pageResult.requested[id] ?? null
+      return row
+    })
 
     const total = pageResult.total
     const totalPages = Math.max(1, Math.ceil(total / limit))
@@ -174,8 +114,8 @@ export async function GET(request: Request) {
       items: rows,
       totals,
       cacheReady: {
-        movies: isFreshMovieCache(),
-        series: isFreshSeriesCache(),
+        movies: isMovieIndexReady(),
+        series: isSeriesIndexReady(),
         totals: getStorageTotalsIfCached() !== null,
       },
       pagination: {
@@ -185,6 +125,7 @@ export async function GET(request: Request) {
         totalPages,
         hasMore: page < totalPages,
       },
+      matchedSize: pageResult.totalSize,
     })
   } catch (err) {
     const raw = (err as Error).message || 'Erreur inconnue'
@@ -328,7 +269,7 @@ export async function DELETE(request: Request) {
         }
     }
 
-    invalidateStorageListCache()
+    removeFromStorageCache(String(itemId), type)
 
     return NextResponse.json({ success: true })
 

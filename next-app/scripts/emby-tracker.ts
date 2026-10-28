@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 // Load environment variables before other imports
-dotenv.config();
+dotenv.config({ quiet: true });
 
 import WebSocket from 'ws';
 import { EmbyService } from '../lib/services/emby';
@@ -8,8 +8,6 @@ import { PlexService } from '../lib/services/plex';
 import { getPrisma } from '../lib/prisma';
 import { Server } from 'socket.io';
 import http from 'http';
-import Docker from 'dockerode';
-import { Writable, Readable, Duplex } from 'stream';
 import { decode, getToken } from 'next-auth/jwt';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
@@ -82,33 +80,6 @@ async function authenticateSocket(socket: any) {
 }
 
 
-const dockerOptions: Record<string, string> = {};
-let docker: Docker;
-
-function initDocker(host?: string) {
-  const options: Record<string, string> = {};
-  const dockerHost = host || process.env.DOCKER_HOST;
-
-  if (dockerHost) {
-    if (dockerHost.startsWith('tcp://')) {
-      const url = new URL(dockerHost.replace('tcp://', 'http://'));
-      options.host = url.hostname;
-      options.port = url.port;
-      log(`[Tracker] Dockerode initialized with TCP: ${options.host}:${options.port}`);
-    } else {
-      options.socketPath = dockerHost;
-      log(`[Tracker] Dockerode initialized with socket: ${options.socketPath}`);
-    }
-  } else {
-    options.socketPath = '/var/run/docker.sock';
-    log(`[Tracker] Dockerode initialized with default socket: ${options.socketPath}`);
-  }
-  docker = new Docker(options);
-}
-
-// Initial placeholder init
-initDocker();
-
 // Patch 14: Pas de prototype patch ici — les valeurs BigInt sont converties en Number
 // explicitement avant tout emit Socket.io ou stockage dans l'interface SessionState.
 
@@ -120,8 +91,8 @@ const server = http.createServer();
 // Utilisation de '*' par défaut pour une compatibilité totale dans le conteneur unifié.
 const CORS_ORIGIN = '*';
 
-// Auth socket : optionnelle à la connexion, obligatoire uniquement pour les actions sensibles
-// (terminal Docker, logs). Les sessions en direct sont en lecture seule.
+// Auth socket : optionnelle à la connexion (rattache l'utilisateur pour ses notifications).
+// Les sessions en direct sont en lecture seule.
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 async function attachSessionIfPresent(socket: any): Promise<void> {
@@ -139,11 +110,6 @@ async function attachSessionIfPresent(socket: any): Promise<void> {
     socket.data.email = decoded.email;
     log(`[Tracker] Session attachée pour ${decoded.email}`);
   }
-}
-
-function requireAuthenticatedSocket(socket: any): boolean {
-  if (socket.data.userId) return true;
-  return false;
 }
 
 const io = new Server(server, {
@@ -234,187 +200,6 @@ io.on('connection', async (socket) => {
     });
   });
 
-  // Docker Logs Handling
-  let logStream: unknown = null;
-  let logWritable: Writable | null = null;
-  // Docker Terminal Handling
-  let terminalStream: unknown = null;
-  let terminalExec: unknown = null;
-
-  socket.on('start_terminal_session', async (rawContainerId: unknown) => {
-    if (!requireAuthenticatedSocket(socket)) {
-      socket.emit('terminal_error', 'Non autorisé');
-      return;
-    }
-    try {
-      const containerId = String(rawContainerId).trim();
-      log(`[Tracker] Client ${socket.id} requested terminal for container: "${containerId}"`);
-
-      // Cleanup existing session if any
-      if (terminalStream) {
-        (terminalStream as { end: () => void }).end();
-        (terminalStream as { destroy: () => void }).destroy();
-        terminalStream = null;
-      }
-
-      // Re-initialize docker (reuse logic from logs)
-      const prisma = getPrisma();
-      if (!process.env.DOCKER_HOST) {
-          // Check Settings model
-          if (prisma.setting) {
-              const dockerHostSetting = await prisma.setting.findUnique({
-                where: { key: 'docker_host' }
-              });
-              if (dockerHostSetting?.value) {
-                initDocker(dockerHostSetting.value);
-              }
-          }
-      }
-
-      const container = docker.getContainer(containerId);
-      
-      // FIX: Ensure container exists and is running before exec
-      const containerInfo = await container.inspect();
-      if (!containerInfo.State.Running) {
-          throw new Error('Le conteneur doit être en cours d\'exécution pour accéder à la console');
-      }
-
-      // Create exec instance
-      // Try bash first, fallback to sh
-      const exec = await container.exec({
-        AttachStdin: true,
-        AttachStdout: true,
-        AttachStderr: true,
-        Tty: true,
-        Cmd: ['/bin/sh', '-c', 'if [ -x /bin/bash ]; then exec /bin/bash; else exec /bin/sh; fi'],
-        Env: ['TERM=xterm-256color']
-      });
-
-      terminalExec = exec;
-
-      // Start exec instance
-      const stream = await exec.start({
-        hijack: true,
-        stdin: true,
-        // Detach: false,
-        // Tty: true
-      });
-
-      terminalStream = stream;
-
-      // Handle output from container -> frontend
-      // Dockerode stream is a duplex stream
-      stream.on('data', (chunk: Buffer) => {
-        socket.emit('terminal_output', chunk.toString('utf-8'));
-      });
-
-      stream.on('end', () => {
-        socket.emit('terminal_exit');
-        terminalStream = null;
-      });
-
-      stream.on('error', (err: Error) => {
-        error(`[Tracker] Terminal stream error: ${(err as Error).message}`);
-        socket.emit('terminal_error', (err as Error).message);
-      });
-
-      log(`[Tracker] Terminal session started for ${containerId}`);
-
-    } catch (err) {
-      error(`[Tracker] Error starting terminal: ${(err as Error).message}`);
-      socket.emit('terminal_error', (err as Error).message);
-    }
-  });
-
-  socket.on('terminal_input', (data: string) => {
-    if (terminalStream) {
-      (terminalStream as { write: (data: string) => void }).write(data);
-    }
-  });
-
-  socket.on('terminal_resize', (size: { cols: number, rows: number }) => {
-    if (terminalExec) {
-      (terminalExec as { resize: (opts: { h: number; w: number }) => void }).resize({ h: size.rows, w: size.cols });
-    }
-  });
-
-  socket.on('subscribe_docker_logs', async (rawContainerId: unknown) => {
-    if (!requireAuthenticatedSocket(socket)) {
-      socket.emit('docker_log_error', 'Non autorisé');
-      return;
-    }
-    try {
-      const containerId = String(rawContainerId).trim();
-      log(`[Tracker] Client ${socket.id} subscribed to logs for container: "${containerId}"`);
-
-      if (logStream) {
-        (logStream as { destroy: () => void }).destroy();
-        logStream = null;
-      }
-      
-      // Re-initialize docker before using it to ensure we have the latest host
-      const prisma = getPrisma();
-      if (!process.env.DOCKER_HOST) {
-        // Check Settings model
-        if (prisma.setting) {
-            const dockerHostSetting = await prisma.setting.findUnique({
-              where: { key: 'docker_host' }
-            });
-            if (dockerHostSetting?.value) {
-              initDocker(dockerHostSetting.value);
-            }
-        }
-      }
-
-      // Create a writable stream that emits to socket
-      logWritable = new Writable({
-        write(chunk, encoding, callback) {
-          socket.emit('docker_log_chunk', chunk.toString('utf-8'));
-          callback();
-        }
-      });
-
-      const container = docker.getContainer(containerId);
-      log(`[Tracker] Getting logs for container object: ${container.id || containerId}`);
-      const stream = await container.logs({
-        follow: true,
-        stdout: true,
-        stderr: true,
-        tail: 100
-      });
-      
-      logStream = stream;
-      
-      // Demultiplex stream to remove header bytes and separate stdout/stderr
-      container.modem.demuxStream(stream, logWritable, logWritable);
-
-      stream.on('end', () => {
-        socket.emit('docker_log_end');
-      });
-
-      stream.on('error', (err: Error) => {
-        error(`[Tracker] Log stream error: ${(err as Error).message}`);
-        socket.emit('docker_log_error', (err as Error).message);
-      });
-
-    } catch (err) {
-      error(`[Tracker] Error streaming logs: ${(err as Error).message}`);
-      socket.emit('docker_log_error', (err as Error).message);
-    }
-  });
-
-  socket.on('unsubscribe_docker_logs', () => {
-    log(`[Tracker] Client ${socket.id} unsubscribed from logs`);
-    if (logStream) {
-      (logStream as { destroy: () => void }).destroy();
-      logStream = null;
-    }
-    if (logWritable) {
-        logWritable.end();
-        logWritable = null;
-    }
-  });
-
   socket.on('disconnect', () => {
     if (userId) {
         const userSet = userSockets.get(userId);
@@ -426,9 +211,6 @@ io.on('connection', async (socket) => {
         }
     }
 
-    if (logStream) {
-      (logStream as { destroy: () => void }).destroy();
-    }
     log(`[Tracker] Frontend client disconnected: ${socket.id}`);
   });
 });
@@ -493,29 +275,6 @@ let currentServiceType: 'emby' | 'jellyfin' | 'plex' = 'emby';
 
 async function startTracker() {
   log('--- Emby Mono-Instance Tracker Starting ---');
-  
-  const p = getPrisma();
-  
-  // Try to find a Docker Host in settings if not in ENV
-  if (!process.env.DOCKER_HOST) {
-    let dockerHostFound = false;
-    
-    // First check the Settings model
-    if (p.setting) {
-      const dockerHostSetting = await p.setting.findUnique({
-        where: { key: 'docker_host' }
-      });
-      if (dockerHostSetting?.value) {
-        log(`[Tracker] Initializing Dockerode from Setting model: ${dockerHostSetting.value}`);
-        initDocker(dockerHostSetting.value);
-        dockerHostFound = true;
-      }
-    }
-
-    if (!dockerHostFound) {
-      log(`[Tracker] No docker_host found in DB (Settings model).`);
-    }
-  }
 
   // 1. Initial connection
   await refreshConnection();

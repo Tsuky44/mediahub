@@ -35,7 +35,7 @@ export default function ApprovalModal({
     const serverName = serverType === 'jellyfin' ? 'Jellyfin' : 'Emby'
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-[#1a1b26] border border-white/10 rounded-xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="bg-[#1a1c1c] border border-white/10 rounded-xl p-6 w-full max-w-md shadow-2xl space-y-4">
                 <h3 className="text-xl font-bold text-white">Approuver la demande</h3>
 
                 <div className="space-y-4">

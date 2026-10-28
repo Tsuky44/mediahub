@@ -13,6 +13,8 @@ interface RequestButtonProps {
   mediaType: 'movie' | 'tv'
   title: string
   initialStatus: string
+  /** Date de sortie attendue quand le média demandé n'est pas encore sorti */
+  releaseDate?: string
   seasons?: any[]
   seasonStatuses?: any[]
   canRequest?: boolean
@@ -25,6 +27,7 @@ export default function RequestButton({
   mediaType,
   title,
   initialStatus,
+  releaseDate,
   seasons,
   seasonStatuses,
   canRequest = false,
@@ -34,7 +37,7 @@ export default function RequestButton({
   const router = useRouter()
   const [showStatusModal, setShowStatusModal] = useState(false)
 
-  const { status, loading, showSeasonModal, setShowSeasonModal, setStatus, sendRequest } = useRequestStatus(
+  const { status, phase, error, showSeasonModal, setShowSeasonModal, setStatus, submit, sendRequest } = useRequestStatus(
     tmdbId,
     mediaType,
     title,
@@ -55,13 +58,10 @@ export default function RequestButton({
       
       if (allSeasonNumbers.length === 0) return
 
-      const result = await requestAllSeasons(tmdbId, title, allSeasonNumbers)
-      if (result.success) {
-        setStatus('processing')
-        router.refresh()
-      } else {
-        alert('Erreur lors de la demande : ' + (result.message || 'Erreur inconnue'))
-      }
+      await submit(async () => {
+        const result = await requestAllSeasons(tmdbId, title, allSeasonNumbers)
+        return { ok: result.success, message: result.message }
+      })
       return
     }
 
@@ -73,17 +73,16 @@ export default function RequestButton({
 
     if (status !== 'not_available' && status !== 'unknown') return
 
-    const success = await sendRequest()
-    if (success) {
-      // noop - handled in hook
-    }
+    await sendRequest()
   }
 
   return (
     <>
       <RequestStatusButton
         status={status}
-        loading={loading}
+        releaseDate={releaseDate}
+        phase={phase}
+        error={error}
         canRequest={canRequest}
         hasUnrequestedSeasons={hasUnrequestedSeasons}
         isTv={isTv}
@@ -99,6 +98,8 @@ export default function RequestButton({
         mediaType={mediaType}
         tvdbId={tvdbId}
         title={title}
+        mediaStatus={status}
+        releaseDate={releaseDate}
       />
       {isTv && seasons && seasonStatuses && (
         <SeasonSelectorModal

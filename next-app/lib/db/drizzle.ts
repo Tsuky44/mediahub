@@ -4,8 +4,7 @@ import * as schema from './schema';
 import { resolve, dirname } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 
-// Patch BigInt pour JSON.stringify / NextResponse.json()
-// Nécessaire car les modèles ont des champs BigInt (DailyTrackerStat, TrackerStatsLog)
+// Patch BigInt pour JSON.stringify / NextResponse.json() (valeurs bigint éventuelles)
 if (!(BigInt.prototype as any).toJSON) {
   (BigInt.prototype as any).toJSON = function () {
     return Number(this);
@@ -59,6 +58,9 @@ const sqlite: Database.Database = isBuildPhase
       instance.pragma('foreign_keys = ON');
       instance.pragma('busy_timeout = 10000');
       instance.pragma('temp_store = MEMORY');
+      // Lectures plus rapides : cache de pages de 32 Mo + I/O mappées en mémoire (256 Mo max)
+      instance.pragma('cache_size = -32000');
+      instance.pragma('mmap_size = 268435456');
       globalForDb.__mediahubSqlite = instance;
       return instance;
     })())
@@ -187,6 +189,7 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
       `CREATE INDEX IF NOT EXISTS "media_requests_user_status_idx" ON "media_requests" ("user_id", "status");`,
       `CREATE INDEX IF NOT EXISTS "media_requests_media_type_status_idx" ON "media_requests" ("media_type", "status");`,
       `CREATE INDEX IF NOT EXISTS "media_requests_tmdb_idx" ON "media_requests" ("tmdb_id");`,
+      `CREATE INDEX IF NOT EXISTS "media_requests_requested_at_idx" ON "media_requests" ("requested_at");`,
     ],
   },
   {
@@ -270,6 +273,8 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
     );`,
     indexes: [
       `CREATE UNIQUE INDEX IF NOT EXISTS "watch_events_emby_item_played_unique" ON "watch_events" ("emby_user_id", "item_id", "played_at");`,
+      // Stats : filtrage par période + tri chronologique
+      `CREATE INDEX IF NOT EXISTS "watch_events_played_at_idx" ON "watch_events" ("played_at");`,
     ],
   },
   {
@@ -305,6 +310,9 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
       "details" TEXT,
       "created_at" INTEGER NOT NULL
     );`,
+    indexes: [
+      `CREATE INDEX IF NOT EXISTS "audit_logs_created_at_idx" ON "audit_logs" ("created_at");`,
+    ],
   },
   {
     name: 'permissions',
@@ -425,38 +433,6 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
       `CREATE INDEX IF NOT EXISTS "notification_deliveries_event_id_idx" ON "notification_deliveries" ("event_id");`,
       `CREATE INDEX IF NOT EXISTS "notification_deliveries_status_retry_idx" ON "notification_deliveries" ("status", "next_retry_at");`,
       `CREATE UNIQUE INDEX IF NOT EXISTS "notification_deliveries_unique_recipient" ON "notification_deliveries" ("event_id", "recipient", "provider");`,
-    ],
-  },
-  {
-    name: 'daily_tracker_stats',
-    ddl: `CREATE TABLE IF NOT EXISTS "daily_tracker_stats" (
-      "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-      "date" INTEGER NOT NULL,
-      "tracker" TEXT NOT NULL,
-      "total_uploaded" BLOB NOT NULL DEFAULT (X'0000000000000000'),
-      "total_downloaded" BLOB NOT NULL DEFAULT (X'0000000000000000'),
-      "created_at" INTEGER NOT NULL,
-      "updated_at" INTEGER NOT NULL
-    );`,
-    indexes: [
-      `CREATE UNIQUE INDEX IF NOT EXISTS "daily_tracker_stats_date_tracker_unique" ON "daily_tracker_stats" ("date", "tracker");`,
-      `CREATE INDEX IF NOT EXISTS "daily_tracker_stats_date_idx" ON "daily_tracker_stats" ("date");`,
-    ],
-  },
-  {
-    name: 'tracker_stats_logs',
-    ddl: `CREATE TABLE IF NOT EXISTS "tracker_stats_logs" (
-      "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-      "tracker" TEXT NOT NULL,
-      "total_uploaded" BLOB NOT NULL,
-      "total_downloaded" BLOB NOT NULL,
-      "uploaded_diff" BLOB NOT NULL DEFAULT (X'0000000000000000'),
-      "downloaded_diff" BLOB NOT NULL DEFAULT (X'0000000000000000'),
-      "timestamp" INTEGER NOT NULL
-    );`,
-    indexes: [
-      `CREATE INDEX IF NOT EXISTS "tracker_stats_logs_timestamp_idx" ON "tracker_stats_logs" ("timestamp");`,
-      `CREATE INDEX IF NOT EXISTS "tracker_stats_logs_tracker_timestamp_idx" ON "tracker_stats_logs" ("tracker", "timestamp");`,
     ],
   },
   {
@@ -590,26 +566,6 @@ function runMigrations(db: Database.Database): void {
     }
   }
 
-  // 4) Migration ponctuelle des BLOB BigInt (anciennes colonnes en INTEGER)
-  for (const tableName of ['tracker_stats_logs', 'daily_tracker_stats'] as const) {
-    try {
-      const tableInfo = db
-        .prepare(`PRAGMA table_info("${tableName}")`)
-        .all() as Array<{ name: string; type: string }>;
-      const uploadedCol = tableInfo.find((c) => c.name === 'total_uploaded');
-      if (uploadedCol && uploadedCol.type.toUpperCase() !== 'BLOB') {
-        console.log(`[Drizzle] Migrating ${tableName}: INTEGER bigint -> BLOB`);
-        db.exec(`ALTER TABLE "${tableName}" RENAME TO "${tableName}_old";`);
-        const def = TABLE_DEFINITIONS.find((d) => d.name === tableName)!;
-        db.exec(def.ddl);
-        if (def.indexes) for (const idx of def.indexes) db.exec(idx);
-        db.exec(`DROP TABLE "${tableName}_old";`);
-      }
-    } catch (err) {
-      console.warn(`[Drizzle] Skipped BLOB migration on ${tableName}:`, (err as Error).message);
-    }
-  }
-
   // 5) Migration one-shot : aligner les timestamps en millisecondes.
   //    Les tables créées par Drizzle (avant ce patch) stockaient en SECONDES
   //    alors que tout le reste (legacy Prisma) est en MILLISECONDES.
@@ -622,8 +578,6 @@ function runMigrations(db: Database.Database): void {
   if (!alreadyApplied) {
     const SEC_THRESHOLD = 100_000_000_000; // 10^11 ms = ~1973 ; toute valeur < c'est en secondes
     const tablesToFix: Array<{ table: string; columns: string[] }> = [
-      { table: 'daily_tracker_stats', columns: ['date', 'created_at', 'updated_at'] },
-      { table: 'tracker_stats_logs', columns: ['timestamp'] },
       { table: 'notification_events', columns: ['created_at', 'dispatched_at'] },
       { table: 'notification_deliveries', columns: ['created_at', 'sent_at', 'next_retry_at'] },
     ];

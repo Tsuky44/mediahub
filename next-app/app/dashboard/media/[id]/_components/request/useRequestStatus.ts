@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useOnyxPhase, type OnyxResult } from '@/components/ui/onyx'
 
 export function useRequestStatus(
   tmdbId: number,
@@ -10,8 +11,8 @@ export function useRequestStatus(
   initialStatus: string
 ) {
   const [status, setStatus] = useState(initialStatus)
-  const [loading, setLoading] = useState(false)
   const [showSeasonModal, setShowSeasonModal] = useState(false)
+  const { phase, error, run } = useOnyxPhase()
   const router = useRouter()
 
   useEffect(() => {
@@ -44,37 +45,38 @@ export function useRequestStatus(
     return () => clearInterval(interval)
   }, [status, tmdbId, mediaType, router])
 
-  const sendRequest = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tmdbId, mediaType, title }),
-      })
-      const data = await res.json()
-      if (res.ok && data.success) {
+  /** Envoi avec les états Onyx ; le statut passe « en cours » après la confirmation. */
+  const submit = useCallback(
+    (send: () => Promise<OnyxResult>) =>
+      run(send, () => {
         setStatus('processing')
         router.refresh()
-        return true
-      }
-      alert('Request failed: ' + (data.error || data.message || 'Unknown error'))
-      return false
-    } catch (e) {
-      console.error(e)
-      alert('An error occurred')
-      return false
-    } finally {
-      setLoading(false)
-    }
-  }, [tmdbId, mediaType, title, router])
+      }),
+    [run, router]
+  )
+
+  const sendRequest = useCallback(
+    () =>
+      submit(async () => {
+        const res = await fetch('/api/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tmdbId, mediaType, title }),
+        })
+        const data = await res.json().catch(() => ({}))
+        return { ok: res.ok && !!data.success, message: data.error || data.message }
+      }),
+    [submit, tmdbId, mediaType, title]
+  )
 
   return {
     status,
-    loading,
+    phase,
+    error,
     showSeasonModal,
     setShowSeasonModal,
     setStatus,
+    submit,
     sendRequest,
   }
 }

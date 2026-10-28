@@ -41,15 +41,20 @@ export function Navbar({ configStatus, impersonation }: NavbarProps) {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 w-full bg-gray-900/80 backdrop-blur-xl border-b border-white/5 shadow-2xl supports-[backdrop-filter]:bg-gray-900/60">
+      <nav className="onyx-scroll-progress sticky top-0 z-50 w-full bg-onyx-bg/85 backdrop-blur-[30px] border-b border-white/[0.06] supports-[backdrop-filter]:bg-onyx-bg/65">
         {impersonation && (
           <ImpersonationBannerClient roleName={impersonation.role} />
         )}
+        {/* Rejoué à chaque changement de page (clé) : comète et lueur d'arrivée */}
+        <span key={pathname} aria-hidden className="onyx-arrival">
+          <span />
+        </span>
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-4">
               <button
                 onClick={toggleMobileMenu}
+                aria-label={isMobileMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
                 className="lg:hidden p-2 text-gray-400 hover:text-white transition-colors relative z-[60]"
               >
                 {isMobileMenuOpen ? (

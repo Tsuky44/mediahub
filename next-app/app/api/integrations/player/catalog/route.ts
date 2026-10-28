@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { defineAbilityFor } from '@/lib/ability'
 import { authenticatePlayerIntegration } from '@/lib/integrations/player-integration-auth'
-import { getMediaAvailability } from '@/lib/services/media-status'
+import { getMediaAvailability, toPlayerStatus } from '@/lib/services/media-status'
 import { getTmdbService } from '@/lib/services/tmdb'
 
 type MediaType = 'all' | 'movie' | 'tv'
@@ -59,7 +59,8 @@ export async function GET(request: Request) {
       backdropPath: item.backdrop_path || null,
       releaseDate: item.release_date || item.first_air_date || null,
       rating: item.vote_average || 0,
-      status: availability.status,
+      status: toPlayerStatus(availability.status),
+      awaitingRelease: availability.status === 'unreleased',
     }
   }))
 

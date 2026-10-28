@@ -1,10 +1,90 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useLayoutEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { useSupportChat } from '@/hooks/useSupportChat'
+import { isPhoneScreen } from '@/lib/screen'
 import { MessageCircle, X, Send, Bot, User, Loader2, ImagePlus, X as XIcon } from 'lucide-react'
 
+const DROP_MS = 850
+const DROP_FRAMES = 72
+
+const smooth = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x))
+
+/** Ressort amorti : de 0 à 1, vitesse nulle au départ, léger dépassement puis repos */
+function spring(t: number) {
+  if (t <= 0) return 0
+  const w = 10
+  const z = 0.7
+  const wd = w * Math.sqrt(1 - z * z)
+  return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t))
+}
+
+/**
+ * Traversée de la bulle en goutte (téléphone). La bulle se détache de son bord en y laissant
+ * un reste qui se résorbe, file suivie de deux gouttelettes, dépasse un peu son bord d'arrivée,
+ * puis les gouttelettes la rejoignent et elle tremble avant de se poser. Le filtre #onyx-goo
+ * fusionne ces formes comme un liquide. Positions et déformations sont calculées image par
+ * image (interpolation linéaire) : le mouvement ne marque aucun arrêt en route.
+ */
+function dropAnimations(blobs: HTMLElement[], from: number, to: number, size: number, bottom: number) {
+  const [rest, tail2, tail1, main] = blobs
+  const icon = main.firstElementChild
+  const dir = Math.sign(to - from)
+  const T = DROP_MS / 1000
+  // Atterrissage exact : le reste d'oscillation s'éteint sur le dernier quart
+  const land = (t: number) => 1 - smooth((t - 0.75 * T) / (0.25 * T))
+  const travel = (t: number, lag: number) => 1 - (1 - spring(t - 0.06 - lag)) * land(t)
+  // Prise d'élan : la goutte recule et se tasse avant de partir
+  const windup = (t: number) => (t < 0.2 ? Math.sin((Math.PI * t) / 0.2) ** 2 : 0)
+  const times = Array.from({ length: DROP_FRAMES }, (_, i) => (i / (DROP_FRAMES - 1)) * T)
+  const h = 0.004
+  const speed = times.map((t) => (travel(t + h, 0) - travel(t - h, 0)) / (2 * h))
+  const vmax = Math.max(...speed.map(Math.abs))
+  const arrival = times.find((t) => travel(t, 0) >= 1) ?? T
+
+  const tails: [HTMLElement, number, number][] = [[tail1, 0.6, 0.035], [tail2, 0.42, 0.07]]
+  const place = (el: HTMLElement, k: number) => {
+    el.style.width = el.style.height = `${size * k}px`
+    el.style.bottom = `${bottom + (size * (1 - k)) / 2}px`
+  }
+  place(rest, 1)
+  place(main, 1)
+  for (const [el, k] of tails) place(el, k)
+
+  const mainFrames: Keyframe[] = []
+  const iconFrames: Keyframe[] = []
+  const restFrames: Keyframe[] = []
+  const tailFrames: Keyframe[][] = tails.map(() => [])
+  times.forEach((t, i) => {
+    const v = speed[i] / vmax
+    const after = t - arrival
+    const wobble = after > 0 ? -0.14 * Math.exp(-7 * after) * Math.sin((2 * Math.PI * after) / 0.24) : 0
+    const sx = 1 + (0.2 * Math.abs(v) - 0.1 * windup(t) + wobble) * land(t)
+    const sy = 1 / sx
+    const center = from + (to - from) * travel(t, 0) - dir * 6 * windup(t)
+    mainFrames.push({ transform: `translateX(${center - size / 2}px) scale(${sx}, ${sy})` })
+    iconFrames.push({ transform: `translateX(${-dir * 4 * v}px) scale(${1 / sx}, ${1 / sy})` })
+    const shrink = t < 0.34 ? 0.5 + 0.5 * Math.cos((Math.PI * t) / 0.34) : 0
+    restFrames.push({ transform: `translateX(${from + dir * 10 * smooth(t / 0.3) - size / 2}px) scale(${shrink})` })
+    tails.forEach(([, k, lag], j) => {
+      tailFrames[j].push({ transform: `translateX(${from + (to - from) * travel(t, lag) - (size * k) / 2}px)` })
+    })
+  })
+  const timing = { duration: DROP_MS, easing: 'linear' }
+  return [
+    main.animate(mainFrames, timing),
+    rest.animate(restFrames, timing),
+    ...tails.map(([el], j) => el.animate(tailFrames[j], timing)),
+    ...(icon ? [icon.animate(iconFrames, timing)] : []),
+  ]
+}
+
 export default function SupportChatbot() {
+  // Écran large : à gauche. Téléphone : à droite, sauf sur Demander où le bouton des filtres occupe la droite
+  const pathname = usePathname()
+  const phoneLeft = pathname === '/dashboard/requests'
+  const side = phoneLeft ? 'left-6' : 'right-6 md:right-auto md:left-6'
   const {
     isOpen,
     messages,
@@ -25,6 +105,45 @@ export default function SupportChatbot() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const gooRef = useRef<HTMLDivElement>(null)
+  const lastPhoneLeft = useRef(phoneLeft)
+  const stopDrop = useRef<(() => void) | null>(null)
+
+  // Changement de bord sur téléphone : la bulle traverse l'écran en goutte
+  useLayoutEffect(() => {
+    if (lastPhoneLeft.current === phoneLeft) return
+    lastPhoneLeft.current = phoneLeft
+    stopDrop.current?.()
+    const button = buttonRef.current
+    const goo = gooRef.current
+    if (!button || !goo || !isPhoneScreen() || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const box = button.getBoundingClientRect()
+    // left-6 et right-6 sont symétriques : l'ancienne place est le reflet de la nouvelle
+    const oldLeft = document.documentElement.clientWidth - box.right
+    if (Math.abs(box.left - oldLeft) < 1) return
+    const anims = dropAnimations(
+      Array.from(goo.children) as HTMLElement[],
+      oldLeft + box.width / 2,
+      box.left + box.width / 2,
+      box.width,
+      parseFloat(getComputedStyle(button).bottom)
+    )
+    // La vraie bulle attend à l'arrivée pendant que sa goutte traverse
+    goo.dataset.on = ''
+    button.style.visibility = 'hidden'
+    let live = true
+    const stop = () => {
+      if (!live) return
+      live = false
+      stopDrop.current = null
+      anims.forEach((a) => a.cancel())
+      delete goo.dataset.on
+      button.style.visibility = ''
+    }
+    stopDrop.current = stop
+    anims[0].onfinish = stop
+  }, [phoneLeft])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -68,17 +187,35 @@ export default function SupportChatbot() {
       {/* Floating Button */}
       {!isOpen && (
         <button
+          ref={buttonRef}
           onClick={open}
-          className="fixed bottom-6 left-6 z-50 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full p-4 shadow-lg shadow-indigo-500/20 transition-all hover:scale-105"
+          className={`onyx-breathe fixed bottom-6 ${side} z-50 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full p-4 shadow-lg shadow-indigo-500/20 transition-[scale,rotate] duration-300 ease-spring hover:scale-110 hover:-rotate-6`}
           aria-label="Ouvrir le support"
         >
           <MessageCircle size={24} />
         </button>
       )}
 
+      {/* Goutte de la traversée (téléphone) : reste, gouttelettes, goutte principale */}
+      <div ref={gooRef} aria-hidden className="onyx-goo">
+        <span className="bg-indigo-500" />
+        <span className="bg-indigo-500" />
+        <span className="bg-indigo-500" />
+        <span className="bg-indigo-500 text-white">
+          <MessageCircle size={24} />
+        </span>
+      </div>
+      <svg aria-hidden className="pointer-events-none fixed h-0 w-0">
+        <filter id="onyx-goo" colorInterpolationFilters="sRGB">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur" />
+          <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="goo" />
+          <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+        </filter>
+      </svg>
+
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-6 left-6 z-50 w-[380px] max-w-[calc(100vw-3rem)] h-[560px] max-h-[calc(100vh-3rem)] bg-gray-900 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className={`fixed bottom-6 ${side} z-50 w-[380px] max-w-[calc(100vw-3rem)] h-[560px] max-h-[calc(100vh-3rem)] bg-gray-900 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden`}>
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-indigo-500/10 border-b border-white/5">
             <div className="flex items-center gap-2">

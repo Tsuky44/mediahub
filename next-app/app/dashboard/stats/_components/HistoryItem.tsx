@@ -47,13 +47,13 @@ export function HistoryItem({ item }: HistoryItemProps) {
         <div
             className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/10 hover:scale-[1.01] ${
                 isLive
-                    ? 'bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-indigo-500/40 hover:border-indigo-500/60 shadow-[0_0_15px_rgba(99,102,241,0.2)]'
+                    ? 'bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-indigo-500/40 hover:border-indigo-500/60 shadow-[0_0_15px_rgba(232,230,228,0.08)]'
                     : 'bg-black/20 border-white/5 hover:bg-white/10 hover:border-indigo-500/30'
             }`}
         >
             {/* Live indicator bar */}
             {isLive && (
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] animate-pulse"></div>
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 shadow-[0_0_10px_rgba(232,230,228,0.32)] animate-pulse"></div>
             )}
 
             <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
@@ -67,7 +67,7 @@ export function HistoryItem({ item }: HistoryItemProps) {
                             {displayName}
                         </h4>
                         {isLive && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500 text-white animate-pulse shadow-[0_0_10px_rgba(99,102,241,0.5)]">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500 text-white animate-pulse shadow-[0_0_10px_rgba(232,230,228,0.2)]">
                                 LIVE
                             </span>
                         )}

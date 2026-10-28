@@ -129,7 +129,13 @@ export class VersionService {
                 changelogContent = response.data;
             }
         } catch (e: any) {
-            logger.warn('[VersionService] Failed to fetch remote CHANGELOG.md, using local. Error:', e.message);
+            // 404 = dépôt privé (raw.githubusercontent n'est pas accessible sans token) :
+            // cas attendu, le CHANGELOG.md embarqué dans l'image prend le relais.
+            if (e?.response?.status === 404) {
+                logger.debug('[VersionService] Remote CHANGELOG.md not reachable (private repo), using local.');
+            } else {
+                logger.warn('[VersionService] Failed to fetch remote CHANGELOG.md, using local. Error:', e.message);
+            }
         }
 
         // 2. Fallback to local CHANGELOG.md

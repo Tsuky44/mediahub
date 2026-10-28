@@ -1,25 +1,409 @@
 @import "tailwindcss";
-@import '@xterm/xterm/css/xterm.css';
+@import "./motion.css";
+
+/*
+ * Direction artistique Onyx (lecteur Onyx) appliquée à tout le site.
+ * Valeurs relevées dans l'app : splash de mise à jour et visuels de l'installeur.
+ *   fond #121414, puits #0E1010, encre #E8E6E4, atténué #9A9794, piste #2A2C2C,
+ *   faisceau #3C3E3D -> fond. Monochrome : la seule « couleur » est la lumière.
+ * Sur le web, le contraste est poussé d'un cran (fond plus profond, encre et
+ * états plus lumineux) pour compenser les écrans moins lumineux qu'un téléviseur.
+ * Mouvement : boucle de 1400 ms, easeInOutQuad = cubic-bezier(0.45, 0, 0.55, 1),
+ * un état reste visible au moins 1500 ms.
+ */
 
 :root {
-  --background: #111827; /* gray-900 */
-  --foreground: #f3f4f6; /* gray-100 */
+  --onyx-bg: #0c0d0d;
+  --onyx-well: #080909;
+  --onyx-ink: #f2f0ed;
+  --onyx-muted: #a8a5a1;
+  --onyx-track: #2a2c2c;
+  --onyx-beam: #3c3e3d;
+  --onyx-loop: 1400ms;
+  --background: var(--onyx-bg);
+  --foreground: var(--onyx-ink);
   color-scheme: dark;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-body {
-  background: radial-gradient(circle at top center, #2d3e5a 0%, #020617 100%);
-  color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
-  min-height: 100vh;
-  background-attachment: fixed;
+@theme {
+  /* Bricolage Grotesque (next/font, auto-hébergée) : axe de taille optique, sobre
+     dans les petits textes, plus de caractère dans les titres */
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+
+  /* Couleurs nommées de l'app */
+  --color-onyx-bg: #0c0d0d;
+  --color-onyx-well: #080909;
+  --color-onyx-ink: #f2f0ed;
+  --color-onyx-muted: #a8a5a1;
+  --color-onyx-track: #2a2c2c;
+  --color-onyx-beam: #3c3e3d;
+
+  /* Graphite : remplace toutes les échelles de gris du site */
+  --color-gray-50: #fafaf9;
+  --color-gray-100: #f2f0ed;
+  --color-gray-200: #dfdcd9;
+  --color-gray-300: #c6c3bf;
+  --color-gray-400: #a8a5a1;
+  --color-gray-500: #7d7a77;
+  --color-gray-600: #565857;
+  --color-gray-700: #333535;
+  --color-gray-800: #1f2121;
+  --color-gray-900: #141616;
+  --color-gray-950: #0a0b0b;
+  --color-zinc-50: var(--color-gray-50);
+  --color-zinc-100: var(--color-gray-100);
+  --color-zinc-200: var(--color-gray-200);
+  --color-zinc-300: var(--color-gray-300);
+  --color-zinc-400: var(--color-gray-400);
+  --color-zinc-500: var(--color-gray-500);
+  --color-zinc-600: var(--color-gray-600);
+  --color-zinc-700: var(--color-gray-700);
+  --color-zinc-800: var(--color-gray-800);
+  --color-zinc-900: var(--color-gray-900);
+  --color-zinc-950: var(--color-gray-950);
+  --color-slate-50: var(--color-gray-50);
+  --color-slate-100: var(--color-gray-100);
+  --color-slate-200: var(--color-gray-200);
+  --color-slate-300: var(--color-gray-300);
+  --color-slate-400: var(--color-gray-400);
+  --color-slate-500: var(--color-gray-500);
+  --color-slate-600: var(--color-gray-600);
+  --color-slate-700: var(--color-gray-700);
+  --color-slate-800: var(--color-gray-800);
+  --color-slate-900: var(--color-gray-900);
+  --color-slate-950: var(--color-gray-950);
+  --color-neutral-50: var(--color-gray-50);
+  --color-neutral-100: var(--color-gray-100);
+  --color-neutral-200: var(--color-gray-200);
+  --color-neutral-300: var(--color-gray-300);
+  --color-neutral-400: var(--color-gray-400);
+  --color-neutral-500: var(--color-gray-500);
+  --color-neutral-600: var(--color-gray-600);
+  --color-neutral-700: var(--color-gray-700);
+  --color-neutral-800: var(--color-gray-800);
+  --color-neutral-900: var(--color-gray-900);
+  --color-neutral-950: var(--color-gray-950);
+  --color-stone-50: var(--color-gray-50);
+  --color-stone-100: var(--color-gray-100);
+  --color-stone-200: var(--color-gray-200);
+  --color-stone-300: var(--color-gray-300);
+  --color-stone-400: var(--color-gray-400);
+  --color-stone-500: var(--color-gray-500);
+  --color-stone-600: var(--color-gray-600);
+  --color-stone-700: var(--color-gray-700);
+  --color-stone-800: var(--color-gray-800);
+  --color-stone-900: var(--color-gray-900);
+  --color-stone-950: var(--color-gray-950);
+
+  /* Accent : la lumière de l'app (encre sur graphite), à peine bleutée pour
+     sortir du pur monochrome (teinte 224°, saturation faible).
+     Remplace indigo, violet, bleu, cyan, rose… */
+  --color-indigo-50: #f8f9fc;
+  --color-indigo-100: #f1f3f9;
+  --color-indigo-200: #eceff6;
+  --color-indigo-300: #e5e9f2;
+  --color-indigo-400: #dde2ee;
+  --color-indigo-500: #d4d9e8;
+  --color-indigo-600: #c5ccdd;
+  --color-indigo-700: #acb4c8;
+  --color-indigo-800: #353840;
+  --color-indigo-900: #23252a;
+  --color-indigo-950: #17181c;
+  --color-purple-50: var(--color-indigo-50);
+  --color-purple-100: var(--color-indigo-100);
+  --color-purple-200: var(--color-indigo-200);
+  --color-purple-300: var(--color-indigo-300);
+  --color-purple-400: var(--color-indigo-400);
+  --color-purple-500: var(--color-indigo-500);
+  --color-purple-600: var(--color-indigo-600);
+  --color-purple-700: var(--color-indigo-700);
+  --color-purple-800: var(--color-indigo-800);
+  --color-purple-900: var(--color-indigo-900);
+  --color-purple-950: var(--color-indigo-950);
+  --color-violet-50: var(--color-indigo-50);
+  --color-violet-100: var(--color-indigo-100);
+  --color-violet-200: var(--color-indigo-200);
+  --color-violet-300: var(--color-indigo-300);
+  --color-violet-400: var(--color-indigo-400);
+  --color-violet-500: var(--color-indigo-500);
+  --color-violet-600: var(--color-indigo-600);
+  --color-violet-700: var(--color-indigo-700);
+  --color-violet-800: var(--color-indigo-800);
+  --color-violet-900: var(--color-indigo-900);
+  --color-violet-950: var(--color-indigo-950);
+  --color-blue-50: var(--color-indigo-50);
+  --color-blue-100: var(--color-indigo-100);
+  --color-blue-200: var(--color-indigo-200);
+  --color-blue-300: var(--color-indigo-300);
+  --color-blue-400: var(--color-indigo-400);
+  --color-blue-500: var(--color-indigo-500);
+  --color-blue-600: var(--color-indigo-600);
+  --color-blue-700: var(--color-indigo-700);
+  --color-blue-800: var(--color-indigo-800);
+  --color-blue-900: var(--color-indigo-900);
+  --color-blue-950: var(--color-indigo-950);
+  --color-sky-50: var(--color-indigo-50);
+  --color-sky-100: var(--color-indigo-100);
+  --color-sky-200: var(--color-indigo-200);
+  --color-sky-300: var(--color-indigo-300);
+  --color-sky-400: var(--color-indigo-400);
+  --color-sky-500: var(--color-indigo-500);
+  --color-sky-600: var(--color-indigo-600);
+  --color-sky-700: var(--color-indigo-700);
+  --color-sky-800: var(--color-indigo-800);
+  --color-sky-900: var(--color-indigo-900);
+  --color-sky-950: var(--color-indigo-950);
+  --color-cyan-50: var(--color-indigo-50);
+  --color-cyan-100: var(--color-indigo-100);
+  --color-cyan-200: var(--color-indigo-200);
+  --color-cyan-300: var(--color-indigo-300);
+  --color-cyan-400: var(--color-indigo-400);
+  --color-cyan-500: var(--color-indigo-500);
+  --color-cyan-600: var(--color-indigo-600);
+  --color-cyan-700: var(--color-indigo-700);
+  --color-cyan-800: var(--color-indigo-800);
+  --color-cyan-900: var(--color-indigo-900);
+  --color-cyan-950: var(--color-indigo-950);
+  --color-fuchsia-50: var(--color-indigo-50);
+  --color-fuchsia-100: var(--color-indigo-100);
+  --color-fuchsia-200: var(--color-indigo-200);
+  --color-fuchsia-300: var(--color-indigo-300);
+  --color-fuchsia-400: var(--color-indigo-400);
+  --color-fuchsia-500: var(--color-indigo-500);
+  --color-fuchsia-600: var(--color-indigo-600);
+  --color-fuchsia-700: var(--color-indigo-700);
+  --color-fuchsia-800: var(--color-indigo-800);
+  --color-fuchsia-900: var(--color-indigo-900);
+  --color-fuchsia-950: var(--color-indigo-950);
+  --color-pink-50: var(--color-indigo-50);
+  --color-pink-100: var(--color-indigo-100);
+  --color-pink-200: var(--color-indigo-200);
+  --color-pink-300: var(--color-indigo-300);
+  --color-pink-400: var(--color-indigo-400);
+  --color-pink-500: var(--color-indigo-500);
+  --color-pink-600: var(--color-indigo-600);
+  --color-pink-700: var(--color-indigo-700);
+  --color-pink-800: var(--color-indigo-800);
+  --color-pink-900: var(--color-indigo-900);
+  --color-pink-950: var(--color-indigo-950);
+
+  /* États : les teintes restent porteuses de sens (erreur, succès, attente) mais
+     sourdes, accordées au graphite. Erreur sur la base du #FFB4AB de la spec. */
+  --color-red-50: #fff1ef;
+  --color-red-100: #ffdad6;
+  --color-red-200: #ffc4bd;
+  --color-red-300: #ffb4ab;
+  --color-red-400: #ff8b7e;
+  --color-red-500: #ee6e62;
+  --color-red-600: #bc4841;
+  --color-red-700: #983933;
+  --color-red-800: #732926;
+  --color-red-900: #4a1b1a;
+  --color-red-950: #2d1110;
+  --color-rose-50: var(--color-red-50);
+  --color-rose-100: var(--color-red-100);
+  --color-rose-200: var(--color-red-200);
+  --color-rose-300: var(--color-red-300);
+  --color-rose-400: var(--color-red-400);
+  --color-rose-500: var(--color-red-500);
+  --color-rose-600: var(--color-red-600);
+  --color-rose-700: var(--color-red-700);
+  --color-rose-800: var(--color-red-800);
+  --color-rose-900: var(--color-red-900);
+  --color-rose-950: var(--color-red-950);
+  --color-green-50: #f0f8ec;
+  --color-green-100: #daefd2;
+  --color-green-200: #bde1b2;
+  --color-green-300: #a0d191;
+  --color-green-400: #85c174;
+  --color-green-500: #6cad59;
+  --color-green-600: #549145;
+  --color-green-700: #417236;
+  --color-green-800: #2d5127;
+  --color-green-900: #1f351b;
+  --color-green-950: #122010;
+  --color-emerald-50: var(--color-green-50);
+  --color-emerald-100: var(--color-green-100);
+  --color-emerald-200: var(--color-green-200);
+  --color-emerald-300: var(--color-green-300);
+  --color-emerald-400: var(--color-green-400);
+  --color-emerald-500: var(--color-green-500);
+  --color-emerald-600: var(--color-green-600);
+  --color-emerald-700: var(--color-green-700);
+  --color-emerald-800: var(--color-green-800);
+  --color-emerald-900: var(--color-green-900);
+  --color-emerald-950: var(--color-green-950);
+  --color-teal-50: var(--color-green-50);
+  --color-teal-100: var(--color-green-100);
+  --color-teal-200: var(--color-green-200);
+  --color-teal-300: var(--color-green-300);
+  --color-teal-400: var(--color-green-400);
+  --color-teal-500: var(--color-green-500);
+  --color-teal-600: var(--color-green-600);
+  --color-teal-700: var(--color-green-700);
+  --color-teal-800: var(--color-green-800);
+  --color-teal-900: var(--color-green-900);
+  --color-teal-950: var(--color-green-950);
+  --color-lime-50: var(--color-green-50);
+  --color-lime-100: var(--color-green-100);
+  --color-lime-200: var(--color-green-200);
+  --color-lime-300: var(--color-green-300);
+  --color-lime-400: var(--color-green-400);
+  --color-lime-500: var(--color-green-500);
+  --color-lime-600: var(--color-green-600);
+  --color-lime-700: var(--color-green-700);
+  --color-lime-800: var(--color-green-800);
+  --color-lime-900: var(--color-green-900);
+  --color-lime-950: var(--color-green-950);
+  --color-amber-50: #fef6e8;
+  --color-amber-100: #fce9c5;
+  --color-amber-200: #f8d79e;
+  --color-amber-300: #f3c478;
+  --color-amber-400: #eaaf58;
+  --color-amber-500: #d29740;
+  --color-amber-600: #b17c31;
+  --color-amber-700: #8c6027;
+  --color-amber-800: #64451c;
+  --color-amber-900: #422e14;
+  --color-amber-950: #281c0c;
+  --color-yellow-50: var(--color-amber-50);
+  --color-yellow-100: var(--color-amber-100);
+  --color-yellow-200: var(--color-amber-200);
+  --color-yellow-300: var(--color-amber-300);
+  --color-yellow-400: var(--color-amber-400);
+  --color-yellow-500: var(--color-amber-500);
+  --color-yellow-600: var(--color-amber-600);
+  --color-yellow-700: var(--color-amber-700);
+  --color-yellow-800: var(--color-amber-800);
+  --color-yellow-900: var(--color-amber-900);
+  --color-yellow-950: var(--color-amber-950);
+  --color-orange-50: var(--color-amber-50);
+  --color-orange-100: var(--color-amber-100);
+  --color-orange-200: var(--color-amber-200);
+  --color-orange-300: var(--color-amber-300);
+  --color-orange-400: var(--color-amber-400);
+  --color-orange-500: var(--color-amber-500);
+  --color-orange-600: var(--color-amber-600);
+  --color-orange-700: var(--color-amber-700);
+  --color-orange-800: var(--color-amber-800);
+  --color-orange-900: var(--color-amber-900);
+  --color-orange-950: var(--color-amber-950);
+
+  /* Mouvement de l'app : la courbe de la barre du splash (easeInOutQuad) */
+  --ease-onyx: cubic-bezier(0.45, 0, 0.55, 1);
+
+  --animate-indeterminate: indeterminate var(--onyx-loop) var(--ease-onyx) infinite;
+  --animate-pulse: pulse var(--onyx-loop) var(--ease-onyx) infinite;
+  --animate-pop-in: pop-in 180ms var(--ease-onyx);
+  --animate-fade-in: onyx-fade 280ms var(--ease-onyx) both;
+  --animate-onyx-beam: onyx-beam 900ms var(--ease-onyx) 1 both;
+  --animate-onyx-fill: onyx-fill 420ms var(--ease-onyx) both;
+
+  /* Barre indéterminée du splash : le segment traverse la piste d'un bord à l'autre */
+  @keyframes indeterminate {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+  }
+
+  @keyframes pulse {
+    50% { opacity: 0.5; }
+  }
+
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes onyx-fade {
+    from { opacity: 0; }
+  }
+
+  /* Faisceau du logo : une lumière qui balaie une fois (badge « Disponible »…) */
+  @keyframes onyx-beam {
+    from { transform: translateX(-120%); }
+    to { transform: translateX(320%); }
+  }
+
+  /* Confirmation : l'encre remplit le bouton de gauche à droite */
+  @keyframes onyx-fill {
+    from { transform: scaleX(0); }
+  }
+}
+
+/* Entrées des modales, menus et panneaux : `animate-in fade-in zoom-in-95
+   slide-in-from-top-2 duration-200`… (classes déjà présentes dans le site),
+   jouées avec la courbe de l'app. Durée : celle de `duration-*`, sinon 280 ms. */
+@keyframes onyx-enter {
+  from {
+    opacity: var(--onyx-enter-opacity, 1);
+    translate: var(--onyx-enter-x, 0) var(--onyx-enter-y, 0);
+    scale: var(--onyx-enter-scale, 1);
+  }
+}
+@utility animate-in {
+  animation: onyx-enter var(--tw-duration, 280ms) var(--ease-onyx) both;
+}
+@utility fade-in {
+  --onyx-enter-opacity: 0;
+}
+@utility zoom-in-* {
+  --onyx-enter-scale: calc(--value(integer) * 1%);
+}
+@utility slide-in-from-top {
+  --onyx-enter-y: -100%;
+}
+@utility slide-in-from-top-* {
+  --onyx-enter-y: calc(var(--spacing) * --value(integer) * -1);
+}
+@utility slide-in-from-bottom-* {
+  --onyx-enter-y: calc(var(--spacing) * --value(integer));
+}
+@utility slide-in-from-left-* {
+  --onyx-enter-x: calc(var(--spacing) * --value(integer) * -1);
+}
+@utility slide-in-from-right-* {
+  --onyx-enter-x: calc(var(--spacing) * --value(integer));
+}
+
+@layer base {
+  body {
+    background-color: var(--onyx-bg);
+    /* La lumière du projecteur, très diffuse, depuis le haut de l'écran */
+    background-image: radial-gradient(ellipse 80% 50% at 50% -12%, rgb(242 240 237 / 0.09), transparent 70%);
+    background-attachment: fixed;
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    font-kerning: normal;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgb(232 230 228 / 0.9);
+    color: var(--onyx-bg);
+  }
+
+  :where(a, button, [role="button"], input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid rgb(242 240 237 / 0.75);
+    outline-offset: 2px;
+  }
+
+  /* Firefox support */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(232 230 228 / 0.18) transparent;
+  }
+
+  html, body {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(232 230 228 / 0.18) transparent;
+  }
 }
 
 @layer utilities {
@@ -39,26 +423,191 @@ body {
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: rgb(232 230 228 / 0.18);
     border-radius: 20px;
   }
   .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.4);
+    background-color: rgb(232 230 228 / 0.35);
   }
 }
 
-/* Custom Scrollbar Global Configuration */
-@layer base {
-  /* Firefox support */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+/* Verre (design.md) : niveau 1 pour les cartes, niveau 2 pour les modales.
+   Arête haute à 15 % de blanc, une seule ombre pour décoller les modales. */
+@utility onyx-glass {
+  background-color: rgb(26 28 28 / 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.15);
+}
+@utility onyx-glass-2 {
+  background-color: rgb(26 28 28 / 0.6);
+  backdrop-filter: blur(40px);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.15), 0 30px 60px rgb(0 0 0 / 0.5);
+}
+
+/* Squelettes de chargement : un reflet couleur faisceau traverse la surface en
+   1400 ms (barre du splash). Les squelettes d'une même page démarrent ensemble :
+   un seul mouvement à l'écran. */
+.onyx-skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: #1a1c1c;
+}
+.onyx-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  background: linear-gradient(90deg, transparent, rgb(60 62 61 / 0.55), transparent);
+  transform: translateX(-100%);
+  animation: indeterminate var(--onyx-loop) var(--ease-onyx) infinite;
+  pointer-events: none;
+}
+
+/* Affiches : elles « s'allument » en entrant dans l'écran, comme sous le faisceau
+   d'un projecteur (navigateurs qui gèrent les animations liées au défilement). */
+@keyframes onyx-ignite {
+  from {
+    opacity: 0;
+    translate: 0 10px;
   }
-  
-  /* Force main scrollbar styling */
-  html, body {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+@keyframes onyx-ignite-veil {
+  from { opacity: 0.6; }
+  to { opacity: 0; }
+}
+/* Au chargement, les affiches visibles montent en cascade (délai donné par
+   .onyx-stagger) ; les suivantes s'allument au défilement. */
+.onyx-ignite {
+  animation: onyx-rise 640ms var(--ease-out-onyx) backwards;
+  animation-delay: var(--onyx-delay, 0ms);
+}
+@supports (animation-timeline: view()) {
+  .onyx-ignite {
+    animation: onyx-rise 640ms var(--ease-out-onyx) backwards, onyx-ignite linear both;
+    animation-timeline: auto, view();
+    animation-range: normal, entry 0% entry 70%;
+    animation-delay: var(--onyx-delay, 0ms), 0s;
+  }
+  .onyx-ignite::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: var(--onyx-bg);
+    pointer-events: none;
+    animation: onyx-ignite-veil linear both;
+    animation-timeline: view();
+    animation-range: entry 10% cover 30%;
+  }
+}
+
+/* Accent encre : un bouton plein garde un texte lisible (graphite sur encre),
+   même quand le composant demande du texte blanc. */
+@layer onyx-contrast {
+:is(
+  .bg-indigo-300, .from-indigo-300, .via-indigo-300, .to-indigo-300, .bg-indigo-400, .from-indigo-400,
+  .via-indigo-400, .to-indigo-400, .bg-indigo-500, .from-indigo-500, .via-indigo-500, .to-indigo-500,
+  .bg-indigo-600, .from-indigo-600, .via-indigo-600, .to-indigo-600, .bg-indigo-700, .from-indigo-700,
+  .via-indigo-700, .to-indigo-700, .bg-purple-300, .from-purple-300, .via-purple-300, .to-purple-300,
+  .bg-purple-400, .from-purple-400, .via-purple-400, .to-purple-400, .bg-purple-500, .from-purple-500,
+  .via-purple-500, .to-purple-500, .bg-purple-600, .from-purple-600, .via-purple-600, .to-purple-600,
+  .bg-purple-700, .from-purple-700, .via-purple-700, .to-purple-700, .bg-violet-300, .from-violet-300,
+  .via-violet-300, .to-violet-300, .bg-violet-400, .from-violet-400, .via-violet-400, .to-violet-400,
+  .bg-violet-500, .from-violet-500, .via-violet-500, .to-violet-500, .bg-violet-600, .from-violet-600,
+  .via-violet-600, .to-violet-600, .bg-violet-700, .from-violet-700, .via-violet-700, .to-violet-700,
+  .bg-blue-300, .from-blue-300, .via-blue-300, .to-blue-300, .bg-blue-400, .from-blue-400,
+  .via-blue-400, .to-blue-400, .bg-blue-500, .from-blue-500, .via-blue-500, .to-blue-500,
+  .bg-blue-600, .from-blue-600, .via-blue-600, .to-blue-600, .bg-blue-700, .from-blue-700,
+  .via-blue-700, .to-blue-700, .bg-sky-300, .from-sky-300, .via-sky-300, .to-sky-300,
+  .bg-sky-400, .from-sky-400, .via-sky-400, .to-sky-400, .bg-sky-500, .from-sky-500,
+  .via-sky-500, .to-sky-500, .bg-sky-600, .from-sky-600, .via-sky-600, .to-sky-600,
+  .bg-sky-700, .from-sky-700, .via-sky-700, .to-sky-700, .bg-cyan-300, .from-cyan-300,
+  .via-cyan-300, .to-cyan-300, .bg-cyan-400, .from-cyan-400, .via-cyan-400, .to-cyan-400,
+  .bg-cyan-500, .from-cyan-500, .via-cyan-500, .to-cyan-500, .bg-cyan-600, .from-cyan-600,
+  .via-cyan-600, .to-cyan-600, .bg-cyan-700, .from-cyan-700, .via-cyan-700, .to-cyan-700,
+  .bg-fuchsia-300, .from-fuchsia-300, .via-fuchsia-300, .to-fuchsia-300, .bg-fuchsia-400, .from-fuchsia-400,
+  .via-fuchsia-400, .to-fuchsia-400, .bg-fuchsia-500, .from-fuchsia-500, .via-fuchsia-500, .to-fuchsia-500,
+  .bg-fuchsia-600, .from-fuchsia-600, .via-fuchsia-600, .to-fuchsia-600, .bg-fuchsia-700, .from-fuchsia-700,
+  .via-fuchsia-700, .to-fuchsia-700, .bg-pink-300, .from-pink-300, .via-pink-300, .to-pink-300,
+  .bg-pink-400, .from-pink-400, .via-pink-400, .to-pink-400, .bg-pink-500, .from-pink-500,
+  .via-pink-500, .to-pink-500, .bg-pink-600, .from-pink-600, .via-pink-600, .to-pink-600,
+  .bg-pink-700, .from-pink-700, .via-pink-700, .to-pink-700, .bg-indigo-600\/80, .bg-indigo-600\/90,
+  .bg-indigo-600\/95
+).text-white,
+:is(
+  .bg-indigo-300, .from-indigo-300, .via-indigo-300, .to-indigo-300, .bg-indigo-400, .from-indigo-400,
+  .via-indigo-400, .to-indigo-400, .bg-indigo-500, .from-indigo-500, .via-indigo-500, .to-indigo-500,
+  .bg-indigo-600, .from-indigo-600, .via-indigo-600, .to-indigo-600, .bg-indigo-700, .from-indigo-700,
+  .via-indigo-700, .to-indigo-700, .bg-purple-300, .from-purple-300, .via-purple-300, .to-purple-300,
+  .bg-purple-400, .from-purple-400, .via-purple-400, .to-purple-400, .bg-purple-500, .from-purple-500,
+  .via-purple-500, .to-purple-500, .bg-purple-600, .from-purple-600, .via-purple-600, .to-purple-600,
+  .bg-purple-700, .from-purple-700, .via-purple-700, .to-purple-700, .bg-violet-300, .from-violet-300,
+  .via-violet-300, .to-violet-300, .bg-violet-400, .from-violet-400, .via-violet-400, .to-violet-400,
+  .bg-violet-500, .from-violet-500, .via-violet-500, .to-violet-500, .bg-violet-600, .from-violet-600,
+  .via-violet-600, .to-violet-600, .bg-violet-700, .from-violet-700, .via-violet-700, .to-violet-700,
+  .bg-blue-300, .from-blue-300, .via-blue-300, .to-blue-300, .bg-blue-400, .from-blue-400,
+  .via-blue-400, .to-blue-400, .bg-blue-500, .from-blue-500, .via-blue-500, .to-blue-500,
+  .bg-blue-600, .from-blue-600, .via-blue-600, .to-blue-600, .bg-blue-700, .from-blue-700,
+  .via-blue-700, .to-blue-700, .bg-sky-300, .from-sky-300, .via-sky-300, .to-sky-300,
+  .bg-sky-400, .from-sky-400, .via-sky-400, .to-sky-400, .bg-sky-500, .from-sky-500,
+  .via-sky-500, .to-sky-500, .bg-sky-600, .from-sky-600, .via-sky-600, .to-sky-600,
+  .bg-sky-700, .from-sky-700, .via-sky-700, .to-sky-700, .bg-cyan-300, .from-cyan-300,
+  .via-cyan-300, .to-cyan-300, .bg-cyan-400, .from-cyan-400, .via-cyan-400, .to-cyan-400,
+  .bg-cyan-500, .from-cyan-500, .via-cyan-500, .to-cyan-500, .bg-cyan-600, .from-cyan-600,
+  .via-cyan-600, .to-cyan-600, .bg-cyan-700, .from-cyan-700, .via-cyan-700, .to-cyan-700,
+  .bg-fuchsia-300, .from-fuchsia-300, .via-fuchsia-300, .to-fuchsia-300, .bg-fuchsia-400, .from-fuchsia-400,
+  .via-fuchsia-400, .to-fuchsia-400, .bg-fuchsia-500, .from-fuchsia-500, .via-fuchsia-500, .to-fuchsia-500,
+  .bg-fuchsia-600, .from-fuchsia-600, .via-fuchsia-600, .to-fuchsia-600, .bg-fuchsia-700, .from-fuchsia-700,
+  .via-fuchsia-700, .to-fuchsia-700, .bg-pink-300, .from-pink-300, .via-pink-300, .to-pink-300,
+  .bg-pink-400, .from-pink-400, .via-pink-400, .to-pink-400, .bg-pink-500, .from-pink-500,
+  .via-pink-500, .to-pink-500, .bg-pink-600, .from-pink-600, .via-pink-600, .to-pink-600,
+  .bg-pink-700, .from-pink-700, .via-pink-700, .to-pink-700, .bg-indigo-600\/80, .bg-indigo-600\/90,
+  .bg-indigo-600\/95
+).hover\:text-white:hover,
+:is(
+  .hover\:bg-indigo-300, .hover\:from-indigo-300, .hover\:via-indigo-300, .hover\:to-indigo-300, .hover\:bg-indigo-400, .hover\:from-indigo-400,
+  .hover\:via-indigo-400, .hover\:to-indigo-400, .hover\:bg-indigo-500, .hover\:from-indigo-500, .hover\:via-indigo-500, .hover\:to-indigo-500,
+  .hover\:bg-indigo-600, .hover\:from-indigo-600, .hover\:via-indigo-600, .hover\:to-indigo-600, .hover\:bg-indigo-700, .hover\:from-indigo-700,
+  .hover\:via-indigo-700, .hover\:to-indigo-700, .hover\:bg-purple-300, .hover\:from-purple-300, .hover\:via-purple-300, .hover\:to-purple-300,
+  .hover\:bg-purple-400, .hover\:from-purple-400, .hover\:via-purple-400, .hover\:to-purple-400, .hover\:bg-purple-500, .hover\:from-purple-500,
+  .hover\:via-purple-500, .hover\:to-purple-500, .hover\:bg-purple-600, .hover\:from-purple-600, .hover\:via-purple-600, .hover\:to-purple-600,
+  .hover\:bg-purple-700, .hover\:from-purple-700, .hover\:via-purple-700, .hover\:to-purple-700, .hover\:bg-violet-300, .hover\:from-violet-300,
+  .hover\:via-violet-300, .hover\:to-violet-300, .hover\:bg-violet-400, .hover\:from-violet-400, .hover\:via-violet-400, .hover\:to-violet-400,
+  .hover\:bg-violet-500, .hover\:from-violet-500, .hover\:via-violet-500, .hover\:to-violet-500, .hover\:bg-violet-600, .hover\:from-violet-600,
+  .hover\:via-violet-600, .hover\:to-violet-600, .hover\:bg-violet-700, .hover\:from-violet-700, .hover\:via-violet-700, .hover\:to-violet-700,
+  .hover\:bg-blue-300, .hover\:from-blue-300, .hover\:via-blue-300, .hover\:to-blue-300, .hover\:bg-blue-400, .hover\:from-blue-400,
+  .hover\:via-blue-400, .hover\:to-blue-400, .hover\:bg-blue-500, .hover\:from-blue-500, .hover\:via-blue-500, .hover\:to-blue-500,
+  .hover\:bg-blue-600, .hover\:from-blue-600, .hover\:via-blue-600, .hover\:to-blue-600, .hover\:bg-blue-700, .hover\:from-blue-700,
+  .hover\:via-blue-700, .hover\:to-blue-700, .hover\:bg-sky-300, .hover\:from-sky-300, .hover\:via-sky-300, .hover\:to-sky-300,
+  .hover\:bg-sky-400, .hover\:from-sky-400, .hover\:via-sky-400, .hover\:to-sky-400, .hover\:bg-sky-500, .hover\:from-sky-500,
+  .hover\:via-sky-500, .hover\:to-sky-500, .hover\:bg-sky-600, .hover\:from-sky-600, .hover\:via-sky-600, .hover\:to-sky-600,
+  .hover\:bg-sky-700, .hover\:from-sky-700, .hover\:via-sky-700, .hover\:to-sky-700, .hover\:bg-cyan-300, .hover\:from-cyan-300,
+  .hover\:via-cyan-300, .hover\:to-cyan-300, .hover\:bg-cyan-400, .hover\:from-cyan-400, .hover\:via-cyan-400, .hover\:to-cyan-400,
+  .hover\:bg-cyan-500, .hover\:from-cyan-500, .hover\:via-cyan-500, .hover\:to-cyan-500, .hover\:bg-cyan-600, .hover\:from-cyan-600,
+  .hover\:via-cyan-600, .hover\:to-cyan-600, .hover\:bg-cyan-700, .hover\:from-cyan-700, .hover\:via-cyan-700, .hover\:to-cyan-700,
+  .hover\:bg-fuchsia-300, .hover\:from-fuchsia-300, .hover\:via-fuchsia-300, .hover\:to-fuchsia-300, .hover\:bg-fuchsia-400, .hover\:from-fuchsia-400,
+  .hover\:via-fuchsia-400, .hover\:to-fuchsia-400, .hover\:bg-fuchsia-500, .hover\:from-fuchsia-500, .hover\:via-fuchsia-500, .hover\:to-fuchsia-500,
+  .hover\:bg-fuchsia-600, .hover\:from-fuchsia-600, .hover\:via-fuchsia-600, .hover\:to-fuchsia-600, .hover\:bg-fuchsia-700, .hover\:from-fuchsia-700,
+  .hover\:via-fuchsia-700, .hover\:to-fuchsia-700, .hover\:bg-pink-300, .hover\:from-pink-300, .hover\:via-pink-300, .hover\:to-pink-300,
+  .hover\:bg-pink-400, .hover\:from-pink-400, .hover\:via-pink-400, .hover\:to-pink-400, .hover\:bg-pink-500, .hover\:from-pink-500,
+  .hover\:via-pink-500, .hover\:to-pink-500, .hover\:bg-pink-600, .hover\:from-pink-600, .hover\:via-pink-600, .hover\:to-pink-600,
+  .hover\:bg-pink-700, .hover\:from-pink-700, .hover\:via-pink-700, .hover\:to-pink-700, .hover\:bg-indigo-600\/80
+):hover:is(.text-white, .hover\:text-white) {
+  color: var(--onyx-bg);
+}}
+
+@media (prefers-reduced-motion: reduce) {
+  *:not(.animate-spin):not(.animate-indeterminate),
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+  .onyx-skeleton::after {
+    animation: none;
   }
 }
 
@@ -80,7 +629,7 @@ body::-webkit-scrollbar-track {
 ::-webkit-scrollbar-thumb,
 html::-webkit-scrollbar-thumb,
 body::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgb(232 230 228 / 0.18);
   border-radius: 20px;
   border: 3px solid transparent;
   background-clip: content-box;
@@ -89,7 +638,7 @@ body::-webkit-scrollbar-thumb {
 ::-webkit-scrollbar-thumb:hover,
 html::-webkit-scrollbar-thumb:hover,
 body::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.5);
+  background-color: rgb(232 230 228 / 0.4);
 }
 
 ::-webkit-scrollbar-corner,

@@ -23,21 +23,38 @@ if (process.env.ALLOWED_ORIGINS) {
 const nextConfig: NextConfig = {
   output: 'standalone',
   productionBrowserSourceMaps: false,
-  /* config options here */
+  poweredByHeader: false,
   reactCompiler: true,
   experimental: {
     serverActions: {
       allowedOrigins: Array.from(new Set(allowedOrigins)),
     },
+    // Cache de routeur côté client : revenir sur une page visitée il y a moins de
+    // 30 s est instantané (aucun aller-retour serveur). Les server actions qui
+    // appellent revalidatePath/router.refresh() invalident ce cache.
+    staleTimes: {
+      dynamic: 30,
+      static: 300,
+    },
+    // Imports "à la carte" pour les librairies à barrel files (bundles plus légers)
+    optimizePackageImports: [
+      'framer-motion',
+      '@casl/ability',
+      '@casl/react',
+      '@tanstack/react-query',
+      'react-hot-toast',
+      'clsx',
+      'tailwind-merge',
+    ],
   },
   images: {
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 31536000, // Cache de 1 an pour les images optimisées
+    // image.tmdb.org n'y figure plus : les affiches TMDB sont déjà servies à la
+    // bonne taille et chargées directement par le navigateur. Les faire passer par
+    // l'optimiseur obligeait le serveur à les télécharger, et une coupure réseau
+    // de son côté remontait en erreur non gérée (« fetch failed »).
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'image.tmdb.org',
-      },
       {
         protocol: 'https',
         hostname: 'plex.tv',
@@ -79,7 +96,7 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  serverExternalPackages: ['ws', '@microsoft/signalr'],
+  serverExternalPackages: ['ws'],
 };
 
 export default nextConfig;

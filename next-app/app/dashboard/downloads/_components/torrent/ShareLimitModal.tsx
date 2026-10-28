@@ -38,7 +38,7 @@ export function ShareLimitModal({
 
     return createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-            <div className="bg-[#0A0A0A]/95 backdrop-blur-xl rounded-3xl border border-white/10 w-full max-w-md p-8 shadow-2xl ring-1 ring-white/5 space-y-8 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#080909]/95 backdrop-blur-xl rounded-3xl border border-white/10 w-full max-w-md p-8 shadow-2xl ring-1 ring-white/5 space-y-8 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
                 <div className="text-center space-y-4">
                     <div className="mx-auto w-16 h-16 bg-orange-500/10 rounded-2xl flex items-center justify-center border border-orange-500/20 shadow-lg shadow-orange-500/10 mb-6">
                         <Clock className="w-8 h-8 text-orange-500" />

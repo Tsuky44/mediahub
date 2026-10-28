@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { getEmbyServiceForUser, getPlexServiceForUser, getJellyfinServiceForUser } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
 
@@ -12,7 +11,7 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   if (!session || !session.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

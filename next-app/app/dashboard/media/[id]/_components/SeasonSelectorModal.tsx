@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Check, Loader2 } from 'lucide-react'
+import { X, Check } from 'lucide-react'
 import { requestSelectedSeasons } from '@/app/dashboard/media/[id]/actions'
 import clsx from 'clsx'
+import { OnyxTrack, useOnyxPhase } from '@/components/ui/onyx'
 
 interface Season {
     id: number
@@ -16,7 +17,7 @@ interface Season {
 
 interface SeasonStatus {
     seasonNumber: number
-    status: 'unknown' | 'available' | 'partial' | 'pending' | 'processing'
+    status: 'unknown' | 'available' | 'partial' | 'pending' | 'processing' | 'unreleased'
 }
 
 interface SeasonSelectorModalProps {
@@ -31,14 +32,15 @@ interface SeasonSelectorModalProps {
 
 export function SeasonSelectorModal({ isOpen, onClose, title, tmdbId, seasons, seasonStatuses, onSuccess }: SeasonSelectorModalProps) {
     const [selectedSeasons, setSelectedSeasons] = useState<number[]>([])
-    const [requesting, setRequesting] = useState(false)
+    const { phase, error, run } = useOnyxPhase()
+    const busy = phase === 'sending' || phase === 'done'
 
     if (!isOpen) return null
 
     // Filter out seasons that are already available or pending
     const isSeasonAvailableOrPending = (seasonNumber: number) => {
         const status = seasonStatuses.find(s => s.seasonNumber === seasonNumber)?.status
-        return status === 'available' || status === 'partial' || status === 'processing' || status === 'pending'
+        return status === 'available' || status === 'partial' || status === 'processing' || status === 'pending' || status === 'unreleased'
     }
 
     const availableSeasonsToRequest = seasons.filter(s => s.season_number > 0 && !isSeasonAvailableOrPending(s.season_number))
@@ -60,34 +62,25 @@ export function SeasonSelectorModal({ isOpen, onClose, title, tmdbId, seasons, s
         }
     }
 
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         if (selectedSeasons.length === 0) return
-
-        setRequesting(true)
-        try {
+        run(async () => {
             const result = await requestSelectedSeasons(tmdbId, title, selectedSeasons)
-            
-            if (result.success) {
-                onSuccess()
-                onClose()
-            } else {
-                alert('Certaines demandes ont échoué : ' + (result.message || 'Erreur inconnue'))
-                onSuccess()
-                onClose()
-            }
-        } catch (e) {
-            console.error(e)
-            alert('Erreur lors de la demande')
-        }
-        setRequesting(false)
+            // Échec partiel : les saisons acceptées apparaissent quand même
+            if (!result.success) onSuccess()
+            return { ok: result.success, message: result.message }
+        }, () => {
+            onSuccess()
+            onClose()
+        })
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-gray-900 border border-gray-800 shadow-xl">
-                <div className="flex items-center justify-between border-b border-gray-800 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="onyx-glass-2 w-full max-w-lg overflow-hidden rounded-3xl animate-in fade-in zoom-in-95 slide-in-from-bottom-2">
+                <div className="flex items-center justify-between border-b border-white/10 p-4">
                     <h3 className="text-lg font-semibold text-white">Sélectionner les saisons</h3>
-                    <button onClick={onClose} className="rounded-full p-1 hover:bg-gray-800 text-gray-400 hover:text-white">
+                    <button onClick={onClose} aria-label="Fermer" className="rounded-full p-1 hover:bg-white/10 text-gray-400 hover:text-white">
                         <X className="h-5 w-5" />
                     </button>
                 </div>
@@ -111,20 +104,20 @@ export function SeasonSelectorModal({ isOpen, onClose, title, tmdbId, seasons, s
                                         key={season.id}
                                         onClick={() => toggleSeason(season.season_number)}
                                         className={clsx(
-                                            "flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all",
+                                            "flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-colors duration-200 ease-onyx",
                                             selectedSeasons.includes(season.season_number)
-                                                ? "bg-indigo-900/30 border-indigo-500/50"
-                                                : "bg-gray-800 border-gray-700 hover:border-gray-600"
+                                                ? "bg-white/10 border-white/25"
+                                                : "bg-white/[0.03] border-white/10 hover:border-white/20"
                                         )}
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className={clsx(
-                                                "flex h-5 w-5 items-center justify-center rounded border",
+                                                "flex h-5 w-5 items-center justify-center rounded-md border transition-colors duration-200 ease-onyx",
                                                 selectedSeasons.includes(season.season_number)
-                                                    ? "bg-indigo-600 border-indigo-600"
-                                                    : "border-gray-600 bg-transparent"
+                                                    ? "bg-onyx-ink border-onyx-ink"
+                                                    : "border-white/25 bg-transparent"
                                             )}>
-                                                {selectedSeasons.includes(season.season_number) && <Check className="h-3.5 w-3.5 text-white" />}
+                                                {selectedSeasons.includes(season.season_number) && <Check className="h-3.5 w-3.5 text-onyx-bg animate-pop-in" />}
                                             </div>
                                             <div>
                                                 <span className="font-medium text-white">{season.name}</span>
@@ -138,20 +131,34 @@ export function SeasonSelectorModal({ isOpen, onClose, title, tmdbId, seasons, s
                     )}
                 </div>
 
-                <div className="border-t border-gray-800 p-4 bg-gray-900 flex justify-end gap-3">
+                <div className="border-t border-white/10 p-4 flex flex-wrap items-center justify-end gap-3">
+                    {phase === 'error' && (
+                        <p role="alert" className="mr-auto text-sm leading-snug animate-fade-in">
+                            <span className="font-semibold text-red-300">Demande non envoyée.</span>{' '}
+                            <span className="text-gray-400">{error ? `${error}. ` : ''}Vous pouvez réessayer.</span>
+                        </p>
+                    )}
                     <button 
                         onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 rounded-md transition-colors"
+                        className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-white/10 rounded-full transition-colors"
                     >
                         Annuler
                     </button>
                     <button 
                         onClick={handleSubmit}
-                        disabled={requesting || selectedSeasons.length === 0}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={busy || selectedSeasons.length === 0}
+                        aria-busy={phase === 'sending'}
+                        className={clsx(
+                            "relative overflow-hidden flex min-w-[9.5rem] items-center justify-center gap-2 px-5 py-2 text-sm font-semibold rounded-full border border-white/20 bg-white/15 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.15)] hover:bg-white/20 transition-[background-color,scale] duration-300 ease-onyx disabled:cursor-not-allowed disabled:hover:bg-white/15",
+                            phase === 'idle' && selectedSeasons.length === 0 && "opacity-50"
+                        )}
                     >
-                        {requesting && <Loader2 className="h-4 w-4 animate-spin" />}
-                        {requesting ? 'Envoi...' : 'Demander'}
+                        {phase === 'done' && <span aria-hidden className="absolute inset-0 origin-left bg-onyx-ink animate-onyx-fill" />}
+                        <span aria-live="polite" className={clsx("relative inline-flex items-center gap-2", phase === 'done' && "mix-blend-difference")}>
+                            {phase === 'done' && <Check className="h-4 w-4 animate-pop-in" />}
+                            {phase === 'sending' ? 'Envoi' : phase === 'done' ? 'Demande envoyée' : 'Demander'}
+                        </span>
+                        {phase === 'sending' && <OnyxTrack className="absolute inset-x-5 bottom-1" />}
                     </button>
                 </div>
             </div>

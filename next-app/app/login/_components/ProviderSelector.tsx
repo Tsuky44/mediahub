@@ -20,15 +20,15 @@ interface ProviderSelectorProps {
 /** Grille de selection du provider d'authentification (4 boutons max). */
 export function ProviderSelector({ enabled, current, onChange }: ProviderSelectorProps) {
     return (
-        <div className="grid grid-cols-4 gap-2 mb-8 p-1 bg-black/20 rounded-2xl">
+        <div className="grid grid-cols-4 gap-2 mb-8 p-1 bg-black/25 border border-white/5 rounded-2xl">
             {PROVIDER_OPTIONS.filter(opt => enabled[opt.id]).map(({ id, label, Icon }) => (
                 <button
                     key={id}
                     type="button"
                     onClick={() => onChange(id)}
                     className={clsx(
-                        'flex flex-col items-center justify-center p-3 rounded-xl transition-all duration-300',
-                        getProviderColor(id, current === id),
+                        'flex flex-col items-center justify-center p-3 rounded-xl transition-colors duration-300 ease-onyx',
+                        getProviderColor(current === id),
                     )}
                 >
                     <Icon className="w-6 h-6 mb-1" />

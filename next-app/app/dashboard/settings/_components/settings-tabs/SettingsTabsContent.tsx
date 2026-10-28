@@ -11,7 +11,6 @@ import AccountRequestsManagement from '../AccountRequestsManagement'
 import ActivityLogs from '../ActivityLogs'
 // import ExternalNotifications from '../ExternalNotifications' // V1 notifications supprimées
 import NotificationsV2Settings from '../NotificationsV2'
-import { TrackerStatsManagement } from '../TrackerStatsManagement'
 import SupportManagement from '../support/SupportManagement'
 
 import type {
@@ -70,7 +69,6 @@ export default function SettingsTabsContent({
             {activeTab === 'logs' && permissions.logs && <ActivityLogs />}
             {/* {activeTab === 'notifications' && permissions.notifications && <ExternalNotifications />} // V1 notifications supprimées */}
             {activeTab === 'notifications-v2' && permissions.notifications && <NotificationsV2Settings />}
-            {activeTab === 'trackers' && permissions.trackers && <TrackerStatsManagement />}
             {activeTab === 'support' && permissions.support && <SupportManagement />}
         </div>
     )

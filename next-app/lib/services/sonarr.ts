@@ -9,8 +9,15 @@ export async function getSonarrService() {
   const apiKey = await getSetting('sonarr_api_key')
   
   if (!url || !apiKey) return null
-  return new SonarrService(url, apiKey)
+  // Instance réutilisée tant que la config ne change pas (client HTTP keep-alive conservé)
+  const configKey = `${url}|${apiKey}`
+  if (cachedSonarrService?.configKey !== configKey) {
+    cachedSonarrService = { configKey, service: new SonarrService(url, apiKey) }
+  }
+  return cachedSonarrService.service
 }
+
+let cachedSonarrService: { configKey: string; service: SonarrService } | null = null
 
 export interface SonarrEpisodeFile {
   id: number;

@@ -1,193 +1,109 @@
-import { getMediaServerServiceForUser, getMediaServerUserId } from '@/lib/auth'
+import 'server-only'
 import { db } from '@/lib/db/drizzle'
-import { users, settings, mediaRequests } from '@/lib/db/schema'
-import { eq, inArray, desc } from 'drizzle-orm'
+import { users, mediaRequests } from '@/lib/db/schema'
+import { eq, desc } from 'drizzle-orm'
 import { getTmdbService } from '@/lib/services/tmdb'
-import { getSetting } from '@/lib/settings'
 import { fetchRecentlyWatchedItems, fetchUserRecommendations } from '../media/actions'
-import { getTorrents } from '../downloads/actions'
-import { AppAbility } from '@/lib/ability'
-import { Session } from 'next-auth'
-import type { Torrent } from '@/lib/services/qbittorrent'
 import type { RecentlyWatchedItem } from '../media/RecentlyWatched'
 import type { RecommendationItem } from '../media/Recommendations'
 import type { MediaRequest } from '../_components/recent-requests/useRecentRequests'
+import { getReleaseWait } from '@/lib/services/media-status'
 
-export interface DashboardData {
-  sessions: unknown[]
-  recentRequests: MediaRequest[]
-  recentlyWatched: RecentlyWatchedItem[]
-  recommendations: RecommendationItem[]
-  activeTorrents: Torrent[]
-  mediaServerUrl: string | null | undefined
-  hasDownloads: boolean
-  hasDocker: boolean
-  showWelcome: boolean
-  userRole: string
-  isAdminOrUserPlus: boolean
+// Chargeurs indépendants du dashboard : chaque section est streamée séparément
+// (Suspense) pour qu'un service lent (Emby, TMDB…) ne bloque pas toute la page.
+
+export async function loadShowWelcome(userId: number, welcomeEnabled: boolean): Promise<boolean> {
+  if (!welcomeEnabled) return false
+  if (isNaN(userId)) return true
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { hasSeenWelcome: true },
+  })
+  return dbUser ? !dbUser.hasSeenWelcome : true
 }
 
-export async function fetchDashboardData(
-  user: Session['user'] | undefined,
-  ability: AppAbility
-): Promise<DashboardData> {
-  const userRole = user?.role || 'user'
-  const isAdminOrUserPlus = userRole === 'admin' || userRole === 'user_plus'
-  const userId = user?.id ? parseInt(user.id) : NaN
-
-  const mediaService = await getMediaServerServiceForUser()
-
-  const dbUser =
-    !isNaN(userId)
-      ? await db.query.users.findFirst({
-          where: eq(users.id, userId),
-        })
-      : null
-
-  const settingsList = await db.query.settings.findMany({
-    where: inArray(settings.key, [
-      'emby_url',
-      'jellyfin_url',
-      'qbittorrent_url',
-      'smb_host',
-      'docker_host',
-      'unraid_url',
-      'welcome_message_enabled',
-    ]),
-    columns: { key: true, value: true },
-  })
-
-  const welcomeEnabled = settingsList.find(s => s.key === 'welcome_message_enabled')
-    ? settingsList.find(s => s.key === 'welcome_message_enabled')?.value === 'true'
-    : true
-
-  const showWelcome = welcomeEnabled && (dbUser ? !dbUser.hasSeenWelcome : true)
-
-  const mediaServerUrl = settingsList.find(s => s.key === 'emby_url')?.value || settingsList.find(s => s.key === 'jellyfin_url')?.value
-  const hasQbit = !!settingsList.find(s => s.key === 'qbittorrent_url' && s.value)
-  const hasSmb = !!settingsList.find(s => s.key === 'smb_host' && s.value)
-  const hasDownloads = hasQbit || hasSmb
-  const hasDocker =
-    !!settingsList.find(s => s.key === 'docker_host' && s.value) ||
-    !!settingsList.find(s => s.key === 'unraid_url' && s.value)
-
-  let sessions: unknown[] = []
-  let recentRequests: MediaRequest[] = []
-  let recentlyWatched: RecentlyWatchedItem[] = []
-  let recommendations: RecommendationItem[] = []
-  let activeTorrents: Torrent[] = []
-
-  const [sessionsRes, requestsRes, watchedRes, recsRes, torrentsRes] = await Promise.allSettled([
-    mediaService ? mediaService.getSessions() : Promise.resolve([]),
-    ability.can('read', 'MediaRequest')
-      ? db.query.mediaRequests.findMany({
-          orderBy: [desc(mediaRequests.requestedAt)],
-          limit: 20,
-        })
-      : Promise.resolve([]),
-    fetchRecentlyWatchedItems(),
-    fetchUserRecommendations(),
-    ability.can('read', 'Downloads') ? getTorrents('all') : Promise.resolve([]),
+export async function loadRecentRequests(): Promise<MediaRequest[]> {
+  const [requests, tmdbService] = await Promise.all([
+    db.query.mediaRequests.findMany({
+      orderBy: [desc(mediaRequests.requestedAt)],
+      limit: 20,
+    }),
+    getTmdbService(),
   ])
 
-  if (sessionsRes.status === 'fulfilled') {
-    sessions = Array.isArray(sessionsRes.value) ? sessionsRes.value : []
-  }
+  return Promise.all(
+    requests.map(async (req) => {
+      let metadata: Record<string, unknown> = {}
+      try {
+        metadata = req.metadata ? JSON.parse(req.metadata as string) : {}
+      } catch {}
 
-  if (torrentsRes.status === 'fulfilled') {
-    activeTorrents = Array.isArray(torrentsRes.value) ? torrentsRes.value : []
-  }
-
-  if (requestsRes.status === 'fulfilled') {
-    const tmdbService = await getTmdbService()
-    recentRequests = await Promise.all(
-      requestsRes.value.map(async (req) => {
-        let metadata: Record<string, unknown> = {}
-        try {
-          metadata = req.metadata ? JSON.parse(req.metadata as string) : {}
-        } catch {}
-
-        let posterPath = (metadata as { posterPath?: string }).posterPath
-        if (
-          (!posterPath || posterPath.includes('MediaCover')) &&
-          req.tmdbId &&
-          tmdbService
-        ) {
-          try {
-            const tmdbIdNum = parseInt(String(req.tmdbId))
-            if (!isNaN(tmdbIdNum)) {
-              const details = await tmdbService.getDetails(tmdbIdNum, req.mediaType as 'movie' | 'tv')
-              if (details && details.poster_path) {
-                posterPath = details.poster_path
-              }
-            }
-          } catch {
-            // ignore
-          }
+      let posterPath = (metadata as { posterPath?: string }).posterPath
+      if ((!posterPath || posterPath.includes('MediaCover')) && req.tmdbId && tmdbService) {
+        const tmdbIdNum = parseInt(String(req.tmdbId))
+        if (!isNaN(tmdbIdNum)) {
+          // getPosterPath est mis en cache (24h) : bien plus léger que getDetails
+          posterPath = (await tmdbService.getPosterPath(tmdbIdNum, req.mediaType as 'movie' | 'tv')) || posterPath
         }
+      }
 
-        return {
-          id: String(req.id || ''),
-          type: req.mediaType,
-          status: req.status,
-          media: {
-            title: req.title,
-            posterPath: posterPath,
-            tmdbId: req.tmdbId,
-            seasons: (metadata as { seasons?: number[] }).seasons ?? undefined,
-          },
-          requestedBy: {
-            displayName: req.requesterName || 'Inconnu',
-            email: req.requesterEmail || '',
-          },
-        }
-      })
-    )
-  }
+      // Pas encore disponible : le média est-il simplement en attente de sa sortie ?
+      const tmdbIdNum = parseInt(String(req.tmdbId))
+      const releaseWait = req.status < 4 && !isNaN(tmdbIdNum) && (req.mediaType === 'movie' || req.mediaType === 'tv')
+        ? await getReleaseWait(tmdbIdNum, req.mediaType)
+        : { awaitingRelease: false }
 
-  if (watchedRes.status === 'fulfilled') {
-    recentlyWatched = watchedRes.value.map((item: any) => ({
-      id: String(item.id || ''),
-      tmdbId: item.tmdbId,
-      title: item.title || item.name || '',
-      name: item.name || item.title || '',
-      seriesName: item.seriesName,
-      poster_path: item.poster_path,
-      media_type: item.media_type || item.type || '',
-      type: item.type || item.media_type || '',
-      overview: item.overview || '',
-      lastPlayedDate: item.lastPlayedDate || null,
-      parentIndexNumber: item.parentIndexNumber,
-      indexNumber: item.indexNumber,
-    }))
-  }
-  if (recsRes.status === 'fulfilled') {
-    const recsData = Array.isArray(recsRes.value)
-      ? recsRes.value
-      : (recsRes.value as { results?: any[] }).results || []
-    recommendations = recsData.map((item: any) => ({
-      id: Number(item.id || 0),
-      title: item.title,
-      name: item.name,
-      poster_path: item.poster_path,
-      media_type: item.media_type || '',
-      vote_average: Number(item.vote_average || 0),
-      release_date: item.release_date,
-      first_air_date: item.first_air_date,
-    }))
-  }
+      return {
+        id: String(req.id || ''),
+        type: req.mediaType,
+        status: req.status,
+        ...releaseWait,
+        media: {
+          title: req.title,
+          posterPath: posterPath,
+          tmdbId: req.tmdbId,
+          seasons: (metadata as { seasons?: number[] }).seasons ?? undefined,
+        },
+        requestedBy: {
+          displayName: req.requesterName || 'Inconnu',
+          email: req.requesterEmail || '',
+        },
+      }
+    })
+  )
+}
 
-  return {
-    sessions,
-    recentRequests,
-    recentlyWatched,
-    recommendations,
-    activeTorrents,
-    mediaServerUrl,
-    hasDownloads,
-    hasDocker,
-    showWelcome,
-    userRole,
-    isAdminOrUserPlus,
-  }
+export async function loadRecentlyWatched(): Promise<RecentlyWatchedItem[]> {
+  const items = await fetchRecentlyWatchedItems()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return items.map((item: any) => ({
+    id: String(item.id || ''),
+    tmdbId: item.tmdbId,
+    title: item.title || item.name || '',
+    name: item.name || item.title || '',
+    seriesName: item.seriesName,
+    poster_path: item.poster_path,
+    media_type: item.media_type || item.type || '',
+    type: item.type || item.media_type || '',
+    overview: item.overview || '',
+    lastPlayedDate: item.lastPlayedDate || null,
+    parentIndexNumber: item.parentIndexNumber,
+    indexNumber: item.indexNumber,
+  }))
+}
+
+export async function loadRecommendations(): Promise<RecommendationItem[]> {
+  const recs = await fetchUserRecommendations()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recsData: any[] = Array.isArray(recs) ? recs : recs.results || []
+  return recsData.map((item) => ({
+    id: Number(item.id || 0),
+    title: item.title,
+    name: item.name,
+    poster_path: item.poster_path,
+    media_type: item.media_type || '',
+    vote_average: Number(item.vote_average || 0),
+    release_date: item.release_date,
+    first_air_date: item.first_air_date,
+  }))
 }

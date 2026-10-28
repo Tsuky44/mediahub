@@ -1,23 +1,29 @@
 import { AlertCircle, Settings } from 'lucide-react'
 import Link from 'next/link'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { Suspense } from 'react'
+import { getCurrentUser } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 
-import { RecentlyWatched } from './media/RecentlyWatched'
-import { Recommendations } from './media/Recommendations'
-import { RecentRequests } from './_components/RecentRequests'
 import { QuickActions } from './_components/QuickActions'
 import { WelcomePopup } from './_components/WelcomePopup'
 import { ReleaseCalendar } from '@/components/global/ReleaseCalendar'
+import {
+  RecentlyWatchedSection,
+  RecommendationsSection,
+  RecentRequestsSection,
+  RecentlyWatchedSkeleton,
+  RecommendationsSkeleton,
+  RecentRequestsSkeleton,
+} from './_components/DashboardSections'
 
-import { fetchDashboardData } from './_services/fetch-dashboard-data'
+import { getDashboardConfig } from './_services/dashboard-config'
+import { loadShowWelcome } from './_services/fetch-dashboard-data'
+import { getTorrents } from './downloads/actions'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions)
-  const user = session?.user
+  const user = await getCurrentUser()
   const ability = defineAbilityFor(user)
 
   if (!user?.id) {
@@ -29,10 +35,20 @@ export default async function DashboardPage() {
     )
   }
 
-  const data = await fetchDashboardData(user, ability)
+  const userRole = user.role || 'user'
+  const isAdminOrUserPlus = userRole === 'admin' || userRole === 'user_plus'
+  const canReadRequests = ability.can('read', 'MediaRequest')
 
-  if (!data.mediaServerUrl) {
-    const isBaseAdmin = data.userRole === 'admin'
+  // Données rapides (SQLite + cache mémoire qBittorrent) uniquement : les sections
+  // dépendant d'Emby/TMDB sont streamées plus bas via <Suspense>.
+  const [config, activeTorrents] = await Promise.all([
+    getDashboardConfig(),
+    ability.can('read', 'Downloads') ? getTorrents('all') : Promise.resolve([]),
+  ])
+  const showWelcome = await loadShowWelcome(parseInt(user.id), config.welcomeEnabled)
+
+  if (!config.mediaServerUrl) {
+    const isBaseAdmin = userRole === 'admin'
     if (isBaseAdmin) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-gray-900/50 rounded-2xl border border-gray-800">
@@ -57,26 +73,32 @@ export default async function DashboardPage() {
 
   return (
     <div className="w-full px-2 md:px-4 mx-auto min-h-screen flex flex-col space-y-6 pb-8">
-      <WelcomePopup show={data.showWelcome} userRole={data.userRole} />
+      <WelcomePopup show={showWelcome} userRole={userRole} />
       <div className="flex-shrink-0">
         <QuickActions
-          initialTorrents={data.activeTorrents}
+          initialTorrents={activeTorrents}
           userName={user?.name || ''}
-          isAdmin={data.isAdminOrUserPlus}
-          configStatus={{ hasDownloads: data.hasDownloads, hasDocker: data.hasDocker }}
+          isAdmin={isAdminOrUserPlus}
+          configStatus={{ hasDownloads: config.hasDownloads }}
         />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
-        <div className={`space-y-8 ${ability.can('read', 'MediaRequest') ? 'xl:col-span-2' : 'xl:col-span-3'}`}>
+        <div className={`space-y-8 ${canReadRequests ? 'xl:col-span-2' : 'xl:col-span-3'}`}>
           <ReleaseCalendar />
-          <RecentlyWatched items={data.recentlyWatched} />
-          <Recommendations items={data.recommendations} />
+          <Suspense fallback={<RecentlyWatchedSkeleton />}>
+            <RecentlyWatchedSection />
+          </Suspense>
+          <Suspense fallback={<RecommendationsSkeleton />}>
+            <RecommendationsSection />
+          </Suspense>
         </div>
 
-        {ability.can('read', 'MediaRequest') && (
+        {canReadRequests && (
           <div className="xl:sticky xl:top-8 h-[calc(100vh-160px)] overflow-hidden">
-            <RecentRequests requests={data.recentRequests} />
+            <Suspense fallback={<RecentRequestsSkeleton />}>
+              <RecentRequestsSection />
+            </Suspense>
           </div>
         )}
       </div>

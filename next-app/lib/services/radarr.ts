@@ -16,8 +16,15 @@ export async function getRadarrService() {
   const apiKey = await getSetting('radarr_api_key')
   
   if (!url || !apiKey) return null
-  return new RadarrService(url, apiKey)
+  // Instance réutilisée tant que la config ne change pas (client HTTP keep-alive conservé)
+  const configKey = `${url}|${apiKey}`
+  if (cachedRadarrService?.configKey !== configKey) {
+    cachedRadarrService = { configKey, service: new RadarrService(url, apiKey) }
+  }
+  return cachedRadarrService.service
 }
+
+let cachedRadarrService: { configKey: string; service: RadarrService } | null = null
 
 export interface RadarrMovieFile {
   id: number;
@@ -225,7 +232,28 @@ export class RadarrService {
     }
   }
 
+  /**
+   * Film de la BIBLIOTHÈQUE Radarr (ou null s'il n'y est pas).
+   * `GET /movie?tmdbId=` lit la base locale de Radarr : quelques ms, contre
+   * plusieurs centaines pour `/movie/lookup` qui interroge le serveur de
+   * métadonnées distant. Lève une erreur si Radarr ne répond pas.
+   */
+  async getLibraryMovieByTmdbId(tmdbId: number): Promise<RadarrMovie | null> {
+    const response = await this.getClient().get('/movie', { params: { tmdbId } })
+    const movies: RadarrMovie[] = Array.isArray(response.data) ? response.data : []
+    // Filtre local : reste correct même si une version de Radarr ignorait le paramètre
+    return movies.find((m) => m.tmdbId === tmdbId) ?? null
+  }
+
   async getMovieByTmdbId(tmdbId: number): Promise<RadarrMovie | null> {
+    // Déjà dans la bibliothèque : réponse locale immédiate (même objet que /movie/{id})
+    try {
+      const libraryMovie = await this.getLibraryMovieByTmdbId(tmdbId)
+      if (libraryMovie) return libraryMovie
+    } catch (e) {
+      logger.warn(`[Radarr] Library check failed for ${tmdbId}, falling back to lookup:`, (e as AppError).message)
+    }
+
     const client = this.getClient()
     try {
       const response = await client.get('/movie/lookup', {

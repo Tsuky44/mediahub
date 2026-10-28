@@ -1,4 +1,5 @@
 import React from 'react'
+import { CountUp } from '@/components/ui/count-up'
 
 interface StatCardProps {
     title: string
@@ -19,7 +20,7 @@ export function StatCard({ title, value, subValue, icon }: StatCardProps) {
                 </div>
             </div>
             <div className="text-3xl font-black text-white tracking-tight mb-1 relative z-10 group-hover:text-indigo-100 transition-colors">
-                {value}
+                <CountUp value={value} />
             </div>
             <p className="text-xs font-medium text-gray-500 relative z-10">{subValue}</p>
         </div>

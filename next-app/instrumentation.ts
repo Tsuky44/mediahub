@@ -9,9 +9,6 @@ export async function register() {
     const { startStatsScheduler } = await import('@/lib/services/stats-scheduler');
     startStatsScheduler();
 
-    const { startTrackerRefreshScheduler } = await import('@/lib/services/tracker-refresh-scheduler');
-    startTrackerRefreshScheduler();
-
     const { startNotificationsV2 } = await import('@/lib/notifications-v2');
     startNotificationsV2();
 

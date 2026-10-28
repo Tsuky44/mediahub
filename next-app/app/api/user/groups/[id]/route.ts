@@ -1,8 +1,7 @@
 import { db } from '@/lib/db/drizzle'
 import { userGroups, userGroupMembers } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 import { logAction } from '@/lib/audit'
 
@@ -15,7 +14,7 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session) {
         return new NextResponse('Unauthorized', { status: 401 })
     }

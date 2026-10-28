@@ -30,7 +30,7 @@ export function DashboardSearchBar({
       <div className="text-center mb-8">
         <h1 className="text-4xl font-extrabold text-white mb-2 tracking-tight">
           {userName ? `Bonjour ${userName}, que` : 'Que'} voulez-vous{' '}
-          <span className="text-blue-500">regarder</span> ?
+          <span className="onyx-shine-text">regarder</span> ?
         </h1>
         <p className="text-gray-400">
           Recherchez parmi des milliers de films et séries à ajouter.
@@ -71,8 +71,8 @@ export function DashboardSearchBar({
         </div>
 
         {showResults && searchResults.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl overflow-hidden z-50 backdrop-blur-xl bg-opacity-95">
-            <div className="max-h-[400px] overflow-y-auto py-2">
+          <div className="animate-pop-in origin-top absolute top-full left-0 right-0 mt-2 bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl overflow-hidden z-50 backdrop-blur-xl bg-opacity-95">
+            <div className="onyx-stagger max-h-[400px] overflow-y-auto py-2">
               {searchResults.map((result) => (
                 <Link
                   key={`${result.type}-${result.id}`}
@@ -82,6 +82,8 @@ export function DashboardSearchBar({
                   <div className="w-10 h-14 bg-gray-800 rounded flex-shrink-0 overflow-hidden">
                     {result.poster ? (
                       <img
+                        loading="lazy"
+                        decoding="async"
                         src={result.poster}
                         alt={result.title}
                         className="w-full h-full object-cover"

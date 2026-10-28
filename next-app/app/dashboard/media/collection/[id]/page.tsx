@@ -35,7 +35,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
     : null
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white">
+    <div className="min-h-screen bg-[#0c0d0d] text-white">
       {/* Backdrop Section */}
       <div className="relative h-[40vh] w-full overflow-hidden">
         {backdropUrl && (
@@ -45,7 +45,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
               alt={collection.name} 
               className="h-full w-full object-cover opacity-40"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] to-transparent"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d0d] to-transparent"></div>
           </>
         )}
         <div className="absolute bottom-0 left-0 p-8 md:p-12 w-full max-w-[1600px] mx-auto right-0">
@@ -58,7 +58,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
 
       {/* Movies Grid */}
       <div className="max-w-[1600px] mx-auto px-8 py-12">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+        <div className="onyx-stagger grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
           {collection.parts.map((movie: any) => (
             <MediaCard 
               key={movie.id} 

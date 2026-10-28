@@ -35,6 +35,8 @@ export function RequestPoster({ src, alt, fallbackSrc, placeholder }: RequestPos
 
   return (
     <img
+      loading="lazy"
+      decoding="async"
       src={imgSrc}
       alt={alt}
       onError={handleError}

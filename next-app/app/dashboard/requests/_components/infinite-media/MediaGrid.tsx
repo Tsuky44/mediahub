@@ -3,6 +3,18 @@
 import { Loader2 } from 'lucide-react'
 import { MediaCard } from '@/components/global/MediaCard'
 
+// Objet dérivé stable par item (même référence d'un rendu à l'autre) pour que les
+// cartes mémoïsées déjà affichées ne soient pas recalculées à chaque ajout de page
+const withMediaTypeCache = new WeakMap<object, { initialType: string; value: any }>()
+function withMediaType(item: any, initialType: string) {
+  if (item.media_type) return item
+  const cached = withMediaTypeCache.get(item)
+  if (cached && cached.initialType === initialType) return cached.value
+  const value = { ...item, media_type: initialType === 'movie' ? 'movie' : initialType === 'tv' ? 'tv' : undefined }
+  withMediaTypeCache.set(item, { initialType, value })
+  return value
+}
+
 interface MediaGridProps {
   items: any[]
   loading: boolean
@@ -13,15 +25,9 @@ interface MediaGridProps {
 
 export function MediaGrid({ items, loading, hasMore, initialType, triggerRef }: MediaGridProps) {
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+    <div className="onyx-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {items.map(item => (
-        <MediaCard
-          key={item.id}
-          item={{
-            ...item,
-            media_type: item.media_type || (initialType === 'movie' ? 'movie' : initialType === 'tv' ? 'tv' : undefined),
-          }}
-        />
+        <MediaCard key={item.id} item={withMediaType(item, initialType)} />
       ))}
     </div>
   )

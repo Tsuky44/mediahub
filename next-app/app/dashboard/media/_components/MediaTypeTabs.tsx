@@ -24,7 +24,7 @@ export function MediaTypeTabs({ currentType, query, isFavoritesOnly, isWatchLate
             href={buildHref(tab.key)}
             className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 ${
               currentType === tab.key
-                ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.3)] scale-105'
+                ? 'bg-indigo-600 text-white shadow-[0_0_20px_rgba(232,230,228,0.12)] scale-105'
                 : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
             }`}
           >

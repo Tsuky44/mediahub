@@ -32,13 +32,13 @@ export function PlayButton({ embyUrl, embyItemId, serverId }: PlayButtonProps) {
     }
 
     return (
-        <div className="flex flex-col items-start gap-2">
+        <div className="flex flex-col items-stretch sm:items-start gap-2">
             <button
                 onClick={handlePlay}
-                className="flex items-center gap-2 rounded-full bg-indigo-600/90 px-6 py-3 text-sm font-semibold text-white shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all hover:bg-indigo-500 hover:scale-105 hover:shadow-[0_0_25px_rgba(79,70,229,0.6)] backdrop-blur-sm"
+                className="flex items-center justify-center gap-2 rounded-full bg-indigo-600/90 px-5 py-2.5 sm:px-6 sm:py-3 text-sm font-semibold text-white shadow-[0_0_15px_rgba(232,230,228,0.16)] transition-all hover:bg-indigo-500 hover:scale-105 hover:shadow-[0_0_25px_rgba(232,230,228,0.24)] backdrop-blur-sm"
             >
                 <Play className="h-4 w-4 fill-current" />
-                <span>{`Lire sur ${serverName}`}</span>
+                <span>Lire<span className="hidden sm:inline">{` sur ${serverName}`}</span></span>
             </button>
             
             {showWebOption && (

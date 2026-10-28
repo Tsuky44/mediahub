@@ -8,7 +8,6 @@ import {
     UserPlus,
     Activity,
     BellRing,
-    BarChart3,
     Tv,
     Download,
     Bot,
@@ -35,7 +34,7 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     },
     {
         title: 'Monitoring & Outils',
-        tabs: ['messages', 'trackers', 'logs', 'support'],
+        tabs: ['messages', 'logs', 'support'],
     },
 ] as const
 
@@ -48,7 +47,7 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     { id: 'media', label: 'Média & Intégrations', icon: Tv, permissionKey: 'media' },
     { id: 'downloads', label: 'Téléchargements', icon: Download, permissionKey: 'downloads' },
     { id: 'automation', label: 'Automatisation', icon: Bot, permissionKey: 'automation' },
-    { id: 'storage', label: 'Stockage & Docker', icon: HardDrive, permissionKey: 'storage' },
+    { id: 'storage', label: 'Stockage', icon: HardDrive, permissionKey: 'storage' },
     { id: 'backup', label: 'Sauvegarde', icon: Database, permissionKey: 'backup' },
     { id: 'maintenance', label: 'Maintenance', icon: Wrench, permissionKey: 'maintenance' },
     { id: 'notifications-v2', label: 'Notifications', icon: BellRing, permissionKey: 'notifications' },
@@ -58,7 +57,6 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     { id: 'requests', label: 'Demandes', icon: UserPlus, permissionKey: 'requests' },
     { id: 'linking', label: 'Lier', icon: LinkIcon, permissionKey: 'linking' },
     { id: 'messages', label: 'Messages Système', icon: MessageSquare, permissionKey: 'messages' },
-    { id: 'trackers', label: 'Trackers', icon: BarChart3, permissionKey: 'trackers' },
     { id: 'logs', label: 'Activité', icon: Activity, permissionKey: 'logs' },
     { id: 'support', label: 'Support & Tickets', icon: LifeBuoy, permissionKey: 'support' },
 ] as const

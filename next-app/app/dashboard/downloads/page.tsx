@@ -1,5 +1,4 @@
-import { getServerSession } from 'next-auth'
-import { authOptions, getSmbServiceForUser, getProwlarrServiceForUser } from '@/lib/auth'
+import { getSession, getSmbServiceForUser, getProwlarrServiceForUser } from '@/lib/auth'
 import { getQBittorrentService } from '@/lib/services/qbittorrent'
 import { AlertCircle, Settings } from 'lucide-react'
 import Link from 'next/link'
@@ -13,7 +12,7 @@ const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
 
 export default async function DownloadsPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const user = session?.user
   const ability = defineAbilityFor(user)
 
@@ -51,9 +50,11 @@ export default async function DownloadsPage() {
     hasProwlarr: typeof getProwlarrServiceForUser
   })
 
-  const qbtService = await getQBittorrentService()
-  const smbService = await getSmbServiceForUser()
-  const prowlarrService = typeof getProwlarrServiceForUser === 'function' ? await getProwlarrServiceForUser() : null
+  const [qbtService, smbService, prowlarrService] = await Promise.all([
+    getQBittorrentService(),
+    getSmbServiceForUser(),
+    typeof getProwlarrServiceForUser === 'function' ? getProwlarrServiceForUser() : null,
+  ])
 
   if (!qbtService && !smbService && !prowlarrService) {
     return (

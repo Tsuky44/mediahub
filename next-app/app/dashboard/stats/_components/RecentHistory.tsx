@@ -24,7 +24,7 @@ export function RecentHistory({ initialHistory }: RecentHistoryProps) {
     )
 
     return (
-        <div className="rounded-3xl bg-black/20 backdrop-blur-md p-6 shadow-2xl border border-white/5 ring-1 ring-white/5 transition-all duration-300 hover:bg-white/[0.03] hover:border-indigo-500/20 hover:shadow-indigo-500/10">
+        <div className="onyx-reveal rounded-3xl bg-black/20 backdrop-blur-md p-6 shadow-2xl border border-white/5 ring-1 ring-white/5 transition-all duration-300 hover:bg-white/[0.03] hover:border-indigo-500/20 hover:shadow-indigo-500/10">
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-500/10 rounded-xl">
@@ -33,7 +33,7 @@ export function RecentHistory({ initialHistory }: RecentHistoryProps) {
                     <h3 className="text-lg font-bold text-white tracking-wide">Historique Récent</h3>
                 </div>
                 {isConnected && (
-                    <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                    <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20 shadow-[0_0_10px_rgba(119,153,109,0.2)]">
                         <span className="relative flex h-2 w-2">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>

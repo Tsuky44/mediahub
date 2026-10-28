@@ -1,9 +1,8 @@
 import { db } from '@/lib/db/drizzle'
-import { users, roles, userGroups, accountRequests, settings } from '@/lib/db/schema'
+import { settings } from '@/lib/db/schema'
 import { sql } from 'drizzle-orm'
 import { getRealUser } from '@/lib/auth'
 import SettingsTabs from './_components/SettingsTabs'
-import { getSetting } from '@/lib/settings'
 import { AbilityProvider } from '@/components/providers/AbilityProvider'
 
 export const dynamic = 'force-dynamic'
@@ -34,40 +33,33 @@ export default async function SettingsPage() {
         )
     }
 
-    // Fetch users from DB for role management
-    const dbUsers = await db.query.users.findMany({
-      orderBy: sql`name ASC`,
-      with: { roleRef: true }
-    })
-
-    // Fetch roles
-    const rolesList = await db.query.roles.findMany({
-      orderBy: sql`name ASC`
-    })
-
-    // Fetch user groups
-    const userGroupsList = await db.query.userGroups.findMany({
-      with: {
-        role: true,
-        members: {
-          with: {
-            user: true
+    // Lectures SQLite indépendantes (users/rôles, groupes, demandes de compte, settings)
+    const [dbUsers, rolesList, userGroupsList, accountRequestsList, settingsList] = await Promise.all([
+      db.query.users.findMany({
+        orderBy: sql`name ASC`,
+        with: { roleRef: true }
+      }),
+      db.query.roles.findMany({
+        orderBy: sql`name ASC`
+      }),
+      db.query.userGroups.findMany({
+        with: {
+          role: true,
+          members: {
+            with: {
+              user: true
+            }
           }
-        }
-      },
-      orderBy: sql`created_at DESC`
-    })
+        },
+        orderBy: sql`created_at DESC`
+      }),
+      db.query.accountRequests.findMany({
+        orderBy: sql`created_at DESC`
+      }),
+      db.select({ key: settings.key, value: settings.value }).from(settings),
+    ])
+    const settingsMap = Object.fromEntries(settingsList.map((s) => [s.key, s.value]))
 
-    // Fetch account requests
-    const accountRequestsList = await db.query.accountRequests.findMany({
-      orderBy: sql`created_at DESC`
-    })
-
-    // Fetch all settings
-    const settingsList = await db.select({ key: settings.key, value: settings.value }).from(settings)
-    
-    const settingsMap = settingsList.reduce((acc: any, curr: any) => ({ ...acc, [curr.key]: curr.value }), {})
-    
     return (
       <AbilityProvider user={user}>
         <SettingsTabs 

@@ -1,27 +1,35 @@
 import Image from 'next/image'
 import Link from 'next/link'
 
+const WORDMARK = 'MEDIAHUB'.split('')
+
 export function NavbarLogo() {
   return (
     <Link
       href="/dashboard"
-      className="flex-shrink-0 flex items-center gap-3 group transition-all duration-300 relative"
+      className="flex-shrink-0 flex items-center gap-3 group relative"
     >
-      <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      <div className="relative w-9 h-9 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
+      <div className="relative w-9 h-9 transition-[scale,rotate] duration-500 ease-spring group-hover:scale-110 group-hover:rotate-[-8deg]">
+        {/* Monochrome comme l'app : le logo ne prend sa couleur qu'au survol */}
         <Image
           src="/logo.png"
           alt="Logo"
           width={36}
           height={36}
-          className="object-contain drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]"
+          className="object-contain grayscale brightness-200 contrast-125 transition-[filter] duration-500 ease-onyx group-hover:grayscale-0 group-hover:brightness-100"
         />
       </div>
-      <div className="flex flex-col leading-none relative">
-        <span className="text-lg font-black tracking-tight text-white group-hover:text-indigo-400 transition-colors drop-shadow-md">
-          MEDIA<span className="text-indigo-500">HUB</span>
-        </span>
-      </div>
+      <span aria-label="MediaHub" className="onyx-letters relative text-[15px] font-bold uppercase tracking-[0.22em] text-white">
+        {WORDMARK.map((letter, i) => (
+          <span
+            key={i}
+            aria-hidden
+            className={i >= 5 ? 'text-gray-500 transition-colors duration-300 group-hover:text-gray-200' : undefined}
+          >
+            {letter}
+          </span>
+        ))}
+      </span>
     </Link>
   )
 }

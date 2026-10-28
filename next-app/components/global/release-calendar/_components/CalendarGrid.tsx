@@ -28,13 +28,13 @@ export function CalendarGrid({
   onEventTouchStart,
 }: CalendarGridProps) {
   return (
-    <div className="flex-1 bg-black/20 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl relative">
+    <div className="hidden md:block flex-1 bg-black/20 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl relative">
       {/* Days Header */}
       <div className="grid grid-cols-7 border-b border-white/5 bg-white/[0.02]">
         {daysOfWeek.map(day => (
           <div
             key={day}
-            className="py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-widest"
+            className="py-2 text-center text-[11px] font-semibold text-gray-500 uppercase tracking-widest"
           >
             {day}
           </div>
@@ -42,7 +42,7 @@ export function CalendarGrid({
       </div>
 
       {/* Days Grid */}
-      <div className="grid grid-cols-7 auto-rows-fr h-full">
+      <div className="onyx-stagger grid grid-cols-7 auto-rows-fr h-full">
         {calendarDays.map((day, dayIdx) => {
           const dayEvents = getDayEvents(day)
           const isCurrentMonth = isSameMonth(day, date)
@@ -62,7 +62,7 @@ export function CalendarGrid({
                   className={cn(
                     'text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full',
                     isTodayDate
-                      ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40'
+                      ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/40 animate-pop-in'
                       : isCurrentMonth
                         ? 'text-gray-400 group-hover:text-gray-200'
                         : 'text-gray-700'

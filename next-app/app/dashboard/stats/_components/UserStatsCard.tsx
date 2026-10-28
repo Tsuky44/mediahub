@@ -84,7 +84,7 @@ export function UserStatsCard({ topUsers, allUsers, periodLabel }: UserStatsCard
             className="absolute inset-0 bg-black/80 backdrop-blur-md transition-opacity duration-300"
             onClick={() => setIsOpen(false)}
           />
-          <div className="relative w-full max-w-2xl bg-[#0A0A0A]/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200 ring-1 ring-white/10">
+          <div className="relative w-full max-w-2xl bg-[#080909]/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200 ring-1 ring-white/10">
             <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5 backdrop-blur-xl">
               <div>
                 <h3 className="text-xl font-bold text-white flex items-center gap-2">

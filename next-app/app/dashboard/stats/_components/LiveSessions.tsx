@@ -15,7 +15,7 @@ export function LiveSessions({ sessions: initialSessions, canManage }: { session
       {activeSessions.length === 0 ? (
         <LiveSessionsEmpty />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="onyx-stagger grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {activeSessions.map(session => (
             <LiveSessionCard key={session.sessionId} session={session} />
           ))}

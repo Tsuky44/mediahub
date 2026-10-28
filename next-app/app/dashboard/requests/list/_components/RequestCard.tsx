@@ -9,7 +9,7 @@ import {
     Trash2,
     Loader2,
 } from 'lucide-react'
-import { getStatusInfo } from '../_utils/request-status'
+import { getAwaitingReleaseInfo, getStatusInfo } from '../_utils/request-status'
 import { resolvePosterUrls } from '../_utils/request-poster'
 import { RequestCardPoster } from './RequestCardPoster'
 import { RequestCardMeta } from './RequestCardMeta'
@@ -37,8 +37,9 @@ export function RequestCard({
     const tmdbId = request.media?.tmdbId
 
     const { posterPath, fallbackPosterPath } = resolvePosterUrls(tmdbId, mediaType, request.media?.posterPath)
-    const currentStatus = getStatusInfo(request.status)
-    const StatusIcon = currentStatus.icon
+    const currentStatus = request.awaitingRelease
+        ? getAwaitingReleaseInfo(request.releaseDate)
+        : getStatusInfo(request.status)
     const requesterName =
         request.requestedBy?.displayName ||
         request.requestedBy?.email?.split('@')[0] ||

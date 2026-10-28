@@ -12,6 +12,8 @@ import {
 } from './_components/infinite-media/MediaGrid'
 import { SlidersHorizontal } from 'lucide-react'
 import clsx from 'clsx'
+import { useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import type { MediaFiltersValue } from '@/components/global/media-filters/_types/media-filters'
 
 interface InfiniteMediaListProps {
@@ -42,6 +44,10 @@ export function InfiniteMediaList({
     ref,
   } = useInfiniteMedia(initialItems, initialType, initialSearch, initialFilters)
 
+  // Bouton flottant rendu directement dans <body> : aucun conteneur de la page ne
+  // peut le déplacer (il reste collé au coin de l'écran pendant le défilement)
+  const isClient = useSyncExternalStore(() => () => {}, () => true, () => false)
+
   const filterType =
     initialType === 'watch-later' || initialType === 'recommendations' || initialType === 'trends'
       ? 'all'
@@ -57,13 +63,17 @@ export function InfiniteMediaList({
         activeFilters={activeFilters}
       />
 
-      <button
-        onClick={() => setShowFilters(true)}
-        className="fixed bottom-8 right-8 z-40 flex items-center justify-center w-14 h-14 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700 hover:scale-110 transition-all focus:outline-none focus:ring-4 focus:ring-indigo-500/30 group"
-        title="Ouvrir les filtres"
-      >
-        <SlidersHorizontal className="h-6 w-6 group-hover:rotate-180 transition-transform duration-500" />
-      </button>
+      {isClient && createPortal(
+        <button
+          onClick={() => setShowFilters(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center justify-center w-14 h-14 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700 hover:scale-110 transition-all focus:outline-none focus:ring-4 focus:ring-indigo-500/30 group"
+          title="Ouvrir les filtres"
+          aria-label="Ouvrir les filtres"
+        >
+          <SlidersHorizontal className="h-6 w-6 group-hover:rotate-180 transition-transform duration-500" />
+        </button>,
+        document.body
+      )}
 
       <div
         className={clsx(

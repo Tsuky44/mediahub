@@ -1,6 +1,6 @@
 # Changelog
 
-Toutes les modifications notables de ce projet seront documentées dans ce fichier.
+Toutes les modifications notables de ce projet seront documentÃ©es dans ce fichier.
 
 ## [0.9.683] - 2026-07-10
 
@@ -16,7 +16,7 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichie
 ## [0.9.678] - 2026-07-08
 
 ### Added
-- Rajoue de colonne sur la partie gestion du stockage pour voir quand est la dernier activiter du média ainsi que la date de demande.
+- Rajoue de colonne sur la partie gestion du stockage pour voir quand est la dernier activiter du mÃ©dia ainsi que la date de demande.
 
 ### Fixed
 - Fixe affichage des activiter dans la partie gestion du stockage
@@ -27,7 +27,7 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichie
 - fail to ban sur tout les provider
 
 ### Changed
-- patche de sécuriter comprennant la sécurisation des webhook et autre amélioration de sécuriter
+- patche de sÃ©curiter comprennant la sÃ©curisation des webhook et autre amÃ©lioration de sÃ©curiter
 
 ## [0.9.676] - 2026-07-07
 
@@ -42,22 +42,22 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichie
 
 ### Added
 - Logs pour l'envoi de notifications + dashboard notifications.
-- Console pour suivre les mises à jour en temps réel.
-- Possibilité de changer de version de MediaHub depuis les paramètres.
+- Console pour suivre les mises Ã  jour en temps rÃ©el.
+- PossibilitÃ© de changer de version de MediaHub depuis les paramÃ¨tres.
 
 ### Changed
-- Interface globale des détails des médias :
+- Interface globale des dÃ©tails des mÃ©dias :
   - Logo, plus d'affiches.
-  - Meilleure ergonomie dans la disposition des différents boutons.
-- Refonte et réaménagement de toute la partie paramètres.
-- Un Docker à la place de deux : le tracker est maintenant intégré à l'app.
+  - Meilleure ergonomie dans la disposition des diffÃ©rents boutons.
+- Refonte et rÃ©amÃ©nagement de toute la partie paramÃ¨tres.
+- Un Docker Ã  la place de deux : le tracker est maintenant intÃ©grÃ© Ã  l'app.
 
 ### Fixed
-- Mise à jour qui ne marchait pas bien depuis l'interface.
-- Scroll infini qui revenait en haut après un retour.
-- Optimisation du rendu des images (moins énergivore).
-- Sauvegarde qui était impossible ou compliquée pour la partie tracker.
-- Amélioration des notifications pour améliorer la stabilité.
+- Mise Ã  jour qui ne marchait pas bien depuis l'interface.
+- Scroll infini qui revenait en haut aprÃ¨s un retour.
+- Optimisation du rendu des images (moins Ã©nergivore).
+- Sauvegarde qui Ã©tait impossible ou compliquÃ©e pour la partie tracker.
+- AmÃ©lioration des notifications pour amÃ©liorer la stabilitÃ©.
 - Fix multiples d'UI et d'optimisation du projet.
 
 ### In Progress

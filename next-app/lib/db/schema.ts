@@ -1,4 +1,4 @@
-import { sqliteTable, integer, text, uniqueIndex, index, blob } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, integer, text, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 
@@ -14,38 +14,6 @@ export const accountRequests = sqliteTable('account_requests', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().$onUpdateFn(() => new Date()),
 });
-
-// ============================================================================
-// DAILY TRACKER STATS
-// ============================================================================
-export const dailyTrackerStats = sqliteTable('daily_tracker_stats', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  date: integer('date', { mode: 'timestamp_ms' }).notNull(),
-  tracker: text('tracker').notNull(),
-  totalUploaded: blob('total_uploaded', { mode: 'bigint' }).notNull().default(BigInt(0)),
-  totalDownloaded: blob('total_downloaded', { mode: 'bigint' }).notNull().default(BigInt(0)),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull().$onUpdateFn(() => new Date()),
-}, (table) => ({
-  uniqueDateTracker: uniqueIndex('daily_tracker_stats_date_tracker_unique').on(table.date, table.tracker),
-  dateIdx: index('daily_tracker_stats_date_idx').on(table.date),
-}));
-
-// ============================================================================
-// TRACKER STATS LOGS
-// ============================================================================
-export const trackerStatsLogs = sqliteTable('tracker_stats_logs', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  tracker: text('tracker').notNull(),
-  totalUploaded: blob('total_uploaded', { mode: 'bigint' }).notNull(),
-  totalDownloaded: blob('total_downloaded', { mode: 'bigint' }).notNull(),
-  uploadedDiff: blob('uploaded_diff', { mode: 'bigint' }).notNull().default(BigInt(0)),
-  downloadedDiff: blob('downloaded_diff', { mode: 'bigint' }).notNull().default(BigInt(0)),
-  timestamp: integer('timestamp', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
-}, (table) => ({
-  timestampIdx: index('tracker_stats_logs_timestamp_idx').on(table.timestamp),
-  trackerTimestampIdx: index('tracker_stats_logs_tracker_timestamp_idx').on(table.tracker, table.timestamp),
-}));
 
 // ============================================================================
 // ROLES (doit être défini avant User car référencé)
@@ -187,6 +155,7 @@ export const mediaRequests = sqliteTable('media_requests', {
   userStatusIdx: index('media_requests_user_status_idx').on(table.userId, table.status),
   mediaTypeStatusIdx: index('media_requests_media_type_status_idx').on(table.mediaType, table.status),
   tmdbIdx: index('media_requests_tmdb_idx').on(table.tmdbId),
+  requestedAtIdx: index('media_requests_requested_at_idx').on(table.requestedAt),
 }));
 
 // ============================================================================
@@ -217,6 +186,7 @@ export const watchEvents = sqliteTable('watch_events', {
   tmdbId: text('tmdb_id'),
 }, (table) => ({
   uniqueEmbyItemPlayed: uniqueIndex('watch_events_emby_item_played_unique').on(table.embyUserId, table.itemId, table.playedAt),
+  playedAtIdx: index('watch_events_played_at_idx').on(table.playedAt),
 }));
 
 // ============================================================================
@@ -257,7 +227,9 @@ export const auditLogs = sqliteTable('audit_logs', {
   userAgent: text('user_agent'),
   details: text('details'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
-});
+}, (table) => ({
+  createdAtIdx: index('audit_logs_created_at_idx').on(table.createdAt),
+}));
 
 // ============================================================================
 // PERMISSIONS

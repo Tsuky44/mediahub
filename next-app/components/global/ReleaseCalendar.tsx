@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useReleaseCalendar } from './release-calendar/_hooks/useReleaseCalendar'
 import { CalendarHeader } from './release-calendar/_components/CalendarHeader'
 import { CalendarGrid } from './release-calendar/_components/CalendarGrid'
+import { CalendarWeekList } from './release-calendar/_components/CalendarWeekList'
 import { EventTooltip } from './release-calendar/_components/EventTooltip'
 import type { CalendarEvent } from '@/app/actions/calendar'
 
@@ -12,6 +13,7 @@ export function ReleaseCalendar() {
     date,
     isLoading,
     calendarDays,
+    weekDays,
     hoveredEvent,
     mousePos,
     showMovies,
@@ -30,6 +32,10 @@ export function ReleaseCalendar() {
   const [touchPos, setTouchPos] = useState<{ x: number; y: number } | null>(null)
   const lastTouchTimeRef = useRef(0)
   const shouldNavigateRef = useRef(false)
+  // Souris : l'infobulle survit au court passage d'une sortie à l'autre (elle glisse vers la
+  // suivante) et reste affichée après un clic, le temps que son affiche s'envole vers la fiche
+  const leaveTimerRef = useRef<number | undefined>(undefined)
+  const pinnedUntilRef = useRef(0)
 
   const handleTouchStart = useCallback((event: CalendarEvent, x: number, y: number) => {
     lastTouchTimeRef.current = Date.now()
@@ -67,6 +73,8 @@ export function ReleaseCalendar() {
       }
     } else {
       // Desktop / Mouse: navigate immediately
+      pinnedUntilRef.current = Date.now() + 4000
+      window.clearTimeout(leaveTimerRef.current)
       handleSelectEvent(event)
     }
   }, [handleSelectEvent])
@@ -78,7 +86,7 @@ export function ReleaseCalendar() {
 
   return (
     <div
-      className="flex flex-col h-full min-h-[850px] relative"
+      className="flex flex-col h-full md:min-h-[850px] relative"
       onClick={touchedEvent ? handleTouchElsewhere : undefined}
     >
       <CalendarHeader
@@ -91,24 +99,30 @@ export function ReleaseCalendar() {
         onToggleSeries={() => setShowSeries(prev => !prev)}
       />
 
+      <CalendarWeekList weekDays={weekDays} getDayEvents={getDayEvents} onSelectEvent={handleSelectEvent} />
+
       <CalendarGrid
         date={date}
         calendarDays={calendarDays}
         getDayEvents={getDayEvents}
         onSelectEvent={handleSelectEventWithTouchCheck}
         onEventMouseEnter={(event, x, y) => {
-          if (Date.now() - lastTouchTimeRef.current < 1000) return
+          if (Date.now() - lastTouchTimeRef.current < 1000 || Date.now() < pinnedUntilRef.current) return
+          window.clearTimeout(leaveTimerRef.current)
           setMousePos({ x, y })
           setHoveredEvent(event)
         }}
         onEventMouseMove={(x, y) => {
-          if (Date.now() - lastTouchTimeRef.current < 1000) return
+          if (Date.now() - lastTouchTimeRef.current < 1000 || Date.now() < pinnedUntilRef.current) return
           setMousePos({ x, y })
         }}
         onEventMouseLeave={() => {
-          if (Date.now() - lastTouchTimeRef.current < 1000) return
-          setHoveredEvent(null)
-          setMousePos(null)
+          if (Date.now() - lastTouchTimeRef.current < 1000 || Date.now() < pinnedUntilRef.current) return
+          window.clearTimeout(leaveTimerRef.current)
+          leaveTimerRef.current = window.setTimeout(() => {
+            setHoveredEvent(null)
+            setMousePos(null)
+          }, 90)
         }}
         onEventTouchStart={handleTouchStart}
       />

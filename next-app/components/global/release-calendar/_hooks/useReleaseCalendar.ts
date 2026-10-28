@@ -12,10 +12,13 @@ import {
   isSameDay,
   subMonths,
   addMonths,
+  subWeeks,
+  addWeeks,
   parseISO,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { getCalendarEvents, CalendarEvent } from '@/app/actions/calendar'
+import { prepareNavTo } from '@/components/global/MotionDirector'
 
 export function useReleaseCalendar() {
   const [date, setDate] = useState(new Date())
@@ -30,6 +33,11 @@ export function useReleaseCalendar() {
   const startDate = startOfWeek(monthStart, { locale: fr })
   const endDate = endOfWeek(monthEnd, { locale: fr })
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate })
+  // Vue téléphone : la semaine qui contient `date` (toujours comprise dans la grille du mois)
+  const weekDays = eachDayOfInterval({
+    start: startOfWeek(date, { locale: fr }),
+    end: endOfWeek(date, { locale: fr }),
+  })
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ['calendar', startDate.toISOString(), endDate.toISOString()],
@@ -46,24 +54,28 @@ export function useReleaseCalendar() {
     staleTime: 60_000,
   })
 
-  const handleNavigate = useCallback((action: 'PREV' | 'NEXT' | 'TODAY') => {
+  const handleNavigate = useCallback((action: 'PREV' | 'NEXT' | 'TODAY', unit: 'month' | 'week' = 'month') => {
     setDate(prev => {
-      if (action === 'PREV') return subMonths(prev, 1)
-      if (action === 'NEXT') return addMonths(prev, 1)
-      return new Date()
+      if (action === 'TODAY') return new Date()
+      if (unit === 'week') return action === 'PREV' ? subWeeks(prev, 1) : addWeeks(prev, 1)
+      return action === 'PREV' ? subMonths(prev, 1) : addMonths(prev, 1)
     })
   }, [])
 
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
-    setHoveredEvent(null)
-    if (event.tmdbId) {
-      let url = `/dashboard/media/${event.tmdbId}?type=${event.mediaType}`
-      if (event.mediaType === 'tv' && event.seasonNumber) {
-        url += `&season=${event.seasonNumber}`
-        if (event.episodeNumber) url += `&episode=${event.episodeNumber}`
-      }
-      router.push(url)
+    if (!event.tmdbId) {
+      setHoveredEvent(null)
+      return
     }
+    let url = `/dashboard/media/${event.tmdbId}?type=${event.mediaType}`
+    if (event.mediaType === 'tv' && event.seasonNumber) {
+      url += `&season=${event.seasonNumber}`
+      if (event.episodeNumber) url += `&episode=${event.episodeNumber}`
+    }
+    // Comme depuis une affiche : celle de l'infobulle (laissée affichée jusqu'au changement
+    // de page) s'envole vers la fiche
+    prepareNavTo(url, document.querySelector('[data-onyx-tooltip-poster]'))
+    router.push(url)
   }, [router])
 
   const getDayEvents = useCallback(
@@ -81,6 +93,7 @@ export function useReleaseCalendar() {
     date,
     isLoading,
     calendarDays,
+    weekDays,
     hoveredEvent,
     mousePos,
     showMovies,

@@ -1,8 +1,9 @@
 'use client'
 
-import { Film, Tv, Play, Clock, Download, Trash2 } from 'lucide-react'
+import { Play, Clock, Download, Trash2 } from 'lucide-react'
 import type { StorageItem } from '../../_types/storage'
 import { formatBytes, formatLastPlayed } from '../../_utils/storage-formatters'
+import { StoragePoster } from './StoragePoster'
 
 interface StorageMobileItemProps {
   item: StorageItem
@@ -28,9 +29,7 @@ export function StorageMobileItem({ item, onSelect, onDelete, selected, onToggle
             onChange={() => onToggleSelect(item.id)}
             className="w-4 h-4 shrink-0 rounded border-gray-600 text-purple-500 focus:ring-purple-500/50 bg-gray-800 cursor-pointer"
           />
-          <div className={`p-2 rounded-lg shrink-0 ${item.type === 'Movie' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-            {item.type === 'Movie' ? <Film size={18} /> : <Tv size={18} />}
-          </div>
+          <StoragePoster item={item} className="w-12" />
           <div className="min-w-0">
             <div className="font-medium text-white truncate pr-2">{item.name}</div>
             <div className="text-xs text-gray-500 flex items-center gap-2">

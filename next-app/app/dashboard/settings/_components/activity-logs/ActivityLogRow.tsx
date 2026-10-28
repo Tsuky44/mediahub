@@ -35,6 +35,8 @@ export default function ActivityLogRow({ log }: ActivityLogRowProps) {
                     {log.user?.image ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
+                            loading="lazy"
+                            decoding="async"
                             src={log.user.image}
                             alt=""
                             className="w-8 h-8 rounded-full object-cover"

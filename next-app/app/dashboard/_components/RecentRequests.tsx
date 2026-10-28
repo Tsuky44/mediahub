@@ -61,7 +61,7 @@ export function RecentRequests({ requests: initialRequests }: { requests: MediaR
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto pr-2 min-h-0">
-          <div className="space-y-3">
+          <div className="onyx-stagger space-y-3">
             {requests.map((request) => (
               <RequestItem key={request.id} request={request} />
             ))}

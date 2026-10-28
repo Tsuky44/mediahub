@@ -1,7 +1,6 @@
 import { fetchUserRequests } from './actions'
 import { InfiniteRequestList } from './InfiniteRequestList'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { defineAbilityFor } from '@/lib/ability'
 import { MediaManagerButton } from '../_components/MediaManagerButton'
@@ -9,7 +8,7 @@ import { MediaManagerButton } from '../_components/MediaManagerButton'
 export const dynamic = 'force-dynamic'
 
 export default async function RequestsListPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const user = session?.user as any
   const ability = defineAbilityFor(user)

@@ -29,8 +29,12 @@ export function DeleteStorageModal({
 
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[60] backdrop-blur-md animate-in fade-in duration-200">
-            <div className="bg-[#0A0A0A]/95 border border-red-500/30 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden ring-1 ring-red-500/20 animate-in zoom-in-95 duration-200">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 to-red-500"></div>
+            <div className="bg-[#080909]/95 border border-red-500/30 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden ring-1 ring-red-500/20 animate-in zoom-in-95 duration-200">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 to-red-500 overflow-hidden">
+                    {isDeleting && (
+                        <div className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/70 to-transparent animate-indeterminate" />
+                    )}
+                </div>
 
                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                     <div className="p-2 bg-red-500/10 rounded-xl">
@@ -50,6 +54,17 @@ export function DeleteStorageModal({
                     </span>
                 </p>
 
+                {isDeleting ? (
+                <div className="mb-6 space-y-2" role="status">
+                    <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden relative">
+                        <div className="absolute inset-y-0 w-2/5 rounded-full bg-gradient-to-r from-red-600 to-orange-500 animate-indeterminate" />
+                    </div>
+                    <p className="text-xs text-gray-400 flex items-center gap-2">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Suppression des fichiers{deleteFromArr ? ` et arrêt du suivi dans ${arrName}` : ''}…
+                    </p>
+                </div>
+                ) : (
                 <div
                     className="bg-black/30 p-4 rounded-xl mb-6 flex items-start gap-3 border border-white/5 hover:border-white/10 transition-colors cursor-pointer"
                     onClick={() => onDeleteFromArrChange(!deleteFromArr)}
@@ -68,6 +83,7 @@ export function DeleteStorageModal({
                         Supprime également la surveillance dans {arrName} pour éviter le re-téléchargement.
                     </label>
                 </div>
+                )}
 
                 <div className="flex justify-end gap-3">
                     <button

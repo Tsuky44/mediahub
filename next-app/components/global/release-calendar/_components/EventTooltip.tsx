@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -16,12 +16,47 @@ interface EventTooltipProps {
   isTouch?: boolean
 }
 
-export function EventTooltip({ event, mousePos, isTouch }: EventTooltipProps) {
-  const [mounted, setMounted] = useState(false)
+const noop = () => () => {}
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+function Poster({ event, className }: { event: CalendarEvent; className?: string }) {
+  return (
+    <div className={cn('absolute inset-0', className)}>
+      {event.posterUrl ? (
+        // Chargée directement depuis TMDB (déjà à la bonne taille) : le serveur ne
+        // sert plus d'intermédiaire, une coupure réseau de son côté ne casse plus rien
+        <Image
+          src={event.posterUrl.replace('/t/p/w500/', '/t/p/w185/')}
+          alt={event.title}
+          fill
+          unoptimized
+          className="object-cover"
+          sizes="120px"
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-gray-900">
+          {event.mediaType === 'movie' ? (
+            <Film className="w-8 h-8 text-gray-800" />
+          ) : (
+            <Tv className="w-8 h-8 text-gray-800" />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Infobulle d'un épisode ou d'un film du calendrier. D'une sortie à l'autre, elle reste
+ * ouverte et glisse vers sa nouvelle place ; l'affiche se fond dans la suivante et le texte
+ * défile dans le sens du mouvement de la souris (motion.css, onyx-tip-*).
+ */
+export function EventTooltip({ event, mousePos, isTouch }: EventTooltipProps) {
+  const mounted = useSyncExternalStore(noop, () => true, () => false)
+  // Sortie affichée, la précédente (pour le fondu de l'affiche) et le sens du changement
+  const [shown, setShown] = useState({ event, y: mousePos.y, previous: null as CalendarEvent | null, dir: 1 })
+  if (shown.event.id !== event.id) {
+    setShown({ event, y: mousePos.y, previous: shown.event, dir: mousePos.y >= shown.y ? 1 : -1 })
+  }
 
   if (!mounted) return null
 
@@ -44,32 +79,17 @@ export function EventTooltip({ event, mousePos, isTouch }: EventTooltipProps) {
 
   return createPortal(
     <div
-      className={`fixed z-[100] w-[380px] bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 duration-200 flex ring-1 ring-white/5 ${
+      className={`fixed z-[100] w-[380px] bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 flex ring-1 ring-white/5 transition-[top,left] duration-300 ease-out-onyx motion-reduce:transition-none ${
         isTouch ? 'max-w-[90vw] sm:w-[380px]' : ''
       }`}
-      style={{ top, left }}
+      style={{ top, left, '--onyx-tip-dir': shown.dir } as React.CSSProperties}
     >
-      <div className="w-[120px] bg-gray-900 relative flex-shrink-0 border-r border-white/5">
-        {event.posterUrl ? (
-          <Image
-            src={event.posterUrl}
-            alt={event.title}
-            fill
-            className="object-cover"
-            sizes="120px"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-900">
-            {event.mediaType === 'movie' ? (
-              <Film className="w-8 h-8 text-gray-800" />
-            ) : (
-              <Tv className="w-8 h-8 text-gray-800" />
-            )}
-          </div>
-        )}
+      <div data-onyx-tooltip-poster className="w-[120px] bg-gray-900 relative flex-shrink-0 border-r border-white/5 overflow-hidden rounded-l-xl">
+        {shown.previous && <Poster key={`out-${shown.previous.id}`} event={shown.previous} className="onyx-tip-poster-out" />}
+        <Poster key={event.id} event={event} className={shown.previous ? 'onyx-tip-poster-in' : undefined} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
       </div>
-      <div className="flex-1 p-4 flex flex-col min-w-0">
+      <div key={event.id} className={cn('flex-1 p-4 flex flex-col min-w-0', shown.previous && 'onyx-tip-text')}>
         <div className="mb-2">
           <Badge
             variant="outline"

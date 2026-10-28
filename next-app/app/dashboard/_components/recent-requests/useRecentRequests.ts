@@ -9,6 +9,9 @@ export interface MediaRequest {
   id: string
   type: string
   status: number
+  /** Demandé mais pas encore sorti (affichage « En attente de sortie ») */
+  awaitingRelease?: boolean
+  releaseDate?: string
   media: {
     title: string
     posterPath?: string

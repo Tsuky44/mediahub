@@ -1,17 +1,18 @@
 'use client'
 
-import { format } from 'date-fns'
+import { endOfWeek, format, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isPhoneScreen } from '@/lib/screen'
 
 interface CalendarHeaderProps {
   date: Date
   isLoading: boolean
   showMovies: boolean
   showSeries: boolean
-  onNavigate: (action: 'PREV' | 'NEXT' | 'TODAY') => void
+  onNavigate: (action: 'PREV' | 'NEXT' | 'TODAY', unit?: 'month' | 'week') => void
   onToggleMovies: () => void
   onToggleSeries: () => void
 }
@@ -25,51 +26,56 @@ export function CalendarHeader({
   onToggleMovies,
   onToggleSeries,
 }: CalendarHeaderProps) {
-  return (
-    <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-8 pt-2 px-2 relative z-10 gap-4 md:gap-0">
-      <div className="flex items-center gap-6">
-        <div>
-          <h1 className="text-4xl font-black text-white tracking-tighter mb-1">Calendrier</h1>
-          <p className="text-base text-gray-400 font-medium">
-            <span className="capitalize text-white/90">{format(date, 'MMMM yyyy', { locale: fr })}</span>
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-4 md:gap-6 w-full md:w-auto">
-        {isLoading && <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />}
+  // Téléphone : une semaine à la fois ; écran plus large : un mois
+  const navigate = (action: 'PREV' | 'NEXT' | 'TODAY') => onNavigate(action, isPhoneScreen() ? 'week' : 'month')
+  const weekStart = startOfWeek(date, { locale: fr })
+  const weekEnd = endOfWeek(date, { locale: fr })
+  const weekLabel = `${format(weekStart, 'd MMM', { locale: fr })} – ${format(weekEnd, 'd MMM', { locale: fr })}`
 
-        <div className="flex items-center bg-white/5 p-1 rounded-lg border border-white/5">
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pb-3 px-1 relative z-10">
+      {/* Titre et mois sur une ligne */}
+      <div className="flex items-baseline gap-3 min-w-0">
+        <h2 className="onyx-title text-2xl font-bold text-white tracking-tight">Calendrier</h2>
+        <span className="hidden md:inline capitalize text-sm font-medium text-gray-400">{format(date, 'MMMM yyyy', { locale: fr })}</span>
+        <span className="md:hidden text-sm font-medium text-gray-400">{weekLabel}</span>
+        {isLoading && <Loader2 className="w-4 h-4 self-center animate-spin text-indigo-400" />}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center bg-white/5 p-0.5 rounded-lg border border-white/5">
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => onNavigate('PREV')}
-            className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors"
+            onClick={() => navigate('PREV')}
+            aria-label="Période précédente"
+            className="h-7 w-7 text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onNavigate('TODAY')}
-            className="h-8 px-3 text-xs font-medium text-gray-300 hover:text-white hover:bg-white/5 rounded-md transition-colors"
+            onClick={() => navigate('TODAY')}
+            className="h-7 px-2.5 text-xs font-medium text-gray-300 hover:text-white hover:bg-white/5 rounded-md transition-colors"
           >
             Aujourd&apos;hui
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => onNavigate('NEXT')}
-            className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors"
+            onClick={() => navigate('NEXT')}
+            aria-label="Période suivante"
+            className="h-7 w-7 text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
 
-        <div className="flex gap-3 text-sm font-medium">
+        <div className="flex gap-1.5 text-xs font-medium">
           <button
             onClick={onToggleMovies}
             className={cn(
-              'flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-200 cursor-pointer select-none',
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all duration-200 cursor-pointer select-none',
               showMovies
                 ? 'bg-amber-500/10 text-amber-200/90 border-amber-500/20 hover:bg-amber-500/20'
                 : 'bg-transparent text-gray-500 border-gray-700 hover:border-gray-500 hover:text-gray-400'
@@ -86,7 +92,7 @@ export function CalendarHeader({
           <button
             onClick={onToggleSeries}
             className={cn(
-              'flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-200 cursor-pointer select-none',
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all duration-200 cursor-pointer select-none',
               showSeries
                 ? 'bg-indigo-500/10 text-indigo-200/90 border-indigo-500/20 hover:bg-indigo-500/20'
                 : 'bg-transparent text-gray-500 border-gray-700 hover:border-gray-500 hover:text-gray-400'

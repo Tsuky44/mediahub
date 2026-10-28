@@ -32,7 +32,7 @@ export function MediaList({
 
     if (variant === 'grid') {
         return (
-            <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            <div className="onyx-stagger grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                 {items.map((item) => (
                     <MediaCard
                         key={item.id}
@@ -46,7 +46,7 @@ export function MediaList({
 
     // Slider variant
     return (
-        <section className="space-y-6">
+        <section className="onyx-reveal space-y-6">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {viewAllLink ? (
@@ -54,7 +54,7 @@ export function MediaList({
                             <h2 className="text-2xl font-bold text-white group-hover:text-indigo-400 transition-colors">
                                 {title}
                             </h2>
-                            <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all translate-y-[1px]" />
+                            <ChevronRight className="onyx-nudge w-5 h-5 text-gray-500 group-hover:text-indigo-400 transition-colors translate-y-[1px]" />
                         </Link>
                     ) : (
                         <h2 className="text-2xl font-bold text-white">
@@ -66,7 +66,7 @@ export function MediaList({
 
             <div
                 ref={scrollRef}
-                className="flex overflow-x-auto gap-4 pb-4 scroll-smooth"
+                className="onyx-stagger flex overflow-x-auto gap-4 pb-4 scroll-smooth"
             >
                 {items.map((item) => (
                     <div key={item.id} className="flex-shrink-0 w-[180px] sm:w-[200px]">

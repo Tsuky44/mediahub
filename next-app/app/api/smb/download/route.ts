@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions, getSmbServiceForUser } from '@/lib/auth';
+import { getSession, getSmbServiceForUser } from '@/lib/auth';
 import { defineAbilityFor } from '@/lib/ability';
 import { Readable } from 'stream';
 
 export async function GET(request: NextRequest) {
-    const session = await getServerSession(authOptions);
+    const session = await getSession();
     const user = session?.user as any
     
     if (!session || !user) {

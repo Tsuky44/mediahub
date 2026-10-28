@@ -33,5 +33,4 @@ export interface LiveSearchResult {
 
 export interface DashboardConfigStatus {
   hasDownloads: boolean
-  hasDocker: boolean
 }

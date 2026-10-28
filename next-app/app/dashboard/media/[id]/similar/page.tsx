@@ -1,8 +1,7 @@
 import { getTmdbServiceForUser } from '@/lib/auth'
 import { MediaCard } from '@/components/global/MediaCard'
 import { notFound, redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { defineAbilityFor } from '@/lib/ability'
@@ -16,7 +15,7 @@ export default async function SimilarPage({
     params: Promise<{ id: string }>, 
     searchParams: Promise<{ type?: string }> 
 }) {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     if (!session) redirect('/api/auth/signin')
 
     const ability = defineAbilityFor(session.user)
@@ -64,7 +63,7 @@ export default async function SimilarPage({
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            <div className="onyx-stagger grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                 {similar.map((item: any) => (
                     <MediaCard 
                         key={item.id} 

@@ -1,5 +1,5 @@
 /**
- * Formatters specifiques aux statistiques globales/trackers.
+ * Formatters specifiques aux statistiques globales qBittorrent.
  * Different de torrent-formatters.ts par les fallbacks vides ('0 o' au lieu de '0 Go')
  * et la precision (2 decimales pour les tailles, 1 pour les vitesses).
  */

@@ -9,9 +9,8 @@ import { fileShares } from '@/lib/db/schema';
 import { v4 as uuidv4 } from 'uuid';
 import { eq, desc } from 'drizzle-orm';
 import axios from 'axios';
-import https from 'https';
-import { getStorageServiceForUser, authOptions } from '@/lib/auth';
-import { getServerSession } from 'next-auth';
+import { insecureHttpsAgent } from '@/lib/http-agents';
+import { getStorageServiceForUser, getSession } from '@/lib/auth';
 import { checkAccess } from './actions';
 import { logger } from '@/lib/logger';
 
@@ -34,7 +33,7 @@ export async function getRemoteFiles(remotePath: string = ''): Promise<FileInfo[
 export async function createPublicShare(filePath: string, expiresDays?: number, password?: string) {
     try {
         await checkAccess('downloads.share_files');
-        const session = await getServerSession(authOptions);
+        const session = await getSession();
         if (!session?.user) {
             return { success: false, error: 'Non autorisé' };
         }
@@ -158,12 +157,11 @@ export async function testEmbyConnection(url: string, apiKey: string) {
     try {
         // On extrait l'URL de base sans le chemin Emby
         const cleanUrl = url.split('/web/')[0].replace(/\/$/, '');
-        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
         // Simple ping HTTP
         const response = await axios.get(`${cleanUrl}/System/Info/Public`, {
             timeout: 5000,
-            httpsAgent: cleanUrl.startsWith('https') ? httpsAgent : undefined,
+            httpsAgent: cleanUrl.startsWith('https') ? insecureHttpsAgent : undefined,
             validateStatus: (status) => status === 200
         });
 
@@ -177,12 +175,11 @@ export async function testEmbyConnection(url: string, apiKey: string) {
 export async function testPlexConnection(url: string, token: string) {
     try {
         const cleanUrl = url.replace(/\/$/, '');
-        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
         // Plex /identity endpoint doesn't require token but confirms it's a Plex server
         const response = await axios.get(`${cleanUrl}/identity`, {
             timeout: 5000,
-            httpsAgent: cleanUrl.startsWith('https') ? httpsAgent : undefined,
+            httpsAgent: cleanUrl.startsWith('https') ? insecureHttpsAgent : undefined,
             headers: { 'Accept': 'application/json' },
             validateStatus: (status) => status === 200
         });
@@ -197,12 +194,11 @@ export async function testPlexConnection(url: string, token: string) {
 export async function testJellyfinConnection(url: string, apiKey: string) {
     try {
         const cleanUrl = url.replace(/\/$/, '');
-        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
         // Jellyfin also has /system/info/public
         const response = await axios.get(`${cleanUrl}/System/Info/Public`, {
             timeout: 5000,
-            httpsAgent: cleanUrl.startsWith('https') ? httpsAgent : undefined,
+            httpsAgent: cleanUrl.startsWith('https') ? insecureHttpsAgent : undefined,
             validateStatus: (status) => status === 200
         });
 

@@ -49,13 +49,12 @@ export async function loadMediaPageData(params: {
 }): Promise<MediaPageDataResult> {
   const { tmdbId, mediaType, externalId } = params
 
-  const tmdbService = await getTmdbServiceForUser()
+  const [tmdbService, user] = await Promise.all([getTmdbServiceForUser(), getCurrentUser()])
   if (!tmdbService) return { kind: 'not-found' }
 
   const details = await tmdbService.getDetails(tmdbId, mediaType)
   if (!details) return { kind: 'not-found' }
 
-  const user = await getCurrentUser()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ability = defineAbilityFor(user as any)
 
@@ -69,17 +68,29 @@ export async function loadMediaPageData(params: {
   const credits = normalizeCredits(details, mediaType)
   const meta = deriveMediaMeta(details, credits)
 
-  const availability = await getMediaAvailability(tmdbId, mediaType, true)
-  const isWatchLaterItem = await isInWatchLater(externalId, mediaType)
-  const isSubscribed = await getSubscriptionStatus(externalId, mediaType)
-  const progress = await fetchMediaEmbyProgress({
-    userEmail: user?.email,
-    tmdbId,
-    mediaType,
-    details,
-  })
-  const embyUrl = await getSetting('emby_url') || await getSetting('jellyfin_url')
-  const requestAllSeasonsEnabled = await getSetting('request_all_seasons_enabled')
+  const [
+    availability,
+    isWatchLaterItem,
+    isSubscribed,
+    progress,
+    embyUrlSetting,
+    jellyfinUrlSetting,
+    requestAllSeasonsEnabled,
+  ] = await Promise.all([
+    getMediaAvailability(tmdbId, mediaType, true),
+    isInWatchLater(externalId, mediaType),
+    getSubscriptionStatus(externalId, mediaType),
+    fetchMediaEmbyProgress({
+      userEmail: user?.email,
+      tmdbId,
+      mediaType,
+      details,
+    }),
+    getSetting('emby_url'),
+    getSetting('jellyfin_url'),
+    getSetting('request_all_seasons_enabled'),
+  ])
+  const embyUrl = embyUrlSetting || jellyfinUrlSetting
 
   return {
     kind: 'ok',

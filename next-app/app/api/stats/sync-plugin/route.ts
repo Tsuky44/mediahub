@@ -1,6 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { defineAbilityFor } from '@/lib/ability';
 import { db } from '@/lib/db/drizzle';
 import { watchEvents, settings, users } from '@/lib/db/schema';
@@ -378,7 +377,7 @@ async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: Array<Record<
 }
 
 export async function POST(req: NextRequest) {
-    const session = await getServerSession(authOptions);
+    const session = await getSession();
     const user = session?.user as { role: string } | undefined;
     const ability = defineAbilityFor(user);
     const isAdmin = user?.role === 'admin';

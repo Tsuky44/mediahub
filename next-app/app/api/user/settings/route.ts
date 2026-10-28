@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { setSetting } from '@/lib/settings'
 import { logAction } from '@/lib/audit'
 
@@ -11,7 +10,7 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   if (!session || !session.user) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
@@ -65,7 +64,6 @@ export async function POST(request: NextRequest) {
         auth_local_enabled,
         unraid_url,
         unraid_api_key,
-        docker_host,
         type,
         request_all_seasons_enabled,
         webhook_sonarr_secret,
@@ -135,8 +133,6 @@ export async function POST(request: NextRequest) {
 
     await updateSetting('unraid_url', unraid_url)
     await updateSetting('unraid_api_key', unraid_api_key)
-    
-    await updateSetting('docker_host', docker_host)
     
     await updateSetting('type', type)
 

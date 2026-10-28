@@ -1,6 +1,3 @@
-import { db } from '@/lib/db/drizzle'
-import { settings as settingsTable } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
 import { EmbyService } from '@/lib/services/emby'
 import { PlexService } from '@/lib/services/plex'
 import { JellyfinService } from '@/lib/services/jellyfin'
@@ -12,15 +9,14 @@ import { getSmbService } from '@/lib/services/smb'
 import { getFtpService } from '@/lib/services/ftp'
 import { getLocalService } from '@/lib/services/local'
 import { getProwlarrService } from '@/lib/services/prowlarr'
-import { getSetting } from '@/lib/settings'
+import { getSetting, readSettings } from '@/lib/settings'
 import { logger } from '@/lib/logger'
 
 export async function getEmbyServiceForUser() {
-  const [urlSetting] = await db.select().from(settingsTable).where(eq(settingsTable.key, 'emby_url'))
-  const [keySetting] = await db.select().from(settingsTable).where(eq(settingsTable.key, 'emby_api_key'))
+  const s = await readSettings(['emby_url', 'emby_api_key'])
 
-  const embyUrl = urlSetting?.value || process.env.EMBY_URL
-  const embyApiKey = keySetting?.value || process.env.EMBY_API_KEY
+  const embyUrl = s.emby_url || process.env.EMBY_URL
+  const embyApiKey = s.emby_api_key || process.env.EMBY_API_KEY
 
   if (!embyUrl || !embyApiKey) {
     logger.info('[getEmbyServiceForUser] Configuration Emby manquante')
@@ -31,11 +27,7 @@ export async function getEmbyServiceForUser() {
 }
 
 export async function getPlexServiceForUser() {
-  const [urlSetting] = await db.select().from(settingsTable).where(eq(settingsTable.key, 'plex_url'))
-  const [tokenSetting] = await db.select().from(settingsTable).where(eq(settingsTable.key, 'plex_token'))
-
-  const plexUrl = urlSetting?.value || ''
-  const plexToken = tokenSetting?.value || ''
+  const { plex_url: plexUrl, plex_token: plexToken } = await readSettings(['plex_url', 'plex_token'])
 
   if (!plexUrl || !plexToken) {
     logger.info('[getPlexServiceForUser] Configuration Plex manquante')
@@ -46,11 +38,7 @@ export async function getPlexServiceForUser() {
 }
 
 export async function getJellyfinServiceForUser() {
-  const [urlSetting] = await db.select().from(settingsTable).where(eq(settingsTable.key, 'jellyfin_url'))
-  const [keySetting] = await db.select().from(settingsTable).where(eq(settingsTable.key, 'jellyfin_api_key'))
-
-  const jellyfinUrl = urlSetting?.value || ''
-  const jellyfinApiKey = keySetting?.value || ''
+  const { jellyfin_url: jellyfinUrl, jellyfin_api_key: jellyfinApiKey } = await readSettings(['jellyfin_url', 'jellyfin_api_key'])
 
   if (!jellyfinUrl) {
     logger.info('[getJellyfinServiceForUser] Configuration Jellyfin manquante')
@@ -66,19 +54,18 @@ export async function getJellyfinServiceForUser() {
  * dans les deux cas pour bénéficier de toutes les méthodes.
  */
 export async function getMediaServerServiceForUser() {
-  const embyService = await getEmbyServiceForUser()
-  if (embyService) return embyService
+  // Une seule requête pour Emby + Jellyfin
+  const s = await readSettings(['emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key'])
+
+  const embyUrl = s.emby_url || process.env.EMBY_URL
+  const embyApiKey = s.emby_api_key || process.env.EMBY_API_KEY
+  if (embyUrl && embyApiKey) return new EmbyService(embyUrl, embyApiKey)
+  logger.info('[getEmbyServiceForUser] Configuration Emby manquante')
 
   // Jellyfin fallback: utiliser EmbyService avec les settings Jellyfin (API compatible)
-  const [jellyfinUrlSetting] = await db.select().from(settingsTable).where(eq(settingsTable.key, 'jellyfin_url'))
-  const [jellyfinKeySetting] = await db.select().from(settingsTable).where(eq(settingsTable.key, 'jellyfin_api_key'))
+  if (!s.jellyfin_url) return null
 
-  const jellyfinUrl = jellyfinUrlSetting?.value || ''
-  const jellyfinApiKey = jellyfinKeySetting?.value || ''
-
-  if (!jellyfinUrl) return null
-
-  return new EmbyService(jellyfinUrl, jellyfinApiKey)
+  return new EmbyService(s.jellyfin_url, s.jellyfin_api_key)
 }
 
 /**
@@ -93,12 +80,9 @@ export function getMediaServerUserId(dbUser: { embyUserId?: string | null; jelly
  * Retourne le type de serveur média configuré ('emby' | 'jellyfin' | null).
  */
 export async function getMediaServerType(): Promise<'emby' | 'jellyfin' | null> {
-  const [embyUrl] = await db.select().from(settingsTable).where(eq(settingsTable.key, 'emby_url'))
-  if (embyUrl?.value) return 'emby'
-
-  const [jellyfinUrl] = await db.select().from(settingsTable).where(eq(settingsTable.key, 'jellyfin_url'))
-  if (jellyfinUrl?.value) return 'jellyfin'
-
+  const s = await readSettings(['emby_url', 'jellyfin_url'])
+  if (s.emby_url) return 'emby'
+  if (s.jellyfin_url) return 'jellyfin'
   return null
 }
 

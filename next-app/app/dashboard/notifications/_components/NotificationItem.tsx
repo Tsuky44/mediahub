@@ -45,12 +45,14 @@ export function NotificationItem({ notification, onMarkAsRead, onDelete }: Notif
         notification.link && "cursor-pointer hover:bg-gray-900/80 hover:border-indigo-500/40",
         notification.isRead
           ? "border-gray-800/50 opacity-80"
-          : "border-indigo-500/30 shadow-[0_0_20px_rgba(79,70,229,0.1)] bg-indigo-500/[0.02]"
+          : "border-indigo-500/30 shadow-[0_0_20px_rgba(232,230,228,0.04)] bg-indigo-500/[0.02]"
       )}
     >
       {notification.posterPath ? (
         <div className="flex-shrink-0 w-20 h-28 rounded-xl overflow-hidden bg-gray-800 border border-gray-700 shadow-lg">
           <img
+            loading="lazy"
+            decoding="async"
             src={`https://image.tmdb.org/t/p/w185${notification.posterPath}`}
             alt={notification.title}
             className="w-full h-full object-cover"

@@ -17,10 +17,11 @@ export function TrailerButton({ youtubeId, title }: TrailerButtonProps) {
         <>
             <button
                 onClick={() => setIsOpen(true)}
-                className="flex items-center gap-2 rounded-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-6 py-3 text-sm font-semibold text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.1)] transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(239,68,68,0.2)] backdrop-blur-md group"
+                aria-label="Bande-annonce"
+                className="flex h-[42px] w-[42px] sm:h-auto sm:w-auto items-center justify-center gap-2 rounded-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 sm:px-6 sm:py-3 text-sm font-semibold text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.1)] transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(239,68,68,0.2)] backdrop-blur-md group"
             >
                 <PlayCircle className="h-4 w-4 fill-red-500/20 group-hover:fill-red-500/40 transition-colors" />
-                <span>Bande-annonce</span>
+                <span className="hidden sm:inline">Bande-annonce</span>
             </button>
 
             {isOpen && (

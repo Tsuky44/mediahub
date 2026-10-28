@@ -12,6 +12,7 @@ import { db } from '@/lib/db/drizzle'
 import { mediaRequests } from '@/lib/db/schema'
 import { desc } from 'drizzle-orm'
 import { getTmdbService } from '@/lib/services/tmdb'
+import { getReleaseWait } from '@/lib/services/media-status'
 import { remember } from '@/lib/cache'
 import { logger } from '@/lib/logger'
 
@@ -81,10 +82,17 @@ export async function getRecentRequests() {
       }
     }
 
+    // Pas encore disponible : le média est-il simplement en attente de sa sortie ?
+    const tmdbIdNum = parseInt(String(req.tmdbId))
+    const releaseWait = status < 4 && !isNaN(tmdbIdNum) && (req.mediaType === 'movie' || req.mediaType === 'tv')
+      ? await getReleaseWait(tmdbIdNum, req.mediaType)
+      : { awaitingRelease: false }
+
     return {
       id: req.id.toString(),
       type: req.mediaType,
       status: status,
+      ...releaseWait,
       media: {
         title: req.title,
         posterPath: posterPath,

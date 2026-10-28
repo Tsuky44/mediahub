@@ -89,7 +89,7 @@ export function RequestItem({ request }: RequestItemProps) {
       </div>
 
       <div className="flex flex-col items-end gap-1">
-        <RequestStatusBadge status={request.status} />
+        <RequestStatusBadge status={request.status} awaitingRelease={request.awaitingRelease} releaseDate={request.releaseDate} />
       </div>
     </Wrapper>
   )

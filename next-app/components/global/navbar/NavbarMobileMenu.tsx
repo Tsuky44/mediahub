@@ -28,7 +28,7 @@ export function NavbarMobileMenu({
       )}
     >
       <div className="flex flex-col h-full pt-20 px-6 pb-6">
-        <div className="flex-1 flex flex-col gap-2 overflow-y-auto min-h-0">
+        <div className={clsx('flex-1 flex flex-col gap-2 overflow-y-auto min-h-0', isOpen && 'onyx-stagger')}>
           {items.map((item) => {
             const isActive = pathname === item.href
             const Icon = item.icon

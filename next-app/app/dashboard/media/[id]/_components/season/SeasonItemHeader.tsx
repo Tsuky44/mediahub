@@ -47,6 +47,8 @@ export function SeasonItemHeader({
                 <div className="h-16 w-12 flex-shrink-0 overflow-hidden rounded bg-gray-900 relative">
                     {season.poster_path ? (
                         <img
+                            loading="lazy"
+                            decoding="async"
                             src={`https://image.tmdb.org/t/p/w200${season.poster_path}`}
                             alt={season.name}
                             className="h-full w-full object-cover"

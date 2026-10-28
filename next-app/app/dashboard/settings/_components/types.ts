@@ -38,7 +38,6 @@ export interface SettingsFormData {
     auth_local_enabled: boolean
     unraid_url: string
     unraid_api_key: string
-    docker_host: string
     request_all_seasons_enabled: boolean
     webhook_sonarr_secret?: string
     webhook_radarr_secret?: string

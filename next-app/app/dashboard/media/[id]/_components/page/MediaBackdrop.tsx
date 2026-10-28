@@ -3,27 +3,34 @@ interface MediaBackdropProps {
   alt: string
 }
 
+/**
+ * Image de fond de la fiche, bord à bord : elle passe sous la barre de navigation
+ * (verre flouté) et se fond dans la page en bas et à gauche, derrière le titre.
+ */
 export default function MediaBackdrop({
   backdropUrl,
   alt,
 }: MediaBackdropProps) {
-  if (!backdropUrl) {
-    return (
-      <div className="absolute top-0 left-0 w-full h-[70vh] overflow-hidden z-0 pointer-events-none bg-gradient-to-b from-[#0f172a] to-[#0f172a]" />
-    )
-  }
   return (
-    <div className="absolute top-0 left-0 w-full h-[65vh] md:h-[80vh] overflow-hidden z-0 pointer-events-none">
-      <img
-        src={backdropUrl}
-        alt={alt}
-        className="absolute right-0 top-0 w-full md:w-[75%] h-full object-cover opacity-75 scale-100 transition-all duration-1000"
-      />
-      {/* Deep dark blue/black gradient blending on the left for text contrast */}
-      <div className="absolute inset-0 bg-gradient-to-r from-[#0f172a] via-[#0f172a]/95 to-transparent w-full md:w-[60%]"></div>
-      <div className="absolute inset-0 bg-gradient-to-r from-[#0f172a] via-[#0f172a]/45 to-transparent"></div>
-      {/* Bottom fade blending into the main page content */}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/50 to-transparent"></div>
+    <div className="absolute inset-x-0 top-0 h-[70vh] md:h-[88vh] overflow-hidden z-0 pointer-events-none">
+      {backdropUrl && (
+        <img
+          src={backdropUrl}
+          alt={alt}
+          className="absolute inset-0 h-full w-full object-cover object-[center_25%] opacity-80 animate-onyx-kenburns"
+        />
+      )}
+      {/* Vignettage léger, comme un écran de cinéma (sous les fondus : le bas
+          rejoint exactement la couleur de la page) */}
+      <div className="absolute inset-0 shadow-[inset_0_0_180px_rgb(0_0_0/0.55)]" />
+      {/* Lisibilité du titre et des boutons, à gauche (sur mobile, le texte est
+          sous l'image : seul le fondu du bas est utile) */}
+      <div className="absolute inset-0 hidden md:block bg-gradient-to-r from-[#0c0d0d] via-[#0c0d0d]/75 to-transparent md:w-[70%]" />
+      <div className="absolute inset-0 bg-gradient-to-r from-[#0c0d0d]/50 to-transparent" />
+      {/* Haut : l'image se fond sous la barre de navigation */}
+      <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-[#0c0d0d]/85 to-transparent" />
+      {/* Bas : raccord avec le contenu de la page */}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#0c0d0d] via-[#0c0d0d]/55 to-transparent" />
     </div>
   )
 }

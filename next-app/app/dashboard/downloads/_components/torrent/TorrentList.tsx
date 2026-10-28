@@ -44,7 +44,7 @@ export function TorrentList({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3">
+    <div className="onyx-stagger grid grid-cols-1 gap-3">
       {filteredTorrents.map((torrent) => (
         <TorrentRow
           key={torrent.hash}

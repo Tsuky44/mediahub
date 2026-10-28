@@ -1,4 +1,4 @@
-import { LayoutDashboard, Search, List, Film, BarChart3, Download, Container, Settings } from 'lucide-react'
+import { LayoutDashboard, Search, List, Film, BarChart3, Download, Settings } from 'lucide-react'
 import type { PermissionTabDef } from '../_types/permission'
 
 export interface TabMeta {
@@ -15,7 +15,6 @@ export const ROLE_TABS: TabMeta[] = [
     { id: 'media', label: 'Médiathèque', icon: Film },
     { id: 'stats', label: 'Statistiques', icon: BarChart3 },
     { id: 'downloads', label: 'Téléchargements', icon: Download },
-    { id: 'docker', label: 'Docker', icon: Container },
     { id: 'settings', label: 'Paramètres', icon: Settings },
 ]
 
@@ -234,50 +233,6 @@ export const ROLE_PERMISSION_TABS: PermissionTabDef[] = [
                         action: 'interactive_search',
                         label: 'Utiliser la Recherche Interactive',
                         description: 'Rechercher et lancer des téléchargements depuis les indexeurs configurés',
-                    },
-                ],
-            },
-        ],
-    },
-    {
-        id: 'docker',
-        label: 'Docker',
-        heading: 'Permissions Docker',
-        groups: [
-            {
-                title: 'Accès & Consultation',
-                style: 'compact',
-                permissions: [
-                    {
-                        subject: 'Docker',
-                        action: 'read',
-                        label: 'Voir les conteneurs (Lecture seule)',
-                        description: 'Accès à la liste des conteneurs et leur statut (On/Off)',
-                    },
-                    {
-                        subject: 'Docker',
-                        action: 'read_details',
-                        label: 'Voir les détails (Logs/Stats/Config)',
-                        description: 'Accès aux logs en direct, statistiques et configuration',
-                    },
-                ],
-            },
-            {
-                title: 'Gestion',
-                style: 'compact',
-                permissions: [
-                    {
-                        subject: 'Docker',
-                        action: 'manage_containers',
-                        label: 'Contrôler les conteneurs',
-                        description: 'Démarrer, arrêter, redémarrer et accès à la console',
-                        danger: true,
-                    },
-                    {
-                        subject: 'Docker',
-                        action: 'manage_groups',
-                        label: 'Gérer les groupes',
-                        description: 'Créer, modifier et supprimer des groupes de conteneurs',
                     },
                 ],
             },

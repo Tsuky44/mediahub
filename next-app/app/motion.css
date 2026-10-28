@@ -1,0 +1,754 @@
+/*
+ * Mouvement du site (importé par globals.css).
+ * Règles de poids : uniquement du CSS, et seulement opacity / translate / scale
+ * (calculés par le compositeur, sans repeindre la page). Les animations liées au
+ * défilement tournent hors du fil JavaScript. Les entrées utilisent un remplissage
+ * `backwards` : une fois jouées, elles ne laissent aucune transformation (les
+ * fenêtres en position fixe des enfants restent calées sur l'écran).
+ */
+
+@theme {
+  /* Entrées : départ vif, arrivée douce. Rebond léger pour les petites pièces. */
+  --ease-out-onyx: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --animate-onyx-rise: onyx-rise 640ms var(--ease-out-onyx) backwards;
+  --animate-onyx-float: onyx-float 3.2s var(--ease-onyx) infinite alternate;
+  --animate-onyx-ping: onyx-ping 1.4s var(--ease-out-onyx) infinite;
+  --animate-onyx-swing: onyx-swing 900ms var(--ease-out-onyx);
+  --animate-onyx-kenburns: onyx-kenburns 14s var(--ease-out-onyx) both;
+
+  @keyframes onyx-rise {
+    from {
+      opacity: 0;
+      translate: 0 18px;
+      scale: 0.985;
+    }
+  }
+  @keyframes onyx-float {
+    to { translate: 0 -6px; }
+  }
+  @keyframes onyx-ping {
+    from { scale: 1; opacity: 0.55; }
+    to { scale: 2.4; opacity: 0; }
+  }
+  @keyframes onyx-swing {
+    15% { rotate: 14deg; }
+    30% { rotate: -11deg; }
+    45% { rotate: 7deg; }
+    60% { rotate: -4deg; }
+    75% { rotate: 2deg; }
+  }
+  @keyframes onyx-kenburns {
+    from { scale: 1.1; }
+  }
+}
+
+@keyframes onyx-page-in {
+  from { opacity: 0; }
+}
+/* Arrivée d'une page : chaque bloc monte et se pose */
+@keyframes onyx-arrive {
+  from {
+    opacity: 0;
+    translate: 0 28px;
+    scale: 0.975;
+  }
+}
+@keyframes onyx-tip-poster-in {
+  from {
+    opacity: 0;
+    scale: 1.14;
+    translate: 0 calc(var(--onyx-tip-dir, 1) * 16px);
+  }
+}
+@keyframes onyx-tip-poster-out {
+  to {
+    opacity: 0;
+    scale: 0.94;
+    translate: 0 calc(var(--onyx-tip-dir, 1) * -16px);
+  }
+}
+@keyframes onyx-tip-text-in {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--onyx-tip-dir, 1) * 12px);
+    filter: blur(3px);
+  }
+}
+/* Comète qui longe la bordure de la barre de navigation */
+@keyframes onyx-comet {
+  from {
+    translate: -100% 0;
+    opacity: 0;
+  }
+  18%,
+  78% {
+    opacity: 1;
+  }
+  to {
+    translate: 290% 0;
+    opacity: 0;
+  }
+}
+/* Lueur qui s'ouvre sous la barre puis s'éteint */
+@keyframes onyx-arrival-glow {
+  from {
+    opacity: 0;
+    scale: 0.5 0.3;
+  }
+  35% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 1.15 1;
+  }
+}
+/* Mise au point de la caméra : le titre sort du flou */
+@keyframes onyx-focus-pull {
+  from {
+    opacity: 0;
+    translate: 0 0.3em;
+    filter: blur(10px);
+  }
+}
+@keyframes onyx-letter {
+  from {
+    opacity: 0;
+    translate: 0 0.5em;
+  }
+}
+@keyframes onyx-drift {
+  from { opacity: 0; translate: -14vw -10vh; scale: 0.7; }
+}
+@keyframes onyx-drift-2 {
+  from { opacity: 0; translate: 12vw 8vh; scale: 0.7; }
+}
+@keyframes onyx-scroll-progress {
+  from { scale: 0 1; }
+}
+@keyframes onyx-shine-text {
+  from { background-position: 150% 0; }
+  to { background-position: -50% 0; }
+}
+@keyframes onyx-sheen {
+  from { translate: -100% 0; }
+  to { translate: 300% 0; }
+}
+@keyframes onyx-breathe {
+  from { scale: 1; opacity: 0.45; }
+  to { scale: 1.7; opacity: 0; }
+}
+@keyframes onyx-nudge {
+  50% { translate: 3px 0; }
+}
+
+@layer base {
+  /* Deux halos de projecteur derrière l'interface. Ils glissent en place une seule
+     fois au chargement : une dérive permanente sous la page obligeait le navigateur
+     à recomposer tout le contenu à chaque image du défilement (mesuré : 2x plus lent
+     sans carte graphique). Fixes, ils ne coûtent rien. */
+  body::before,
+  body::after {
+    content: "";
+    position: fixed;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 50%;
+  }
+  body::before {
+    top: -12vh;
+    left: 8vw;
+    width: 52vw;
+    height: 46vh;
+    background: radial-gradient(closest-side, rgb(212 220 242 / 0.08), transparent);
+    animation: onyx-drift 2.6s var(--ease-out-onyx) backwards;
+  }
+  body::after {
+    bottom: -10vh;
+    right: 4vw;
+    width: 40vw;
+    height: 36vh;
+    background: radial-gradient(closest-side, rgb(234 175 88 / 0.04), transparent);
+    animation: onyx-drift-2 3.2s var(--ease-out-onyx) backwards;
+  }
+
+  /* Pression : chaque bouton s'enfonce légèrement sous le doigt */
+  :where(button, [role="button"], a[href]):not(:disabled, [aria-disabled="true"]) {
+    transition-property: scale;
+    transition-duration: 160ms;
+    transition-timing-function: var(--ease-out-onyx);
+  }
+  :where(button, [role="button"]):not(:disabled, [aria-disabled="true"]):active {
+    scale: 0.97;
+  }
+
+  /* L'anneau de focus se resserre sur l'élément (8 px -> 2 px) */
+  :where(a, button, [role="button"], input, select, textarea, summary, [tabindex]) {
+    outline-offset: 8px;
+  }
+  :where(a, button, [role="button"], input, select, textarea, summary, [tabindex]):focus-visible {
+    transition: outline-offset 220ms var(--ease-out-onyx), scale 160ms var(--ease-out-onyx);
+  }
+
+  /* Fenêtres modales : le voile se pose, la fenêtre monte en douceur.
+     (Les modales qui ont déjà leurs propres classes d'entrée gardent les leurs.) */
+  .fixed.inset-0:is([class*="bg-black/"]) {
+    animation: onyx-page-in 240ms var(--ease-out-onyx) backwards;
+  }
+  .fixed.inset-0:is([class*="bg-black/"]) > :not(.fixed, .absolute) {
+    animation: onyx-rise 420ms var(--ease-spring) backwards;
+    animation-delay: 40ms;
+  }
+  /* Variante : voile en enfant absolu, fenêtre à côté */
+  .fixed.inset-0 > .absolute.inset-0:is([class*="bg-black/"]) {
+    animation: onyx-page-in 240ms var(--ease-out-onyx) backwards;
+  }
+  .fixed.inset-0 > .absolute.inset-0:is([class*="bg-black/"]) ~ :not(.absolute, .fixed) {
+    animation: onyx-rise 420ms var(--ease-spring) backwards;
+    animation-delay: 40ms;
+  }
+}
+
+@layer components {
+  /* Arrivée d'une page : le titre sort du flou, puis le sous-titre monte */
+  .onyx-page :is(h1, .onyx-title) {
+    animation: onyx-focus-pull 760ms var(--ease-out-onyx) backwards;
+  }
+  .onyx-page :is(h1, .onyx-title) + p {
+    animation: onyx-rise 640ms var(--ease-out-onyx) backwards;
+    animation-delay: 120ms;
+  }
+  /* ...et les blocs de la page arrivent l'un après l'autre. Spécificité nulle : un bloc
+     qui a déjà sa propre animation la garde. */
+  :where(.onyx-page > * > :not(.fixed)) {
+    animation: onyx-arrive 760ms var(--ease-out-onyx) backwards;
+    animation-delay: var(--onyx-arrive-delay, 0ms);
+  }
+  :where(.onyx-page > * > :nth-child(2)) { --onyx-arrive-delay: 70ms; }
+  :where(.onyx-page > * > :nth-child(3)) { --onyx-arrive-delay: 140ms; }
+  :where(.onyx-page > * > :nth-child(4)) { --onyx-arrive-delay: 210ms; }
+  :where(.onyx-page > * > :nth-child(5)) { --onyx-arrive-delay: 280ms; }
+  :where(.onyx-page > * > :nth-child(n + 6)) { --onyx-arrive-delay: 340ms; }
+
+  /* Infobulle du calendrier, d'une sortie à l'autre (EventTooltip) : l'affiche se fond dans
+     la suivante, le texte défile dans le sens du mouvement de la souris */
+  .onyx-tip-poster-in {
+    animation: onyx-tip-poster-in 460ms var(--ease-out-onyx) backwards;
+  }
+  .onyx-tip-poster-out {
+    animation: onyx-tip-poster-out 340ms var(--ease-onyx) both;
+  }
+  .onyx-tip-text > * {
+    animation: onyx-tip-text-in 440ms var(--ease-out-onyx) backwards;
+  }
+  .onyx-tip-text > :nth-child(2) { animation-delay: 45ms; }
+  .onyx-tip-text > :nth-child(3) { animation-delay: 90ms; }
+
+  /* Signal d'arrivée dans la barre de navigation (rejoué à chaque page, voir Navbar) :
+     une comète longe la bordure et une lueur éclaire le haut de la page */
+  .onyx-arrival {
+    position: absolute;
+    inset: 100% 0 auto;
+    height: 12rem;
+    margin-top: -6px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .onyx-arrival::before {
+    content: "";
+    position: absolute;
+    inset: 0 12%;
+    background: radial-gradient(50% 55% at 50% 0%, rgb(242 240 237 / 0.08), transparent);
+    transform-origin: 50% 0;
+    opacity: 0;
+    animation: onyx-arrival-glow 1300ms var(--ease-out-onyx) backwards;
+  }
+  .onyx-arrival > span {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    width: 35%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--onyx-ink), transparent);
+    box-shadow: 0 0 10px rgb(242 240 237 / 0.45);
+    opacity: 0;
+    animation: onyx-comet 1000ms cubic-bezier(0.65, 0, 0.35, 1) backwards;
+  }
+
+  /* Apparition en cascade des enfants (grilles, listes, cartes) */
+  .onyx-stagger > :not(.fixed) {
+    animation: onyx-rise 640ms var(--ease-out-onyx) backwards;
+    animation-delay: var(--onyx-delay, 0ms);
+  }
+  .onyx-stagger > :nth-child(2) { --onyx-delay: 35ms; }
+  .onyx-stagger > :nth-child(3) { --onyx-delay: 70ms; }
+  .onyx-stagger > :nth-child(4) { --onyx-delay: 105ms; }
+  .onyx-stagger > :nth-child(5) { --onyx-delay: 140ms; }
+  .onyx-stagger > :nth-child(6) { --onyx-delay: 175ms; }
+  .onyx-stagger > :nth-child(7) { --onyx-delay: 210ms; }
+  .onyx-stagger > :nth-child(8) { --onyx-delay: 245ms; }
+  .onyx-stagger > :nth-child(9) { --onyx-delay: 280ms; }
+  .onyx-stagger > :nth-child(10) { --onyx-delay: 315ms; }
+  .onyx-stagger > :nth-child(11) { --onyx-delay: 350ms; }
+  .onyx-stagger > :nth-child(12) { --onyx-delay: 385ms; }
+  .onyx-stagger > :nth-child(13) { --onyx-delay: 420ms; }
+  .onyx-stagger > :nth-child(14) { --onyx-delay: 455ms; }
+  .onyx-stagger > :nth-child(15) { --onyx-delay: 490ms; }
+  .onyx-stagger > :nth-child(16) { --onyx-delay: 525ms; }
+  .onyx-stagger > :nth-child(17) { --onyx-delay: 560ms; }
+  .onyx-stagger > :nth-child(18) { --onyx-delay: 595ms; }
+  .onyx-stagger > :nth-child(19) { --onyx-delay: 630ms; }
+  .onyx-stagger > :nth-child(20) { --onyx-delay: 665ms; }
+  .onyx-stagger > :nth-child(21) { --onyx-delay: 700ms; }
+  .onyx-stagger > :nth-child(22) { --onyx-delay: 735ms; }
+  .onyx-stagger > :nth-child(23) { --onyx-delay: 770ms; }
+  .onyx-stagger > :nth-child(24) { --onyx-delay: 805ms; }
+
+  /* Texte qui accroche la lumière (titre d'accueil) */
+  .onyx-shine-text {
+    background: linear-gradient(100deg, var(--onyx-ink) 35%, #ffffff 50%, var(--onyx-ink) 65%);
+    background-size: 250% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    animation: onyx-shine-text 5s var(--ease-onyx) infinite;
+  }
+
+  /* Barre de progression active : un reflet la parcourt */
+  .onyx-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+  .onyx-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
+    animation: onyx-sheen 2.2s var(--ease-onyx) infinite;
+    pointer-events: none;
+  }
+
+  /* Bouton flottant : une onde respire autour */
+  .onyx-breathe {
+    position: relative;
+  }
+  .onyx-breathe::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid rgb(242 240 237 / 0.6);
+    animation: onyx-breathe 2.8s var(--ease-out-onyx) infinite;
+    pointer-events: none;
+  }
+  /* Traversée en goutte de la bulle d'aide (SupportChatbot) : les formes sont fusionnées
+     par le filtre #onyx-goo, le calque n'existe que le temps de la traversée */
+  .onyx-goo {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 50;
+    height: 8rem;
+    pointer-events: none;
+    filter: url(#onyx-goo);
+    display: none;
+  }
+  .onyx-goo[data-on] {
+    display: block;
+  }
+  .onyx-goo > span {
+    position: absolute;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+  }
+
+  /* Icône qui avance au survol du parent (flèches « Voir tout »…) */
+  .group:hover .onyx-nudge {
+    animation: onyx-nudge 700ms var(--ease-onyx) infinite;
+  }
+  /* Icône qui sonne au survol (cloche) */
+  .group:hover .onyx-swing,
+  .onyx-swing-once {
+    animation: onyx-swing 900ms var(--ease-out-onyx);
+    transform-origin: 50% 10%;
+  }
+
+  /* Logo : les lettres s'allument une à une au chargement */
+  .onyx-letters > span {
+    display: inline-block;
+    animation: onyx-letter 520ms var(--ease-out-onyx) backwards;
+  }
+  .onyx-letters > span:nth-child(2) { animation-delay: 45ms; }
+  .onyx-letters > span:nth-child(3) { animation-delay: 90ms; }
+  .onyx-letters > span:nth-child(4) { animation-delay: 135ms; }
+  .onyx-letters > span:nth-child(5) { animation-delay: 180ms; }
+  .onyx-letters > span:nth-child(6) { animation-delay: 225ms; }
+  .onyx-letters > span:nth-child(7) { animation-delay: 270ms; }
+  .onyx-letters > span:nth-child(8) { animation-delay: 315ms; }
+}
+
+/* Survol : la carte se soulève. Utilitaire (variantes possibles : *:onyx-lift).
+   À éviter sur un élément qui contient une fenêtre en position fixe. */
+@utility onyx-lift {
+  transition-property: translate, border-color, background-color;
+  transition-duration: 320ms;
+  transition-timing-function: var(--ease-out-onyx);
+  &:hover:not(:has(.fixed)) {
+    translate: 0 -4px;
+  }
+}
+
+/* Survol : un reflet traverse la surface (l'élément coupe ce qui dépasse) */
+@utility onyx-sweep {
+  position: relative;
+  overflow: hidden;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 45%;
+    background: linear-gradient(105deg, transparent, rgb(255 255 255 / 0.12), transparent);
+    translate: -120% 0;
+    pointer-events: none;
+  }
+  &:hover::after {
+    translate: 320% 0;
+    transition: translate 900ms var(--ease-onyx);
+  }
+}
+
+/* Changement de page (View Transitions, voir app/dashboard/template.tsx) :
+   l'ancienne page recule et se brouille pendant que les blocs de la nouvelle arrivent
+   d'eux-mêmes (onyx-arrive). La barre de navigation et le fond ne bougent pas : seule
+   la paire « onyx-page » est animée. */
+/* Le reste de l'écran (barre de navigation, fond) bascule sans fondu : l'ancienne
+   image reste affichée tant que la nouvelle n'est pas prête, puis elle la recouvre. */
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-old(onyx-nav),
+::view-transition-new(onyx-nav) {
+  animation: none;
+}
+/* La barre de navigation a son propre calque, le temps de la transition seulement :
+   elle reste au-dessus de la page (dont l'image de fond passe sous elle). */
+:root:active-view-transition .onyx-scroll-progress {
+  view-transition-name: onyx-nav;
+}
+::view-transition-group(onyx-page) {
+  animation-duration: 520ms;
+  animation-timing-function: var(--ease-out-onyx);
+}
+::view-transition-old(onyx-page) {
+  animation: onyx-vt-out 240ms var(--ease-onyx) both;
+}
+::view-transition-new(onyx-page) {
+  animation: none;
+}
+@keyframes onyx-vt-out {
+  to {
+    opacity: 0;
+    scale: 0.97;
+    filter: blur(8px);
+  }
+}
+
+/* Sens du trajet, posé au clic par MotionDirector (écran large uniquement) :
+   - sections voisines de la barre de navigation : la page glisse dans le sens du menu ;
+   - vers une fiche : plongée, l'ancienne page passe derrière nous, la nouvelle approche ;
+   - en ressortant d'une fiche : remontée, l'inverse. */
+:root[data-onyx-nav="next"]::view-transition-old(onyx-page) {
+  animation: onyx-vt-out-left 380ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+:root[data-onyx-nav="next"]::view-transition-new(onyx-page) {
+  animation: onyx-vt-in-right 640ms var(--ease-out-onyx) 60ms both;
+}
+:root[data-onyx-nav="prev"]::view-transition-old(onyx-page) {
+  animation: onyx-vt-out-right 380ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+:root[data-onyx-nav="prev"]::view-transition-new(onyx-page) {
+  animation: onyx-vt-in-left 640ms var(--ease-out-onyx) 60ms both;
+}
+:root:is([data-onyx-nav="dive"], [data-onyx-nav="hero"])::view-transition-old(onyx-page) {
+  transform-origin: 50% 40vh;
+  animation: onyx-vt-dive-out 440ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+:root:is([data-onyx-nav="dive"], [data-onyx-nav="hero"])::view-transition-new(onyx-page) {
+  transform-origin: 50% 40vh;
+  animation: onyx-vt-dive-in 680ms var(--ease-out-onyx) 80ms both;
+}
+:root[data-onyx-nav="rise"]::view-transition-old(onyx-page) {
+  transform-origin: 50% 40vh;
+  animation: onyx-vt-rise-out 400ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+:root[data-onyx-nav="rise"]::view-transition-new(onyx-page) {
+  transform-origin: 50% 40vh;
+  animation: onyx-vt-rise-in 640ms var(--ease-out-onyx) 60ms both;
+}
+@keyframes onyx-vt-out-left {
+  to { opacity: 0; translate: -96px 0; scale: 0.98; filter: blur(6px); }
+}
+@keyframes onyx-vt-out-right {
+  to { opacity: 0; translate: 96px 0; scale: 0.98; filter: blur(6px); }
+}
+@keyframes onyx-vt-in-right {
+  from { opacity: 0; translate: 140px 0; }
+}
+@keyframes onyx-vt-in-left {
+  from { opacity: 0; translate: -140px 0; }
+}
+@keyframes onyx-vt-dive-out {
+  to { opacity: 0; scale: 1.08; filter: blur(14px); }
+}
+@keyframes onyx-vt-dive-in {
+  from { opacity: 0; scale: 0.9; }
+}
+@keyframes onyx-vt-rise-out {
+  to { opacity: 0; scale: 0.9; filter: blur(10px); }
+}
+@keyframes onyx-vt-rise-in {
+  from { opacity: 0; scale: 1.07; }
+}
+
+/* Plongée dans une fiche depuis une affiche : la carte cliquée (son cadre, coins compris) part
+   aussitôt vers le haut de l'écran en grandissant, sans temps d'arrêt, et se dissout dans la
+   fiche qui approche derrière elle (déplacement et échelle calculés au clic par MotionDirector). */
+:root[data-onyx-nav="hero"]:active-view-transition [data-onyx-hero] {
+  view-transition-name: onyx-hero;
+}
+::view-transition-group(onyx-nav) {
+  z-index: 3;
+}
+::view-transition-group(onyx-hero) {
+  z-index: 2;
+}
+::view-transition-old(onyx-hero) {
+  animation: onyx-hero-fly 720ms cubic-bezier(0.32, 0, 0.18, 1) both;
+}
+@keyframes onyx-hero-fly {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  55% {
+    opacity: 0.9;
+    filter: blur(1px);
+  }
+  to {
+    translate: var(--onyx-hero-x, 0px) var(--onyx-hero-y, 0px);
+    scale: var(--onyx-hero-scale, 3);
+    opacity: 0;
+    filter: blur(14px);
+  }
+}
+
+/* Écran large : fenêtres, menus et panneaux plus vivants. Hors couche (@layer) pour passer
+   devant les classes d'entrée déjà posées sur ces éléments (animate-in…). */
+@media (min-width: 768px) {
+  /* Le voile tombe et floute progressivement la page derrière */
+  .fixed.inset-0[class*="bg-black/"],
+  .fixed.inset-0 > .absolute.inset-0[class*="bg-black/"] {
+    animation: onyx-veil-in 380ms var(--ease-out-onyx) backwards;
+  }
+  /* La fenêtre jaillit du bouton cliqué (origine posée par MotionDirector) */
+  .fixed.inset-0[class*="bg-black/"] > :not(.fixed, .absolute),
+  .fixed.inset-0 > .absolute.inset-0[class*="bg-black/"] ~ :not(.absolute, .fixed) {
+    animation: onyx-window-in 660ms cubic-bezier(0.2, 1.18, 0.32, 1) backwards;
+  }
+  /* ...puis son contenu se dépose : en-tête, corps, boutons */
+  :is(
+    .fixed.inset-0[class*="bg-black/"] > :not(.fixed, .absolute),
+    .fixed.inset-0 > .absolute.inset-0[class*="bg-black/"] ~ :not(.absolute, .fixed)
+  ) > :not(.fixed, .absolute) {
+    animation: onyx-rise 520ms var(--ease-out-onyx) backwards;
+    animation-delay: 170ms;
+  }
+  :is(
+    .fixed.inset-0[class*="bg-black/"] > :not(.fixed, .absolute),
+    .fixed.inset-0 > .absolute.inset-0[class*="bg-black/"] ~ :not(.absolute, .fixed)
+  ) > :not(.fixed, .absolute):nth-child(2) { animation-delay: 220ms; }
+  :is(
+    .fixed.inset-0[class*="bg-black/"] > :not(.fixed, .absolute),
+    .fixed.inset-0 > .absolute.inset-0[class*="bg-black/"] ~ :not(.absolute, .fixed)
+  ) > :not(.fixed, .absolute):nth-child(3) { animation-delay: 270ms; }
+  :is(
+    .fixed.inset-0[class*="bg-black/"] > :not(.fixed, .absolute),
+    .fixed.inset-0 > .absolute.inset-0[class*="bg-black/"] ~ :not(.absolute, .fixed)
+  ) > :not(.fixed, .absolute):nth-child(n + 4) { animation-delay: 320ms; }
+
+  /* Fenêtre remplacée par une autre (chargement puis contenu, MotionDirector) : elle reste en
+     place, seul son contenu se dépose */
+  .fixed.inset-0[data-onyx-swap],
+  .fixed.inset-0[data-onyx-swap] > .absolute.inset-0,
+  .fixed.inset-0[data-onyx-swap] > :not(.fixed, .absolute) {
+    animation: none;
+  }
+
+  /* Menus déroulants : ils s'ouvrent en rebond depuis leur bouton, les entrées suivent */
+  .animate-pop-in {
+    animation: onyx-pop 420ms cubic-bezier(0.2, 1.3, 0.3, 1) backwards;
+  }
+  .animate-pop-in > * {
+    animation: onyx-pop-item 460ms var(--ease-out-onyx) backwards;
+    animation-delay: 60ms;
+  }
+  .animate-pop-in > :nth-child(2) { animation-delay: 95ms; }
+  .animate-pop-in > :nth-child(3) { animation-delay: 130ms; }
+  .animate-pop-in > :nth-child(4) { animation-delay: 165ms; }
+  .animate-pop-in > :nth-child(5) { animation-delay: 200ms; }
+  .animate-pop-in > :nth-child(n + 6) { animation-delay: 235ms; }
+
+  /* Panneaux et listes déroulantes (animate-in) : ils sortent du flou */
+  .animate-in {
+    animation-name: onyx-enter-wide;
+    animation-timing-function: var(--ease-out-onyx);
+  }
+
+  /* Page courante dans la barre : son icône saute quand on y arrive */
+  nav a[aria-current="page"] > svg:first-child {
+    animation: onyx-nav-pop 700ms var(--ease-spring) backwards;
+  }
+}
+/* Copie d'une fenêtre qui se ferme (MotionDirector) : seules ses animations de sortie jouent */
+[data-onyx-ghost],
+[data-onyx-ghost] * {
+  animation: none !important;
+  transition: none !important;
+  pointer-events: none !important;
+}
+@keyframes onyx-veil-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+}
+@keyframes onyx-window-in {
+  from {
+    opacity: 0;
+    translate: var(--onyx-ox, 0px) var(--onyx-oy, 48px);
+    scale: 0.3;
+    filter: blur(12px);
+  }
+  45% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes onyx-pop {
+  from {
+    opacity: 0;
+    translate: 0 -10px;
+    scale: 0.88;
+    filter: blur(6px);
+  }
+}
+@keyframes onyx-pop-item {
+  from {
+    opacity: 0;
+    translate: 0 -6px;
+  }
+}
+@keyframes onyx-enter-wide {
+  from {
+    opacity: var(--onyx-enter-opacity, 1);
+    translate: var(--onyx-enter-x, 0) var(--onyx-enter-y, 0);
+    scale: var(--onyx-enter-scale, 1);
+    filter: blur(5px);
+  }
+}
+@keyframes onyx-nav-pop {
+  35% { scale: 1.5; rotate: -12deg; }
+  65% { scale: 0.95; rotate: 5deg; }
+}
+
+/* Défilement : fine ligne d'encre sous la barre de navigation */
+.onyx-scroll-progress::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--onyx-ink));
+  transform-origin: 0 50%;
+  scale: 0 1;
+  pointer-events: none;
+}
+@supports (animation-timeline: scroll()) {
+  .onyx-scroll-progress::after {
+    animation: onyx-scroll-progress linear both;
+    animation-timeline: scroll(root block);
+  }
+}
+
+/* Éléments qui montent en entrant dans l'écran (sans enfant en position fixe) */
+@supports (animation-timeline: view()) {
+  .onyx-reveal {
+    animation: onyx-rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 80%;
+  }
+}
+
+/* Une fenêtre en position fixe ouverte dans un élément encore en mouvement serait
+   placée par rapport à lui : dès qu'elle apparaît, l'élément arrête son animation. */
+:is(.onyx-stagger > *, .onyx-reveal, .onyx-ignite, .onyx-page > * > *):has(.fixed) {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0ms !important;
+    transition-delay: 0ms !important;
+  }
+  /* Aucune animation décorative : le contenu s'affiche dès la première image, même
+     si la page est encore occupée à démarrer. Seuls les indicateurs de chargement
+     (rotation, barre indéterminée) continuent de bouger. */
+  *:not(.animate-spin, .animate-indeterminate),
+  *::before,
+  *::after {
+    animation-name: none !important;
+  }
+  .onyx-ignite,
+  .onyx-reveal,
+  .onyx-scroll-progress::after {
+    animation: none !important;
+  }
+  .onyx-ignite::before {
+    content: none !important;
+  }
+  .onyx-arrival {
+    display: none;
+  }
+  body::before,
+  body::after,
+  .onyx-shine-text,
+  .onyx-sheen::after,
+  .onyx-breathe::before {
+    animation: none;
+  }
+}
+
+/* Barres de valeur fixe (stockage, progression) : elles se remplissent à l'arrivée */
+@keyframes onyx-grow {
+  from { scale: 0 1; }
+}
+@layer components {
+  .onyx-grow {
+    transform-origin: left center;
+    animation: onyx-grow 1100ms var(--ease-out-onyx) backwards;
+    animation-delay: 250ms;
+  }
+}

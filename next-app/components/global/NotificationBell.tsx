@@ -146,10 +146,10 @@ export function NotificationBell() {
       {/* Bell Trigger Icon */}
       <button
         onClick={handleToggle}
-        className="relative p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+        className="group relative p-2 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
         aria-label="Notifications"
       >
-        <Bell className="h-5 w-5" />
+        <Bell className="onyx-swing h-5 w-5" />
         {unreadCount > 0 && (
           <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -309,6 +309,8 @@ export function NotificationBell() {
                             {n.posterPath ? (
                               <div className="relative w-12 h-18 rounded-lg overflow-hidden bg-gray-800 border border-gray-700 shadow-md">
                                 <img
+                                  loading="lazy"
+                                  decoding="async"
                                   src={`https://image.tmdb.org/t/p/w92${n.posterPath}`}
                                   alt={n.title}
                                   className="w-full h-full object-cover"

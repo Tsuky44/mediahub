@@ -6,6 +6,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { fetchMedia } from '../../actions'
 import type { MediaFiltersValue } from '@/components/global/media-filters/_types/media-filters'
 import { mapGenres } from '@/components/global/media-filters/_utils/genre-mapping'
+import { preloadPosters } from '@/components/global/media-card/preloadPosters'
 
 const CACHE_KEY = 'infinite-media-cache'
 
@@ -125,8 +126,22 @@ export function useInfiniteMedia(
   })
   const [showFilters, setShowFilters] = useState(false)
 
-  const { ref, inView } = useInView({ rootMargin: '1000px' })
+  // Déclenché bien avant le bas de la liste : les éléments (déjà préchargés) sont ajoutés hors écran
+  const { ref, inView } = useInView({ rootMargin: '2500px' })
   const router = useRouter()
+
+  // Préchargement de la page suivante : quand le bas de la liste est atteint,
+  // ses éléments sont déjà chargés et s'affichent sans attendre le serveur.
+  const prefetchRef = useRef<{ key: string; promise: ReturnType<typeof fetchMedia> } | null>(null)
+  const pageKey = (p: number) => JSON.stringify([p, initialType, initialSearch ?? null, activeFilters])
+  const getPage = (p: number) => {
+    const prefetched = prefetchRef.current
+    if (prefetched?.key === pageKey(p)) {
+      prefetchRef.current = null
+      return prefetched.promise
+    }
+    return fetchMedia(p, initialType, initialSearch, activeFilters)
+  }
   
   // Track previous type for genre mapping
   const prevTypeRef = useRef(initialType)
@@ -263,17 +278,16 @@ export function useInfiniteMedia(
 
     setLoading(true)
     const nextPage = page + 1
-    const data = await fetchMedia(nextPage, initialType, initialSearch, activeFilters)
+    const data = await getPage(nextPage)
 
     if (data.results.length > 0) {
       setItems(prev => {
-        const newItems = data.results.filter(
-          (newItem: any) => !prev.some((existingItem: any) => existingItem.id === newItem.id)
-        )
+        const existingIds = new Set(prev.map((existingItem: any) => existingItem.id))
+        const newItems = data.results.filter((newItem: any) => !existingIds.has(newItem.id))
         return [...prev, ...newItems]
       })
       setPage(nextPage)
-      if (page >= (data.total_pages || 1000)) {
+      if (nextPage >= (data.total_pages || 1000)) {
         setHasMore(false)
       }
     } else {
@@ -282,12 +296,26 @@ export function useInfiniteMedia(
     setLoading(false)
   }
 
+  // Lance le chargement de la page suivante en arrière-plan dès que la page courante est affichée
   useEffect(() => {
-    if (inView) {
+    if (!hasMore || loading) return
+    const key = pageKey(page + 1)
+    if (prefetchRef.current?.key === key) return
+    const promise = fetchMedia(page + 1, initialType, initialSearch, activeFilters)
+    // Affiches téléchargées en même temps que les données ; l'erreur éventuelle remontera à l'utilisation
+    promise.then((data) => preloadPosters(data.results ?? [])).catch(() => {})
+    prefetchRef.current = { key, promise }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, hasMore, loading, initialType, initialSearch, activeFilters])
+
+  useEffect(() => {
+    // Rejoué après chaque page : tant que le bas de liste reste proche, on enchaîne
+    // (une page préchargée arrive instantanément, le déclencheur ne sort jamais de l'écran)
+    if (inView && !loading && hasMore) {
       loadMore()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inView])
+  }, [inView, loading, hasMore, page])
 
   const handleFilterChange = (type: 'all' | 'movie' | 'tv' | 'watch-later' | 'recommendations') => {
     if (type === initialType) return

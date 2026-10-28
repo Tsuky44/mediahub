@@ -1,5 +1,5 @@
 import axios from 'axios';
-import https from 'https';
+import { insecureHttpsAgent, keepAliveHttpAgent } from '../http-agents'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
@@ -42,9 +42,7 @@ interface PlexSession {
 
 
 export class PlexService {
-  private httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-  });
+  private httpsAgent = insecureHttpsAgent
 
   constructor(private baseUrl: string, private token: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
@@ -57,6 +55,7 @@ export class PlexService {
         'X-Plex-Token': this.token
       },
       timeout,
+      httpAgent: keepAliveHttpAgent,
       httpsAgent: this.httpsAgent,
       headers: {
         'Accept': 'application/json'
@@ -203,6 +202,7 @@ export class PlexService {
                 'X-Plex-Product': 'MediaHub',
                 'X-Plex-Version': '1.0.0'
             },
+            httpAgent: keepAliveHttpAgent,
             httpsAgent: this.httpsAgent,
             timeout: 15000 // 15s timeout
         });
@@ -237,6 +237,7 @@ export class PlexService {
                 'X-Plex-Client-Identifier': 'mediahub-client-generic',
                 'Accept': 'application/json'
             },
+            httpAgent: keepAliveHttpAgent,
             httpsAgent: this.httpsAgent,
             timeout: 10000
         });

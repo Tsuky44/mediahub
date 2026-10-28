@@ -1,12 +1,10 @@
 import axios from 'axios';
-import https from 'https';
+import { insecureHttpsAgent, keepAliveHttpAgent } from '../http-agents'
 
 export class JellyseerrService {
   private baseUrl: string;
   private apiKey: string;
-  private httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-  });
+  private httpsAgent = insecureHttpsAgent
 
   constructor(baseUrl: string, apiKey: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
@@ -21,6 +19,7 @@ export class JellyseerrService {
         'Accept': 'application/json'
       },
       timeout,
+      httpAgent: keepAliveHttpAgent,
       httpsAgent: this.httpsAgent
     });
   }

@@ -2,14 +2,13 @@
 import { db } from '@/lib/db/drizzle'
 import { settings, users } from '@/lib/db/schema'
 import { inArray, eq } from 'drizzle-orm'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 // GET: Get current system message if available and unseen
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   const { searchParams } = new URL(req.url)
   const type = searchParams.get('type') // 'banner' or 'popup' (default)
 
@@ -98,7 +97,7 @@ export async function GET(req: Request) {
 
 // POST: Acknowledge (mark as seen) the current system message
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
   
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

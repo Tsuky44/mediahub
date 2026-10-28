@@ -42,7 +42,6 @@ export default function SettingsTabs({
             requests: isAdmin,
             logs: isAdmin,
             notifications: isAdmin,
-            trackers: isAdmin,
             support: isAdmin,
         }),
         [isAdmin]

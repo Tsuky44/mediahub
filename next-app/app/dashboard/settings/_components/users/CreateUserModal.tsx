@@ -39,7 +39,7 @@ export function CreateUserModal({ roles, onClose, onSubmit }: CreateUserModalPro
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-[#0f172a] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6">
+            <div className="bg-[#0c0d0d] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-xl font-bold text-white">Créer un utilisateur local</h3>
                     <button

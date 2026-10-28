@@ -85,7 +85,7 @@ export default function FullCreditsButton({ cast, crew, children }: FullCreditsB
 
             {isOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-[#1e293b] w-full max-w-4xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                    <div className="bg-[#1f2121] w-full max-w-4xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 border-b border-white/5">
                             <h2 className="text-2xl font-bold text-white">Équipe complète</h2>
@@ -115,6 +115,8 @@ export default function FullCreditsButton({ cast, crew, children }: FullCreditsB
                                             <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-800 flex-shrink-0 border border-white/5">
                                                 {actor.profile_path ? (
                                                     <img 
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         src={`https://image.tmdb.org/t/p/w185${actor.profile_path}`} 
                                                         alt={actor.name}
                                                         className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
@@ -150,6 +152,8 @@ export default function FullCreditsButton({ cast, crew, children }: FullCreditsB
                                                 <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-800 flex-shrink-0 border border-white/5">
                                                     {member.profile_path ? (
                                                         <img 
+                                                            loading="lazy"
+                                                            decoding="async"
                                                             src={`https://image.tmdb.org/t/p/w185${member.profile_path}`} 
                                                             alt={member.name}
                                                             className="w-full h-full object-cover group-hover:scale-110 transition duration-300"

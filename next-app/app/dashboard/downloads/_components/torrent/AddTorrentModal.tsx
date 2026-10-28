@@ -35,7 +35,7 @@ export function AddTorrentModal({
 
     return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="bg-[#0A0A0A]/95 backdrop-blur-xl rounded-3xl border border-white/10 w-full max-w-md p-8 shadow-2xl animate-in fade-in zoom-in-95 ring-1 ring-white/10">
+            <div className="bg-[#080909]/95 backdrop-blur-xl rounded-3xl border border-white/10 w-full max-w-md p-8 shadow-2xl animate-in fade-in zoom-in-95 ring-1 ring-white/10">
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-black text-white flex items-center gap-3">
                         <div className="p-2.5 bg-indigo-500/10 rounded-xl border border-indigo-500/20">

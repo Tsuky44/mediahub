@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import Link from 'next/link'
 import { Film } from 'lucide-react'
 import { useMediaCardActions, type MediaCardItem } from './media-card/useMediaCardActions'
@@ -10,7 +11,9 @@ import { MediaCardActions } from './media-card/MediaCardActions'
 
 export interface MediaItem extends MediaCardItem {}
 
-export function MediaCard({ item, showFavoriteButton = false }: { item: MediaItem, showFavoriteButton?: boolean }) {
+// memo : dans les listes infinies, les cartes déjà affichées ne sont pas recalculées
+// à chaque ajout de page (coût constant au lieu de croître avec la longueur de la liste)
+export const MediaCard = memo(function MediaCard({ item, showFavoriteButton = false }: { item: MediaItem, showFavoriteButton?: boolean }) {
   const {
     isFavorite,
     isWatchLater,
@@ -25,14 +28,15 @@ export function MediaCard({ item, showFavoriteButton = false }: { item: MediaIte
   const posterUrl = getPosterUrl(item.poster_path, 'w342')
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl bg-gray-900 shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(0,0,0,0.3)] hover:z-10 ring-1 ring-white/5 hover:ring-white/20">
+    // onyx-ignite : l'affiche s'allume en entrant dans l'écran (globals.css)
+    <div className="onyx-ignite onyx-sweep group relative flex flex-col overflow-hidden rounded-2xl bg-gray-900 shadow-lg transition-[scale,box-shadow] duration-300 ease-onyx hover:scale-[1.04] hover:shadow-[0_30px_60px_rgb(0_0_0/0.5)] hover:z-10 ring-1 ring-white/5 hover:ring-white/20">
       <Link href={`/dashboard/media/${linkId}?type=${item.media_type || 'movie'}`} className="block h-full w-full">
         <div className="aspect-[2/3] w-full overflow-hidden bg-gray-800 relative">
           {posterUrl !== '/placeholder.png' ? (
             <img
               src={posterUrl}
               alt={title}
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+              className="absolute inset-0 h-full w-full object-cover transition-[scale] duration-700 ease-onyx group-hover:scale-105"
               loading="lazy"
             />
           ) : (
@@ -41,7 +45,7 @@ export function MediaCard({ item, showFavoriteButton = false }: { item: MediaIte
             </div>
           )}
 
-          <MediaCardStatus status={item.media_status?.status} message={item.media_status?.message} />
+          <MediaCardStatus status={item.media_status?.status} message={item.media_status?.message} releaseDate={item.media_status?.releaseDate} />
           <MediaCardOverlay title={title} mediaType={item.media_type} overview={item.overview} />
         </div>
       </Link>
@@ -57,4 +61,4 @@ export function MediaCard({ item, showFavoriteButton = false }: { item: MediaIte
       />
     </div>
   )
-}
+})

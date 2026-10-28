@@ -56,7 +56,7 @@ export default function TemplateHelpModal() {
       {open &&
         createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50">
-            <div className="bg-[#0f172a] border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="bg-[#0c0d0d] border border-white/10 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
               <div className="flex items-center justify-between p-4 border-b border-white/10">
                 <h3 className="font-semibold text-white">Placeholders disponibles</h3>
                 <button

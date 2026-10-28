@@ -1,6 +1,6 @@
 import { db } from '@/lib/db/drizzle'
 import { settings } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { logger } from '@/lib/logger'
 
 // Cache in-memory pour éviter un hit DB à chaque appel getSetting().
@@ -40,6 +40,23 @@ export async function getSetting(key: string, defaultValue: string = ''): Promis
   }
   
   return defaultValue
+}
+
+/**
+ * Lit plusieurs settings en UNE requête (valeurs DB brutes, sans priorité env ni cache).
+ * Les clés absentes ou vides valent ''.
+ */
+export async function readSettings<K extends string>(keys: readonly K[]): Promise<Record<K, string>> {
+  const result = Object.fromEntries(keys.map((k) => [k, ''])) as Record<K, string>
+  if (!db || keys.length === 0) return result
+  const rows = await db
+    .select({ key: settings.key, value: settings.value })
+    .from(settings)
+    .where(inArray(settings.key, keys as unknown as string[]))
+  for (const row of rows) {
+    if (row.value) result[row.key as K] = row.value
+  }
+  return result
 }
 
 // Helper for retry with exponential backoff

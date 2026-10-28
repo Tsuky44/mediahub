@@ -1,6 +1,5 @@
 ﻿import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
 import { users, settings, watchLater, accounts, sessions, mediaRequests, watchEvents, auditLogs, userGroups, userGroupMembers } from '@/lib/db/schema'
 import { decryptData } from '@/lib/crypto'
@@ -10,7 +9,7 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getSession()
     const user = session?.user as any
 
     if (!session || user?.role !== 'admin') {

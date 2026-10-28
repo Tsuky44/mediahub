@@ -1,5 +1,4 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 import { computeStatsPeriod, type StatsPeriodParams, type StatsPeriod } from '../_utils/stats-period'
 import {
@@ -19,6 +18,11 @@ import {
 } from './stats-data'
 import type { UserStat } from '../_components/UserStatsCard'
 import type { ActivityData } from '../_components/StatsCharts'
+
+// RecentHistory n'affiche que les 50 entrées les plus récentes (les mises à jour
+// temps réel ne touchent que le haut de la liste) : inutile de sérialiser tout
+// l'historique de la période vers le navigateur.
+const HISTORY_PAYLOAD_LIMIT = 200
 
 export interface StatsDataResult {
   hasGlobalView: boolean
@@ -56,7 +60,7 @@ export interface StatsDataResult {
 export async function fetchStatsData(
   searchParams: StatsPeriodParams
 ): Promise<StatsDataResult | { restricted: true; message: string; linkHref: string; linkLabel: string }> {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
 
   if (!session || !session.user) {
     return { restricted: true, message: 'Veuillez vous connecter pour voir les statistiques.', linkHref: '/api/auth/signin', linkLabel: 'Se connecter' }
@@ -100,7 +104,7 @@ export async function fetchStatsData(
   const { hourlyActivity, orderedDailyActivity, monthlyActivity } = computeActivityHistograms(historyArray, period)
 
   const embySessions: unknown[] = []
-  const aggregatedHistory = consolidateHistory(historyArray, [], itemDurations)
+  const aggregatedHistory = consolidateHistory(historyArray, [], itemDurations).slice(0, HISTORY_PAYLOAD_LIMIT)
 
   const { userStatsMap, totalWatchTimeSeconds } = computeUserStats(
     historyArray,

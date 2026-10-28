@@ -232,7 +232,7 @@ function MobileActionsMenu({
         ref={menuRef}
         role="menu"
         style={style}
-        className="w-[min(17.5rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-white/10 bg-[#0b1220]/97 shadow-2xl shadow-black/50 backdrop-blur-xl animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200"
+        className="w-[min(17.5rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-white/10 bg-[#080909]/97 shadow-2xl shadow-black/50 backdrop-blur-xl animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200"
       >
         <div className="border-b border-white/5 px-3.5 py-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
@@ -445,7 +445,7 @@ export default function MediaActionsRow(props: MediaActionsRowProps) {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={clsx(
-          'flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border shadow-sm transition-all duration-300',
+          'flex h-[42px] w-[42px] sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full border shadow-sm transition-all duration-300',
           isOpen
             ? 'border-indigo-500/50 bg-indigo-600/20 text-indigo-400'
             : 'border-white/10 bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white',

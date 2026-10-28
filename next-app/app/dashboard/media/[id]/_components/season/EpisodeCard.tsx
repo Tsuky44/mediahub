@@ -23,6 +23,8 @@ export function EpisodeCard({ episode, title, tvId, tvdbId, seasonNumber, allSea
             <div className="relative h-32 w-full flex-shrink-0 overflow-hidden rounded-md sm:w-56 bg-gray-900">
                 {episode.still_path ? (
                     <img
+                        loading="lazy"
+                        decoding="async"
                         src={`https://image.tmdb.org/t/p/w500${episode.still_path}`}
                         alt={episode.name}
                         className="h-full w-full object-cover"

@@ -1,8 +1,9 @@
 'use client'
 
-import { Film, Tv, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import type { StorageItem } from '../../_types/storage'
 import { formatBytes, formatLastPlayed } from '../../_utils/storage-formatters'
+import { StoragePoster } from './StoragePoster'
 
 interface StorageTableRowProps {
   item: StorageItem
@@ -27,11 +28,9 @@ export function StorageTableRow({ item, onSelect, onDelete, selected, onToggleSe
           className="w-4 h-4 rounded border-gray-600 text-purple-500 focus:ring-purple-500/50 bg-gray-800 cursor-pointer"
         />
       </td>
-      <td className="px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${item.type === 'Movie' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-            {item.type === 'Movie' ? <Film size={18} /> : <Tv size={18} />}
-          </div>
+      <td className="px-6 py-3">
+        <div className="flex items-center gap-4">
+          <StoragePoster item={item} className="w-10" />
           <div>
             <div className="font-medium text-white group-hover:text-purple-400 transition-colors">{item.name}</div>
             {item.type === 'Series' && (

@@ -24,7 +24,7 @@ export function DeleteFileModal({ file, isOpen, onClose, onConfirm }: DeleteFile
 
     return createPortal(
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-            <div className="bg-[#0A0A0A]/95 backdrop-blur-xl rounded-3xl shadow-2xl shadow-red-500/10 max-w-md w-full border border-white/10 overflow-hidden ring-1 ring-white/10 scale-100 animate-in zoom-in-95 duration-200">
+            <div className="bg-[#080909]/95 backdrop-blur-xl rounded-3xl shadow-2xl shadow-red-500/10 max-w-md w-full border border-white/10 overflow-hidden ring-1 ring-white/10 scale-100 animate-in zoom-in-95 duration-200">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500/50 to-transparent opacity-50" />
 
                 <div className="p-8 text-center space-y-6">

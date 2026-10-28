@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { Loader2, Trash2, X } from 'lucide-react'
-import type { StorageItem, SeasonDetail, StorageSort } from '../_types/storage'
+import type { StorageItem, SeasonDetail, StorageSort, BulkDeleteProgress } from '../_types/storage'
 import { useStorageItems } from '../_hooks/useStorageItems'
 import { StorageTable } from './storage/StorageTable'
 import { StorageDetailsModal } from './storage/StorageDetailsModal'
@@ -11,7 +11,10 @@ import { DeleteStorageModal } from './storage/DeleteStorageModal'
 import { BulkDeleteModal } from './storage/BulkDeleteModal'
 import { BulkDeleteResultModal } from './storage/BulkDeleteResultModal'
 import { StorageManagerHeader } from './storage-manager/StorageManagerHeader'
+import { StorageFilterBar } from './storage-manager/StorageFilterBar'
 import { useStorageManager } from './storage-manager/useStorageManager'
+import { countActiveFilters } from '../_utils/storage-filters'
+import { formatBytes } from '../_utils/storage-formatters'
 
 export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
     const [activeTab, setActiveTab] = useState<'Movie' | 'Series'>('Movie')
@@ -21,6 +24,9 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
         searchTerm,
         setSearchTerm,
         debouncedSearch,
+        filters,
+        setFilters,
+        debouncedFilters,
         itemToDelete,
         setItemToDelete,
         deleteFromArr,
@@ -33,6 +39,8 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
         items,
         totals,
         pagination,
+        matchedSize,
+        refreshing,
         loading,
         loadingMore,
         hasMore,
@@ -48,7 +56,7 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
         deleteItem,
         deleteMultiple,
         cacheBuilding,
-    } = useStorageItems(activeTab, debouncedSearch, sort)
+    } = useStorageItems(activeTab, debouncedSearch, sort, debouncedFilters)
 
     const totalSize = totals.all
     const categorySize = activeTab === 'Movie' ? totals.movies : totals.series
@@ -57,16 +65,22 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [showBulkDelete, setShowBulkDelete] = useState(false)
     const [bulkDeleteFromArr, setBulkDeleteFromArr] = useState(true)
-    const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+    const [bulkProgress, setBulkProgress] = useState<BulkDeleteProgress | null>(null)
+    const [stopRequested, setStopRequested] = useState(false)
+    const bulkAbort = useRef<AbortController | null>(null)
     const [bulkDeleteResult, setBulkDeleteResult] = useState<{
         successCount: number
         failedCount: number
+        skippedCount: number
         freedBytes: number
     } | null>(null)
+    // Médias figés au lancement : la liste de la modale ne bouge pas pendant que
+    // les lignes supprimées disparaissent du tableau.
+    const [bulkTargets, setBulkTargets] = useState<StorageItem[]>([])
 
     useEffect(() => {
         setSelectedIds(new Set())
-    }, [activeTab, debouncedSearch, sort])
+    }, [activeTab, debouncedSearch, sort, debouncedFilters])
 
     useEffect(() => {
         setSelectedIds(prev => {
@@ -79,6 +93,10 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
     const selectedItems = useMemo(
         () => items.filter(i => selectedIds.has(i.id)),
         [items, selectedIds]
+    )
+    const selectedSize = useMemo(
+        () => selectedItems.reduce((acc, i) => acc + (i.size || 0), 0),
+        [selectedItems]
     )
 
     const toggleSelect = (id: string) => {
@@ -124,23 +142,63 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
             toast.error(`${playing.length} média(s) en cours de lecture ne peuvent pas être supprimés.`)
         }
         setBulkDeleteFromArr(true)
+        setBulkTargets(selectedItems)
         setShowBulkDelete(true)
     }
 
     const confirmBulkDelete = async () => {
-        setIsBulkDeleting(true)
-        const result = await deleteMultiple(selectedItems, bulkDeleteFromArr)
-        setIsBulkDeleting(false)
+        const controller = new AbortController()
+        bulkAbort.current = controller
+        setStopRequested(false)
+        const result = await deleteMultiple(bulkTargets, bulkDeleteFromArr, {
+            signal: controller.signal,
+            onProgress: setBulkProgress,
+        })
+        bulkAbort.current = null
+        setBulkProgress(null)
         setShowBulkDelete(false)
         setSelectedIds(new Set())
         if (result.success > 0) {
             setBulkDeleteResult({
                 successCount: result.success,
                 failedCount: result.failed,
+                skippedCount: bulkTargets.length - result.processed,
                 freedBytes: result.freedBytes,
             })
         }
     }
+
+    const stopBulkDelete = () => {
+        setStopRequested(true)
+        bulkAbort.current?.abort()
+    }
+
+    const selectionBar = selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-purple-500/10 border border-purple-500/20 rounded-2xl px-4 py-3">
+            <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-white">
+                    {selectedIds.size} média{selectedIds.size > 1 ? 's' : ''} sélectionné{selectedIds.size > 1 ? 's' : ''}
+                    <span className="ml-2 text-purple-300 font-semibold" title="Espace libéré si la sélection est supprimée">
+                        • {formatBytes(selectedSize)}
+                    </span>
+                </span>
+                <button
+                    onClick={() => setSelectedIds(new Set())}
+                    className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors"
+                >
+                    <X size={14} />
+                    Tout désélectionner
+                </button>
+            </div>
+            <button
+                onClick={openBulkDelete}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors"
+            >
+                <Trash2 className="w-4 h-4" />
+                Supprimer la sélection
+            </button>
+        </div>
+    )
 
     return (
         <div className="space-y-6">
@@ -158,33 +216,27 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
                 onSync={syncLastPlayed}
             />
 
-            {selectedIds.size > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-3 bg-purple-500/10 border border-purple-500/20 rounded-2xl px-4 py-3">
-                    <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-white">
-                            {selectedIds.size} média{selectedIds.size > 1 ? 's' : ''} sélectionné{selectedIds.size > 1 ? 's' : ''}
-                        </span>
-                        <button
-                            onClick={() => setSelectedIds(new Set())}
-                            className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors"
-                        >
-                            <X size={14} />
-                            Tout désélectionner
-                        </button>
-                    </div>
-                    <button
-                        onClick={openBulkDelete}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition-colors"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                        Supprimer la sélection
-                    </button>
-                </div>
-            )}
+            {/* Filtres et sélection restent visibles pendant le défilement (-top-6 : padding du conteneur) */}
+            <div className="sticky -top-6 z-20 -mx-6 px-6 py-3 space-y-3 bg-gray-950/90 backdrop-blur-md border-b border-white/5">
+                <StorageFilterBar
+                    filters={filters}
+                    onChange={setFilters}
+                    resultCount={loading ? null : pagination.total}
+                    resultSize={loading ? null : matchedSize}
+                    refreshing={refreshing}
+                />
+                {selectionBar}
+            </div>
 
             <StorageTable
                 items={items}
                 loading={loading}
+                refreshing={refreshing}
+                loadingLabel={
+                    countActiveFilters(debouncedFilters) > 0 || sort
+                        ? 'Analyse de toute la bibliothèque…'
+                        : undefined
+                }
                 sort={sort}
                 onSortChange={setSort}
                 onSelect={openDetails}
@@ -242,14 +294,16 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
                 />
             )}
 
-            {showBulkDelete && selectedItems.length > 0 && (
+            {showBulkDelete && bulkTargets.length > 0 && (
                 <BulkDeleteModal
-                    items={selectedItems}
+                    items={bulkTargets}
                     deleteFromArr={bulkDeleteFromArr}
                     onDeleteFromArrChange={setBulkDeleteFromArr}
-                    isDeleting={isBulkDeleting}
+                    progress={bulkProgress}
+                    stopRequested={stopRequested}
                     onConfirm={confirmBulkDelete}
                     onCancel={() => setShowBulkDelete(false)}
+                    onStop={stopBulkDelete}
                 />
             )}
 
@@ -257,6 +311,7 @@ export function StorageManager({ canDelete = false }: { canDelete?: boolean }) {
                 <BulkDeleteResultModal
                     successCount={bulkDeleteResult.successCount}
                     failedCount={bulkDeleteResult.failedCount}
+                    skippedCount={bulkDeleteResult.skippedCount}
                     freedBytes={bulkDeleteResult.freedBytes}
                     onClose={() => setBulkDeleteResult(null)}
                 />

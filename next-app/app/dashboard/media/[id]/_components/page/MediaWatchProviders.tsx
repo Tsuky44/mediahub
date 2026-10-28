@@ -18,7 +18,9 @@ export default function MediaWatchProviders({
           (provider: any) => (
             <div key={provider.provider_id} className="group relative">
               <img
-                src={`https://image.tmdb.org/t/p/original${provider.logo_path}`}
+                loading="lazy"
+                decoding="async"
+                src={`https://image.tmdb.org/t/p/w92${provider.logo_path}`}
                 alt={provider.provider_name}
                 className="w-5 h-5 rounded-md shadow-md border border-white/10 group-hover:scale-110 transition duration-300"
               />

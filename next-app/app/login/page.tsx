@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import { getTmdbServiceForUser } from '@/lib/auth'
 import BackgroundSlideshow from './BackgroundSlideshow'
 import Image from 'next/image'
+import { OnyxTrack } from '@/components/ui/onyx'
 import { isAppConfigured } from '@/lib/setup'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db/drizzle'
@@ -71,26 +72,26 @@ export default async function LoginPage() {
 
       <div className="relative z-10 w-full max-w-md px-4">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-40 h-40 mb-6 transition-transform duration-500 hover:scale-110">
+          <div className="group inline-flex items-center justify-center w-32 h-32 mb-6 animate-in fade-in zoom-in-95 duration-700">
             <Image 
               src="/logo.png" 
               alt="MediaHub Logo" 
               width={160} 
               height={160}
-              className="drop-shadow-2xl object-contain"
+              className="animate-onyx-float drop-shadow-2xl object-contain grayscale brightness-150 transition-[filter] duration-700 ease-onyx group-hover:grayscale-0 group-hover:brightness-100"
               priority
             />
           </div>
-          <h1 className="text-4xl font-black text-white tracking-tight mb-2">
-            MediaHub
+          <h1 className="text-2xl font-bold uppercase tracking-[0.3em] text-white mb-3">
+            Media<span className="text-gray-500">hub</span>
           </h1>
           <p className="text-gray-400 font-medium">Connectez-vous pour commencer à regarder</p>
         </div>
 
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl">
+        <div className="onyx-glass-2 p-8 rounded-3xl animate-in fade-in slide-in-from-bottom-4 duration-500">
           <Suspense fallback={
             <div className="flex justify-center items-center py-10">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              <OnyxTrack className="w-40" />
             </div>
           }>
             <LoginForm enabledProviders={enabledProviders} />
