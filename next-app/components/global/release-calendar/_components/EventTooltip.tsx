@@ -51,10 +51,13 @@ export function EventTooltip({ event, mousePos, isTouch }: EventTooltipProps) {
     >
       <div className="w-[120px] bg-gray-900 relative flex-shrink-0 border-r border-white/5">
         {event.posterUrl ? (
+          // Chargée directement depuis TMDB (déjà à la bonne taille) : le serveur ne
+          // sert plus d'intermédiaire, une coupure réseau de son côté ne casse plus rien
           <Image
-            src={event.posterUrl}
+            src={event.posterUrl.replace('/t/p/w500/', '/t/p/w185/')}
             alt={event.title}
             fill
+            unoptimized
             className="object-cover"
             sizes="120px"
           />

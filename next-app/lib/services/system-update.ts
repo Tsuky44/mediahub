@@ -30,6 +30,16 @@ export interface SystemUpdateStatus {
     changelog: ChangelogVersion[];
 }
 
+/** Vrai si l'image est référencée par un tag de branche (ni « latest », ni vX.Y.Z, ni digest). */
+function followsBranchTag(imageName: string): boolean {
+    if (imageName.includes('@')) return false;
+    const lastSlash = imageName.lastIndexOf('/');
+    const colon = imageName.indexOf(':', lastSlash + 1);
+    if (colon === -1) return false;
+    const tag = imageName.slice(colon + 1);
+    return tag !== 'latest' && !/^v?\d+\.\d+(\.\d+)?$/.test(tag);
+}
+
 export class SystemUpdateService {
     
     private static async getCurrentContainerId(): Promise<string> {
@@ -279,6 +289,15 @@ export class SystemUpdateService {
                 appImageName = appInfo.Config.Image;
             } catch (e) {
                 logger.warn('[SystemUpdate] Failed to inspect current App container image name', e);
+            }
+
+            // Image suivie par branche (ex. « mediahub-app:FyTrOz », tenue à jour par
+            // Watchtower) : la comparer aux versions publiées vX.Y.Z annoncerait une
+            // fausse mise à jour (le registre peut contenir un numéro plus élevé que
+            // celui du code de la branche).
+            if (updateAvailable && followsBranchTag(appImageName)) {
+                updateAvailable = false;
+                effectiveLatestTag = currentTag;
             }
 
             // 5. Inspect current Docker Tracker container

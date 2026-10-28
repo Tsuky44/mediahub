@@ -50,11 +50,11 @@ const nextConfig: NextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 31536000, // Cache de 1 an pour les images optimisées
+    // image.tmdb.org n'y figure plus : les affiches TMDB sont déjà servies à la
+    // bonne taille et chargées directement par le navigateur. Les faire passer par
+    // l'optimiseur obligeait le serveur à les télécharger, et une coupure réseau
+    // de son côté remontait en erreur non gérée (« fetch failed »).
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'image.tmdb.org',
-      },
       {
         protocol: 'https',
         hostname: 'plex.tv',
