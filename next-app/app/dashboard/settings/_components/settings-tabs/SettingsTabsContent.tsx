@@ -39,7 +39,7 @@ export default function SettingsTabsContent({
     accountRequests,
 }: SettingsTabsContentProps) {
     return (
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 shadow-2xl">
             {(activeTab === 'services' || activeTab === 'media' || activeTab === 'downloads' || activeTab === 'automation' || activeTab === 'storage' || activeTab === 'maintenance') && (
                 <SettingsForm settings={settings} readOnly={!canManageSettings} />
             )}

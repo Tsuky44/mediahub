@@ -41,7 +41,7 @@ function TorrentRowComponent({
         <div
             onClick={() => onToggleSelect(torrent.hash)}
             className={clsx(
-                'backdrop-blur-md rounded-2xl p-3 border shadow-sm transition-all duration-300 group overflow-hidden w-full relative cursor-pointer',
+                'rounded-2xl p-3 border shadow-sm transition-all duration-300 group overflow-hidden w-full relative cursor-pointer',
                 isSelected
                     ? 'bg-indigo-900/20 border-indigo-500/50 shadow-indigo-500/10'
                     : 'bg-black/40 border-white/5 hover:bg-black/60 hover:border-indigo-500/30'

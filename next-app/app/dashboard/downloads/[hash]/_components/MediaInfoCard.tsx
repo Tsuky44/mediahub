@@ -16,7 +16,7 @@ export function MediaInfoCard({ mediaInfo, torrentHash, parsed, relatedRequests 
   const hasInternalLink = !isGame && mediaInfo.tmdbId
 
   return (
-    <div className="bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/5 overflow-hidden">
+    <div className="bg-gray-900/40 rounded-2xl border border-white/5 overflow-hidden">
       {/* Backdrop image if available */}
       {mediaInfo.backdropUrl && (
         <div className="relative h-48 sm:h-64">

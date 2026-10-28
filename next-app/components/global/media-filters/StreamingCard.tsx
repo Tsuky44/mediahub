@@ -35,7 +35,7 @@ export function StreamingCard({
         <Monitor className="h-4 w-4" />
         <h4 className="font-bold text-white">Streaming</h4>
       </div>
-      <div className="bg-gray-800/40 p-6 rounded-3xl border border-gray-700/50 shadow-sm space-y-5 backdrop-blur-sm">
+      <div className="bg-gray-800/40 p-6 rounded-3xl border border-gray-700/50 shadow-sm space-y-5">
         <div className="space-y-1.5">
           <label className="text-[10px] font-bold text-gray-500 uppercase px-1">
             Région

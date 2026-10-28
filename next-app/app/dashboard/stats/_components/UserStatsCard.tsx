@@ -31,7 +31,7 @@ export function UserStatsCard({ topUsers, allUsers, periodLabel }: UserStatsCard
     <>
       <div 
         onClick={() => setIsOpen(true)}
-        className="rounded-3xl bg-black/20 backdrop-blur-md shadow-2xl border border-white/5 hover:border-indigo-500/30 transition-all duration-300 cursor-pointer group hover:scale-[1.02] hover:shadow-indigo-500/10 overflow-hidden relative ring-1 ring-white/5"
+        className="rounded-3xl bg-black/20 shadow-2xl border border-white/5 hover:border-indigo-500/30 transition-all duration-300 cursor-pointer group hover:scale-[1.02] hover:shadow-indigo-500/10 overflow-hidden relative ring-1 ring-white/5"
       >
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
         

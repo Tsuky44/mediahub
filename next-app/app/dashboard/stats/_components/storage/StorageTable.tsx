@@ -55,7 +55,7 @@ export function StorageTable({
     const someSelected = items.some(i => selectedIds.has(i.id))
 
     return (
-        <div className={`bg-black/20 backdrop-blur-md border border-white/5 rounded-3xl overflow-hidden shadow-xl transition-opacity ${refreshing ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`bg-black/20 border border-white/5 rounded-3xl overflow-hidden shadow-xl transition-opacity ${refreshing ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-sm">

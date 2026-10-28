@@ -9,7 +9,7 @@ export function LiveSessions({ sessions: initialSessions, canManage }: { session
   const { activeSessions, isConnected } = useLiveSessionsInterpolation(initialSessions)
 
   return (
-    <div className="rounded-2xl bg-gray-900/50 border border-gray-800 p-6 backdrop-blur-sm mb-8">
+    <div className="rounded-2xl bg-gray-900/50 border border-gray-800 p-6 mb-8">
       <LiveSessionsHeader isConnected={isConnected} activeCount={activeSessions.length} />
 
       {activeSessions.length === 0 ? (

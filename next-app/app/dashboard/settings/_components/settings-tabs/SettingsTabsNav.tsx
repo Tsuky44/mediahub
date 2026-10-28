@@ -32,7 +32,7 @@ export default function SettingsTabsNav({
                 <button
                     type="button"
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    className="w-full flex items-center justify-between bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-4 text-white text-left shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-left shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                     <div className="flex items-center gap-3">
                         {ActiveIcon && <ActiveIcon size={20} className="text-indigo-400" />}

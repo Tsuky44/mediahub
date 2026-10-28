@@ -11,7 +11,7 @@ interface StatusFilterRowProps {
 export function StatusFilterRow({ filter, onFilterChange }: StatusFilterRowProps) {
   return (
     <div className="w-full overflow-x-auto pb-1 no-scrollbar [&::-webkit-scrollbar]:hidden">
-      <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-2xl p-1.5 backdrop-blur-md shadow-inner w-max min-w-full sm:min-w-0 sm:w-auto">
+      <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-2xl p-1.5 shadow-inner w-max min-w-full sm:min-w-0 sm:w-auto">
         {STATUS_FILTERS.map(f => (
           <button
             key={f.id}

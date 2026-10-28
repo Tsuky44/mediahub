@@ -24,7 +24,7 @@ export function MediaTypeTabs({ activeType, isPending, onChange, showTabs = true
   return (
     <div className="w-full border-b border-gray-800/50 pb-4">
       <div className="flex items-center justify-start sm:justify-center overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="flex p-1 gap-1.5 bg-gray-900/40 backdrop-blur-md rounded-2xl border border-gray-800/50 relative whitespace-nowrap">
+        <div className="flex p-1 gap-1.5 bg-gray-900/40 rounded-2xl border border-gray-800/50 relative whitespace-nowrap">
           {isPending && (
             <div className="absolute -top-6 left-1/2 -translate-x-1/2">
               <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />

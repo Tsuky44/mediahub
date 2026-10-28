@@ -10,7 +10,7 @@ interface LanguageCardProps {
 
 export function LanguageCard({ value, onChange }: LanguageCardProps) {
   return (
-    <div className="bg-gray-800/40 p-6 rounded-3xl border border-gray-700/50 shadow-sm backdrop-blur-sm">
+    <div className="bg-gray-800/40 p-6 rounded-3xl border border-gray-700/50 shadow-sm">
       <div className="flex items-center gap-2 mb-4 text-indigo-400">
         <Globe className="h-4 w-4" />
         <h4 className="font-bold text-white">Langue</h4>

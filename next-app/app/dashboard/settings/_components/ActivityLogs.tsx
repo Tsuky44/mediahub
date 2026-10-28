@@ -30,7 +30,7 @@ export default function ActivityLogs() {
                 onFilterChange={setFilter}
             />
 
-            <div className="bg-gray-900/50 border border-white/5 rounded-xl overflow-hidden backdrop-blur-sm">
+            <div className="bg-gray-900/50 border border-white/5 rounded-xl overflow-hidden">
                 <ActivityLogsTable logs={logs} loading={loading} />
 
                 {!loading && (

@@ -48,7 +48,7 @@ export function RequestCard({
     return (
         <div
             onClick={onToggleSelect}
-            className={`group relative bg-zinc-900/40 backdrop-blur-sm rounded-2xl border transition-all duration-300 overflow-hidden shadow-xl cursor-pointer ${
+            className={`group relative bg-zinc-900/40 rounded-2xl border transition-all duration-300 overflow-hidden shadow-xl cursor-pointer ${
                 isSelected
                     ? 'border-indigo-500 ring-1 ring-indigo-500/50 bg-indigo-500/5'
                     : 'border-zinc-800/50 hover:border-indigo-500/30'
