@@ -45,7 +45,7 @@ export function useDownloadStatus(
           setLoaded(true)
           timer = setTimeout(() => {
             if (!document.hidden) fetchStatus()
-          }, result?.isDownloading ? ACTIVE_POLL_MS : IDLE_POLL_MS)
+          }, result?.isDownloading || result?.imports?.some((i) => !i.failed) ? ACTIVE_POLL_MS : IDLE_POLL_MS)
         }
       }
     }

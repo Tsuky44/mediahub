@@ -1,6 +1,7 @@
 'use client'
 
 import { useDownloadStatus } from '../../_hooks/useDownloadStatus'
+import { useSmoothProgress } from '../../_hooks/useSmoothProgress'
 import { ArrowDownCircle } from 'lucide-react'
 
 interface MediaDownloadProgressBarProps {
@@ -18,11 +19,15 @@ export function MediaDownloadProgressBar({
 }: MediaDownloadProgressBarProps) {
   const { status, loading } = useDownloadStatus(tmdbId, mediaType, tvdbId, title)
 
-  if (loading || !status || !status.isDownloading) return null
+  const running = status?.imports?.filter((i) => !i.failed) ?? []
+  const smoothDownload = useSmoothProgress(status?.progress ?? 0)
+  const smoothImport = useSmoothProgress(running[0]?.progress ?? 0)
+  if (loading || !status || (!status.isDownloading && running.length === 0)) return null
 
-  const isImporting = status.progress === 100
+  const isImporting = running.length > 0 || status.progress === 100
 
   if (isImporting) {
+    const importing = running[0]
     return (
       <div className="w-full max-w-xl bg-yellow-500/5 border border-yellow-500/15 rounded-2xl p-4 animate-in fade-in slide-in-from-top-2 duration-300">
         <div className="flex items-center justify-between text-xs font-bold text-gray-400">
@@ -34,11 +39,21 @@ export function MediaDownloadProgressBar({
             <span className="text-yellow-400 font-bold">Importation en cours, veuillez patienter...</span>
           </div>
           <span className="text-yellow-400 text-[10px] bg-yellow-500/10 px-2 py-0.5 rounded font-bold uppercase tracking-wider animate-pulse">
-            Importation
+            {importing ? `${importing.progress}%` : 'Importation'}
           </span>
         </div>
+        {importing && (
+          <div className="mt-2 h-1.5 w-full bg-gray-700/50 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-yellow-500"
+              style={{ width: `${smoothImport}%` }}
+            />
+          </div>
+        )}
         <div className="mt-2 text-[10px] text-gray-500 truncate max-w-[400px] sm:max-w-md">
-          Mise à disposition par {mediaType === 'tv' ? 'Sonarr' : 'Radarr'} • {status.releaseTitle || status.title}
+          {importing
+            ? `${importing.filesDone} fichier${importing.filesDone > 1 ? 's' : ''} sur ${importing.files} copié${importing.filesDone > 1 ? 's' : ''} • ${importing.sizeDone} sur ${importing.size} • reste ${importing.sizeLeft}`
+            : `Mise à disposition par ${mediaType === 'tv' ? 'Sonarr' : 'Radarr'} • ${status.releaseTitle || status.title}`}
         </div>
       </div>
     )
@@ -59,9 +74,9 @@ export function MediaDownloadProgressBar({
 
       <div className="relative h-2 w-full bg-gray-850 rounded-full overflow-hidden border border-white/5 mb-1.5">
         <div
-          className="onyx-sheen absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out"
+          className="onyx-sheen absolute inset-y-0 left-0 rounded-full"
           style={{
-            width: `${status.progress}%`,
+            width: `${smoothDownload}%`,
             background: 'linear-gradient(90deg, #9a9794, #f2f0ed)',
             boxShadow: '0 0 8px rgba(232,230,228,0.2)',
           }}

@@ -24,6 +24,11 @@ export interface SettingsFormData {
     radarr_api_key: string
     sonarr_url: string
     sonarr_api_key: string
+    sorraa_url: string
+    sorraa_api_key: string
+    /** Gestionnaire de telechargement par type de media : 'arr' (Radarr/Sonarr) ou 'sorraa' */
+    download_manager_movie: string
+    download_manager_tv: string
     jellyseerr_url: string
     jellyseerr_api_key: string
     emby_url: string
@@ -35,12 +40,16 @@ export interface SettingsFormData {
     auth_emby_enabled: boolean
     auth_plex_enabled: boolean
     auth_jellyfin_enabled: boolean
+    auth_onyx_enabled: boolean
+    auth_onyx_auto_create: boolean
+    onyx_url: string
     auth_local_enabled: boolean
     unraid_url: string
     unraid_api_key: string
     request_all_seasons_enabled: boolean
     webhook_sonarr_secret?: string
     webhook_radarr_secret?: string
+    webhook_sorraa_secret?: string
     webhook_emby_secret?: string
 }
 

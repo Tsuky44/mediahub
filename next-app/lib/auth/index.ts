@@ -10,6 +10,7 @@ import { localProvider } from "./providers/local"
 import { embyProvider } from "./providers/emby"
 import { plexProvider } from "./providers/plex"
 import { jellyfinProvider } from "./providers/jellyfin"
+import { onyxProvider } from "./providers/onyx"
 
 import { logger } from '@/lib/logger'
 
@@ -21,6 +22,7 @@ export const authOptions: NextAuthOptions = {
     embyProvider,
     plexProvider,
     jellyfinProvider,
+    onyxProvider,
   ],
   session: {
     strategy: "jwt",
