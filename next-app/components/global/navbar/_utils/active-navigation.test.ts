@@ -23,6 +23,6 @@ test('a media opened from the requests tab keeps the requests tab active', () =>
 
 test('disabled services and unavailable permissions do not create sidebar destinations', () => {
   const ability = { can: (_action: string, subject: string) => ['Media', 'Library'].includes(subject) }
-  const visible = filterNavigationItems(NAVIGATION_ITEMS, ability as Parameters<typeof filterNavigationItems>[1], { hasDownloads: false, hasDocker: false })
+  const visible = filterNavigationItems(NAVIGATION_ITEMS, ability as Parameters<typeof filterNavigationItems>[1], { hasDownloads: false })
   assert.deepEqual(visible.map(item => item.href), ['/dashboard', '/dashboard/requests', '/dashboard/media'])
 })
