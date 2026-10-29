@@ -32,8 +32,36 @@ function defaultCode(status: number) {
   return 'error'
 }
 
+const FRENCH_ERRORS: Record<string, string> = {
+  Unauthorized: 'Clé d’intégration invalide.',
+  Forbidden: 'Vous n’avez pas le droit de faire cela.',
+  'Forbidden: Insufficient permissions': 'Vous n’avez pas le droit de faire cela.',
+  'Request not found': 'Demande introuvable.',
+  'Invalid id': 'Identifiant invalide.',
+  'Invalid media': 'Média invalide.',
+  'Invalid body': 'Requête invalide.',
+  'Missing parameters': 'Paramètres manquants.',
+  'action must be approve or decline': 'L’action doit être approve ou decline.',
+  'Request already processed': 'La demande est déjà traitée.',
+  'Radarr not configured': 'Radarr n’est pas configuré sur MediaHub.',
+  'Sonarr or TMDB not configured': 'Sonarr ou TMDB n’est pas configuré sur MediaHub.',
+  'Could not find TVDB ID for this series': 'Série introuvable (identifiant TVDB manquant).',
+  'Series not found in Sonarr lookup': 'Série introuvable dans Sonarr.',
+}
+
+const FRENCH_BY_STATUS: Record<number, string> = {
+  400: 'Requête invalide.',
+  401: 'Clé d’intégration invalide.',
+  403: 'Vous n’avez pas le droit de faire cela.',
+  404: 'Introuvable.',
+  409: 'Conflit avec l’état actuel.',
+  503: 'Service indisponible sur MediaHub.',
+}
+
+/** Erreur JSON { error, code } ; le message est toujours en français, prêt à afficher. */
 export function apiError(status: number, error: string, code?: string) {
-  return NextResponse.json({ error, code: code ?? defaultCode(status) }, { status })
+  const message = FRENCH_ERRORS[error] ?? (/[éèàêç]|(Pas|Aucun|Le |La |Les )/.test(error) ? error : FRENCH_BY_STATUS[status] ?? 'Une erreur est survenue sur MediaHub.')
+  return NextResponse.json({ error: message, code: code ?? defaultCode(status) }, { status })
 }
 
 export type AuthResult =

@@ -22,6 +22,8 @@ retrouvé par `X-Player-Username` (CASL, comme dans l'interface). Un nom inconnu
 est traité comme un compte sans rôle (`read Media`, `create MediaRequest`), sans
 demandes à lui.
 
+Le message `error` est en français et prêt à afficher.
+
 Erreur : `{ "error": "message", "code": "unauthorized|forbidden|not_found|bad_request|unavailable|conflict|error" }`.
 
 ## Routes

@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   if (auth.ability.cannot('manage_settings', 'Settings')) return apiError(403, 'Forbidden')
 
   if (!(await getOnyxWebhookTarget())) {
-    return NextResponse.json({ ok: false, error: 'Webhook non configure (onyx_webhook_url / ONYX_WEBHOOK_URL)' }, { status: 409 })
+    return NextResponse.json({ ok: false, error: 'Webhook non configuré (onyx_webhook_url / ONYX_WEBHOOK_URL)' }, { status: 409 })
   }
   const result = await deliverOnyxEvent('webhook.test', { message: 'MediaHub -> Onyx' })
   return NextResponse.json({ ok: result.delivered, status: result.status ?? null, error: result.error ?? null }, { status: result.delivered ? 200 : 502 })
