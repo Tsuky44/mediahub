@@ -159,14 +159,16 @@ export function SeasonEpisodesPanel({
                             open === null && 'opacity-0',
                         )}
                     >
-                        <div
-                            ref={beam}
-                            aria-hidden
-                            className="pointer-events-none absolute left-0 top-0 transition-[translate] duration-700 ease-out-onyx motion-reduce:transition-none"
-                        >
-                            <div key={open ?? 'off'} className="onyx-season-flare relative">
-                                <span className="absolute left-0 top-0 h-28 w-80 -translate-x-1/2 bg-[radial-gradient(50%_60%_at_50%_0%,rgb(242_240_237/0.13),transparent)]" />
-                                <span className="absolute left-0 -top-px h-px w-44 -translate-x-1/2 bg-gradient-to-r from-transparent via-white/80 to-transparent shadow-[0_0_14px_rgb(242_240_237/0.6)]" />
+                        {/* Lumiere tenue dans la forme arrondie du panneau (bord compris), meme sous la premiere bulle */}
+                        <div aria-hidden className="pointer-events-none absolute -inset-px overflow-hidden rounded-3xl">
+                            <div
+                                ref={beam}
+                                className="absolute left-0 top-0 transition-[translate] duration-700 ease-out-onyx motion-reduce:transition-none"
+                            >
+                                <div key={open ?? 'off'} className="onyx-season-flare relative">
+                                    <span className="absolute left-0 top-px h-28 w-80 -translate-x-1/2 bg-[radial-gradient(50%_60%_at_50%_0%,rgb(242_240_237/0.13),transparent)]" />
+                                    <span className="absolute left-0 top-0 h-px w-44 -translate-x-1/2 bg-gradient-to-r from-transparent via-white/80 to-transparent shadow-[0_0_14px_rgb(242_240_237/0.6)]" />
+                                </div>
                             </div>
                         </div>
 
