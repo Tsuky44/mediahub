@@ -12,7 +12,7 @@ interface SeasonRequestButtonProps {
     onSuccess: () => void
 }
 
-/** Bouton "Demander" avec etat de chargement et notification au parent. */
+/** Bouton "Demander" (bleu) d'une saison pas encore demandee, avec etat de chargement. */
 export function SeasonRequestButton({ tvId, seasonNumber, title, onSuccess }: SeasonRequestButtonProps) {
     const [requesting, setRequesting] = useState(false)
 
@@ -30,24 +30,22 @@ export function SeasonRequestButton({ tvId, seasonNumber, title, onSuccess }: Se
     }
 
     return (
-        <div
-            role="button"
+        <button
+            type="button"
             onClick={handleRequest}
+            disabled={requesting}
+            aria-busy={requesting}
             className={clsx(
-                'flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border transition-colors',
-                requesting
-                    ? 'bg-gray-700 text-gray-400 border-gray-600 cursor-wait'
-                    : 'bg-indigo-600/80 text-white border-indigo-500 hover:bg-indigo-500 cursor-pointer',
+                'flex items-center gap-1.5 rounded-full bg-onyx-request px-2.5 py-1 text-xs font-semibold text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_6px_18px_-8px_var(--color-onyx-request)] transition-[filter,opacity] duration-300 ease-onyx',
+                requesting ? 'cursor-wait opacity-60' : 'cursor-pointer hover:brightness-110',
             )}
         >
             {requesting ? (
-                <div className="h-3 w-3 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
             ) : (
-                <>
-                    <Download className="h-3 w-3" />
-                    <span>Demander</span>
-                </>
+                <Download className="h-3.5 w-3.5" strokeWidth={2.5} />
             )}
-        </div>
+            <span>Demander</span>
+        </button>
     )
 }

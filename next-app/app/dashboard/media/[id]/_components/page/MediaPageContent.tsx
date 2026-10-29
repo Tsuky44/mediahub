@@ -188,6 +188,7 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
                   seasonProgress={seasonProgress}
                   canTriggerSearch={ability.can('trigger_search', 'Media')}
                   canInteractiveSearch={ability.can('interactive_search', 'Media')}
+                  canRequest={ability.can('create', 'MediaRequest')}
                 />
               </section>
             )}

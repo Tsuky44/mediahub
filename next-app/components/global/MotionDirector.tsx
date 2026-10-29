@@ -376,6 +376,7 @@ function settleFly() {
   if (!backdrop) {
     // Fiche sans image de fond : la copie s'efface sur place
     nav.fly = null
+    arrived()
     const out = fly.layer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: 'ease-out', fill: 'forwards' })
     out.onfinish = () => fly.layer.remove()
     out.oncancel = () => fly.layer.remove()
@@ -393,6 +394,7 @@ function settleFly() {
 
 function fadeFly(fly: FlyGhost) {
   if (nav.fly === fly) nav.fly = null
+  arrived()
   const out = fly.flight.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: 'ease-out', fill: 'forwards' })
   out.onfinish = () => fly.flight.remove()
   out.oncancel = () => fly.flight.remove()
@@ -403,6 +405,7 @@ function dropFly(restore = false) {
   const fly = nav.fly
   if (!fly) return
   nav.fly = null
+  arrived()
   fly.observer.disconnect()
   delete document.documentElement.dataset.onyxFly
   if (restore) fly.frame.style.visibility = ''
@@ -410,6 +413,20 @@ function dropFly(restore = false) {
   const out = fly.layer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: 'ease-out', fill: 'forwards' })
   out.onfinish = () => fly.layer.remove()
   out.oncancel = () => fly.layer.remove()
+}
+
+/** Ce qui attend la fin de l'envol (fiche posée, copie effacée) */
+const waiting = new Set<() => void>()
+
+function arrived() {
+  waiting.forEach((resolve) => resolve())
+  waiting.clear()
+}
+
+/** Fin de l'arrivée sur la fiche : l'envol s'est posé et sa copie s'efface ; immédiat sans envol */
+export function whenArrived(): Promise<void> {
+  if (!nav.fly) return Promise.resolve()
+  return new Promise((resolve) => waiting.add(resolve))
 }
 
 /** Image de fond d'une fiche : chargée dès que le pointeur s'attarde sur sa carte */

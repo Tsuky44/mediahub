@@ -43,6 +43,8 @@
   --color-onyx-muted: #a8a5a1;
   --color-onyx-track: #2a2c2c;
   --color-onyx-beam: #3c3e3d;
+  /* Bleu « Demander » (saison pas encore demandée) : les bleus du thème sont neutralisés */
+  --color-onyx-request: #2f6fe4;
 
   /* Serveurs média : Emby vert, Plex jaune, Jellyfin bleu (lib/media-server-brand.ts) */
   --color-emby: #52b54b;

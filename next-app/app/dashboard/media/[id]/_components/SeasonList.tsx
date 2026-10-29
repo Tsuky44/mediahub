@@ -197,6 +197,7 @@ export function SeasonList({
                                 status={statuses[number]}
                                 progress={seasonProgress.find(p => p.seasonNumber === number)}
                                 active={open === number}
+                                requestable={!!canRequest && statuses[number] === 'unknown'}
                                 panelId={panelId}
                                 onToggle={() => toggle(number)}
                                 onIntent={() => prefetch(number)}

@@ -1,5 +1,6 @@
 'use client'
 
+import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Season, SeasonProgress } from '../../_types/season'
 
@@ -8,6 +9,8 @@ interface SeasonBubbleProps {
     status: string
     progress?: SeasonProgress
     active: boolean
+    /** Saison pas encore demandee, que l'utilisateur peut demander : pastille bleue « + » */
+    requestable?: boolean
     panelId: string
     onToggle: () => void
     onIntent: () => void
@@ -33,7 +36,7 @@ export function SeasonStatusDot({ status, className }: { status: string; classNa
  * pilule et montre son affiche, son nom et son nombre d'episodes (motion.css, onyx-season-*).
  * Son corps liquide est dessine a part, dans le calque filtre de SeasonList.
  */
-export function SeasonBubble({ season, status, progress, active, panelId, onToggle, onIntent }: SeasonBubbleProps) {
+export function SeasonBubble({ season, status, progress, active, requestable, panelId, onToggle, onIntent }: SeasonBubbleProps) {
     const number = season.season_number
     const year = season.air_date ? new Date(season.air_date).getFullYear() : null
     const watched = progress && progress.total > 0 ? Math.min(progress.played / progress.total, 1) : 0
@@ -92,10 +95,19 @@ export function SeasonBubble({ season, status, progress, active, panelId, onTogg
                     {season.episode_count} épisodes{year ? ` · ${year}` : ''}
                 </span>
             </span>
-            <SeasonStatusDot
-                status={status}
-                className="onyx-season-pip absolute right-[6px] bottom-[6px] ring-2 ring-[#0c0d0d]"
-            />
+            {requestable ? (
+                <span
+                    aria-hidden
+                    className="onyx-season-pip absolute right-[3px] bottom-[3px] grid size-3.5 place-items-center rounded-full bg-onyx-request text-white ring-2 ring-[#0c0d0d]"
+                >
+                    <Plus className="size-2.5" strokeWidth={3.5} />
+                </span>
+            ) : (
+                <SeasonStatusDot
+                    status={status}
+                    className="onyx-season-pip absolute right-[6px] bottom-[6px] ring-2 ring-[#0c0d0d]"
+                />
+            )}
         </button>
     )
 }
