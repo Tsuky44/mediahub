@@ -40,6 +40,7 @@ export const users = sqliteTable('users', {
   embyUserId: text('emby_user_id').unique(),
   jellyfinUserId: text('jellyfin_user_id').unique(),
   plexUserId: text('plex_user_id').unique(),
+  onyxUserId: text('onyx_user_id').unique(),
   jellyseerrUserId: text('jellyseerr_user_id'),
   role: text('role').notNull().default('user'),
   roleId: text('role_id').references(() => roles.id),

@@ -65,6 +65,9 @@ export async function POST(request: NextRequest) {
         auth_emby_enabled,
         auth_plex_enabled,
         auth_jellyfin_enabled,
+        auth_onyx_enabled,
+        auth_onyx_auto_create,
+        onyx_url,
         auth_local_enabled,
         unraid_url,
         unraid_api_key,
@@ -138,6 +141,9 @@ export async function POST(request: NextRequest) {
     await updateSetting('auth_emby_enabled', auth_emby_enabled)
     await updateSetting('auth_plex_enabled', auth_plex_enabled)
     await updateSetting('auth_jellyfin_enabled', auth_jellyfin_enabled)
+    await updateSetting('auth_onyx_enabled', auth_onyx_enabled)
+    await updateSetting('auth_onyx_auto_create', auth_onyx_auto_create)
+    await updateSetting('onyx_url', onyx_url)
     await updateSetting('auth_local_enabled', auth_local_enabled)
     await updateSetting('request_all_seasons_enabled', request_all_seasons_enabled)
 

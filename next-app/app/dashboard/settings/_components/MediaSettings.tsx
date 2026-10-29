@@ -3,6 +3,7 @@ import { LocalAuthSection } from './media/LocalAuthSection'
 import { EmbySettings } from './media/EmbySettings'
 import { PlexSettings } from './media/PlexSettings'
 import { JellyfinSettings } from './media/JellyfinSettings'
+import { OnyxSettings } from './media/OnyxSettings'
 import { RequestSettings } from './media/RequestSettings'
 import type { SettingsFormData } from './types'
 
@@ -66,6 +67,7 @@ export const MediaSettings = ({ formData, updateField, readOnly }: Props) => {
         onTest={handleTestJellyfin}
         readOnly={readOnly}
       />
+      <OnyxSettings formData={formData} updateField={updateField} readOnly={readOnly} />
     </div>
   )
 }

@@ -1,6 +1,8 @@
 'use server'
 
 import axios from 'axios'
+import { getOnyxAuthConfig } from '@/lib/auth/onyx-link'
+import { onyxDeviceStart } from '@/lib/services/onyx-auth'
 import { v4 as uuidv4 } from 'uuid'
 
 const PLEX_API_URL = 'https://plex.tv/api/v2'
@@ -68,5 +70,19 @@ export async function checkPlexAuthPin(pinId: string, clientIdentifier: string) 
     console.error(`[PlexAuth] Error checking PIN ${pinId}:`, error.message)
     // Don't throw, just return unauthorized to keep polling safe
     return { authorized: false, error: error.message }
+  }
+}
+
+/** Démarre un appairage Onyx : le code affiché se valide depuis une app Onyx connectée. */
+export async function startOnyxPairing(): Promise<
+  | { deviceCode: string; userCode: string; expiresIn: number; interval: number }
+  | { error: string }
+> {
+  const config = await getOnyxAuthConfig()
+  if (!config.enabled || !config.url) return { error: "L'authentification via Onyx n'est pas disponible" }
+  try {
+    return await onyxDeviceStart(config.url, 'MediaHub')
+  } catch (e: any) {
+    return { error: e?.message || "Impossible de démarrer l'appairage Onyx" }
   }
 }

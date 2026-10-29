@@ -40,6 +40,9 @@ export interface SettingsFormData {
     auth_emby_enabled: boolean
     auth_plex_enabled: boolean
     auth_jellyfin_enabled: boolean
+    auth_onyx_enabled: boolean
+    auth_onyx_auto_create: boolean
+    onyx_url: string
     auth_local_enabled: boolean
     unraid_url: string
     unraid_api_key: string

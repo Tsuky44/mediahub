@@ -15,11 +15,13 @@ Chaque appel porte :
 |---|---|
 | `Authorization` | `Bearer <PLAYER_INTEGRATION_API_KEY>` (variable d'environnement de MediaHub) |
 | `X-Player-Username` | nom ou e-mail du compte MediaHub de l'utilisateur d'Onyx |
-| `X-Player-Id` | accepté et ignoré |
+| `X-Player-Id` | id stable du compte Onyx (`user.id`), de préférence au nom : le compte MediaHub lié (`users.onyx_user_id`) est retrouvé par cet id |
 
 Sans clé valide : `401`. Les droits sont ceux du rôle du compte MediaHub
-retrouvé par `X-Player-Username` (CASL, comme dans l'interface). Un nom inconnu
-est traité comme un compte sans rôle (`read Media`, `create MediaRequest`), sans
+retrouvé par `X-Player-Id` (liaison créée par la connexion avec Onyx, voir
+`onyx-login-contract.md`), à défaut par `X-Player-Username` (CASL, comme dans
+l'interface). Un compte déjà lié à un autre id Onyx n'est jamais retrouvé par un
+homonyme. Un compte inconnu est traité comme un compte sans rôle (`read Media`, `create MediaRequest`), sans
 demandes à lui.
 
 Le message `error` est en français et prêt à afficher.

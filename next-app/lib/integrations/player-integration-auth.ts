@@ -26,14 +26,23 @@ export async function authenticatePlayerIntegration(request: Request): Promise<P
   if (!expectedKey || !providedKey || !isValidKey(providedKey, expectedKey)) return null
 
   const playerUsername = request.headers.get('x-player-username')?.trim()
+  const playerId = request.headers.get('x-player-id')?.trim()
   const fallbackEmail = process.env.PLAYER_INTEGRATION_USER_EMAIL?.trim()
+  const withRole = { roleRef: { with: { permissions: true } } } as const
 
-  let user = playerUsername
-    ? await db.query.users.findFirst({
-        where: or(eq(users.name, playerUsername), eq(users.email, playerUsername)),
-        with: { roleRef: { with: { permissions: true } } },
-      })
+  // 1) Id stable du compte Onyx (liaison users.onyx_user_id), 2) nom ou email en repli.
+  let user = playerId
+    ? await db.query.users.findFirst({ where: eq(users.onyxUserId, playerId), with: withRole })
     : null
+
+  if (!user && playerUsername) {
+    const byName = await db.query.users.findFirst({
+      where: or(eq(users.name, playerUsername), eq(users.email, playerUsername)),
+      with: withRole,
+    })
+    // Un compte déjà lié à un autre compte Onyx n'est pas le même utilisateur qu'un homonyme.
+    user = byName && playerId && byName.onyxUserId && byName.onyxUserId !== playerId ? null : byName
+  }
 
   if (!user && fallbackEmail) {
     user = await db.query.users.findFirst({

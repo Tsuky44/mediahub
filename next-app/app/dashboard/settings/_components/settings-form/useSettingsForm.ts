@@ -43,6 +43,9 @@ const initialFormData: SettingsFormData = {
   auth_emby_enabled: true,
   auth_plex_enabled: false,
   auth_jellyfin_enabled: false,
+  auth_onyx_enabled: false,
+  auth_onyx_auto_create: true,
+  onyx_url: '',
   auth_local_enabled: true,
   unraid_url: '',
   unraid_api_key: '',
@@ -89,6 +92,8 @@ export function useSettingsForm(settings: Partial<SettingsFormData>) {
         'auth_emby_enabled',
         'auth_plex_enabled',
         'auth_jellyfin_enabled',
+        'auth_onyx_enabled',
+        'auth_onyx_auto_create',
         'auth_local_enabled',
         'request_all_seasons_enabled',
       ]
