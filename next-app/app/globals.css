@@ -44,6 +44,11 @@
   --color-onyx-track: #2a2c2c;
   --color-onyx-beam: #3c3e3d;
 
+  /* Serveurs média : Emby vert, Plex jaune, Jellyfin bleu (lib/media-server-brand.ts) */
+  --color-emby: #52b54b;
+  --color-plex: #e5a00d;
+  --color-jellyfin: #00a4dc;
+
   /* Graphite : remplace toutes les échelles de gris du site */
   --color-gray-50: #fafaf9;
   --color-gray-100: #f2f0ed;

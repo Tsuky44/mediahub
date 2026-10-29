@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { OnyxTrack } from '@/components/ui/onyx'
-import { getProviderIcon, getProviderLabel, type LoginProvider } from '../_utils/login-providers'
+import { cn } from '@/lib/utils'
+import { getProviderIcon, getProviderLabel, getSubmitColor, type LoginProvider } from '../_utils/login-providers'
 
 interface CredentialsFormProps {
     provider: LoginProvider
@@ -81,7 +82,10 @@ export function CredentialsForm({
                     type="submit"
                     disabled={loading}
                     aria-busy={loading}
-                    className="relative flex w-full justify-center overflow-hidden rounded-2xl border border-white/20 bg-white/15 px-4 py-3 text-sm font-semibold text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.15)] hover:bg-white/20 disabled:cursor-wait transition-[background-color,scale] duration-300 ease-onyx active:scale-[0.98]"
+                    className={cn(
+                        'relative flex w-full justify-center overflow-hidden rounded-2xl border px-4 py-3 text-sm font-semibold disabled:cursor-wait transition-[background-color,scale,filter] duration-300 ease-onyx active:scale-[0.98]',
+                        getSubmitColor(provider),
+                    )}
                 >
                     {loading ? 'Connexion' : `Se connecter avec ${label}`}
                     {loading && <OnyxTrack className="absolute inset-x-6 bottom-1.5" />}

@@ -28,7 +28,7 @@ export function ProviderSelector({ enabled, current, onChange }: ProviderSelecto
                     onClick={() => onChange(id)}
                     className={clsx(
                         'flex flex-col items-center justify-center p-3 rounded-xl transition-colors duration-300 ease-onyx',
-                        getProviderColor(current === id),
+                        getProviderColor(id, current === id),
                     )}
                 >
                     <Icon className="w-6 h-6 mb-1" />
