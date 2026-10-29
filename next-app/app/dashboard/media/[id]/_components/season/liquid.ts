@@ -28,11 +28,23 @@ export interface RowLayout {
  * vitesse, deux gouttelettes en traine), rejoint la bulle choisie, qui se gonfle alors en pilule
  * avec un leger tremblement. Le filtre #onyx-season-goo fusionne ces formes comme un liquide.
  *
- * Tout est calcule a l'avance, image par image (interpolation lineaire) : largeurs des bulles et
- * de leurs corps, positions de la goutte qui suit la bulle d'arrivee pendant que la rangee se
- * reforme. Les deplacements de la goutte sont des transformations (compositeur).
+ * Vers la droite, c'est le miroir exact : la pilule quittee se retire vers la bulle choisie (son
+ * bord droit reste en place), puis la bulle choisie se gonfle vers la gauche et ramene les bulles
+ * d'avant a leur place. Sans cela, la bulle choisie glisserait sous la goutte des le depart.
+ *
+ * Tout est calcule a l'avance, image par image (interpolation lineaire) : largeurs et decalages
+ * des bulles et de leurs corps, positions de la goutte qui suit la bulle d'arrivee pendant que la
+ * rangee se reforme. Les deplacements de la goutte sont des transformations (compositeur).
+ * `shift` : decalage de chaque bulle laisse par une animation interrompue, resorbe en douceur.
  */
-export function liquidSwitch(parts: LiquidParts, from: number | null, to: number | null, start: number[], final: RowLayout) {
+export function liquidSwitch(
+    parts: LiquidParts,
+    from: number | null,
+    to: number | null,
+    start: number[],
+    shift: number[],
+    final: RowLayout,
+) {
     const travelling = from !== null && to !== null && from !== to
     const T = travelling ? 0.9 : 0.7
     const times = Array.from({ length: FRAMES }, (_, i) => (i / (FRAMES - 1)) * T)
@@ -41,17 +53,28 @@ export function liquidSwitch(parts: LiquidParts, from: number | null, to: number
     // La bulle choisie se gonfle quand la goutte l'atteint
     const inflateAt = travelling ? 0.36 * T : 0
 
+    const grow = (t: number) => 1 - (1 - spring(t - inflateAt, 11, 0.5)) * land(t)
+    const shrink = (t: number) => 1 - (1 - spring(t, 13, 0.62)) * land(t)
     const width = (i: number, t: number) => {
         const a = start[i]
         const b = final.w[i]
         if (Math.abs(a - b) < 0.5) return b
-        const p = b > a ? 1 - (1 - spring(t - inflateAt, 11, 0.5)) * land(t) : 1 - (1 - spring(t, 13, 0.62)) * land(t)
-        return a + (b - a) * p
+        return a + (b - a) * (b > a ? grow(t) : shrink(t))
     }
     const widths = times.map(t => final.w.map((_, i) => width(i, t)))
+    // Vers la droite : la pilule quittee et les bulles qui la suivent sont decalees de ce qu'elle a
+    // perdu (son bord droit tient), puis de moins en moins a mesure que la bulle choisie se gonfle.
+    // Jamais en deca de leur place : le rebond du gonflement part a droite, sans heurter la bulle d'avant
+    const rightward = travelling && to > from
+    const offsets = times.map((t, f) =>
+        final.w.map((_, i) => {
+            const held = rightward && i >= from ? Math.max(0, start[from] - widths[f][from] - (start[from] - final.w[from]) * grow(t)) : 0
+            return held + shift[i] * (1 - shrink(t))
+        }),
+    )
     // Position d'une bulle : sa place finale, decalee par les bulles d'avant qui n'ont pas fini de changer
     const left = (i: number, f: number) => {
-        let x = final.x[i]
+        let x = final.x[i] + offsets[f][i]
         for (let j = 0; j < i; j++) x += widths[f][j] - final.w[j]
         return x
     }
@@ -59,8 +82,14 @@ export function liquidSwitch(parts: LiquidParts, from: number | null, to: number
     const timing: KeyframeAnimationOptions = { duration: T * 1000, easing: 'linear' }
     const animations: Animation[] = []
     final.w.forEach((_, i) => {
-        if (Math.abs(start[i] - final.w[i]) < 0.5) return
-        const frames = widths.map(w => ({ width: `${w[i]}px` }))
+        const resized = Math.abs(start[i] - final.w[i]) >= 0.5
+        const moved = offsets.some(o => Math.abs(o[i]) > 0.01)
+        if (!resized && !moved) return
+        // Largeur toujours tenue : interrompue, la bulle repart de sa largeur affichee (SeasonList)
+        const frames = times.map((_, f) => ({
+            width: `${widths[f][i]}px`,
+            ...(moved && { translate: `${offsets[f][i]}px 0` }),
+        }))
         animations.push(parts.chips[i].animate(frames, timing), parts.bodies[i].animate(frames, timing))
     })
     if (!travelling) return animations

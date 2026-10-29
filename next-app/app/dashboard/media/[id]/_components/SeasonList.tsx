@@ -100,11 +100,12 @@ export function SeasonList({
         const parts = rowParts(el)
         // Largeurs avant le changement : celles d'une animation en cours, sinon la place d'avant
         const before = layout.current.w
-        const start = parts.chips.map((chip, i) =>
-            before[i] === undefined || running.current.some(a => (a.effect as KeyframeEffect | null)?.target === chip && a.playState === 'running')
-                ? chip.getBoundingClientRect().width
-                : before[i],
-        )
+        const moving = (chip: HTMLElement) =>
+            running.current.some(a => (a.effect as KeyframeEffect | null)?.target === chip && a.playState === 'running')
+        const start = parts.chips.map((chip, i) => (before[i] === undefined || moving(chip) ? chip.getBoundingClientRect().width : before[i]))
+        // Decalage laisse par une animation interrompue : la bulle repart d'ou elle est
+        const origin = el.getBoundingClientRect().left
+        const shift = parts.chips.map(chip => (moving(chip) ? chip.getBoundingClientRect().left - origin - chip.offsetLeft : 0))
         running.current.forEach(a => a.cancel())
         running.current = []
         layout.current = settle(parts)
@@ -112,7 +113,7 @@ export function SeasonList({
         shown.current = open
         if (from === open || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
         const index = (n: number | null) => (n === null ? null : parts.chips.findIndex(c => Number(c.dataset.season) === n))
-        running.current = liquidSwitch(parts, index(from), index(open), start, layout.current)
+        running.current = liquidSwitch(parts, index(from), index(open), start, shift, layout.current)
     }, [open])
 
     // Polices chargees, fenetre redimensionnee : les corps suivent leurs bulles
