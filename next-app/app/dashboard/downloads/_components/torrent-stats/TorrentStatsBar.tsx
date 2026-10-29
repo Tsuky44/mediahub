@@ -17,7 +17,7 @@ export function TorrentStatsBar({ stats }: TorrentStatsBarProps) {
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="md:col-span-2 bg-black/40 backdrop-blur-md border border-white/5 rounded-2xl p-3 flex flex-col justify-between hover:bg-white/5 transition-colors group">
+            <div className="md:col-span-2 bg-black/40 border border-white/5 rounded-2xl p-3 flex flex-col justify-between hover:bg-white/5 transition-colors group">
                 <div className="flex items-center gap-2 mb-2">
                     <Activity className="w-3.5 h-3.5 text-emerald-400" />
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Vitesse & Connexions</span>
@@ -54,7 +54,7 @@ export function TorrentStatsBar({ stats }: TorrentStatsBarProps) {
                 </div>
             </div>
 
-            <div className="md:col-span-1 bg-black/40 backdrop-blur-md border border-white/5 rounded-2xl p-3 flex flex-col justify-between hover:bg-white/5 transition-colors group">
+            <div className="md:col-span-1 bg-black/40 border border-white/5 rounded-2xl p-3 flex flex-col justify-between hover:bg-white/5 transition-colors group">
                 <div className="flex items-center gap-2 mb-2">
                     <Clock className="w-3.5 h-3.5 text-purple-400" />
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Session</span>
@@ -71,7 +71,7 @@ export function TorrentStatsBar({ stats }: TorrentStatsBarProps) {
                 </div>
             </div>
 
-            <div className="md:col-span-2 bg-black/40 backdrop-blur-md border border-white/5 rounded-2xl p-3 flex flex-col justify-between hover:bg-white/5 transition-colors group">
+            <div className="md:col-span-2 bg-black/40 border border-white/5 rounded-2xl p-3 flex flex-col justify-between hover:bg-white/5 transition-colors group">
                 <div className="flex items-center gap-2 mb-2">
                     <Globe className="w-3.5 h-3.5 text-blue-400" />
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Global</span>

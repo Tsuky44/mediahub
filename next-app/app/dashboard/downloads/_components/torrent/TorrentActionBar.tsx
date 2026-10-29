@@ -33,7 +33,7 @@ export function TorrentActionBar({
         <button
           onClick={onSelectAll}
           className={clsx(
-            'flex-1 md:flex-none flex items-center justify-center gap-2 px-3 h-11 bg-white/5 backdrop-blur-md border rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap',
+            'flex-1 md:flex-none flex items-center justify-center gap-2 px-3 h-11 bg-white/5 border rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap',
             isAllSelected
               ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/10'
               : 'border-white/10 text-gray-400 hover:text-white hover:bg-white/5'
@@ -47,7 +47,7 @@ export function TorrentActionBar({
         <button
           onClick={onOpenFilterModal}
           className={clsx(
-            'flex-1 md:flex-none flex items-center justify-center gap-2 px-4 h-11 bg-white/5 backdrop-blur-md border rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap',
+            'flex-1 md:flex-none flex items-center justify-center gap-2 px-4 h-11 bg-white/5 border rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap',
             hasActiveFilters
               ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/10'
               : 'border-white/10 text-gray-400 hover:text-white hover:bg-white/5'

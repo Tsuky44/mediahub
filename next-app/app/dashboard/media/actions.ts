@@ -20,6 +20,11 @@ const warn = (...args: any[]) => { if (isDev) console.warn(...args); };
 // SeriesId (serveur média) → id TMDB : stable, inutile de redemander la série à chaque rendu
 const seriesTmdbIds = createMemoCache({ max: 5000, ttl: MS.HOUR })
 
+// Lectures du serveur média par utilisateur (historique, bibliothèque) : fraîches 20 s, puis
+// servies le temps d'être relues en arrière-plan. Les pages s'affichent sans attendre Emby ;
+// un changement de favori vide ce cache.
+const mediaReads = createMemoCache({ max: 500, ttl: 20_000, stale: 10 * MS.MINUTE, clone: true })
+
 async function getSeriesTmdbId(mediaService: EmbyService, seriesId: string, userId: string): Promise<string | undefined> {
     return seriesTmdbIds.get<string | undefined>(seriesId, async () => {
         const series = await mediaService.getItemDetails(seriesId, userId)
@@ -64,7 +69,7 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
             ids = embyWatchLaterIds.join(',')
         }
 
-        const data = await mediaService.getUserItems(userId, {
+        const itemsQuery = {
             SearchTerm: query,
             StartIndex: startIndex,
             Limit: limit,
@@ -75,7 +80,8 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
             SortOrder: 'Ascending',
             IsFavorite: favoritesOnly ? true : undefined,
             Ids: ids
-        })
+        }
+        const data = await mediaReads.get(`items:${userId}:${JSON.stringify(itemsQuery)}`, () => mediaService.getUserItems(userId, itemsQuery))
 
         const items = Array.isArray(data.Items) ? data.Items : []
 
@@ -90,11 +96,8 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
         const enrichedItems = await Promise.all(items.map(async (item: EmbyItem) => {
             const tmdbId = item.ProviderIds?.Tmdb
             const itemType = item.Type === 'Movie' ? 'movie' : 'tv'
-            let poster_path = null
-            
-            if (tmdbId && tmdbService) {
-                poster_path = await tmdbService.getPosterPath(parseInt(String(tmdbId)), itemType)
-            }
+            const images = tmdbId && tmdbService ? await tmdbService.getImagePaths(parseInt(String(tmdbId)), itemType) : null
+            let poster_path = images?.poster_path ?? null
 
             // Fallback to Emby image if TMDB image is not available
             if (!poster_path && item.Id != null) {
@@ -108,6 +111,7 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
                 title: item.Name,
                 name: item.Name,
                 poster_path: poster_path,
+                backdrop_path: images?.backdrop_path ?? null,
                 media_type: itemType,
                 overview: item.Overview,
                 emby_id: item.Id,
@@ -150,7 +154,7 @@ export async function fetchRecentlyWatchedItems() {
         
         log('[fetchRecentlyWatchedItems] Fetching recently played items for user:', userId)
         // Réduction du nombre d'items récupérés pour plus de rapidité (20 au lieu de 50)
-        const data = await mediaService.getRecentlyPlayedItems(userId, 20)
+        const data = await mediaReads.get(`played:${userId}:20`, () => mediaService.getRecentlyPlayedItems(userId, 20))
         const allItems = Array.isArray(data.Items) ? data.Items : []
         
         // Group items by SeriesId (for episodes) or Id (for movies)
@@ -244,7 +248,7 @@ export async function fetchUserRecommendations(page: number = 1) {
 
         // 1. Historique récent (serveur média) + 2. demandes récentes (DB locale), en parallèle
         const [historyData, requests] = await Promise.all([
-            mediaUserId && mediaService ? mediaService.getRecentlyPlayedItems(mediaUserId, 15) : null,
+            mediaUserId && mediaService ? mediaReads.get(`played:${mediaUserId}:15`, () => mediaService.getRecentlyPlayedItems(mediaUserId, 15)) : null,
             db.query.mediaRequests.findMany({
                 where: or(eq(mediaRequests.requesterEmail, user.email), eq(mediaRequests.userId, dbUser.id)),
                 orderBy: [desc(mediaRequests.requestedAt)],
@@ -396,7 +400,7 @@ export async function fetchServerTrends(page: number = 1) {
                     const mediaType = watch.itemType?.toLowerCase() === 'series' || watch.itemType?.toLowerCase() === 'episode' ? 'tv' : 'movie'
                     if (!tmdbId) return null
 
-                    const poster_path = await tmdbService.getPosterPath(parseInt(String(tmdbId)), mediaType)
+                    const { poster_path, backdrop_path } = await tmdbService.getImagePaths(parseInt(String(tmdbId)), mediaType)
                     return {
                         tmdbKey: String(tmdbId),
                         item: {
@@ -404,6 +408,7 @@ export async function fetchServerTrends(page: number = 1) {
                             title: watch.itemName || watch.seriesName,
                             name: watch.itemName || watch.seriesName,
                             poster_path,
+                            backdrop_path,
                             media_type: mediaType,
                             tmdbId: parseInt(String(tmdbId)),
                             trendingReason: 'Populaire sur le serveur'
@@ -426,12 +431,13 @@ export async function fetchServerTrends(page: number = 1) {
             .map(async (req) => {
                 try {
                     const mediaType = req.mediaType as 'movie' | 'tv'
-                    const poster_path = await tmdbService.getPosterPath(parseInt(req.tmdbId), mediaType)
+                    const { poster_path, backdrop_path } = await tmdbService.getImagePaths(parseInt(req.tmdbId), mediaType)
                     return {
                         id: req.tmdbId,
                         title: req.title,
                         name: req.title,
                         poster_path,
+                        backdrop_path,
                         media_type: mediaType,
                         tmdbId: parseInt(req.tmdbId),
                         trendingReason: 'Fortement demandé'
@@ -470,6 +476,7 @@ export async function toggleFavorite(itemId: string, isFavorite: boolean) {
         if (!userId) return false
         
         await mediaService.updateFavoriteStatus(userId, itemId, isFavorite)
+        mediaReads.clear()
         revalidatePath('/')
         return true
     } catch (e) {

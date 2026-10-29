@@ -24,7 +24,7 @@ export function DownloadsHeader({
   onTabChange,
 }: DownloadsHeaderProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-black/40 backdrop-blur-xl border border-white/10 p-4 rounded-3xl shadow-2xl">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-black/40 border border-white/10 p-4 rounded-3xl shadow-2xl">
       <div className="flex items-center gap-4 px-2">
         <div className="p-3 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 shadow-[0_0_15px_-5px_rgba(232,230,228,0.2)]">
           <CloudArrowDownIcon className="w-6 h-6 text-indigo-400" />
@@ -32,7 +32,7 @@ export function DownloadsHeader({
         <h2 className="text-2xl font-black text-white tracking-tight">Téléchargements</h2>
       </div>
 
-      <div className="flex bg-black/40 backdrop-blur-md p-1.5 rounded-2xl border border-white/5 self-start sm:self-center overflow-x-auto max-w-full">
+      <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/5 self-start sm:self-center overflow-x-auto max-w-full">
         {hasQbit && permissions.canReadTorrents && (
           <button
             onClick={() => onTabChange('qbit')}

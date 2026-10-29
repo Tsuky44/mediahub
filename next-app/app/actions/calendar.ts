@@ -79,9 +79,14 @@ export interface CalendarEvent {
   status?: string
   overview?: string
   posterUrl?: string
+  /** Image de fond de la fiche : l'infobulle s'y retourne au clic (MotionDirector) */
+  backdropUrl?: string
   seasonNumber?: number
   episodeNumber?: number
 }
+
+/** Même adresse que l'image de fond de la fiche (MediaPageContent) */
+const backdropUrlOf = (path?: string | null) => (path ? `https://image.tmdb.org/t/p/original${path}` : undefined)
 
 export async function getCalendarEvents(start: Date, end: Date) {
   log(`[Calendar] Fetching events from ${start.toISOString()} to ${end.toISOString()}`)
@@ -118,12 +123,13 @@ export async function getCalendarEvents(start: Date, end: Date) {
         if (e.mediaType === 'movie') {
         // For movies, only show if releaseDate is in range
         if (e.releaseDate >= start && e.releaseDate <= end) {
-            let posterUrl, overview
+            let posterUrl, overview, backdropUrl
             if (tmdb) {
                 try {
                     const details = await tmdb.getDetails(parseInt(e.tmdbId), 'movie')
                     if (details) {
                         posterUrl = details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : undefined
+                        backdropUrl = backdropUrlOf(details.backdrop_path)
                         overview = details.overview
                     }
                 } catch (err) {
@@ -141,7 +147,8 @@ export async function getCalendarEvents(start: Date, end: Date) {
             mediaType: 'movie',
             tmdbId: e.tmdbId,
             overview,
-            posterUrl
+            posterUrl,
+            backdropUrl
             }] as CalendarEvent[]
         }
         return []
@@ -152,6 +159,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
             if (!show || !show.seasons) return []
             
             const showPosterUrl = show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : undefined
+            const backdropUrl = backdropUrlOf(show.backdrop_path)
 
             const showEvents: CalendarEvent[] = []
             
@@ -194,6 +202,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
                         tmdbId: e.tmdbId,
                         overview: seasonDetails.overview || show.overview,
                         posterUrl: seasonDetails.poster_path ? `https://image.tmdb.org/t/p/w500${seasonDetails.poster_path}` : showPosterUrl,
+                        backdropUrl,
                         seasonNumber: season.season_number
                     })
                     } else {
@@ -210,6 +219,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
                         tmdbId: e.tmdbId,
                         overview: ep.overview || show.overview,
                         posterUrl: ep.still_path ? `https://image.tmdb.org/t/p/w500${ep.still_path}` : showPosterUrl,
+                        backdropUrl,
                         seasonNumber: season.season_number,
                         episodeNumber: ep.episode_number
                     })
@@ -248,12 +258,13 @@ export async function getCalendarEvents(start: Date, end: Date) {
         // Use the event if Radarr returned it, trusting the service's date range filter mostly
         // But still good to check if it's completely out of bounds, but let's be more lenient or log if we drop it
         if (true) { // Was: if (date >= start && date <= end)
-            let posterUrl, overview = m.overview
+            let posterUrl, backdropUrl, overview = m.overview
             if (tmdb) {
                 try {
                     const details = await tmdb.getDetails(m.tmdbId, 'movie')
                     if (details) {
                         posterUrl = details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : undefined
+                        backdropUrl = backdropUrlOf(details.backdrop_path)
                         if (details.overview) overview = details.overview
                     }
                 } catch (e) {
@@ -272,7 +283,8 @@ export async function getCalendarEvents(start: Date, end: Date) {
               tmdbId: m.tmdbId.toString(),
               status: m.hasFile ? 'available' : (m.monitored ? 'monitored' : 'unmonitored'),
               overview,
-              posterUrl
+              posterUrl,
+              backdropUrl
             } as CalendarEvent
         }
         return null
@@ -315,7 +327,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
         // Relaxed filter: Trust Sonarr's return
         // if (startDate < start || startDate > end) return null
 
-        let posterUrl, overview = firstEp.overview
+        let posterUrl, backdropUrl, overview = firstEp.overview
         let title = `${firstEp.series.title} - S${firstEp.seasonNumber}E${firstEp.episodeNumber}`
         let isSeasonRelease = false
 
@@ -327,8 +339,12 @@ export async function getCalendarEvents(start: Date, end: Date) {
 
         if (tmdb && firstEp.series.tmdbId) {
             try {
-                // Fetch season details
-                const season = await tmdb.getSeasonDetails(firstEp.series.tmdbId, firstEp.seasonNumber)
+                // Fetch season details (et l'image de fond de la série, en cache 24 h)
+                const [season, images] = await Promise.all([
+                    tmdb.getSeasonDetails(firstEp.series.tmdbId, firstEp.seasonNumber),
+                    tmdb.getImagePaths(firstEp.series.tmdbId, 'tv'),
+                ])
+                backdropUrl = backdropUrlOf(images.backdrop_path)
                 
                 if (isSeasonRelease) {
                     // Season Release: Use season overview and poster
@@ -378,6 +394,7 @@ export async function getCalendarEvents(start: Date, end: Date) {
             status: firstEp.hasFile ? 'available' : (firstEp.monitored ? 'monitored' : 'unmonitored'),
             overview,
             posterUrl,
+            backdropUrl,
             seasonNumber: firstEp.seasonNumber,
             episodeNumber: isSeasonRelease ? undefined : firstEp.episodeNumber
         } as CalendarEvent

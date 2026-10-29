@@ -28,7 +28,7 @@ export function CalendarGrid({
   onEventTouchStart,
 }: CalendarGridProps) {
   return (
-    <div className="hidden md:block flex-1 bg-black/20 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl relative">
+    <div className="hidden md:block flex-1 bg-black/20 border border-white/5 rounded-2xl overflow-hidden shadow-xl relative">
       {/* Days Header */}
       <div className="grid grid-cols-7 border-b border-white/5 bg-white/[0.02]">
         {daysOfWeek.map(day => (

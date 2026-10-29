@@ -51,7 +51,7 @@ export function StorageManagerHeader({
       </div>
 
       <div className="flex flex-col md:flex-row gap-4 items-center">
-        <div className="flex bg-black/40 backdrop-blur-md rounded-2xl p-1 border border-white/5">
+        <div className="flex bg-black/40 rounded-2xl p-1 border border-white/5">
           <button
             onClick={() => onTabChange('Movie')}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
@@ -81,26 +81,26 @@ export function StorageManagerHeader({
         </div>
 
         <div className="relative flex-1 md:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Search className="absolute z-10 left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             type="text"
             placeholder="Rechercher..."
             value={searchTerm}
             onChange={e => onSearchChange(e.target.value)}
-            className="w-full bg-black/40 backdrop-blur-sm border border-white/5 rounded-2xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
+            className="w-full bg-black/40 border border-white/5 rounded-2xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all shadow-inner"
           />
         </div>
         <button
           onClick={onSync}
           disabled={syncing}
-          className="p-2.5 bg-black/40 backdrop-blur-sm border border-white/5 hover:bg-white/10 rounded-2xl text-gray-400 hover:text-white transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-2.5 bg-black/40 border border-white/5 hover:bg-white/10 rounded-2xl text-gray-400 hover:text-white transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           title="Synchroniser les dates de lecture depuis Emby"
         >
           <History className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
         </button>
         <button
           onClick={onRefresh}
-          className="p-2.5 bg-black/40 backdrop-blur-sm border border-white/5 hover:bg-white/10 rounded-2xl text-gray-400 hover:text-white transition-all shadow-sm hover:shadow-md"
+          className="p-2.5 bg-black/40 border border-white/5 hover:bg-white/10 rounded-2xl text-gray-400 hover:text-white transition-all shadow-sm hover:shadow-md"
           title="Actualiser"
         >
           <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />

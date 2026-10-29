@@ -1,5 +1,6 @@
 'use client'
 
+import { BRAND, isMediaServerBrand } from '@/lib/media-server-brand'
 import type { ProviderFilter } from '../../_types/user'
 
 const PROVIDERS: { id: ProviderFilter; label: string }[] = [
@@ -23,9 +24,11 @@ export function ProviderFilterTabs({ value, onChange }: ProviderFilterTabsProps)
                     key={provider.id}
                     onClick={() => onChange(provider.id)}
                     className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        value === provider.id
-                            ? 'bg-indigo-600 text-white shadow-sm'
-                            : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        value !== provider.id
+                            ? 'text-gray-400 hover:text-white hover:bg-white/5'
+                            : isMediaServerBrand(provider.id)
+                              ? BRAND[provider.id].selected
+                              : 'bg-white/15 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.15)]'
                     }`}
                 >
                     {provider.label}

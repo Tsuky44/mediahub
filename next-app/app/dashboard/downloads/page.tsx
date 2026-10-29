@@ -19,7 +19,7 @@ export default async function DownloadsPage() {
   if (!ability.can('read', 'Downloads')) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 p-8">
-        <div className="p-6 rounded-3xl bg-red-500/10 text-red-500 border border-red-500/20 shadow-xl shadow-red-500/10 backdrop-blur-xl animate-in fade-in zoom-in duration-500">
+        <div className="p-6 rounded-3xl bg-red-500/10 text-red-500 border border-red-500/20 shadow-xl shadow-red-500/10 animate-in fade-in zoom-in duration-500">
           <AlertCircle size={64} className="animate-pulse" />
         </div>
         <div className="text-center space-y-2 max-w-md">

@@ -1,6 +1,7 @@
 'use client'
 
 import { UserPlus } from 'lucide-react'
+import { BRAND } from '@/lib/media-server-brand'
 import type { SyncProvider } from '../../_types/user'
 
 interface UserSyncButtonsProps {
@@ -17,9 +18,9 @@ interface SyncButtonConfig {
 }
 
 const SYNC_BUTTONS: SyncButtonConfig[] = [
-    { provider: 'emby', label: 'Sync Emby', className: 'bg-green-600 hover:bg-green-500' },
-    { provider: 'plex', label: 'Sync Plex', className: 'bg-orange-600 hover:bg-orange-500' },
-    { provider: 'jellyfin', label: 'Sync Jellyfin', className: 'bg-purple-600 hover:bg-purple-500' },
+    { provider: 'emby', label: 'Sync Emby', className: BRAND.emby.solid },
+    { provider: 'plex', label: 'Sync Plex', className: BRAND.plex.solid },
+    { provider: 'jellyfin', label: 'Sync Jellyfin', className: BRAND.jellyfin.solid },
 ]
 
 /**
@@ -41,10 +42,10 @@ export function UserSyncButtons({ syncingProvider, readOnly, onSync, onOpenCreat
                     key={provider}
                     onClick={() => onSync(provider)}
                     disabled={!!syncingProvider || readOnly}
-                    className={`flex items-center gap-2 px-3 py-2 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm ${className}`}
+                    className={`flex items-center gap-2 px-3 py-2 font-medium rounded-lg transition-[filter] disabled:opacity-50 disabled:cursor-not-allowed text-sm ${className}`}
                 >
                     {syncingProvider === provider ? (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <div className="w-4 h-4 border-2 border-onyx-bg/30 border-t-onyx-bg rounded-full animate-spin" />
                     ) : (
                         <span>{label}</span>
                     )}

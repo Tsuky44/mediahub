@@ -34,7 +34,7 @@ export function FileManagerTable({
     return (
         <div className="w-full overflow-hidden relative z-10">
             <table className="w-full divide-y divide-white/5 table-fixed">
-                <thead className="bg-gradient-to-r from-white/5 to-transparent backdrop-blur-md">
+                <thead className="bg-gradient-to-r from-white/5 to-transparent">
                     <tr>
                         <th className="text-left text-[10px] font-bold text-indigo-300 uppercase tracking-wider px-4 py-3">Nom</th>
                         <th className="hidden sm:table-cell w-24 text-left text-[10px] font-bold text-indigo-300 uppercase tracking-wider px-3 py-3">Taille</th>

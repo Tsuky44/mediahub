@@ -76,6 +76,26 @@
     filter: blur(3px);
   }
 }
+/* Saisons d'une série (SeasonList) : épisodes qui arrivent du côté de la bulle choisie,
+   liste quittée qui file de l'autre côté, lumière qui se pose */
+@keyframes onyx-season-in {
+  from {
+    opacity: 0;
+    translate: var(--onyx-sx, 0px) var(--onyx-sy, 18px);
+    scale: 0.985;
+  }
+}
+@keyframes onyx-season-out {
+  to {
+    opacity: 0;
+    translate: calc(var(--onyx-sx, 0px) * -1) 0;
+    scale: 0.985;
+  }
+}
+@keyframes onyx-season-flare {
+  from { opacity: 0; scale: 0.5 1; }
+  30% { opacity: 1; }
+}
 /* Comète qui longe la bordure de la barre de navigation */
 @keyframes onyx-comet {
   from {
@@ -245,6 +265,110 @@
   }
   .onyx-tip-text > :nth-child(2) { animation-delay: 45ms; }
   .onyx-tip-text > :nth-child(3) { animation-delay: 90ms; }
+
+  /* Saisons : cascade des épisodes (sens donné par --onyx-sx / --onyx-sy, SeasonEpisodes) */
+  .onyx-season-cascade > * {
+    animation: onyx-season-in 620ms var(--ease-out-onyx) backwards;
+    animation-delay: var(--onyx-season-delay, 0ms);
+  }
+  .onyx-season-cascade > :nth-child(2) { --onyx-season-delay: 45ms; }
+  .onyx-season-cascade > :nth-child(3) { --onyx-season-delay: 90ms; }
+  .onyx-season-cascade > :nth-child(4) { --onyx-season-delay: 135ms; }
+  .onyx-season-cascade > :nth-child(5) { --onyx-season-delay: 180ms; }
+  .onyx-season-cascade > :nth-child(6) { --onyx-season-delay: 225ms; }
+  .onyx-season-cascade > :nth-child(7) { --onyx-season-delay: 270ms; }
+  .onyx-season-cascade > :nth-child(n + 8) { --onyx-season-delay: 300ms; }
+  .onyx-season-head {
+    animation: onyx-season-in 620ms var(--ease-out-onyx) backwards;
+  }
+  .onyx-season-out {
+    animation: onyx-season-out 300ms var(--ease-onyx) both;
+    pointer-events: none;
+  }
+
+  /* Bulles des saisons : corps liquide dans un calque filtré (#onyx-season-goo), verre par-dessus.
+     La bulle choisie s'éclaire quand la goutte l'atteint (--onyx-bubble-delay, SeasonList). */
+  .onyx-season-goo {
+    filter: url(#onyx-season-goo);
+    opacity: 0.2;
+  }
+  .onyx-season-goo [data-body] {
+    background-color: #77736f;
+    transition: background-color 300ms;
+  }
+  .onyx-season-goo [data-body][data-active] {
+    background-color: var(--onyx-ink);
+    transition: background-color 380ms var(--onyx-bubble-delay, 60ms);
+  }
+  .onyx-season-goo :is([data-drop], [data-tail]) {
+    background-color: var(--onyx-ink);
+    opacity: 0;
+  }
+  .onyx-season-rim {
+    box-shadow:
+      inset 0 1px 0.5px rgb(255 255 255 / 0.22),
+      inset 0 0 0 1px rgb(255 255 255 / 0.07);
+    transition: box-shadow 300ms;
+  }
+  .onyx-season-bubble:hover .onyx-season-rim {
+    box-shadow:
+      inset 0 1px 0.5px rgb(255 255 255 / 0.3),
+      inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  }
+  .onyx-season-bubble[data-active] .onyx-season-rim {
+    box-shadow:
+      inset 0 1px 1px rgb(255 255 255 / 0.5),
+      inset 0 -2px 4px rgb(255 255 255 / 0.06),
+      inset 0 0 0 1px rgb(255 255 255 / 0.16),
+      0 0 22px rgb(242 240 237 / 0.08);
+    transition: box-shadow 420ms var(--onyx-bubble-delay, 60ms);
+  }
+  .onyx-season-num {
+    color: var(--onyx-muted);
+    transition: color 200ms, opacity 180ms, scale 260ms var(--ease-out-onyx);
+  }
+  .onyx-season-bubble:hover .onyx-season-num {
+    color: var(--onyx-ink);
+  }
+  .onyx-season-bubble[data-active] .onyx-season-num {
+    opacity: 0;
+    scale: 0.5;
+  }
+  .onyx-season-avatar {
+    opacity: 0;
+    scale: 0.4;
+    transition: opacity 180ms, scale 220ms;
+  }
+  .onyx-season-bubble[data-active] .onyx-season-avatar {
+    opacity: 1;
+    scale: 1;
+    transition:
+      opacity 260ms var(--onyx-bubble-delay, 60ms),
+      scale 560ms var(--ease-spring) var(--onyx-bubble-delay, 60ms);
+  }
+  .onyx-season-label {
+    opacity: 0;
+    translate: -8px 0;
+    transition: opacity 140ms, translate 140ms;
+  }
+  .onyx-season-bubble[data-active] .onyx-season-label {
+    opacity: 1;
+    translate: 0 0;
+    transition:
+      opacity 320ms calc(var(--onyx-bubble-delay, 60ms) + 80ms),
+      translate 560ms var(--ease-out-onyx) calc(var(--onyx-bubble-delay, 60ms) + 80ms);
+  }
+  .onyx-season-pip {
+    transition: opacity 200ms, scale 300ms var(--ease-spring);
+  }
+  .onyx-season-bubble[data-active] .onyx-season-pip {
+    opacity: 0;
+    scale: 0;
+  }
+  /* Lumière du panneau : elle s'allume sous la bulle choisie */
+  .onyx-season-flare {
+    animation: onyx-season-flare 900ms var(--ease-out-onyx) backwards;
+  }
 
   /* Signal d'arrivée dans la barre de navigation (rejoué à chaque page, voir Navbar) :
      une comète longe la bordure et une lueur éclaire le haut de la page */
@@ -429,26 +553,57 @@
    la paire « onyx-page » est animée. */
 /* Le reste de l'écran (barre de navigation, fond) bascule sans fondu : l'ancienne
    image reste affichée tant que la nouvelle n'est pas prête, puis elle la recouvre. */
-::view-transition-old(root),
-::view-transition-new(root),
 ::view-transition-old(onyx-nav),
 ::view-transition-new(onyx-nav) {
   animation: none;
+}
+::view-transition-old(onyx-nav) {
+  opacity: 0;
 }
 /* La barre de navigation a son propre calque, le temps de la transition seulement :
    elle reste au-dessus de la page (dont l'image de fond passe sous elle). */
 :root:active-view-transition .onyx-scroll-progress {
   view-transition-name: onyx-nav;
 }
-::view-transition-group(onyx-page) {
-  animation-duration: 520ms;
-  animation-timing-function: var(--ease-out-onyx);
-}
-::view-transition-old(onyx-page) {
-  animation: onyx-vt-out 240ms var(--ease-onyx) both;
-}
+/* La View Transition ne joue que la sortie, brève, de l'ancienne page : tant qu'une transition
+   dure, React retient l'affichage du contenu qui arrive. La nouvelle page s'affiche aussitôt et
+   joue son arrivée elle-même (plus bas, sur .onyx-page), sans rien retenir.
+   L'ancienne page est l'image de l'écran (« root », au-dessus de la nouvelle) : le navigateur
+   ne photographie que ce qui est visible, pas toute la hauteur de la page (template.tsx). */
+::view-transition-group(root),
+::view-transition-group(onyx-page),
+::view-transition-old(onyx-page),
 ::view-transition-new(onyx-page) {
   animation: none;
+}
+::view-transition-old(root) {
+  z-index: 1;
+  mix-blend-mode: normal;
+  animation: onyx-vt-out 240ms var(--ease-onyx) both;
+}
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation: none;
+}
+.onyx-vt-anchor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+/* La bulle d'aide reste en place pendant la transition (elle fait partie de l'écran) */
+:root:active-view-transition .onyx-breathe {
+  view-transition-name: onyx-bubble;
+}
+::view-transition-group(onyx-bubble),
+::view-transition-old(onyx-bubble),
+::view-transition-new(onyx-bubble) {
+  animation: none;
+}
+::view-transition-old(onyx-bubble) {
+  opacity: 0;
 }
 @keyframes onyx-vt-out {
   to {
@@ -462,33 +617,34 @@
    - sections voisines de la barre de navigation : la page glisse dans le sens du menu ;
    - vers une fiche : plongée, l'ancienne page passe derrière nous, la nouvelle approche ;
    - en ressortant d'une fiche : remontée, l'inverse. */
-:root[data-onyx-nav="next"]::view-transition-old(onyx-page) {
-  animation: onyx-vt-out-left 380ms cubic-bezier(0.4, 0, 1, 1) both;
+:root[data-onyx-nav="next"]::view-transition-old(root) {
+  animation: onyx-vt-out-left 260ms cubic-bezier(0.4, 0, 1, 1) both;
 }
-:root[data-onyx-nav="next"]::view-transition-new(onyx-page) {
-  animation: onyx-vt-in-right 640ms var(--ease-out-onyx) 60ms both;
+:root[data-onyx-nav="prev"]::view-transition-old(root) {
+  animation: onyx-vt-out-right 260ms cubic-bezier(0.4, 0, 1, 1) both;
 }
-:root[data-onyx-nav="prev"]::view-transition-old(onyx-page) {
-  animation: onyx-vt-out-right 380ms cubic-bezier(0.4, 0, 1, 1) both;
-}
-:root[data-onyx-nav="prev"]::view-transition-new(onyx-page) {
-  animation: onyx-vt-in-left 640ms var(--ease-out-onyx) 60ms both;
-}
-:root:is([data-onyx-nav="dive"], [data-onyx-nav="hero"])::view-transition-old(onyx-page) {
+:root:is([data-onyx-nav="dive"], [data-onyx-nav="hero"], [data-onyx-nav="fly"])::view-transition-old(root) {
   transform-origin: 50% 40vh;
-  animation: onyx-vt-dive-out 440ms cubic-bezier(0.4, 0, 1, 1) both;
+  animation: onyx-vt-dive-out 280ms cubic-bezier(0.4, 0, 1, 1) both;
 }
-:root:is([data-onyx-nav="dive"], [data-onyx-nav="hero"])::view-transition-new(onyx-page) {
+:root[data-onyx-nav="rise"]::view-transition-old(root) {
   transform-origin: 50% 40vh;
-  animation: onyx-vt-dive-in 680ms var(--ease-out-onyx) 80ms both;
+  animation: onyx-vt-rise-out 260ms cubic-bezier(0.4, 0, 1, 1) both;
 }
-:root[data-onyx-nav="rise"]::view-transition-old(onyx-page) {
-  transform-origin: 50% 40vh;
-  animation: onyx-vt-rise-out 400ms cubic-bezier(0.4, 0, 1, 1) both;
+/* Arrivée de la nouvelle page (la page quittée est marquée data-onyx-leaving au clic) */
+:root[data-onyx-nav="next"] .onyx-page:not([data-onyx-leaving]) {
+  animation: onyx-vt-in-right 640ms var(--ease-out-onyx) 40ms backwards;
 }
-:root[data-onyx-nav="rise"]::view-transition-new(onyx-page) {
+:root[data-onyx-nav="prev"] .onyx-page:not([data-onyx-leaving]) {
+  animation: onyx-vt-in-left 640ms var(--ease-out-onyx) 40ms backwards;
+}
+:root:is([data-onyx-nav="dive"], [data-onyx-nav="hero"]) .onyx-page:not([data-onyx-leaving]) {
   transform-origin: 50% 40vh;
-  animation: onyx-vt-rise-in 640ms var(--ease-out-onyx) 60ms both;
+  animation: onyx-vt-dive-in 680ms var(--ease-out-onyx) 60ms backwards;
+}
+:root[data-onyx-nav="rise"] .onyx-page:not([data-onyx-leaving]) {
+  transform-origin: 50% 40vh;
+  animation: onyx-vt-rise-in 640ms var(--ease-out-onyx) 40ms backwards;
 }
 @keyframes onyx-vt-out-left {
   to { opacity: 0; translate: -96px 0; scale: 0.98; filter: blur(6px); }
@@ -515,35 +671,151 @@
   from { opacity: 0; scale: 1.07; }
 }
 
-/* Plongée dans une fiche depuis une affiche : la carte cliquée (son cadre, coins compris) part
-   aussitôt vers le haut de l'écran en grandissant, sans temps d'arrêt, et se dissout dans la
-   fiche qui approche derrière elle (déplacement et échelle calculés au clic par MotionDirector). */
-:root[data-onyx-nav="hero"]:active-view-transition [data-onyx-hero] {
+/* Plongée depuis une affiche : une copie de la carte (MotionDirector) se soulève dès le clic et
+   s'avance au centre pendant que la page quittée s'assombrit ; elle se dissout quand la fiche est
+   là. Elle bouge dans un calque fixe plein écran qui, pendant la transition, a sa propre paire
+   « onyx-hero » au-dessus des pages, affichée telle quelle (toujours animée) ; la barre de
+   navigation reste au-dessus de tout. */
+:root:is([data-onyx-nav="hero"], [data-onyx-nav="fly"]) .onyx-page[data-onyx-leaving] {
+  filter: brightness(0.45) saturate(0.85);
+  transition: filter 380ms var(--ease-out-onyx);
+}
+.onyx-hero-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
   view-transition-name: onyx-hero;
+}
+.onyx-hero-ghost {
+  overflow: hidden;
+  transform-origin: 50% 50%;
+}
+.onyx-hero-ghost,
+.onyx-hero-ghost * {
+  animation: none !important;
+  transition: none !important;
 }
 ::view-transition-group(onyx-nav) {
   z-index: 3;
 }
 ::view-transition-group(onyx-hero) {
   z-index: 2;
+  animation: none;
 }
 ::view-transition-old(onyx-hero) {
-  animation: onyx-hero-fly 720ms cubic-bezier(0.32, 0, 0.18, 1) both;
+  animation: none;
+  opacity: 0;
 }
-@keyframes onyx-hero-fly {
+::view-transition-new(onyx-hero) {
+  animation: none;
+}
+
+/* Envol vers une fiche (MotionDirector, écran large et téléphone) : la carte cliquée se retourne
+   sur l'image de fond de la fiche, qu'une copie plein écran amène à sa place. Sous la barre de
+   navigation, comme l'image de fond de la fiche. Uniquement des transformations : fluide pendant
+   le chargement de la fiche. */
+.onyx-fly-layer {
+  z-index: 45;
+}
+.onyx-fly-card,
+.onyx-fly {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform, opacity;
+}
+.onyx-fly-card {
+  perspective: 1000px;
+}
+.onyx-fly-turn {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-style: preserve-3d;
+}
+.onyx-fly-face {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  border-radius: inherit;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.onyx-fly-back {
+  transform: rotateY(180deg);
+  background: #0c0d0d;
+}
+/* Affiche floutée, le temps que l'image de fond arrive (réseau lent, téléphone) */
+.onyx-fly-blur {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  filter: blur(18px) brightness(0.6);
+  scale: 1.25;
+}
+/* Même cadrage et même zoom de départ que l'image de fond de la fiche (MediaBackdrop) */
+.onyx-fly-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 25%;
+  scale: 1.1;
+}
+.onyx-fly {
+  transform-origin: 0 0;
+}
+.onyx-fly-squash {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  transform-origin: 50% 0;
+  background: #0c0d0d;
+}
+.onyx-fly-img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  object-fit: cover;
+  transform-origin: 0 0;
+}
+/* La fiche attend l'atterrissage (son image de fond reste à son zoom de départ, comme la copie) */
+:root[data-onyx-fly] .onyx-page:not([data-onyx-leaving], [data-onyx-drop]) {
+  opacity: 0;
+}
+:root[data-onyx-fly] [data-onyx-backdrop] > img,
+[data-onyx-backdrop]:has(> .onyx-fly) > img {
+  animation-play-state: paused;
+}
+/* Atterrie : l'image est déjà là ; ses fondus arrivent et les textes tombent en place pendant
+   l'écrasement, sans l'arrivée habituelle des blocs */
+.onyx-page[data-onyx-drop] > * > :not(.fixed) {
+  animation: none;
+}
+.onyx-page[data-onyx-drop] [data-onyx-backdrop] > div:not(.onyx-fly) {
+  animation: onyx-page-in 520ms var(--ease-out-onyx) backwards;
+}
+.onyx-page[data-onyx-drop] .onyx-hero-copy .onyx-stagger > :not(.fixed),
+.onyx-page[data-onyx-drop] .onyx-hero-copy > :not(.onyx-stagger) {
+  animation: onyx-hero-drop 520ms var(--ease-spring) backwards;
+  animation-delay: calc(var(--onyx-delay, 0ms) * 1.5 + 20ms);
+}
+.onyx-page[data-onyx-drop] .onyx-hero-copy > :not(.onyx-stagger) {
+  animation-delay: 170ms;
+}
+@keyframes onyx-hero-drop {
   from {
-    opacity: 1;
-    filter: blur(0);
-  }
-  55% {
-    opacity: 0.9;
-    filter: blur(1px);
-  }
-  to {
-    translate: var(--onyx-hero-x, 0px) var(--onyx-hero-y, 0px);
-    scale: var(--onyx-hero-scale, 3);
     opacity: 0;
-    filter: blur(14px);
+    translate: 0 -18px;
   }
 }
 
@@ -697,7 +969,7 @@
 
 /* Une fenêtre en position fixe ouverte dans un élément encore en mouvement serait
    placée par rapport à lui : dès qu'elle apparaît, l'élément arrête son animation. */
-:is(.onyx-stagger > *, .onyx-reveal, .onyx-ignite, .onyx-page > * > *):has(.fixed) {
+:is(.onyx-stagger > *, .onyx-reveal, .onyx-ignite, .onyx-page > * > *, .onyx-page):has(.fixed) {
   animation: none !important;
 }
 
@@ -729,7 +1001,8 @@
   .onyx-ignite::before {
     content: none !important;
   }
-  .onyx-arrival {
+  .onyx-arrival,
+  .onyx-season-out {
     display: none;
   }
   body::before,

@@ -3,6 +3,7 @@
 import React from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Filter } from 'lucide-react'
+import { BRAND, isMediaServerBrand } from '@/lib/media-server-brand'
 
 export function SourceFilter() {
   const router = useRouter()
@@ -23,8 +24,9 @@ export function SourceFilter() {
   }
 
   return (
-    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 backdrop-blur-md hover:bg-white/10 transition-colors duration-300 shadow-sm">
-      <Filter size={14} className="text-gray-400" />
+    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 hover:bg-white/10 transition-colors duration-300 shadow-sm">
+      {/* Source choisie : le filtre prend la couleur de son serveur */}
+      <Filter size={14} className={isMediaServerBrand(currentSource) ? BRAND[currentSource].text : 'text-gray-400'} />
       <select 
         value={currentSource} 
         onChange={handleChange}

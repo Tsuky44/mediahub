@@ -26,11 +26,17 @@ export const MediaCard = memo(function MediaCard({ item, showFavoriteButton = fa
   const title = item.title || item.name || 'Untitled'
   const linkId = item.tmdbId || item.id
   const posterUrl = getPosterUrl(item.poster_path, 'w342')
+  // Même adresse que l'image de fond de la fiche : préchargée au survol, déjà là à l'arrivée
+  const backdropUrl = item.backdrop_path ? getPosterUrl(item.backdrop_path, 'original') : undefined
 
   return (
     // onyx-ignite : l'affiche s'allume en entrant dans l'écran (globals.css)
     <div className="onyx-ignite onyx-sweep group relative flex flex-col overflow-hidden rounded-2xl bg-gray-900 shadow-lg transition-[scale,box-shadow] duration-300 ease-onyx hover:scale-[1.04] hover:shadow-[0_30px_60px_rgb(0_0_0/0.5)] hover:z-10 ring-1 ring-white/5 hover:ring-white/20">
-      <Link href={`/dashboard/media/${linkId}?type=${item.media_type || 'movie'}`} className="block h-full w-full">
+      <Link
+        href={`/dashboard/media/${linkId}?type=${item.media_type || 'movie'}`}
+        data-onyx-backdrop={backdropUrl}
+        className="block h-full w-full"
+      >
         <div className="aspect-[2/3] w-full overflow-hidden bg-gray-800 relative">
           {posterUrl !== '/placeholder.png' ? (
             <img

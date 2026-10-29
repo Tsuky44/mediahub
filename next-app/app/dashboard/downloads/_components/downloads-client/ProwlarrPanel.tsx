@@ -16,7 +16,7 @@ interface ProwlarrPanelProps {
 export function ProwlarrPanel({ hasProwlarr, isAdmin, permissions }: ProwlarrPanelProps) {
   if (!hasProwlarr && isAdmin) {
     return (
-      <div className="bg-black/40 backdrop-blur-md rounded-3xl border border-white/5 p-6 shadow-xl">
+      <div className="bg-black/40 rounded-3xl border border-white/5 p-6 shadow-xl">
         <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
           <div className="p-6 rounded-3xl bg-amber-500/10 text-amber-500 border border-amber-500/20 shadow-2xl shadow-amber-500/10">
             <Search size={48} />
@@ -39,7 +39,7 @@ export function ProwlarrPanel({ hasProwlarr, isAdmin, permissions }: ProwlarrPan
   }
 
   return (
-    <div className="bg-black/40 backdrop-blur-md rounded-3xl border border-white/5 p-6 shadow-xl">
+    <div className="bg-black/40 rounded-3xl border border-white/5 p-6 shadow-xl">
       <ProwlarrSearch
         title=""
         canManage={permissions.canAddTorrent || permissions.canInteractiveSearch}

@@ -1,6 +1,7 @@
 'use client'
 
 import { Server, Loader2, MonitorPlay } from 'lucide-react'
+import { BRAND } from '@/lib/media-server-brand'
 
 type ServerType = 'emby' | 'jellyfin'
 
@@ -52,7 +53,7 @@ export function SetupConfigureForm({
             onClick={() => onServerTypeChange('emby')}
             className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
               !isJellyfin
-                ? 'border-green-500/50 bg-green-600/20 text-green-400'
+                ? `border-transparent ${BRAND.emby.selected}`
                 : 'border-white/10 bg-white/5 text-gray-400 hover:bg-white/10'
             }`}
           >
@@ -64,7 +65,7 @@ export function SetupConfigureForm({
             onClick={() => onServerTypeChange('jellyfin')}
             className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
               isJellyfin
-                ? 'border-purple-500/50 bg-purple-600/20 text-purple-400'
+                ? `border-transparent ${BRAND.jellyfin.selected}`
                 : 'border-white/10 bg-white/5 text-gray-400 hover:bg-white/10'
             }`}
           >
@@ -77,12 +78,10 @@ export function SetupConfigureForm({
       <div className="space-y-4">
         <div className={`border rounded-xl p-4 mb-4 ${
           isJellyfin
-            ? 'bg-purple-500/10 border-purple-500/20'
-            : 'bg-green-500/10 border-green-500/20'
+            ? 'bg-jellyfin/10 border-jellyfin/20'
+            : 'bg-emby/10 border-emby/20'
         }`}>
-          <p className={`text-sm ${
-            isJellyfin ? 'text-purple-200' : 'text-green-200'
-          }`}>
+          <p className="text-sm text-gray-200">
             Connectez-vous à votre instance {isJellyfin ? 'Jellyfin' : 'Emby'} pour commencer.
           </p>
         </div>
@@ -130,7 +129,9 @@ export function SetupConfigureForm({
         <button
           type="submit"
           disabled={loading}
-          className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+          className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-[scale,filter] duration-300 ease-onyx active:scale-[0.98] ${
+            BRAND[isJellyfin ? 'jellyfin' : 'emby'].solid
+          }`}
         >
           {loading ? (
             <>

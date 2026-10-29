@@ -13,7 +13,7 @@ export type MediaStatus = 'unknown' | 'available' | 'partial' | 'pending' | 'pro
 export interface MediaAvailability {
     status: MediaStatus;
     available: boolean;
-    seasons?: { seasonNumber: number; status: MediaStatus; available: boolean; totalEpisodes?: number }[];
+    seasons?: { seasonNumber: number; status: MediaStatus; available: boolean; totalEpisodes?: number; availableEpisodes?: number }[];
     details?: any;
     /** Date de sortie attendue (ISO), quand le statut est `unreleased` et qu'elle est connue */
     releaseDate?: string;
@@ -121,7 +121,8 @@ export async function getArrAvailability(tmdbId: number, mediaType: 'movie' | 't
                         seasonNumber: s.seasonNumber,
                         status,
                         available: hasFiles,
-                        totalEpisodes
+                        totalEpisodes,
+                        availableEpisodes: fileCount
                     }
                 });
 

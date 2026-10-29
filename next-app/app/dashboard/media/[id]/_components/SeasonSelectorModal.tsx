@@ -76,8 +76,11 @@ export function SeasonSelectorModal({ isOpen, onClose, title, tmdbId, seasons, s
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
-            <div className="onyx-glass-2 w-full max-w-lg overflow-hidden rounded-3xl animate-in fade-in zoom-in-95 slide-in-from-bottom-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in" onClick={onClose}>
+            <div
+                className="onyx-glass-2 w-full max-w-lg overflow-hidden rounded-3xl animate-in fade-in zoom-in-95 slide-in-from-bottom-2"
+                onClick={e => e.stopPropagation()}
+            >
                 <div className="flex items-center justify-between border-b border-white/10 p-4">
                     <h3 className="text-lg font-semibold text-white">Sélectionner les saisons</h3>
                     <button onClick={onClose} aria-label="Fermer" className="rounded-full p-1 hover:bg-white/10 text-gray-400 hover:text-white">

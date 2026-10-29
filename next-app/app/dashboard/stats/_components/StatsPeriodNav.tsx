@@ -36,7 +36,7 @@ export function StatsPeriodNav({ period }: StatsPeriodNavProps) {
 
     return (
         <div className="flex justify-center md:justify-end">
-            <div className="flex items-center gap-1 bg-black/20 backdrop-blur-md p-1.5 rounded-2xl border border-white/5 shadow-lg w-full md:w-fit overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-1 bg-black/20 p-1.5 rounded-2xl border border-white/5 shadow-lg w-full md:w-fit overflow-x-auto no-scrollbar">
                 {items.map(item => (
                     <div key={item.key} className="flex-1 md:flex-none">
                         <PeriodButton active={period === item.key} href={`?period=${item.key}`} label={item.label} />

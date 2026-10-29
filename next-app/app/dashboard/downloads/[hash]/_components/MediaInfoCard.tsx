@@ -16,11 +16,11 @@ export function MediaInfoCard({ mediaInfo, torrentHash, parsed, relatedRequests 
   const hasInternalLink = !isGame && mediaInfo.tmdbId
 
   return (
-    <div className="bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/5 overflow-hidden">
+    <div className="bg-gray-900/40 rounded-2xl border border-white/5 overflow-hidden">
       {/* Backdrop image if available */}
       {mediaInfo.backdropUrl && (
         <div className="relative h-48 sm:h-64">
-          <img
+          <img loading="lazy"
             src={mediaInfo.backdropUrl}
             alt={mediaInfo.title}
             className="w-full h-full object-cover"
@@ -34,7 +34,7 @@ export function MediaInfoCard({ mediaInfo, torrentHash, parsed, relatedRequests 
           {/* Poster */}
           {mediaInfo.posterUrl && (
             <div className="shrink-0">
-              <img
+              <img loading="lazy"
                 src={mediaInfo.posterUrl}
                 alt={mediaInfo.title}
                 className="w-32 sm:w-40 rounded-xl shadow-lg"

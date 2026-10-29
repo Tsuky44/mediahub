@@ -74,7 +74,7 @@ export default async function PersonPage({ params }: PersonPageProps) {
                     <div className="w-full md:w-80 flex-shrink-0">
                         <div className="aspect-[2/3] w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-gray-900">
                             {person.profile_path ? (
-                                <img 
+                                <img loading="lazy" 
                                     src={`https://image.tmdb.org/t/p/h632${person.profile_path}`}
                                     alt={person.name}
                                     className="w-full h-full object-cover"

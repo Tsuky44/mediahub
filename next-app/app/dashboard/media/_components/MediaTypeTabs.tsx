@@ -17,7 +17,7 @@ export function MediaTypeTabs({ currentType, query, isFavoritesOnly, isWatchLate
 
   return (
     <div className="flex justify-center mb-8">
-      <div className="inline-flex bg-gray-900/50 p-1.5 rounded-full border border-gray-800/50 backdrop-blur-md shadow-inner">
+      <div className="inline-flex bg-gray-900/50 p-1.5 rounded-full border border-gray-800/50 shadow-inner">
         {tabs.map((tab) => (
           <a
             key={tab.key}

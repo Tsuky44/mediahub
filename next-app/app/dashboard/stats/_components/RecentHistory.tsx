@@ -24,7 +24,7 @@ export function RecentHistory({ initialHistory }: RecentHistoryProps) {
     )
 
     return (
-        <div className="onyx-reveal rounded-3xl bg-black/20 backdrop-blur-md p-6 shadow-2xl border border-white/5 ring-1 ring-white/5 transition-all duration-300 hover:bg-white/[0.03] hover:border-indigo-500/20 hover:shadow-indigo-500/10">
+        <div className="onyx-reveal rounded-3xl bg-black/20 p-6 shadow-2xl border border-white/5 ring-1 ring-white/5 transition-all duration-300 hover:bg-white/[0.03] hover:border-indigo-500/20 hover:shadow-indigo-500/10">
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-500/10 rounded-xl">

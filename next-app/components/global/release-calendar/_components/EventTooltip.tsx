@@ -79,6 +79,7 @@ export function EventTooltip({ event, mousePos, isTouch }: EventTooltipProps) {
 
   return createPortal(
     <div
+      data-onyx-tooltip
       className={`fixed z-[100] w-[380px] bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 flex ring-1 ring-white/5 transition-[top,left] duration-300 ease-out-onyx motion-reduce:transition-none ${
         isTouch ? 'max-w-[90vw] sm:w-[380px]' : ''
       }`}

@@ -47,7 +47,7 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
     } = useUserManagement(users, readOnly)
 
     return (
-        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden">
+        <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden">
             <div className="flex flex-col gap-4 p-6 border-b border-white/10">
                 <div className="flex items-center justify-between">
                     <h3 className="text-xl font-bold text-white">Gestion des utilisateurs</h3>

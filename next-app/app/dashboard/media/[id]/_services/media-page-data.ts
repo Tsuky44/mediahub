@@ -52,6 +52,19 @@ export async function loadMediaPageData(params: {
   const [tmdbService, user] = await Promise.all([getTmdbServiceForUser(), getCurrentUser()])
   if (!tmdbService) return { kind: 'not-found' }
 
+  // Tout ce qui ne dépend pas des détails TMDB part en même temps qu'eux (disponibilité
+  // Radarr/Sonarr, listes, réglages) : la fiche attend le plus lent, pas leur somme.
+  // Promesses sans attente si la fiche n'existe pas : leurs erreurs sont absorbées ici.
+  const quiet = <T,>(p: Promise<T>) => (p.catch(() => {}), p)
+  const early = {
+    availability: quiet(getMediaAvailability(tmdbId, mediaType, true)),
+    isWatchLaterItem: quiet(isInWatchLater(externalId, mediaType)),
+    isSubscribed: quiet(getSubscriptionStatus(externalId, mediaType)),
+    embyUrl: quiet(getSetting('emby_url')),
+    jellyfinUrl: quiet(getSetting('jellyfin_url')),
+    requestAllSeasons: quiet(getSetting('request_all_seasons_enabled')),
+  }
+
   const details = await tmdbService.getDetails(tmdbId, mediaType)
   if (!details) return { kind: 'not-found' }
 
@@ -77,18 +90,18 @@ export async function loadMediaPageData(params: {
     jellyfinUrlSetting,
     requestAllSeasonsEnabled,
   ] = await Promise.all([
-    getMediaAvailability(tmdbId, mediaType, true),
-    isInWatchLater(externalId, mediaType),
-    getSubscriptionStatus(externalId, mediaType),
+    early.availability,
+    early.isWatchLaterItem,
+    early.isSubscribed,
     fetchMediaEmbyProgress({
       userEmail: user?.email,
       tmdbId,
       mediaType,
       details,
     }),
-    getSetting('emby_url'),
-    getSetting('jellyfin_url'),
-    getSetting('request_all_seasons_enabled'),
+    early.embyUrl,
+    early.jellyfinUrl,
+    early.requestAllSeasons,
   ])
   const embyUrl = embyUrlSetting || jellyfinUrlSetting
 

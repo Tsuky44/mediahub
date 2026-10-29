@@ -16,7 +16,7 @@ export function TorrentSidebar({ torrent, trackerName, trackerUrl, torrentPageUr
   return (
     <div className="space-y-6">
       {/* Progress Card */}
-      <div className="bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/5 p-6 space-y-6">
+      <div className="bg-gray-900/40 rounded-2xl border border-white/5 p-6 space-y-6">
         {/* Progress Bar */}
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
@@ -71,7 +71,7 @@ export function TorrentSidebar({ torrent, trackerName, trackerUrl, torrentPageUr
       </div>
 
       {/* Tracker Info */}
-      <div className="bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/5 p-6 space-y-4">
+      <div className="bg-gray-900/40 rounded-2xl border border-white/5 p-6 space-y-4">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Tracker</h3>
 
         <div className="space-y-3">
@@ -117,7 +117,7 @@ export function TorrentSidebar({ torrent, trackerName, trackerUrl, torrentPageUr
           : (Array.isArray(torrent.tags) ? torrent.tags : [])
         if (tags.length === 0) return null
         return (
-          <div className="bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/5 p-6 space-y-4">
+          <div className="bg-gray-900/40 rounded-2xl border border-white/5 p-6 space-y-4">
             <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Tags</h3>
             <div className="flex flex-wrap gap-2">
               {tags.map((tag: string) => (
@@ -132,7 +132,7 @@ export function TorrentSidebar({ torrent, trackerName, trackerUrl, torrentPageUr
 
       {/* Category */}
       {torrent.category && (
-        <div className="bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/5 p-6 space-y-4">
+        <div className="bg-gray-900/40 rounded-2xl border border-white/5 p-6 space-y-4">
           <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Catégorie</h3>
           <span className="px-3 py-1 rounded-lg bg-white/5 text-gray-400 text-sm border border-white/5">
             {torrent.category}

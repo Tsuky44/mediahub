@@ -106,7 +106,7 @@ export default async function TorrentDetailsPage({ params }: TorrentDetailsPageP
             {mediaInfo ? (
               <MediaInfoCard mediaInfo={mediaInfo} torrentHash={torrent.hash} parsed={parsed} relatedRequests={relatedRequests} />
             ) : (
-              <div className="bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/5 p-8 text-center">
+              <div className="bg-gray-900/40 rounded-2xl border border-white/5 p-8 text-center">
                 <FileQuestion className="w-12 h-12 mx-auto text-gray-600 mb-4" />
                 <h3 className="text-lg font-semibold text-gray-400 mb-2">Informations non disponibles</h3>
                 <p className="text-sm text-gray-500">

@@ -22,6 +22,9 @@ const l1 = new LRUCache<string, { value: unknown; expiry: number }>({
   updateAgeOnGet: true,
 });
 
+/** Rafraîchissements en arrière-plan en cours (un seul par clé) */
+const refreshing = new Map<string, Promise<unknown>>();
+
 /* ------------------------------------------------------------------ */
 // L2 Persistent (simple JSON-backed store via the existing settings DB table)
 // We import lazily to avoid circular deps at boot.
@@ -98,6 +101,21 @@ export async function cached<T>(
   const l1Entry = l1.get(key);
   if (l1Entry && Date.now() < l1Entry.expiry) {
     logger.dev(`[Cache] L1 hit ${key}`);
+    return l1Entry.value as T;
+  }
+  // L1 expirée depuis peu : servie tout de suite, rafraîchie en arrière-plan
+  if (l1Entry && Date.now() < l1Entry.expiry + memoryTtl * 5) {
+    if (!refreshing.has(key)) {
+      const refresh = Promise.resolve()
+        .then(fetcher)
+        .then(async (value) => {
+          l1.set(key, { value, expiry: Date.now() + memoryTtl });
+          if (persistentTtl !== undefined) await l2Set(key, value, persistentTtl, tags);
+        })
+        .catch((e) => logger.warn('[Cache] Background refresh failed', { key, error: (e as Error).message }))
+        .finally(() => refreshing.delete(key));
+      refreshing.set(key, refresh);
+    }
     return l1Entry.value as T;
   }
 

@@ -80,7 +80,7 @@ export function DownloadStatusModal({
   if (loading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
-        <div className="onyx-glass-2 w-full max-w-md rounded-3xl p-8 flex flex-col items-center justify-center gap-4">
+        <div className="onyx-glass-2 w-full max-w-md rounded-3xl p-8 flex flex-col items-center justify-center gap-4" onClick={(e) => e.stopPropagation()}>
           <OnyxTrack className="w-40" />
           <p className="text-sm text-gray-400">Chargement des informations de téléchargement</p>
         </div>
@@ -116,8 +116,11 @@ export function DownloadStatusModal({
     : 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
+      <div
+        className="w-full max-w-xl overflow-hidden rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-800 p-5 bg-white/5">

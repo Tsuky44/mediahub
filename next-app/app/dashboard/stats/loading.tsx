@@ -9,7 +9,7 @@ export default function StatsLoading() {
         <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full" />
         
         {/* Spinner container */}
-        <div className="relative bg-gray-900/50 p-8 rounded-3xl border border-gray-800 backdrop-blur-sm shadow-2xl flex flex-col items-center gap-4">
+        <div className="relative bg-gray-900/50 p-8 rounded-3xl border border-gray-800 shadow-2xl flex flex-col items-center gap-4">
           <div className="relative h-16 w-16">
             <Loader2 className="h-16 w-16 text-blue-500 animate-spin" />
             <Activity className="absolute inset-0 m-auto h-6 w-6 text-blue-400 opacity-50" />

@@ -71,7 +71,7 @@ export default function FileManager({ canDownload, canShare, canDelete }: FileMa
     }
 
     return (
-        <div className="bg-black/20 backdrop-blur-md rounded-3xl border border-white/5 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:shadow-indigo-500/10">
+        <div className="bg-black/20 rounded-3xl border border-white/5 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:shadow-indigo-500/10">
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-purple-500/5 pointer-events-none" />
 
             <FileManagerHeader

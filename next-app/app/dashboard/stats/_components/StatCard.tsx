@@ -11,7 +11,7 @@ interface StatCardProps {
 /** Carte statistique de l'en-tete (temps de visionnage, contenus vus, etc.). */
 export function StatCard({ title, value, subValue, icon }: StatCardProps) {
     return (
-        <div className="rounded-3xl bg-black/20 backdrop-blur-md p-6 shadow-xl border border-white/5 hover:bg-white/[0.03] hover:border-white/10 hover:shadow-2xl transition-all duration-300 group relative overflow-hidden">
+        <div className="rounded-3xl bg-black/20 p-6 shadow-xl border border-white/5 hover:bg-white/[0.03] hover:border-white/10 hover:shadow-2xl transition-all duration-300 group relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
             <div className="flex items-center justify-between mb-4 relative z-10">
                 <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">{title}</span>

@@ -10,7 +10,7 @@ interface TorrentInfoCardProps {
 
 export function TorrentInfoCard({ torrent, parsed }: TorrentInfoCardProps) {
   return (
-    <div className="bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/5 p-6 space-y-6">
+    <div className="bg-gray-900/40 rounded-2xl border border-white/5 p-6 space-y-6">
       <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
         <HardDrive size={16} />
         Informations du torrent
