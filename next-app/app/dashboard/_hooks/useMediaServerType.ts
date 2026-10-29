@@ -42,6 +42,11 @@ export function useMediaServerType() {
   return useServerInfo().serverType
 }
 
+/** Le compte courant vient d'Onyx : la lecture passe par l'app Onyx plutôt que par le serveur média. */
+export function useIsOnyxAccount() {
+  return useServerInfo().accountOrigin === 'onyx'
+}
+
 /** Nom à afficher pour « disponible sur … » : Onyx si le compte vient d'Onyx, sinon le serveur média. */
 export function useAvailabilityServerName() {
   const { serverType, accountOrigin } = useServerInfo()
