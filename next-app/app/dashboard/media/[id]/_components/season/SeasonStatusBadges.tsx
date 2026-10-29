@@ -8,31 +8,32 @@ interface SeasonStatusBadgesProps {
     progress?: SeasonProgress
 }
 
-/** Badges d'etat d'une saison : vu/restants + disponible/partiel/en attente. */
+/**
+ * Pastille d'etat d'une saison (en-tete du panneau d'episodes) : sa disponibilite, avec les
+ * episodes qui restent a voir quand on l'a commencee. « Vu » reste sur les episodes.
+ */
 export function SeasonStatusBadges({ status, progress }: SeasonStatusBadgesProps) {
+    const left = progress && !progress.isWatched && progress.played > 0 ? progress.total - progress.played : 0
+    const rest = left > 0 && (
+        <span>
+            <span className="hidden sm:inline">· </span>
+            {left} restants
+        </span>
+    )
     return (
         <>
-            {progress && (progress.isWatched ? (
-                <span className="flex items-center gap-1 rounded-full bg-green-900/50 px-2 py-0.5 text-xs font-medium text-green-400 border border-green-800">
-                    <Check className="h-3 w-3" />
-                    <span className="hidden sm:inline">Vu</span>
-                </span>
-            ) : progress.played > 0 && (
-                <span className="flex items-center gap-1 rounded-full bg-blue-900/50 px-2 py-0.5 text-xs font-medium text-blue-400 border border-blue-800">
-                    <span className="hidden sm:inline">{progress.total - progress.played} restants</span>
-                </span>
-            ))}
-
             {status === 'available' && (
                 <span className="flex items-center gap-1 rounded-full bg-green-900/50 px-2 py-0.5 text-xs font-medium text-green-400 border border-green-800">
                     <Check className="h-3 w-3" />
                     <span className="hidden sm:inline">Disponible</span>
+                    {rest}
                 </span>
             )}
             {status === 'partial' && (
                 <span className="flex items-center gap-1 rounded-full bg-amber-900/50 px-2 py-0.5 text-xs font-medium text-amber-400 border border-amber-800">
                     <Check className="h-3 w-3" />
                     <span className="hidden sm:inline">Partiellement disponible</span>
+                    {rest}
                 </span>
             )}
             {(status === 'pending' || status === 'processing') && (

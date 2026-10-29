@@ -65,8 +65,12 @@ export function SeasonList({
 
     const [open, setOpen] = useState<number | null>(requestedSeason)
     const [lastRequested, setLastRequested] = useState(requestedSeason)
+    // Episode vise par le lien (calendrier, notification) : mis en evidence a l'arrivee seulement,
+    // pas a chaque reouverture de sa saison
+    const [highlightSeason, setHighlightSeason] = useState(requestedSeason)
     if (requestedSeason !== lastRequested) {
         setLastRequested(requestedSeason)
+        setHighlightSeason(requestedSeason)
         if (requestedSeason !== null) setOpen(requestedSeason)
     }
     // Saison quittee au dernier changement : la bulle choisie attend la goutte avant de s'eclairer
@@ -111,8 +115,20 @@ export function SeasonList({
         layout.current = settle(parts)
         const from = shown.current
         shown.current = open
-        if (from === open || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
         const index = (n: number | null) => (n === null ? null : parts.chips.findIndex(c => Number(c.dataset.season) === n))
+        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        // Sur telephone, la bulle choisie vient se placer dans la rangee : defilement horizontal
+        // seulement, la page ne bouge pas
+        const r = rail.current
+        const i = index(open)
+        if (r && i !== null && i >= 0 && r.scrollWidth > r.clientWidth) {
+            const left = el.getBoundingClientRect().left - r.getBoundingClientRect().left + r.scrollLeft + layout.current.x[i]
+            const right = left + layout.current.w[i]
+            const pad = 16
+            const target = left - pad < r.scrollLeft ? left - pad : right + pad > r.scrollLeft + r.clientWidth ? right + pad - r.clientWidth : null
+            if (target !== null) r.scrollTo({ left: target, behavior: reduced ? 'auto' : 'smooth' })
+        }
+        if (from === open || reduced) return
         running.current = liquidSwitch(parts, index(from), index(open), start, shift, layout.current)
     }, [open])
 
@@ -142,10 +158,8 @@ export function SeasonList({
     }
 
     const toggle = (seasonNumber: number) => {
-        const opening = open !== seasonNumber
-        setOpen(opening ? seasonNumber : null)
-        // Sur telephone, la bulle choisie vient se placer dans la rangee
-        if (opening) row.current?.querySelector(`[data-season="${seasonNumber}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+        setOpen(open !== seasonNumber ? seasonNumber : null)
+        setHighlightSeason(null)
     }
 
     return (
@@ -215,7 +229,7 @@ export function SeasonList({
                 tvId={tvId}
                 tvdbId={tvdbId}
                 title={title}
-                highlightSeason={requestedSeason}
+                highlightSeason={highlightSeason}
                 highlightEpisode={requestedEpisode}
             />
         </div>
