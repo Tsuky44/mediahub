@@ -38,7 +38,7 @@ Erreur : `{ "error": "message", "code": "unauthorized|forbidden|not_found|bad_re
 | `GET /requests/:id` | propriétaire, ou `read MediaRequest` | Détail avec disponibilité par saison (`request_detail.json`) |
 | `PATCH /requests/:id` | `update MediaRequest` | Approuver ou refuser (`request_moderate.json`) |
 | `DELETE /requests/:id` | `delete MediaRequest` | Supprime la demande dans MediaHub (Radarr et Sonarr ne sont pas touchés) |
-| `GET /requests/feed?after=<curseur>&limit=` | `read MediaRequest` | Nouvelles demandes de tous les comptes, du plus ancien au plus récent (`request_feed.json`). `cursor` est à repasser dans `after`. Sondage de secours si le webhook manque |
+| `GET /requests/feed?after=<curseur>&limit=` | `read MediaRequest` | Nouvelles demandes de tous les comptes, du plus ancien au plus récent (`request_feed.json`). `cursor` est à repasser dans `after`. Sans `after`, la réponse ne contient que le curseur courant (`requests` vide). Sondage de secours si le webhook manque |
 | `POST /webhook/test` | `manage_settings Settings` | Envoie un évènement `webhook.test` à Onyx |
 
 `catalog` et `media/:tmdbId` rendent les mêmes réponses que

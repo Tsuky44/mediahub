@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { and, asc, gt } from 'drizzle-orm'
+import { and, asc, desc, gt } from 'drizzle-orm'
 import { db } from '@/lib/db/drizzle'
 import { mediaRequests } from '@/lib/db/schema'
 import { apiError, authenticate, serializeRequest } from '@/lib/integrations/player-v1'
@@ -18,7 +18,12 @@ export async function GET(request: Request) {
 
   const params = new URL(request.url).searchParams
   const rawAfter = params.get('after')
-  const after = rawAfter === null || rawAfter === '' ? 0 : Number(rawAfter)
+  if (rawAfter === null || rawAfter === '') {
+    // Sans curseur : on rend seulement le curseur courant, sans rejouer l'historique.
+    const [latest] = await db.select({ id: mediaRequests.id }).from(mediaRequests).orderBy(desc(mediaRequests.id)).limit(1)
+    return NextResponse.json({ cursor: latest?.id ?? 0, requests: [] })
+  }
+  const after = Number(rawAfter)
   if (!Number.isInteger(after) || after < 0) return apiError(400, 'Curseur invalide')
   const limit = Math.min(200, Math.max(1, Number.parseInt(params.get('limit') || '', 10) || 100))
 
