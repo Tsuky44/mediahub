@@ -7,9 +7,14 @@ import { logger } from '@/lib/logger'
 
 // Caches process-wide partagés par toutes les instances de TmdbService.
 // - responses : réponses JSON TMDB (copie à la lecture : certains appelants enrichissent les objets)
-// - posters   : poster_path par média (chaînes, très sollicité par les listes)
+// - posters   : affiche et image de fond par média (chemins, très sollicité par les listes)
 const responses = createMemoCache({ max: 1500, ttl: CACHE_TTL.API_STATIC, clone: true })
 const posters = createMemoCache({ max: 20_000, ttl: MS.DAY })
+
+interface ImagePaths {
+  poster_path: string | null
+  backdrop_path: string | null
+}
 
 let serviceInstance: { apiKey: string; service: TmdbService } | null = null
 
@@ -225,15 +230,20 @@ export class TmdbService {
     }, { memoryTtl: CACHE_TTL.API_STATIC, tags: ['tmdb-static'] })
   }
 
-  async getPosterPath(id: number, type: 'movie' | 'tv') {
+  /** Affiche et image de fond d'un média (un seul appel, mis en cache 24 h) */
+  async getImagePaths(id: number, type: 'movie' | 'tv'): Promise<ImagePaths> {
     try {
-      return await posters.get<string | null>(`${type}-${id}`, async () => {
+      return await posters.get<ImagePaths>(`${type}-${id}`, async () => {
         const response = await this.getClient().get(`/${type}/${id}`)
-        return response.data.poster_path ?? null
+        return { poster_path: response.data.poster_path ?? null, backdrop_path: response.data.backdrop_path ?? null }
       })
     } catch (e) {
-      return null
+      return { poster_path: null, backdrop_path: null }
     }
+  }
+
+  async getPosterPath(id: number, type: 'movie' | 'tv') {
+    return (await this.getImagePaths(id, type)).poster_path
   }
 
   async getDetails(id: number, type: 'movie' | 'tv') {
@@ -243,8 +253,10 @@ export class TmdbService {
         append_to_response: `videos,images,${type === 'tv' ? 'aggregate_credits' : 'credits'},watch/providers,keywords,external_ids,recommendations,similar`,
         include_image_language: 'fr,en,null'
       }, CACHE_TTL.API_STATIC)
-      // Alimente le cache des posters (évite un appel getPosterPath ultérieur)
-      if (details?.poster_path) posters.set(`${type}-${id}`, details.poster_path)
+      // Alimente le cache des images (évite un appel getImagePaths ultérieur)
+      if (details?.poster_path) {
+        posters.set(`${type}-${id}`, { poster_path: details.poster_path, backdrop_path: details.backdrop_path ?? null })
+      }
       return details
     } catch (e) {
       logger.error(`Failed to get ${type} details`, e)

@@ -96,11 +96,8 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
         const enrichedItems = await Promise.all(items.map(async (item: EmbyItem) => {
             const tmdbId = item.ProviderIds?.Tmdb
             const itemType = item.Type === 'Movie' ? 'movie' : 'tv'
-            let poster_path = null
-            
-            if (tmdbId && tmdbService) {
-                poster_path = await tmdbService.getPosterPath(parseInt(String(tmdbId)), itemType)
-            }
+            const images = tmdbId && tmdbService ? await tmdbService.getImagePaths(parseInt(String(tmdbId)), itemType) : null
+            let poster_path = images?.poster_path ?? null
 
             // Fallback to Emby image if TMDB image is not available
             if (!poster_path && item.Id != null) {
@@ -114,6 +111,7 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
                 title: item.Name,
                 name: item.Name,
                 poster_path: poster_path,
+                backdrop_path: images?.backdrop_path ?? null,
                 media_type: itemType,
                 overview: item.Overview,
                 emby_id: item.Id,
@@ -402,7 +400,7 @@ export async function fetchServerTrends(page: number = 1) {
                     const mediaType = watch.itemType?.toLowerCase() === 'series' || watch.itemType?.toLowerCase() === 'episode' ? 'tv' : 'movie'
                     if (!tmdbId) return null
 
-                    const poster_path = await tmdbService.getPosterPath(parseInt(String(tmdbId)), mediaType)
+                    const { poster_path, backdrop_path } = await tmdbService.getImagePaths(parseInt(String(tmdbId)), mediaType)
                     return {
                         tmdbKey: String(tmdbId),
                         item: {
@@ -410,6 +408,7 @@ export async function fetchServerTrends(page: number = 1) {
                             title: watch.itemName || watch.seriesName,
                             name: watch.itemName || watch.seriesName,
                             poster_path,
+                            backdrop_path,
                             media_type: mediaType,
                             tmdbId: parseInt(String(tmdbId)),
                             trendingReason: 'Populaire sur le serveur'
@@ -432,12 +431,13 @@ export async function fetchServerTrends(page: number = 1) {
             .map(async (req) => {
                 try {
                     const mediaType = req.mediaType as 'movie' | 'tv'
-                    const poster_path = await tmdbService.getPosterPath(parseInt(req.tmdbId), mediaType)
+                    const { poster_path, backdrop_path } = await tmdbService.getImagePaths(parseInt(req.tmdbId), mediaType)
                     return {
                         id: req.tmdbId,
                         title: req.title,
                         name: req.title,
                         poster_path,
+                        backdrop_path,
                         media_type: mediaType,
                         tmdbId: parseInt(req.tmdbId),
                         trendingReason: 'Fortement demandé'

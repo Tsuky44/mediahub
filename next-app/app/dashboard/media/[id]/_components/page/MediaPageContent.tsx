@@ -82,7 +82,8 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
       <div className="relative z-10 mx-auto max-w-[1600px] px-4 pt-36 pb-12 sm:px-8 lg:px-12">
         {/* Header Section (Hero Backdrop Layout) */}
         <div className="relative flex flex-col justify-end min-h-[35vh] md:min-h-[50vh] pt-16 pb-6 mb-12">
-          <div className="max-w-6xl space-y-6">
+          {/* onyx-hero-copy : textes qui tombent en place quand l'affiche atterrit (motion.css) */}
+          <div className="onyx-hero-copy max-w-6xl space-y-6">
             <div className="onyx-stagger space-y-4">
               <MediaAvailabilityBadges status={availability.status} />
               <MediaTitleHeader

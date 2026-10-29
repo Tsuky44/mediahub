@@ -9,6 +9,8 @@ export interface MediaCardItem {
   title?: string
   name?: string
   poster_path: string | null
+  /** Image de fond de la fiche : l'affiche s'y retourne au clic (MotionDirector) */
+  backdrop_path?: string | null
   media_type?: string
   overview?: string
   media_status?: {
