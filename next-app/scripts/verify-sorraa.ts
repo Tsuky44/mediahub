@@ -21,13 +21,32 @@ nodeModule._load = function (request: string, ...rest: unknown[]) {
 
 type Json = Record<string, any>
 const API_KEY = 'srr_verify'
+const PLAYER_KEY = 'player-verify'
+process.env.PLAYER_INTEGRATION_API_KEY = PLAYER_KEY
 const SECRET = 'verify-secret'
 
 // --- faux sorraa -----------------------------------------------------------
 const posted: Json[] = []
+const batches: number[] = []
 const seen: Array<{ method: string; url: string; auth?: string }> = []
 let nextId = 1
 const requests: Json[] = []
+let availabilitySupported = false
+let libraryProgress: number | undefined
+
+/** /availability du faux sorraa, calcule depuis les demandes. */
+function availabilityOf(kind: string, tmdbId: number): Json {
+  const found = requests.filter((r) => r.kind === kind && r.tmdbId === tmdbId)
+  if (found.length === 0) return { inLibrary: false, state: 'absent' }
+  const r = found[0]
+  return {
+    inLibrary: true, state: r.state, mediaId: r.mediaId, title: `Titre ${tmdbId}`, monitored: true,
+    seasons: kind === 'movie'
+      ? [{ number: 0, state: r.state, episodesHeld: 0, episodesReleased: 1, episodesTotal: 1, monitored: true }]
+      : (r.seasons ?? []).map((s: Json) => ({ ...s, episodesHeld: 0, episodesReleased: 5, episodesTotal: 5, monitored: true })),
+    ...(libraryProgress !== undefined ? { progress: libraryProgress, etaSeconds: 3700 } : {}),
+  }
+}
 
 function startFakeSorraa() {
   const server = createServer((req, res) => {
@@ -59,6 +78,19 @@ function startFakeSorraa() {
         const kind = url.searchParams.get('kind')
         return send(200, { items: requests.filter((r) => r.tmdbId === tmdb && r.kind === kind) })
       }
+      if (availabilitySupported && url.pathname === '/api/v1/availability') {
+        return send(200, availabilityOf(url.searchParams.get('kind')!, Number(url.searchParams.get('tmdbId'))))
+      }
+      if (availabilitySupported && url.pathname === '/api/v1/availability-queries') {
+        const items = JSON.parse(body).items as Array<{ kind: string; tmdbId: number }>
+        batches.push(items.length)
+        return send(200, { items: items.map((it) => availabilityOf(it.kind, it.tmdbId)) })
+      }
+      if (url.pathname === '/api/v1/grabs') {
+        return send(200, { items: libraryProgress === undefined ? [] : [{ id: 1, mediaId: 12, releaseName: 'Matrix.1999.1080p', status: 'downloading', progress: libraryProgress, sizeLeft: 2147483648, speed: 1048576 }] })
+      }
+      if (url.pathname === '/api/v1/media/12') return send(200, { id: 11, versions: [{ id: 1, rootFolderId: 2 }] })
+      if (url.pathname === '/api/v1/root-folders') return send(200, { items: [{ id: 1, path: '/autre', defaultFor: [] }, { id: 2, path: '/data/films/', defaultFor: ['movie'] }] })
       send(404, { title: 'Not found' })
     })
   })
@@ -80,6 +112,8 @@ async function main() {
   const { SorraaService, SorraaError } = await import('../lib/services/sorraa')
   const { signSorraaDelivery } = await import('../lib/webhooks/verify-sorraa')
   const webhook = await import('../app/api/webhooks/sorraa/route')
+  const { checkDownloadStatus } = await import('../app/dashboard/media/[id]/download-status-actions')
+  const { serializeRequest } = await import('../lib/integrations/player-v1')
 
   const [admin] = await db.insert(schema.users).values({ name: 'root', email: 'root@verify.local', role: 'admin' }).returning()
   const user = { id: String(admin.id), name: 'root', email: 'root@verify.local', role: 'admin' }
@@ -130,6 +164,34 @@ async function main() {
   assert.equal(tvAvail.status, 'partial')
   assert.deepEqual(tvAvail.seasons?.map((s) => [s.seasonNumber, s.status]), [[1, 'available'], [2, 'pending']])
 
+  // --- /availability (sorraa recent) : progression, attente, sortie, lot -------------
+  availabilitySupported = true
+  libraryProgress = 0.425
+  const withProgress = await getMediaAvailability(603, 'movie', true)
+  assert.equal(withProgress.status, 'processing')
+  assert.equal(withProgress.progress, 0.425)
+  const dl = await checkDownloadStatus(603, 'movie', undefined, 'Matrix')
+  assert.equal(dl?.isDownloading, true)
+  assert.equal(dl?.progress, 42.5)
+  assert.equal(dl?.timeleft, '1h 1m')
+  assert.equal(dl?.releaseTitle, 'Matrix.1999.1080p')
+  assert.equal(dl?.speed, '1 MB/s')
+  const serialized = serializeRequest(movieRow!, { availability: withProgress })
+  assert.equal(serialized.progress, 42.5)
+  libraryProgress = undefined
+  assert.equal(await checkDownloadStatus(603, 'movie', undefined, 'Matrix'), null)
+  assert.equal(serializeRequest(movieRow!, { availability: await getMediaAvailability(603, 'movie', true) }).progress, null)
+  // media present dans sorraa sans demande MediaHub : hors liste de demandes, il reste visible
+  requests.push({ id: 99, mediaId: 50, kind: 'movie', tmdbId: 7, requester: { name: 'x' }, createdAt: '', state: 'available' })
+  assert.equal((await getMediaAvailability(7, 'movie', true)).status, 'available')
+  assert.equal((await getMediaAvailability(8, 'movie', true)).status, 'unknown')
+  const batch = await (await import('../app/api/integrations/player/v1/availability/route')).POST(
+    new Request('http://mediahub.test/', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + PLAYER_KEY }, body: JSON.stringify({ items: [{ tmdbId: 7, mediaType: 'movie' }, { tmdbId: 1399, mediaType: 'tv' }, { tmdbId: 8, mediaType: 'movie' }] }) })
+  )
+  assert.equal(batch.status, 200)
+  assert.deepEqual((await batch.json()).results.map((r: Json) => r.status), ['available', 'partial', 'unknown'])
+  assert.deepEqual(batches, [2, 1], 'un appel par type de media, pas un par titre')
+
   // --- Radarr pour les series, sorraa pour les films ---------------------------
   await setSetting('download_manager_tv', 'arr')
   const before = posted.length
@@ -166,6 +228,10 @@ async function main() {
   assert.equal(await status(movie.requestIds[0]), 3)
   assert.equal((await deliver(imported)).status, 200)
   assert.equal(await status(movie.requestIds[0]), 5)
+  // chemin pour Onyx : reconstruit avec le dossier racine de la version quand sorraa n'envoie que le relatif
+  const rooted = await new SorraaService(fake.url, API_KEY).resolveAbsolutePath(12, 'Matrix/Matrix.mkv')
+  assert.equal(rooted, '/data/films/Matrix/Matrix.mkv')
+  assert.equal(await new SorraaService(fake.url, API_KEY).resolveAbsolutePath(12, '/deja/absolu.mkv'), '/deja/absolu.mkv')
   // un evenement en retard ne fait pas reculer, request_changed oui
   assert.equal((await deliver({ ...imported, id: 4, event: 'grabbed', requests: [{ id: 1, state: 'processing' }] })).status, 200)
   assert.equal(await status(movie.requestIds[0]), 5)

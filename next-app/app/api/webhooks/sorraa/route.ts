@@ -14,7 +14,7 @@ import { notifyOnyx } from '@/lib/integrations/onyx-webhook'
 import { emitRequestStatus } from '@/lib/integrations/player-v1'
 import { verifySorraaDelivery } from '@/lib/webhooks/verify-sorraa'
 import { mergeRequests, stateToRequestStatus } from '@/lib/download-managers/sorraa'
-import type { SorraaRequestState } from '@/lib/services/sorraa'
+import { getSorraaService, type SorraaRequestState } from '@/lib/services/sorraa'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -27,6 +27,8 @@ interface SorraaWebhookPayload {
   quality?: string
   release?: string
   path?: string
+  /** Chemin absolu du fichier (sorraa recent) ; sinon `path` est relatif au dossier racine */
+  absolutePath?: string
   media?: { id: number; kind: 'movie' | 'series'; tmdbId: number; title: string }
   unit?: { id: number; kind: string; season?: number; episode?: number; title?: string }
   requests?: Array<{
@@ -97,7 +99,16 @@ export async function POST(req: NextRequest) {
     await syncRequestStatuses(payload, mediaType, tmdbId)
 
     if (event === 'imported' || event === 'upgraded') {
-      notifyOnyx('media.imported', { tmdbId: media.tmdbId, mediaType, paths: payload.path ? [payload.path] : [] })
+      let importedPath = payload.absolutePath || payload.path
+      if (!payload.absolutePath && payload.path) {
+        try {
+          const sorraa = await getSorraaService()
+          if (sorraa) importedPath = await sorraa.resolveAbsolutePath(media.id, payload.path)
+        } catch (e) {
+          logger.warn('[SorraaWebhook] Chemin absolu introuvable, chemin relatif transmis:', e)
+        }
+      }
+      notifyOnyx('media.imported', { tmdbId: media.tmdbId, mediaType, paths: importedPath ? [importedPath] : [] })
       // MEDIA_AVAILABLE : laisse a l'AvailabilityPoller (dedup, saisons groupees, verification Emby)
       return NextResponse.json({ success: true })
     }

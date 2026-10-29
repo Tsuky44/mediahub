@@ -98,10 +98,15 @@ function parseMetadata(row: RequestRow): { posterPath?: string | null; seasons?:
 export interface WaitingInfo {
   message: string
   releaseDate: string | null
+  /** Prochaine recherche prevue (sorraa) ; null quand on attend une sortie */
+  nextAttemptAt?: string | null
 }
 
 /** Pourquoi rien ne se telecharge encore : le media n'est pas sorti. */
 export function waitingFrom(availability: MediaAvailability | null): WaitingInfo | null {
+  if (availability?.waiting) {
+    return { message: availability.waiting.message, releaseDate: null, nextAttemptAt: availability.waiting.nextAttemptAt ?? null }
+  }
   if (availability?.status !== 'unreleased') return null
   const date = availability.releaseDate ?? null
   return {
@@ -131,8 +136,9 @@ export function serializeRequest(row: RequestRow, options: SerializeOptions = {}
     statusCode: row.status,
     requestedAt: row.requestedAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-    progress: null as number | null,
-    awaitingRelease: waiting !== null,
+    // Pourcentage 0-100 du telechargement en cours (sorraa) ; null sinon
+    progress: row.status >= 4 || options.availability?.progress === undefined ? null : Math.round(options.availability.progress * 1000) / 10,
+    awaitingRelease: waiting !== null && waiting.nextAttemptAt === undefined,
     waiting,
     note: row.status === REQUEST_DECLINED ? row.notes : null,
     ...(options.withRequester ? { requester: row.requesterName ?? null } : {}),
@@ -158,7 +164,7 @@ export function serializeAvailability(availability: MediaAvailability) {
   return {
     status: toPlayerStatus(availability.status),
     available: availability.available,
-    awaitingRelease: availability.status === 'unreleased',
+    awaitingRelease: availability.status === 'unreleased' && !availability.waiting,
     waiting: waitingFrom(availability),
     expectedReleaseDate: availability.releaseDate ?? null,
     seasons: (availability.seasons ?? []).map((season) => ({

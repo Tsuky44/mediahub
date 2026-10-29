@@ -18,7 +18,9 @@ Combinaisons possibles : sorraa pour tout, Radarr pour les films et sorraa pour 
 
 `lib/download-managers/` : interface `DownloadManager { addRequest, getAvailability }`, implémentations `arr.ts` (code historique) et `sorraa.ts`. `getDownloadManager(mediaType)` lit le réglage. Consommateurs : `createMediaRequest` (`lib/services/media-requests.ts`) et `getMediaAvailability` (`lib/services/media-status.ts`).
 
-Côté sorraa, une demande MediaHub devient un `POST /requests` (tmdbId, saisons, `requester.ref` = id MediaHub) ; sorraa ajoute le titre, surveille les saisons et lance la recherche. `media_requests.external_id` vaut `sorraa:<id>`. Le statut se lit par `GET /requests?kind&tmdbId` (états `pending/processing/partial/available`, raison d'attente en `waiting`).
+Côté sorraa, une demande MediaHub devient un `POST /requests` (tmdbId, saisons, `requester.ref` = id MediaHub) ; sorraa ajoute le titre, surveille les saisons et lance la recherche. `media_requests.external_id` vaut `sorraa:<id>`. Le statut se lit par `GET /availability` (médias présents dans sorraa avec ou sans demande MediaHub : états par saison, `progress`, `etaSeconds`, raison d'attente en `waiting`), en lot par `POST /availability-queries` pour la route de disponibilité en lot de l'API joueur. Repli sur `GET /requests` pour un sorraa plus ancien.
+
+La progression (`progress`) alimente la barre et la fenêtre de statut du média (détail via `GET /grabs?active&mediaId`) et le champ `progress` (0-100) de l'API joueur ; la raison d'attente passe dans `waiting` (avec `nextAttemptAt`).
 
 ## Webhook entrant
 
@@ -27,7 +29,7 @@ Côté sorraa, une demande MediaHub devient un `POST /requests` (tmdbId, saisons
 | Évènement sorraa | Effet |
 | --- | --- |
 | `grabbed` | notification `MEDIA_GRABBED` |
-| `imported`, `upgraded` | statuts des demandes (la notification de disponibilité reste faite par l'AvailabilityPoller) et `media.imported` vers Onyx |
+| `imported`, `upgraded` | statuts des demandes (la notification de disponibilité reste faite par l'AvailabilityPoller) et `media.imported` vers Onyx avec `absolutePath` ; à défaut, `path` (relatif) est reconstruit avec le dossier racine de la version (`GET /media/{id}` et `/root-folders`) |
 | `download_failed`, `import_failed` | notification `MEDIA_FAILED` |
 | `request_changed` | statuts des demandes, y compris un recul |
 | `health_*`, `test` | journal seulement |
@@ -36,7 +38,7 @@ Les statuts viennent de `requests[]` du payload ; chaque changement émet `reque
 
 ## Limites (volontaires)
 
-Ces fonctions restent liées à Radarr/Sonarr et ne voient pas les médias gérés par sorraa : fenêtre de gestion du média, recherche interactive Prowlarr, imports bloqués, calendrier, suppression depuis les stats de stockage, synchronisation des demandes.
+Ces fonctions restent liées à Radarr/Sonarr et ne voient pas les médias gérés par sorraa : fenêtre de gestion du média, recherche interactive Prowlarr, imports bloqués, calendrier, suppression depuis les stats de stockage, synchronisation des demandes. Les titres inconnus de la bibliothèque sorraa valent `unknown` (sorraa lit sans appeler TMDb).
 
 ## Vérification
 

@@ -35,6 +35,18 @@ export interface SorraaRequest {
   etaSeconds?: number
 }
 
+export interface SorraaAvailability {
+  inLibrary: boolean
+  state: 'absent' | SorraaRequestState
+  mediaId?: number
+  title?: string
+  monitored?: boolean
+  seasons?: Array<SorraaRequestSeason & { monitored?: boolean }>
+  progress?: number
+  etaSeconds?: number
+  waiting?: SorraaRequestWaiting
+}
+
 export interface SorraaGrab {
   id: number
   mediaId: number
@@ -141,6 +153,28 @@ export class SorraaService {
     const q = new URLSearchParams({ kind: params.kind, tmdbId: String(params.tmdbId), limit: '200' })
     const page = await this.call<{ items: SorraaRequest[] }>('GET', `/requests?${q}`)
     return page.items ?? []
+  }
+
+  /** Etat d'un titre de la bibliotheque, demande ou non (lecture seule). */
+  async getAvailability(kind: SorraaKind, tmdbId: number): Promise<SorraaAvailability> {
+    return this.call<SorraaAvailability>('GET', `/availability?kind=${kind}&tmdbId=${tmdbId}`)
+  }
+
+  /** Meme chose en lot (1 a 100 titres), dans l'ordre demande. */
+  async queryAvailability(items: Array<{ kind: SorraaKind; tmdbId: number }>): Promise<SorraaAvailability[]> {
+    const res = await this.call<{ items: SorraaAvailability[] }>('POST', '/availability-queries', { body: { items } })
+    return res.items ?? []
+  }
+
+  /** Chemin absolu d'un fichier a partir du chemin relatif au dossier racine de sa version. */
+  async resolveAbsolutePath(mediaId: number, relativePath: string): Promise<string> {
+    if (/^([a-zA-Z]:[\\/]|\/)/.test(relativePath)) return relativePath
+    const media = await this.call<{ versions?: Array<{ rootFolderId?: number }> }>('GET', `/media/${mediaId}`)
+    const rootFolderId = media.versions?.find((v) => v.rootFolderId)?.rootFolderId
+    const folders = (await this.call<{ items: Array<{ id: number; path: string }> }>('GET', '/root-folders')).items ?? []
+    const root = folders.find((f) => f.id === rootFolderId) ?? (folders.length === 1 ? folders[0] : undefined)
+    if (!root) return relativePath
+    return `${root.path.replace(/[\\/]+$/, '')}/${relativePath}`
   }
 
   async getRequest(id: number): Promise<SorraaRequest> {

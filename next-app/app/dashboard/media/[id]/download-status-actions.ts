@@ -1,6 +1,8 @@
 'use server'
 
 import { getRadarrServiceForUser, getSonarrServiceForUser } from '@/lib/auth'
+import { getDownloadManager } from '@/lib/download-managers'
+import type { SorraaDownloadManager } from '@/lib/download-managers/sorraa'
 import { QBittorrentCache } from '@/lib/services/qbittorrent-cache'
 import { RadarrQueueItem } from '@/lib/services/radarr'
 import { SonarrQueueItem, SonarrSeries, SonarrSeason } from '@/lib/services/sonarr'
@@ -76,6 +78,10 @@ export async function checkDownloadStatus(
 ): Promise<DownloadStatus | null> {
     try {
         log(`Checking download status for ${mediaType} TMDB:${tmdbId} TVDB:${tvdbId} Title:${mediaTitle}`)
+        const manager = await getDownloadManager(mediaType)
+        if (manager.kind === 'sorraa') {
+            return await (manager as SorraaDownloadManager).getDownloadStatus(tmdbId, mediaType, mediaTitle)
+        }
         if (mediaType === 'movie') {
             const radarr = await getRadarrServiceForUser()
             if (!radarr) {

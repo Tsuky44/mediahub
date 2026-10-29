@@ -19,6 +19,9 @@ export interface MediaAvailability {
     releaseDate?: string;
     /** Pourquoi rien ne se telecharge (sorraa : recherches sans resultat) */
     waiting?: { message: string; nextAttemptAt?: string };
+    /** Progression du telechargement, 0 a 1 (sorraa) */
+    progress?: number;
+    etaSeconds?: number;
 }
 
 /** Champs de date renvoyés par l'API Radarr (film) et Sonarr (série, saison). */
