@@ -32,7 +32,7 @@ Erreur : `{ "error": "message", "code": "unauthorized|forbidden|not_found|bad_re
 | `GET /catalog?type=&query=&page=` | `read Media` | Tendances ou recherche TMDB, statut de chaque titre |
 | `GET /media/:tmdbId?type=movie\|tv` | `read Media` | Fiche d'un titre et état de ses saisons |
 | `GET /availability/:tmdbId?type=` | `read Media` | Disponibilité, saisons, raison d'attente (`availability.json`) |
-| `POST /availability` | `read Media` | Même chose pour 100 titres maximum (`availability_batch_request.json`, réponse `{ "results": [{ tmdbId, mediaType, ...disponibilité }] }`) |
+| `POST /availability` | `read Media` | Même chose pour 100 titres maximum (`availability_batch_request.json`, réponse `availability_batch.json`) |
 | `POST /requests` | `create MediaRequest` | Crée une demande (`request_create.json` puis `request_create_response.json`) |
 | `GET /requests?scope=mine\|all&type=&limit=&before=` | `mine` : `read` ou `create MediaRequest` ; `all` : `read MediaRequest` | Liste, plus récente d'abord, paginée par `nextBefore` (`requests_list.json`) |
 | `GET /requests/:id` | propriétaire, ou `read MediaRequest` | Détail avec disponibilité par saison (`request_detail.json`) |
@@ -85,7 +85,7 @@ numérique `6` n'existe que dans cette API et dans la liste de l'interface.
 
 Configuration côté MediaHub : variable `ONYX_WEBHOOK_URL` (ou réglage
 `onyx_webhook_url`), URL complète de la route d'Onyx qui reçoit les évènements.
-La clé est la même `PLAYER_INTEGRATION_API_KEY`. Sans URL, rien n'est envoyé.
+La clé est la même `PLAYER_INTEGRATION_API_KEY`. Sans URL, rien n'est envoyé. Côté Onyx la route est `POST {Onyx}/api/integrations/mediahub/events` (c'est la valeur à mettre).
 
 `POST <ONYX_WEBHOOK_URL>`, corps JSON :
 
