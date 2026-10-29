@@ -17,7 +17,7 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
 
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3008'
 
-    const generateSecret = (field: 'webhook_sonarr_secret' | 'webhook_radarr_secret' | 'webhook_emby_secret') => {
+    const generateSecret = (field: 'webhook_sonarr_secret' | 'webhook_radarr_secret' | 'webhook_sorraa_secret' | 'webhook_emby_secret') => {
         const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
         let result = ''
         for (let i = 0; i < 32; i++) {
@@ -46,6 +46,14 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
             description: 'Notifie MediaHub du lancement des téléchargements (Grab) et de l\'import des films.',
             secretField: 'webhook_radarr_secret' as const,
             endpoint: '/api/webhooks/radarr',
+        },
+        {
+            id: 'sorraa',
+            name: 'sorraa',
+            description: 'Webhook signé (HMAC-SHA256) : états des demandes, téléchargements lancés et imports. Dans sorraa, déclarez ce webhook avec l\'URL ci-dessous et ce secret.',
+            secretField: 'webhook_sorraa_secret' as const,
+            endpoint: '/api/webhooks/sorraa',
+            signed: true,
         },
     ]
 
@@ -85,7 +93,7 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
                     {webhookServices.map((service) => {
                         const secret = formData[service.secretField] || ''
                         const fullUrl = secret 
-                            ? `${origin}${service.endpoint}?secret=${secret}`
+                            ? `${origin}${service.endpoint}${'signed' in service ? '' : `?secret=${secret}`}`
                             : ''
 
                         return (
@@ -112,6 +120,19 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
 
                                 {secret ? (
                                     <div className="mt-3 space-y-1.5">
+                                        {'signed' in service && (
+                                            <div className="space-y-1.5 pb-2">
+                                                <label className="text-[11px] font-semibold text-white/40 uppercase tracking-wider block">
+                                                    Secret de signature à saisir dans sorraa
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    readOnly
+                                                    value={secret}
+                                                    className="block w-full rounded-lg border border-white/10 bg-white/5 py-1.5 px-3 text-xs text-white/80 focus:outline-none focus:ring-0"
+                                                />
+                                            </div>
+                                        )}
                                         <label className="text-[11px] font-semibold text-white/40 uppercase tracking-wider block">
                                             URL du webhook à copier
                                         </label>

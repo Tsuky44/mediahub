@@ -28,6 +28,10 @@ const initialFormData: SettingsFormData = {
   radarr_api_key: '',
   sonarr_url: '',
   sonarr_api_key: '',
+  sorraa_url: '',
+  sorraa_api_key: '',
+  download_manager_movie: 'arr',
+  download_manager_tv: 'arr',
   jellyseerr_url: '',
   jellyseerr_api_key: '',
   emby_url: '',
@@ -45,6 +49,7 @@ const initialFormData: SettingsFormData = {
   request_all_seasons_enabled: false,
   webhook_sonarr_secret: '',
   webhook_radarr_secret: '',
+  webhook_sorraa_secret: '',
   webhook_emby_secret: '',
 }
 

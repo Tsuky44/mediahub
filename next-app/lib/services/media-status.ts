@@ -1,6 +1,7 @@
 import { getRadarrServiceForUser, getSonarrServiceForUser, getTmdbServiceForUser } from '@/lib/auth'
 import { SonarrSeries, SonarrSeason } from '@/lib/services/sonarr'
 import { remember, forget, cache } from '@/lib/cache'
+import { getDownloadManager } from '@/lib/download-managers'
 
 /**
  * `unreleased` : demandé (Radarr/Sonarr surveillent le média) mais pas encore sorti,
@@ -16,6 +17,8 @@ export interface MediaAvailability {
     details?: any;
     /** Date de sortie attendue (ISO), quand le statut est `unreleased` et qu'elle est connue */
     releaseDate?: string;
+    /** Pourquoi rien ne se telecharge (sorraa : recherches sans resultat) */
+    waiting?: { message: string; nextAttemptAt?: string };
 }
 
 /** Champs de date renvoyés par l'API Radarr (film) et Sonarr (série, saison). */
@@ -49,10 +52,8 @@ function seasonNotAiredYet(stats?: SonarrAiringInfo): boolean {
     return !!stats && !stats.previousAiring && (stats.episodeCount ?? 0) === 0
 }
 
-export async function getMediaAvailability(tmdbId: number, mediaType: 'movie' | 'tv', forceRefresh = false): Promise<MediaAvailability> {
-    const cacheKey = `media_availability_${mediaType}_${tmdbId}`
-    
-    const fetchFreshData = async (): Promise<MediaAvailability> => {
+/** Statut lu dans Radarr (films) ou Sonarr (series). */
+export async function getArrAvailability(tmdbId: number, mediaType: 'movie' | 'tv'): Promise<MediaAvailability> {
         try {
             if (mediaType === 'movie') {
                 const radarrService = await getRadarrServiceForUser()
@@ -185,6 +186,18 @@ export async function getMediaAvailability(tmdbId: number, mediaType: 'movie' | 
             }
 
             return { status: 'unknown' as MediaStatus, available: false }
+        } catch (e) {
+            console.error(`[MediaStatus] Error checking availability for ${mediaType}/${tmdbId}:`, e)
+            return { status: 'unknown' as MediaStatus, available: false }
+        }
+}
+
+export async function getMediaAvailability(tmdbId: number, mediaType: 'movie' | 'tv', forceRefresh = false): Promise<MediaAvailability> {
+    const cacheKey = `media_availability_${mediaType}_${tmdbId}`
+
+    const fetchFreshData = async (): Promise<MediaAvailability> => {
+        try {
+            return await (await getDownloadManager(mediaType)).getAvailability(tmdbId, mediaType)
         } catch (e) {
             console.error(`[MediaStatus] Error checking availability for ${mediaType}/${tmdbId}:`, e)
             return { status: 'unknown' as MediaStatus, available: false }

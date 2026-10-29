@@ -1,5 +1,4 @@
-import { getRadarrService } from '@/lib/services/radarr'
-import { getSonarrService } from '@/lib/services/sonarr'
+import { getDownloadManager } from '@/lib/download-managers'
 import { getTmdbService } from '@/lib/services/tmdb'
 import { prisma } from '@/lib/prisma'
 import { forget } from '@/lib/cache'
@@ -78,121 +77,20 @@ export async function createMediaRequest(user: CreateMediaRequestUser, body: Cre
         logger.warn('[Request API] Failed to pre-fetch TMDB details for notification:', e)
     }
 
-    let result: { success: boolean; message?: string; data?: unknown } = { success: false, message: 'Unknown error' }
-    let externalId: string | undefined
-
-    if (mediaType === 'movie') {
-        const radarrService = await getRadarrService()
-        if (!radarrService) {
-            return { status: 503, body: { error: 'Radarr not configured' }, requestIds }
-        }
-
-        const profiles = await radarrService.getProfiles()
-        const rootFolders = await radarrService.getRootFolders()
-        
-        if (!profiles.length || !rootFolders.length) {
-            return { status: 500, body: { error: 'Radarr configuration incomplete (profiles/root folders missing)' }, requestIds }
-        }
-
-        const qualityProfileId = profiles[0].id
-        const rootFolderPath = rootFolders[0].path
-
-        const addResult = await radarrService.addMovie({
-            tmdbId,
-            title: title || 'Unknown',
-            qualityProfileId,
-            rootFolderPath,
-            year: 0, // Radarr lookup will fill this
-            minimumAvailability: 'announced',
-            monitored: true,
-            searchNow: true
-        })
-
-        result = {
-            success: addResult.success,
-            message: addResult.message,
-            data: addResult.movie
-        }
-        if (addResult.movie?.id) externalId = addResult.movie.id.toString()
-
-    } else if (mediaType === 'tv') {
-        const sonarrService = await getSonarrService()
-        const tmdbService = await getTmdbService()
-        
-        if (!sonarrService || !tmdbService) {
-            return { status: 503, body: { error: 'Sonarr or TMDB not configured' }, requestIds }
-        }
-
-        // Get TVDB ID
-        const externalIds = await tmdbService.getExternalIds('tv', tmdbId)
-        if (!externalIds || !externalIds.tvdb_id) {
-            return { status: 404, body: { error: 'Could not find TVDB ID for this series' }, requestIds }
-        }
-        const tvdbId = externalIds.tvdb_id
-
-        const profiles = await sonarrService.getProfiles()
-        const rootFolders = await sonarrService.getRootFolders()
-        const languageProfiles = await sonarrService.getLanguageProfiles()
-        
-        if (!profiles.length || !rootFolders.length) {
-            return { status: 500, body: { error: 'Sonarr configuration incomplete (profiles/root folders missing)' }, requestIds }
-        }
-
-        // Lookup series to get seasons
-        const lookup = await sonarrService.lookupSeriesByTvdbId(tvdbId)
-        if (!lookup) {
-            return { status: 404, body: { error: 'Series not found in Sonarr lookup' }, requestIds }
-        }
-
-        let seasonsToRequest: number[] = []
-        
-        // If specific seasons are provided in the body, use them
-        if (body.seasons) {
-            const requestedSeasons = Array.isArray(body.seasons) ? body.seasons : [body.seasons]
-            if (requestedSeasons.length > 0) {
-                // Fetch other active requests to maintain monitoring for previously requested seasons
-                const activeRequests = await (prisma as any).mediaRequest.findMany({
-                    where: { 
-                        tmdbId: tmdbId.toString()
-                    }
-                })
-                
-                const seasonsFromRequests = new Set<number>(requestedSeasons)
-                activeRequests.forEach((req: { metadata?: string | null }) => {
-                    try {
-                        const metadata = req.metadata ? JSON.parse(req.metadata) as { seasons?: number[] } : {}
-                        const seasons = metadata.seasons || []
-                        seasons.forEach((s: number) => seasonsFromRequests.add(s))
-                    } catch (e) {}
-                })
-                
-                seasonsToRequest = Array.from(seasonsFromRequests)
-            }
-        } else {
-            // Only use all seasons if no specific seasons were requested
-            seasonsToRequest = lookup.seasons.map((s: { seasonNumber: number }) => s.seasonNumber)
-        }
-
-        const addResult = await sonarrService.addSeries({
-            tvdbid: tvdbId,
-            title: title || lookup.title,
-            qualityProfileId: profiles[0].id,
-            rootFolderPath: rootFolders[0].path,
-            languageProfileId: languageProfiles?.[0]?.id,
-            seasons: seasonsToRequest,
-            seasonFolder: true,
-            seriesType: 'standard',
-            monitored: true,
-            searchNow: true
-        })
-
-        result = {
-            success: addResult.success,
-            message: addResult.message,
-            data: addResult.series
-        }
-        if (addResult.series?.id) externalId = addResult.series.id.toString()
+    const manager = await getDownloadManager(mediaType)
+    const requestedSeasons = body.seasons === undefined ? undefined : (Array.isArray(body.seasons) ? body.seasons : [body.seasons])
+    const outcome = await manager.addRequest({
+        tmdbId,
+        mediaType,
+        title,
+        seasons: requestedSeasons,
+        requester: { id: user.id, name: user.name || dbUser?.name || '' },
+    })
+    if (!outcome.ok) {
+        return { status: outcome.status, body: { error: outcome.error }, requestIds }
     }
+    const result = { success: true, message: outcome.message, data: outcome.data }
+    const externalId = outcome.externalId
 
     if (result.success) {
         // Notify V2 — MEDIA_REQUESTED (dispatched IMMEDIATELY before DB update
@@ -261,17 +159,7 @@ export async function createMediaRequest(user: CreateMediaRequestUser, body: Cre
                     seasons = Array.isArray(body.seasons) ? body.seasons : [body.seasons]
                 } else {
                     // Fallback to all seasons if it's a new series request without specific seasons
-                    const sonarrService = await getSonarrService()
-                    const tmdbService = await getTmdbService()
-                    if (sonarrService && tmdbService) {
-                        const externalIds = await tmdbService.getExternalIds('tv', tmdbId)
-                        if (externalIds?.tvdb_id) {
-                            const lookupMeta = await sonarrService.lookupSeriesByTvdbId(externalIds.tvdb_id)
-                            if (lookupMeta) {
-                                seasons = lookupMeta.seasons.map((s: { seasonNumber: number }) => s.seasonNumber)
-                            }
-                        }
-                    }
+                    seasons = outcome.allSeasons ?? []
                 }
             }
 
