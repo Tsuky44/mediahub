@@ -1,0 +1,96 @@
+{
+  "runs": [
+    {
+      "date": "2026-08-26T08:09:36.725030+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 851
+    },
+    {
+      "date": "2026-08-26T09:58:40.417624+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 856
+    },
+    {
+      "date": "2026-08-26T10:01:10.064606+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 856
+    },
+    {
+      "date": "2026-08-26T12:16:45.546226+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 856
+    },
+    {
+      "date": "2026-08-26T14:33:32.741582+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 856
+    },
+    {
+      "date": "2026-08-27T14:03:29.712384+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 880
+    },
+    {
+      "date": "2026-09-15T13:09:42.958101+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 886
+    },
+    {
+      "date": "2026-09-15T19:30:34.868038+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 890
+    },
+    {
+      "date": "2026-09-16T08:45:41.372862+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 891
+    },
+    {
+      "date": "2026-10-05T07:31:40.729485+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 891
+    },
+    {
+      "date": "2026-10-05T07:42:27.900782+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 894
+    },
+    {
+      "date": "2026-10-05T07:44:11.644296+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 894
+    },
+    {
+      "date": "2026-10-05T07:48:23.203599+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 894
+    },
+    {
+      "date": "2026-10-05T07:54:00.199240+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 894
+    },
+    {
+      "date": "2026-10-05T07:58:05.752772+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 894
+    }
+  ],
+  "total_input_tokens": 0,
+  "total_output_tokens": 0
+}
