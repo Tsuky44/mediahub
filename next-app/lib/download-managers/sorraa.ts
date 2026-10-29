@@ -154,7 +154,10 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(2))} ${units[i]}`
 }
 
-type SeasonLike = { number: number; state: SorraaRequestState; episodesReleased?: number; episodesTotal?: number; monitored?: boolean }
+type SeasonLike = { number: number; state: SorraaRequestState; episodesHeld?: number; episodesReleased?: number; episodesTotal?: number; monitored?: boolean }
+
+/** sorraa liste toutes les saisons du titre : celles qu'il ne suit pas et ne detient pas n'ont jamais ete demandees. */
+const isFollowed = (s: SeasonLike) => s.monitored !== false || (s.episodesHeld ?? 0) > 0
 
 /** /availability de sorraa vers le statut commun de MediaHub. */
 export function availabilityFromSorraa(entry: SorraaAvailability, mediaType: 'movie' | 'tv'): MediaAvailability {
@@ -164,8 +167,10 @@ export function availabilityFromSorraa(entry: SorraaAvailability, mediaType: 'mo
     ? { message: entry.waiting.reason, nextAttemptAt: entry.waiting.nextAttemptAt }
     : undefined
   const extra = { details: entry, waiting, progress: entry.progress, etaSeconds: entry.etaSeconds }
-  const seasonStatus = (s: SeasonLike): MediaStatus =>
-    s.state === 'pending' && s.episodesReleased === 0 && (s.episodesTotal ?? 0) > 0 ? 'unreleased' : toMediaStatus(s.state)
+  const seasonStatus = (s: SeasonLike): MediaStatus => {
+    if (!isFollowed(s)) return 'unknown'
+    return s.state === 'pending' && s.episodesReleased === 0 && (s.episodesTotal ?? 0) > 0 ? 'unreleased' : toMediaStatus(s.state)
+  }
 
   if (mediaType === 'movie') {
     // Un film est la saison 0 d'un episode
@@ -183,10 +188,12 @@ export function availabilityFromSorraa(entry: SorraaAvailability, mediaType: 'mo
       available: s.state === 'available' || s.state === 'partial',
       totalEpisodes: s.episodesTotal,
     }))
-  const regular = seasons.filter((s) => s.seasonNumber > 0)
-  const scope = regular.length > 0 ? regular : seasons
+  const followed = seasons.filter((s) => s.status !== 'unknown')
+  const regular = followed.filter((s) => s.seasonNumber > 0)
+  const scope = regular.length > 0 ? regular : followed
   let status: MediaStatus
-  if (scope.length === 0) status = toMediaStatus(entry.state as SorraaRequestState)
+  if (seasons.length > 0 && scope.length === 0) status = 'unknown'
+  else if (scope.length === 0) status = toMediaStatus(entry.state as SorraaRequestState)
   else if (scope.every((s) => s.status === 'available')) status = 'available'
   else if (scope.some((s) => s.available)) status = 'partial'
   else if (scope.some((s) => s.status === 'processing')) status = 'processing'
