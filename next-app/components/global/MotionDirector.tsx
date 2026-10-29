@@ -29,7 +29,9 @@ const SECTIONS = NAVIGATION_ITEMS.map((item) => item.href)
 const VEIL = '[class*="bg-black/"]'
 
 const depth = (path: string) => path.split('/').filter(Boolean).length
-const calm = () => isPhoneScreen() || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const still = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+/** Téléphone : pas de transition de page (template.tsx), seul l'envol vers une fiche est joué */
+const calm = () => isPhoneScreen() || still()
 
 /** Rang de la section dans la barre de navigation, -1 hors des sections */
 function sectionOf(path: string) {
@@ -148,10 +150,10 @@ function dissolveHero(restore = false) {
 /* ---------- Envol vers une fiche : l'affiche se retourne sur l'image de fond ---------- */
 
 /**
- * Image de fond de la fiche (MediaBackdrop) : bord à bord, 88 % de la hauteur de l'écran, cadrée
- * au quart haut (object-[center_25%]) et zoomée à 110 % au départ (onyx-kenburns). Images TMDB en 16:9.
+ * Image de fond de la fiche (MediaBackdrop) : bord à bord, cadrée au quart haut
+ * (object-[center_25%]) et zoomée à 110 % au départ (onyx-kenburns). Images TMDB en 16:9.
  */
-const BACKDROP = { height: 0.88, focusY: 0.25, zoom: 1.1, ratio: 16 / 9 }
+const BACKDROP = { focusY: 0.25, zoom: 1.1, ratio: 16 / 9 }
 /** Temps forts (ms) : la carte se retourne, l'image fonce à sa place, s'y écrase et rebondit */
 const FLY = { turn: 420, flight: 430, squash: 520 }
 const LAND = FLY.turn + FLY.flight
@@ -179,6 +181,27 @@ function backdropImage(src: string, className: string) {
 
 const lerp = (a: number, b: number, p: number) => a + (b - a) * p
 
+/** Hauteur de l'image de fond de la fiche (MediaBackdrop : h-[70vh] md:h-[88vh]), en unités CSS */
+function backdropHeight() {
+  const probe = document.createElement('div')
+  probe.style.cssText = `position:fixed;top:0;visibility:hidden;pointer-events:none;height:${isPhoneScreen() ? 70 : 88}vh`
+  document.body.appendChild(probe)
+  const height = probe.offsetHeight
+  probe.remove()
+  return height
+}
+
+/** Affiche floutée sous l'image de fond tant que celle-ci n'est pas prête (réseau lent) */
+function placeholder(poster: string | undefined, cover: HTMLImageElement) {
+  if (!poster || cover.complete) return []
+  const blur = backdropImage(poster, 'onyx-fly-blur')
+  cover.decode().then(
+    () => blur.remove(),
+    () => undefined
+  )
+  return [blur]
+}
+
 /**
  * La carte cliquée (copie de son cadre) se soulève et se retourne : au dos, l'image de fond de la
  * fiche. Relayée par une copie plein écran de cette image, qui fonce jusqu'à la place exacte de
@@ -192,7 +215,8 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   if (!box.width || !box.height) return false
   const radius = parseFloat(getComputedStyle(frame).borderTopLeftRadius) || 12
   const W = document.documentElement.clientWidth
-  const H = Math.round(innerHeight * BACKDROP.height)
+  const H = backdropHeight()
+  const poster = frame.querySelector('img')?.currentSrc || undefined
 
   const layer = document.createElement('div')
   layer.className = 'onyx-hero-layer onyx-fly-layer'
@@ -216,7 +240,8 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   front.classList.add('onyx-hero-ghost', 'onyx-fly-face')
   const back = document.createElement('div')
   back.className = 'onyx-fly-face onyx-fly-back'
-  back.append(backdropImage(backdrop, 'onyx-fly-cover'))
+  const cover = backdropImage(backdrop, 'onyx-fly-cover')
+  back.append(...placeholder(poster, cover), cover)
   turn.append(front, back)
   card.append(turn)
 
@@ -231,7 +256,7 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   const img = backdropImage(backdrop, 'onyx-fly-img')
   img.style.width = `${end.w}px`
   img.style.height = `${end.h}px`
-  squash.append(img)
+  squash.append(...placeholder(poster, img), img)
   flight.append(squash)
 
   layer.append(card, flight)
@@ -400,7 +425,7 @@ function preloadBackdrop(src: string | undefined) {
 function onPointerOver(event: PointerEvent) {
   window.clearTimeout(intent)
   const link = (event.target as Element | null)?.closest?.('a[data-onyx-backdrop]')
-  if (!(link instanceof HTMLAnchorElement) || calm()) return
+  if (!(link instanceof HTMLAnchorElement) || still()) return
   intent = window.setTimeout(() => preloadBackdrop(link.dataset.onyxBackdrop), 140)
 }
 
@@ -408,8 +433,11 @@ function prepareNav(kind: NavKind, frame?: HTMLElement, backdrop?: string) {
   clearNav()
   dissolveHero(true)
   dropFly(true)
-  // Sans image de fond connue (ou affiche invisible), l'affiche s'avance au centre
-  if (kind === 'fly' && !(frame && backdrop && launchFly(frame, backdrop))) kind = 'hero'
+  // Sans image de fond connue (ou affiche invisible), l'affiche s'avance au centre (écran large)
+  if (kind === 'fly' && !(frame && backdrop && launchFly(frame, backdrop))) {
+    if (isPhoneScreen()) return
+    kind = 'hero'
+  }
   document.documentElement.dataset.onyxNav = kind
   // La page quittée est marquée : l'arrivée animée ne concerne que la nouvelle page
   document.querySelectorAll('.onyx-page').forEach((el) => el.setAttribute('data-onyx-leaving', ''))
@@ -452,17 +480,25 @@ function posterFrame(image: Element) {
  * de fond de cette fiche, si on la connaît.
  */
 export function prepareNavTo(href: string, hero?: Element | null, backdrop?: string) {
-  if (calm()) return
+  if (still()) return
   const url = new URL(href, location.href)
   if (url.origin !== location.origin) return
   const kind = navKind(location.pathname, url.pathname)
   if (!kind) return
-  if (hero instanceof HTMLElement && kind === 'dive' && MEDIA_PAGE.test(url.pathname)) prepareNav('fly', hero, backdrop)
+  const toMedia = hero instanceof HTMLElement && kind === 'dive' && MEDIA_PAGE.test(url.pathname)
+  if (isPhoneScreen()) {
+    // Téléphone : l'envol seulement ; tout autre trajet laisse la page changer normalement
+    if (toMedia && backdrop) prepareNav('fly', hero, backdrop)
+    else {
+      clearNav()
+      dropFly(true)
+    }
+  } else if (toMedia) prepareNav('fly', hero, backdrop)
   else prepareNav(kind)
 }
 
 function onLinkClick(event: MouseEvent) {
-  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || calm()) return
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || still()) return
   const link = (event.target as Element | null)?.closest?.('a[href]')
   if (!(link instanceof HTMLAnchorElement) || (link.target && link.target !== '_self') || link.hasAttribute('download')) return
   const image = link.closest('.onyx-page') ? link.querySelector('img') : null
@@ -476,7 +512,7 @@ let pointer = { x: 0, y: 0, at: -Infinity }
 function onPointerDown(event: PointerEvent) {
   pointer = { x: event.clientX, y: event.clientY, at: performance.now() }
   const link = (event.target as Element | null)?.closest?.('a[data-onyx-backdrop]')
-  if (link instanceof HTMLAnchorElement && !calm()) preloadBackdrop(link.dataset.onyxBackdrop)
+  if (link instanceof HTMLAnchorElement && !still()) preloadBackdrop(link.dataset.onyxBackdrop)
 }
 
 function onKeyDown(event: KeyboardEvent) {
@@ -573,7 +609,8 @@ export function MotionDirector() {
   useEffect(() => {
     const observer = new MutationObserver(onMutations)
     observer.observe(document.body, { childList: true, subtree: true })
-    const onBack = () => !calm() && prepareNav('rise')
+    // Retour arrière : remontée sur écran large ; sur téléphone, un envol en cours s'efface
+    const onBack = () => (calm() ? dropFly(true) : prepareNav('rise'))
     document.addEventListener('click', onLinkClick, true)
     document.addEventListener('pointerdown', onPointerDown, { capture: true, passive: true })
     document.addEventListener('pointerover', onPointerOver, { passive: true })

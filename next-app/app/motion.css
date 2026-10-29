@@ -711,9 +711,10 @@
   animation: none;
 }
 
-/* Envol vers une fiche (MotionDirector) : la carte cliquée se retourne sur l'image de fond de la
-   fiche, qu'une copie plein écran amène à sa place. Sous la barre de navigation, comme l'image de
-   fond de la fiche. Uniquement des transformations : fluide pendant le chargement de la fiche. */
+/* Envol vers une fiche (MotionDirector, écran large et téléphone) : la carte cliquée se retourne
+   sur l'image de fond de la fiche, qu'une copie plein écran amène à sa place. Sous la barre de
+   navigation, comme l'image de fond de la fiche. Uniquement des transformations : fluide pendant
+   le chargement de la fiche. */
 .onyx-fly-layer {
   z-index: 45;
 }
@@ -747,6 +748,17 @@
 .onyx-fly-back {
   transform: rotateY(180deg);
   background: #0c0d0d;
+}
+/* Affiche floutée, le temps que l'image de fond arrive (réseau lent, téléphone) */
+.onyx-fly-blur {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  filter: blur(18px) brightness(0.6);
+  scale: 1.25;
 }
 /* Même cadrage et même zoom de départ que l'image de fond de la fiche (MediaBackdrop) */
 .onyx-fly-cover {

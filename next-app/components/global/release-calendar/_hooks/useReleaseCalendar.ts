@@ -72,9 +72,13 @@ export function useReleaseCalendar() {
       url += `&season=${event.seasonNumber}`
       if (event.episodeNumber) url += `&episode=${event.episodeNumber}`
     }
-    // Comme depuis une affiche : celle de l'infobulle (laissée affichée jusqu'au changement
-    // de page) s'envole vers la fiche
-    prepareNavTo(url, document.querySelector('[data-onyx-tooltip-poster]'))
+    // Comme depuis une affiche : celle de l'infobulle (ou de la ligne, sur téléphone) se retourne
+    // sur l'image de fond de la fiche et s'envole ; le reste de l'infobulle s'efface
+    const poster =
+      document.querySelector('[data-onyx-tooltip-poster]') ??
+      document.querySelector(`[data-onyx-event="${CSS.escape(event.id)}"] img`)
+    prepareNavTo(url, poster, event.backdropUrl)
+    poster?.closest('[data-onyx-tooltip]')?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: 'ease-out', fill: 'forwards' })
     router.push(url)
   }, [router])
 

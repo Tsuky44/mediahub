@@ -56,6 +56,7 @@ export function CalendarWeekList({ weekDays, getDayEvents, onSelectEvent }: Cale
                     <li key={event.id}>
                       <button
                         type="button"
+                        data-onyx-event={event.id}
                         onClick={() => onSelectEvent(event)}
                         className={cn(
                           'flex w-full items-center gap-3 rounded-xl border-l-2 px-2.5 py-2 text-left transition-colors',
