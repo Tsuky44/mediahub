@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { SeasonEpisodes } from './SeasonEpisodes'
-import type { Season, SeasonProgress } from '../../_types/season'
+import type { Season } from '../../_types/season'
 
 interface SeasonEpisodesPanelProps {
     id: string
@@ -14,7 +14,8 @@ interface SeasonEpisodesPanelProps {
     /** Rangee des bulles (defilante sur telephone) */
     rail: React.RefObject<HTMLDivElement | null>
     statuses: Record<number, string>
-    progress: SeasonProgress[]
+    /** Episodes encore a venir, par saison */
+    remaining: Record<number, number | undefined>
     canTriggerSearch?: boolean
     canInteractiveSearch?: boolean
     canRequest?: boolean
@@ -52,7 +53,7 @@ export function SeasonEpisodesPanel({
     anchor,
     rail,
     statuses,
-    progress,
+    remaining,
     canTriggerSearch,
     canInteractiveSearch,
     canRequest,
@@ -180,7 +181,7 @@ export function SeasonEpisodesPanel({
                                     {...layer}
                                     season={season}
                                     status={statuses[season.season_number] ?? 'unknown'}
-                                    progress={progress.find(p => p.seasonNumber === season.season_number)}
+                                    remaining={remaining[season.season_number]}
                                     leaving={season === previous}
                                     highlightEpisode={season === shown && season.season_number === highlightSeason ? highlightEpisode : null}
                                     className={season === previous ? 'absolute inset-x-3 top-3 sm:inset-x-4 sm:top-4' : undefined}

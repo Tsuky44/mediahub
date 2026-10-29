@@ -28,6 +28,9 @@ export type SeasonStatusValue = 'unknown' | 'available' | 'partial' | 'pending' 
 export interface SeasonStatus {
     seasonNumber: number
     status: SeasonStatusValue
+    /** Episodes de la saison et fichiers presents (Sonarr) */
+    totalEpisodes?: number
+    availableEpisodes?: number
 }
 
 export interface SeasonProgress {

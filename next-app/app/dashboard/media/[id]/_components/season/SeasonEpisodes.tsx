@@ -7,7 +7,7 @@ import { SearchActions } from '../SearchActions'
 import { EpisodeCard } from './EpisodeCard'
 import { SeasonStatusBadges } from './SeasonStatusBadges'
 import { SeasonRequestButton } from './SeasonRequestButton'
-import type { Season, SeasonProgress } from '../../_types/season'
+import type { Season } from '../../_types/season'
 
 interface SeasonEpisodesProps {
     tvId: number
@@ -16,7 +16,8 @@ interface SeasonEpisodesProps {
     season: Season
     allSeasons: Season[]
     status: string
-    progress?: SeasonProgress
+    /** Episodes encore a venir */
+    remaining?: number
     canTriggerSearch?: boolean
     canInteractiveSearch?: boolean
     canRequest?: boolean
@@ -53,7 +54,7 @@ export function SeasonEpisodes({
     season,
     allSeasons,
     status,
-    progress,
+    remaining,
     canTriggerSearch,
     canInteractiveSearch,
     canRequest = false,
@@ -86,7 +87,16 @@ export function SeasonEpisodes({
                     {season.episode_count} épisodes{year ? ` · ${year}` : ''}
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5 empty:hidden [&>span]:whitespace-nowrap">
-                    <SeasonStatusBadges status={status} progress={progress} />
+                    <SeasonStatusBadges status={status} remaining={remaining} />
+                    {/* Saison pas encore demandee : le bouton prend la place des pastilles */}
+                    {canRequest && status === 'unknown' && (
+                        <SeasonRequestButton
+                            tvId={tvId}
+                            seasonNumber={season.season_number}
+                            title={title}
+                            onSuccess={() => onRequested(season.season_number)}
+                        />
+                    )}
                 </div>
                 <span className="flex-1" />
                 {(canTriggerSearch || canInteractiveSearch) && (
@@ -99,14 +109,6 @@ export function SeasonEpisodes({
                         tvdbId={tvdbId}
                         seasons={allSeasons}
                         initialSeason={season.season_number}
-                    />
-                )}
-                {canRequest && status === 'unknown' && (
-                    <SeasonRequestButton
-                        tvId={tvId}
-                        seasonNumber={season.season_number}
-                        title={title}
-                        onSuccess={() => onRequested(season.season_number)}
                     />
                 )}
             </div>

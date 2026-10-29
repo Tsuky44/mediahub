@@ -81,11 +81,17 @@ export function SeasonList({
     // Saisons demandees depuis la page (en attente sans recharger)
     const [requested, setRequested] = useState<number[]>([])
     const statuses: Record<number, string> = {}
+    // Episodes encore a venir : ceux de la saison moins les fichiers presents (Sonarr), jamais plus
+    // que la saison n'en compte (TMDB) ; une saison tout juste demandee les attend tous
+    const remaining: Record<number, number | undefined> = {}
     for (const season of sortedSeasons) {
         const number = season.season_number
-        statuses[number] = requested.includes(number)
-            ? 'pending'
-            : seasonStatuses.find(s => s.seasonNumber === number)?.status || 'unknown'
+        const known = seasonStatuses.find(s => s.seasonNumber === number)
+        statuses[number] = requested.includes(number) ? 'pending' : known?.status || 'unknown'
+        const waiting = statuses[number] === 'pending' || statuses[number] === 'processing'
+        remaining[number] = !requested.includes(number) && known?.totalEpisodes
+            ? Math.max(0, Math.min(known.totalEpisodes, season.episode_count || Infinity) - (known.availableEpisodes ?? 0))
+            : waiting ? season.episode_count : undefined
     }
 
     // Le panneau suit en priorite basse : la goutte part sans attendre le rendu des episodes
@@ -222,7 +228,7 @@ export function SeasonList({
                 anchor={anchor}
                 rail={rail}
                 statuses={statuses}
-                progress={seasonProgress}
+                remaining={remaining}
                 canTriggerSearch={canTriggerSearch}
                 canInteractiveSearch={canInteractiveSearch}
                 canRequest={canRequest}
