@@ -5,6 +5,7 @@ import { OnyxTrack } from '@/components/ui/onyx'
 import { formatReleaseDate } from '@/lib/release-date'
 import { useDownloadStatus } from '../_hooks/useDownloadStatus'
 import { getStatusText, getStatusColor } from '../_utils/download-status'
+import { ImportProgressList } from './ImportProgressList'
 import { MovieDownloadProgress } from './MovieDownloadProgress'
 import { SeasonDownloadRow } from './SeasonDownloadRow'
 import { StatusBadge } from './StatusBadge'
@@ -101,6 +102,7 @@ export function DownloadStatusModal({
   
   const hasDownloadingSeasons = downloadingSeasons.length > 0
   const hasAvailableSeasons = availableSeasons.length > 0
+  const hasImports = (status.imports?.length ?? 0) > 0
 
   // Calculate total size
   const totalSize = isTv && status.seasons
@@ -222,8 +224,10 @@ export function DownloadStatusModal({
             </div>
           )}
 
+          {hasImports && <ImportProgressList imports={status.imports!} />}
+
           {/* No available or downloading seasons but status is partial */}
-          {!hasDownloadingSeasons && !hasAvailableSeasons && (
+          {!hasDownloadingSeasons && !hasAvailableSeasons && !hasImports && !status.isDownloading && (
             <div className="text-center py-8 text-gray-400 italic text-sm">
               Aucun détail de téléchargement n'est disponible pour l'instant.
             </div>

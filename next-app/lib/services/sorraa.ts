@@ -47,6 +47,16 @@ export interface SorraaAvailability {
   waiting?: SorraaRequestWaiting
 }
 
+/** Avancement de l'import d'un telechargement : fichiers et octets deja places dans la bibliotheque. */
+export interface SorraaImportProgress {
+  files: number
+  filesDone: number
+  bytes: number
+  bytesDone: number
+  /** Fichier en cours de copie ; absent entre deux fichiers. */
+  current?: string
+}
+
 export interface SorraaGrab {
   id: number
   mediaId: number
@@ -59,6 +69,8 @@ export interface SorraaGrab {
   etaSeconds?: number
   message?: string
   unitId?: number
+  /** Present des que l'import a commence, gardee apres un echec. */
+  importProgress?: SorraaImportProgress
 }
 
 export interface SorraaRequestDraft {
@@ -192,6 +204,13 @@ export class SorraaService {
   async listActiveGrabs(mediaId?: number): Promise<SorraaGrab[]> {
     const q = new URLSearchParams({ active: 'true', limit: '200' })
     if (mediaId) q.set('mediaId', String(mediaId))
+    const page = await this.call<{ items: SorraaGrab[] }>('GET', `/grabs?${q}`)
+    return page.items ?? []
+  }
+
+  /** Telechargements d'un titre, termines ou non : sert a suivre l'import en cours. */
+  async listGrabs(mediaId: number): Promise<SorraaGrab[]> {
+    const q = new URLSearchParams({ mediaId: String(mediaId), limit: '200' })
     const page = await this.call<{ items: SorraaGrab[] }>('GET', `/grabs?${q}`)
     return page.items ?? []
   }

@@ -27,6 +27,20 @@ export interface SeasonInfo {
     isSeasonPack?: boolean
 }
 
+/** Import d'un telechargement dans la bibliotheque, tel que le rapporte le gestionnaire (sorraa). */
+export interface ImportInfo {
+    releaseName: string
+    progress: number // 0-100
+    files: number
+    filesDone: number
+    size: string
+    sizeDone: string
+    sizeLeft: string
+    current?: string
+    failed: boolean
+    message?: string
+}
+
 export interface DownloadStatus {
     isDownloading: boolean
     progress: number // 0-100
@@ -41,6 +55,7 @@ export interface DownloadStatus {
     dateAdded?: string
     language?: string
     seasons?: SeasonInfo[]
+    imports?: ImportInfo[]
 }
 
 function formatTime(seconds: number) {

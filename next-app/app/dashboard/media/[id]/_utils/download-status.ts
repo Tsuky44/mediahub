@@ -2,6 +2,8 @@ export function getStatusText(s: string): string {
   switch (s) {
     case 'Downloading':
       return 'Téléchargement en cours'
+    case 'Importing':
+      return 'Importation en cours'
     case 'Paused':
       return 'En pause'
     case 'Queued':
@@ -21,6 +23,8 @@ export function getStatusColor(s: string): string {
   switch (s) {
     case 'Downloading':
       return 'indigo'
+    case 'Importing':
+      return 'yellow'
     case 'Paused':
       return 'amber'
     case 'Queued':

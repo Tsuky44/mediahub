@@ -1,6 +1,6 @@
-import { getSorraaService, SorraaError, toSorraaKind, type SorraaAvailability, type SorraaRequest, type SorraaRequestState } from '@/lib/services/sorraa'
+import { getSorraaService, SorraaError, toSorraaKind, type SorraaAvailability, type SorraaGrab, type SorraaRequest, type SorraaRequestState } from '@/lib/services/sorraa'
 import { cache } from '@/lib/cache'
-import type { DownloadStatus } from '@/app/dashboard/media/[id]/download-status-actions'
+import type { DownloadStatus, ImportInfo } from '@/app/dashboard/media/[id]/download-status-actions'
 import type { MediaAvailability, MediaStatus } from '@/lib/services/media-status'
 import type { AddRequestInput, AddRequestOutcome, DownloadManager } from './types'
 
@@ -114,9 +114,28 @@ export class SorraaDownloadManager implements DownloadManager {
     const sorraa = await getSorraaService()
     if (!sorraa) return null
     const availability = await sorraa.getAvailability(toSorraaKind(mediaType), tmdbId).catch(() => null)
-    if (!availability?.inLibrary || availability.progress === undefined) return null
+    if (!availability?.inLibrary) return null
 
-    const grabs = availability.mediaId ? await sorraa.listActiveGrabs(availability.mediaId).catch(() => []) : []
+    const all = availability.mediaId ? await sorraa.listGrabs(availability.mediaId).catch(() => []) : []
+    const imports = importsFromGrabs(all)
+    if (availability.progress === undefined && imports.length === 0) return null
+
+    // Un import en cours : sorraa dit ou il en est, comme dans son interface.
+    if (availability.progress === undefined) {
+      return {
+        isDownloading: false,
+        progress: 100,
+        timeleft: '',
+        status: 'Importing',
+        title: title || availability.title || '',
+        releaseTitle: imports[0].releaseName,
+        size: '',
+        sizeLeft: '',
+        imports,
+      }
+    }
+
+    const grabs = all.filter((g) => ACTIVE_GRAB_STATUSES.has(g.status))
     const first = grabs[0]
     const sizeLeft = grabs.reduce((sum, g) => sum + (g.sizeLeft || 0), 0)
     const speed = grabs.reduce((sum, g) => sum + (g.speed || 0), 0)
@@ -130,8 +149,32 @@ export class SorraaDownloadManager implements DownloadManager {
       size: '',
       sizeLeft: sizeLeft ? formatBytes(sizeLeft) : '',
       speed: speed ? `${formatBytes(speed)}/s` : undefined,
+      ...(imports.length > 0 ? { imports } : {}),
     }
   }
+}
+
+const ACTIVE_GRAB_STATUSES = new Set(['sent', 'queued', 'downloading', 'paused', 'stalled'])
+
+/** Les imports a montrer : un telechargement termine dont l'import tourne ou a echoue. */
+export function importsFromGrabs(grabs: SorraaGrab[]): ImportInfo[] {
+  return grabs
+    .filter((g) => g.importProgress !== undefined && (g.status === 'completed' || g.status === 'import_failed'))
+    .map((g) => {
+      const p = g.importProgress!
+      return {
+        releaseName: g.releaseName,
+        progress: p.bytes > 0 ? Math.min(Math.round((p.bytesDone / p.bytes) * 1000) / 10, 100) : 0,
+        files: p.files,
+        filesDone: p.filesDone,
+        size: formatBytes(p.bytes),
+        sizeDone: formatBytes(p.bytesDone),
+        sizeLeft: formatBytes(Math.max(p.bytes - p.bytesDone, 0)),
+        current: p.current,
+        failed: g.status === 'import_failed',
+        message: g.status === 'import_failed' ? g.message : undefined,
+      }
+    })
 }
 
 function maxOf(values: Array<number | undefined>): number | undefined {
