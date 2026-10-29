@@ -27,17 +27,25 @@ function scrollSettled(max = 1600): Promise<void> {
     })
 }
 
-/** Survol puis atterrissage, dans l'esprit de l'envol vers la fiche (MotionDirector) */
+/**
+ * Survol puis atterrissage, dans l'esprit de l'envol vers la fiche (MotionDirector), sans jamais
+ * deborder du panneau des episodes : l'agrandissement tient dans la marge qui l'entoure.
+ */
 function lift(el: HTMLElement) {
-    const shadow = '0 28px 60px -18px rgb(0 0 0 / 0.75), 0 0 0 1px rgb(242 240 237 / 0.22)'
+    const box = el.getBoundingClientRect()
+    const room = el.parentElement?.closest('.rounded-3xl')?.getBoundingClientRect()
+    const margin = room ? Math.min(box.left - room.left, room.right - box.right) - 3 : 6
+    const grow = Math.max(0, Math.min(0.018, (2 * margin) / box.width))
+    const up = String(1 + grow)
+    const shadow = '0 18px 40px -16px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(242 240 237 / 0.18)'
     Object.assign(el.style, { position: 'relative', zIndex: '1', transformOrigin: '50% 100%' })
     // Debut et fin implicites : l'episode part de sa place et y revient exactement
     const flight = el.animate(
         [
-            { offset: 0.3, translate: '0 -10px', scale: '1.035', boxShadow: shadow, easing: 'ease-in-out' },
-            { offset: 0.56, translate: '0 -13px', scale: '1.035', boxShadow: shadow, easing: 'ease-in' },
-            { offset: 0.72, translate: '0 1px', scale: '1.014 0.982', boxShadow: '0 8px 20px -10px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(242 240 237 / 0.12)', easing: 'ease-out' },
-            { offset: 0.86, translate: '0 -2px', scale: '0.997 1.006', easing: 'ease-in-out' },
+            { offset: 0.3, translate: '0 -6px', scale: up, boxShadow: shadow, easing: 'ease-in-out' },
+            { offset: 0.56, translate: '0 -7px', scale: up, boxShadow: shadow, easing: 'ease-in' },
+            { offset: 0.72, translate: '0 1px', scale: `${1 + grow * 0.4} ${1 - grow * 0.6}`, boxShadow: '0 6px 16px -10px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(242 240 237 / 0.1)', easing: 'ease-out' },
+            { offset: 0.86, translate: '0 -1px', scale: `${1 - grow * 0.1} ${1 + grow * 0.2}`, easing: 'ease-in-out' },
         ],
         { duration: LIFT_MS }
     )
