@@ -36,6 +36,7 @@ Erreur : `{ "error": "message", "code": "unauthorized|forbidden|not_found|bad_re
 | `GET /catalog?type=&query=&page=` | `read Media` | Tendances ou recherche TMDB, statut de chaque titre |
 | `GET /media/:tmdbId?type=movie\|tv` | `read Media` | Fiche d'un titre et état de ses saisons |
 | `GET /availability/:tmdbId?type=` | `read Media` | Disponibilité, saisons, raison d'attente (`availability.json`) |
+| `GET /progress/:tmdbId?type=` | `read Media` | Téléchargement et import en cours du titre, ceux des widgets de la fiche (Radarr, Sonarr ou sorraa) : `{ active, downloading, download: { progress, timeleft, speed, size, sizeLeft, releaseTitle } \| null, imports: [{ releaseName, progress, files, filesDone, size, sizeDone, sizeLeft, current, failed, message }] }` |
 | `POST /availability` | `read Media` | Même chose pour 100 titres maximum (`availability_batch_request.json`, réponse `availability_batch.json`) |
 | `POST /requests` | `create MediaRequest` | Crée une demande (`request_create.json` puis `request_create_response.json`) |
 | `GET /requests?scope=mine\|all&type=&limit=&before=` | `mine` : `read` ou `create MediaRequest` ; `all` : `read MediaRequest` | Liste, plus récente d'abord, paginée par `nextBefore` (`requests_list.json`) |
