@@ -1,12 +1,12 @@
 'use server'
 
-import { getProwlarrServiceForUser, getRadarrServiceForUser, getSonarrServiceForUser, getCurrentUser } from '@/lib/auth'
+import { getProwlarrServiceForUser, getSonarrServiceForUser, getCurrentUser } from '@/lib/auth'
 import { getQBittorrentService } from '@/lib/services/qbittorrent'
+import { grabArrRelease, searchArrReleases } from '@/lib/services/interactive-search'
 import { getTmdbServiceForUser } from '@/lib/auth'
 import { defineAbilityFor, Actions, Subjects } from '@/lib/ability'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
-const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
 const error = (...args: unknown[]) => { if (isDev) console.error(...args); };
 const warn = (...args: unknown[]) => { if (isDev) console.warn(...args); };
 
@@ -109,71 +109,9 @@ export async function searchMediaReleases(
 ) {
     try {
         await checkPermission('interactive_search', 'Media')
-        const prowlarr = await getProwlarrServiceForUser()
-        if (!prowlarr) return { error: 'Prowlarr non configuré' }
-        
-        const tmdbService = await getTmdbServiceForUser()
-        if (!tmdbService) return { error: 'Service TMDB non disponible' }
-
-        let query = ''
-        let categories: number[] = []
-
-        if (mediaType === 'movie') {
-            categories = [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060, 8000] // Films categories
-            
-            // Get IMDb ID for better search
-            const externalIds = await tmdbService.getExternalIds('movie', tmdbId)
-            if (externalIds?.imdb_id) {
-                query = `{imdb:${externalIds.imdb_id}}`
-            } else {
-                query = `{tmdb:${tmdbId}}`
-            }
-        } 
-        else if (mediaType === 'tv') {
-            categories = [5000, 5010, 5020, 5030, 5040, 5045, 5050, 5060, 5070, 5080] // TV categories
-            
-            let targetTvdbId = tvdbId
-            if (!targetTvdbId) {
-                const externalIds = await tmdbService.getExternalIds('tv', tmdbId)
-                targetTvdbId = externalIds?.tvdb_id
-            }
-
-            if (!targetTvdbId) return { error: 'TVDB ID introuvable pour cette série' }
-
-            query = `{tvdb:${targetTvdbId}}`
-            
-            if (typeof seasonNumber === 'number' && typeof episodeNumber === 'number') {
-                const s = seasonNumber < 10 ? `0${seasonNumber}` : seasonNumber
-                const e = episodeNumber < 10 ? `0${episodeNumber}` : episodeNumber
-                query += ` S${s}E${e}` 
-            } else if (typeof seasonNumber === 'number') {
-                const s = seasonNumber < 10 ? `0${seasonNumber}` : seasonNumber
-                query += ` S${s}`
-            }
-        }
-
-        log(`[SmartSearch] Searching Prowlarr directly with query: ${query}`)
-        
-        const results = await prowlarr.search(query, undefined, categories)
-        
-        return { 
-            results: results.map((r) => ({
-                guid: r.guid,
-                title: r.title,
-                size: r.size,
-                indexer: r.indexer,
-                indexerId: r.indexerId,
-                publishDate: r.publishDate,
-                seeders: r.seeders,
-                leechers: r.leechers,
-                age: r.age,
-                downloadUrl: r.downloadUrl,
-                magnetUrl: r.magnetUrl,
-                protocol: r.protocol,
-                customFormatScore: 0, // Not available from Prowlarr directly
-                rejections: [] // Not available from Prowlarr directly
-            }))
-        }
+        // La fenêtre de recherche de la fiche envoie des adresses de téléchargement : elle reste sur
+        // Radarr/Sonarr, que sorraa soit réglé ou non (docs/sorraa-integration.md).
+        return await searchArrReleases({ mediaType, tmdbId, tvdbId, seasonNumber, episodeNumber })
     } catch (err) {
         error('Search media releases error:', err)
         return { error: (err as Error).message }
@@ -200,54 +138,8 @@ export async function downloadMediaRelease(
 ) {
     try {
         await checkPermission('interactive_search', 'Media')
-
-        if (mediaType === 'movie') {
-            const radarr = await getRadarrServiceForUser()
-            if (!radarr) return { error: 'Radarr non configuré' }
-
-            const profiles = await radarr.getProfiles()
-            const rootFolders = await radarr.getRootFolders()
-            
-            await radarr.addMovie({
-                tmdbId,
-                title: '', 
-                qualityProfileId: profiles?.[0]?.id || 1,
-                rootFolderPath: rootFolders?.[0]?.path || '',
-                year: 0,
-                monitored: true,
-                minimumAvailability: 'announced',
-                searchNow: false
-            })
-
-            if (releaseInfo) {
-                const res = await radarr.pushRelease(releaseInfo)
-                return res
-            } else {
-                const res = await radarr.downloadRelease(guid, indexerId)
-                return res
-            }
-        }
-        else if (mediaType === 'tv') {
-            if (!tvdbId) return { error: 'TVDB ID manquant' }
-            const sonarr = await getSonarrServiceForUser()
-            if (!sonarr) return { error: 'Sonarr non configuré' }
-
-            if (typeof seasonNumber === 'number' && typeof episodeNumber === 'number') {
-                await sonarr.monitorEpisode(tvdbId, seasonNumber, episodeNumber)
-            } else if (typeof seasonNumber === 'number') {
-                await sonarr.monitorSeason(tvdbId, seasonNumber)
-            }
-
-            if (releaseInfo) {
-                const res = await sonarr.pushRelease(releaseInfo)
-                return res
-            } else {
-                const res = await sonarr.downloadRelease(guid, indexerId)
-                return res
-            }
-        }
-        
-        return { error: 'Type de média non supporté' }
+        if (mediaType !== 'movie' && mediaType !== 'tv') return { error: 'Type de média non supporté' }
+        return await grabArrRelease({ mediaType, tmdbId, tvdbId, seasonNumber, episodeNumber }, guid, indexerId, releaseInfo)
     } catch (err) {
         error('Download media release error:', err)
         return { error: (err as Error).message }

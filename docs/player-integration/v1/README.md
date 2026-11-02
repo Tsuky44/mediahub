@@ -44,6 +44,17 @@ Erreur : `{ "error": "message", "code": "unauthorized|forbidden|not_found|bad_re
 | `PATCH /requests/:id` | `update MediaRequest` | Approuver ou refuser (`request_moderate.json`) |
 | `DELETE /requests/:id` | `delete MediaRequest` | Supprime la demande dans MediaHub (Radarr et Sonarr ne sont pas touchés) |
 | `GET /requests/feed?after=<curseur>&limit=` | `read MediaRequest` | Nouvelles demandes de tous les comptes, du plus ancien au plus récent (`request_feed.json`). `cursor` est à repasser dans `after`. Sans `after`, la réponse ne contient que le curseur courant (`requests` vide). Sondage de secours si le webhook manque |
+| `GET /releases?tmdbId=&type=movie\|tv&season=&episode=` | `interactive_search` (sur `Media` ou `Downloads`) | Recherche interactive pour un film, une saison (`season` seule) ou un épisode (`season` et `episode`) : `{ manager, releases }` (`releases.json`, `releases_arr.json`) |
+| `POST /releases` | `interactive_search` | Envoie la release choisie au téléchargement (`release_grab.json`, `release_grab_arr.json`). `{ success: true }` |
+
+### Recherche interactive
+
+`manager` dit qui a cherché, selon le gestionnaire choisi pour ce type de média (`download_manager_movie` / `download_manager_tv`, comme pour les demandes) :
+
+- **`sorraa`** : sorraa interroge les indexeurs et juge chaque release (`accepted`, `rejections` en français, `customFormatScore`) ; la meilleure d'abord. Un titre pas encore dans sorraa y est ajouté sans recherche. `id` est un jeton valable 30 minutes ; il n'y a **aucune adresse de téléchargement** (`downloadUrl` et `magnetUrl` valent `null`) : `POST /releases` n'a besoin que de `release.id`. Jeton périmé : `410`, il faut relancer la recherche. Pas de client de téléchargement réglé dans sorraa : `409`. Saison ou épisode absent de sorraa : `404`.
+- **`arr`** : Prowlarr liste, Radarr/Sonarr reçoivent la release. `id` est le guid de l'indexeur ; `POST /releases` exige aussi `title` et `downloadUrl` ou `magnetUrl` (sinon `400`), et surveille le film, la saison ou l'épisode visé avant l'envoi. `502` si Radarr/Sonarr la refusent, `503` s'ils ne sont pas configurés. `accepted` est absent, `rejections` vide.
+
+sorraa choisi mais pas réglé dans MediaHub : `503` (Radarr/Sonarr ne prennent pas le relais). `guid` reste, égal à `id`, pour les clients d'avant sorraa ; l'interface web de la fiche garde sa propre recherche, sur Radarr/Sonarr.
 | `POST /webhook/test` | `manage_settings Settings` | Envoie un évènement `webhook.test` à Onyx |
 
 `catalog` et `media/:tmdbId` rendent les mêmes réponses que
