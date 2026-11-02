@@ -4,7 +4,7 @@ import { memo } from 'react'
 import Link from 'next/link'
 import { Film } from 'lucide-react'
 import { useMediaCardActions, type MediaCardItem } from './media-card/useMediaCardActions'
-import { getPosterUrl } from './media-card/getPosterUrl'
+import { getFramelessPosterUrl, getPosterUrl } from './media-card/getPosterUrl'
 import { MediaCardStatus } from './media-card/MediaCardStatus'
 import { MediaCardOverlay } from './media-card/MediaCardOverlay'
 import { MediaCardActions } from './media-card/MediaCardActions'
@@ -25,7 +25,7 @@ export const MediaCard = memo(function MediaCard({ item, showFavoriteButton = fa
 
   const title = item.title || item.name || 'Untitled'
   const linkId = item.tmdbId || item.id
-  const posterUrl = getPosterUrl(item.poster_path, 'w342')
+  const posterUrl = getFramelessPosterUrl(item.poster_path, 'w342')
   // Même adresse que l'image de fond de la fiche : préchargée au survol, déjà là à l'arrivée
   const backdropUrl = item.backdrop_path ? getPosterUrl(item.backdrop_path, 'original') : undefined
 
@@ -42,9 +42,7 @@ export const MediaCard = memo(function MediaCard({ item, showFavoriteButton = fa
             <img
               src={posterUrl}
               alt={title}
-              // scale-[1.05] : certaines affiches TMDB ont un cadre clair imprimé dans l'image ; rogner
-              // 2,5 % par bord le fait disparaître sans changer le cadrage
-              className="absolute inset-0 h-full w-full object-cover scale-[1.05] transition-[scale] duration-700 ease-onyx group-hover:scale-[1.1]"
+              className="absolute inset-0 h-full w-full object-cover transition-[scale] duration-700 ease-onyx group-hover:scale-105"
               loading="lazy"
             />
           ) : (
