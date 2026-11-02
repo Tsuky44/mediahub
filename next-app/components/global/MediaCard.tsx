@@ -42,7 +42,9 @@ export const MediaCard = memo(function MediaCard({ item, showFavoriteButton = fa
             <img
               src={posterUrl}
               alt={title}
-              className="absolute inset-0 h-full w-full object-cover transition-[scale] duration-700 ease-onyx group-hover:scale-105"
+              // scale-[1.05] : certaines affiches TMDB ont un cadre clair imprimé dans l'image ; rogner
+              // 2,5 % par bord le fait disparaître sans changer le cadrage
+              className="absolute inset-0 h-full w-full object-cover scale-[1.05] transition-[scale] duration-700 ease-onyx group-hover:scale-[1.1]"
               loading="lazy"
             />
           ) : (
