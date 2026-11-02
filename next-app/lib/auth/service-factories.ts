@@ -71,10 +71,10 @@ export async function getMediaServerServiceForUser() {
 /** Plateformes lues par l'API Emby (Jellyfin via l'API compatible) */
 export type LibrarySource = 'emby' | 'jellyfin'
 
-/** Plateformes dont MediaHub sait afficher la bibliothèque : Onyx passe par son compte de service */
+/** Plateformes dont MediaHub sait afficher la bibliothèque : Onyx passe par la clé d'intégration */
 export type LibraryPlatform = LibrarySource | 'onyx'
 
-const LIBRARY_KEYS = ['library_source', 'emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key', 'onyx_url', 'onyx_service_token'] as const
+const LIBRARY_KEYS = ['library_source', 'emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key', 'onyx_url', 'player_integration_api_key'] as const
 
 function resolveLibrary(s: Record<(typeof LIBRARY_KEYS)[number], string>) {
   const embyUrl = s.emby_url || process.env.EMBY_URL
@@ -83,7 +83,7 @@ function resolveLibrary(s: Record<(typeof LIBRARY_KEYS)[number], string>) {
   const jellyfin = s.jellyfin_url
     ? { service: new EmbyService(s.jellyfin_url, s.jellyfin_api_key), type: 'jellyfin' as const }
     : null
-  const onyx = !!(s.onyx_url && s.onyx_service_token)
+  const onyx = !!(s.onyx_url && (s.player_integration_api_key || process.env.PLAYER_INTEGRATION_API_KEY))
   let platform: LibraryPlatform | null
   if (s.library_source === 'onyx' && onyx) platform = 'onyx'
   else if (s.library_source === 'jellyfin' && jellyfin) platform = 'jellyfin'
@@ -102,7 +102,7 @@ export async function getLibraryPlatform(): Promise<LibraryPlatform | null> {
 
 /**
  * Serveur Emby ou Jellyfin de la médiathèque. Null quand c'est Onyx : son catalogue se lit par
- * lib/services/onyx-admin.ts, et l'historique ou les favoris d'Emby n'y correspondraient pas.
+ * lib/services/onyx-directory.ts, et l'historique ou les favoris d'Emby n'y correspondraient pas.
  */
 export async function getLibraryServer(): Promise<{ service: EmbyService; type: LibrarySource } | null> {
   const { platform, emby, jellyfin } = resolveLibrary(await readSettings(LIBRARY_KEYS))

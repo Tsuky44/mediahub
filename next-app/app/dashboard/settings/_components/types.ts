@@ -49,8 +49,6 @@ export interface SettingsFormData {
     player_integration_user_email: string
     /** URL des évènements vers Onyx (vide : déduite de onyx_url) */
     onyx_webhook_url: string
-    /** Nom du compte de service Onyx connecté (lecture seule, géré par /api/admin/onyx) */
-    onyx_service_username: string
     /** Plateforme affichée dans « Ma médiathèque » (vide : la seule configurée) */
     library_source: string
     auth_local_enabled: boolean

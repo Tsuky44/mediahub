@@ -15,31 +15,33 @@ formats Onyx sont ceux de `server/handlers/auth.go`, `otp.go`,
 | `player_integration_api_key` | clé d'intégration, aussi utilisée pour racheter les codes SSO ; vide : variable `PLAYER_INTEGRATION_API_KEY` |
 | `player_integration_user_email` | compte de repli de l'API du lecteur ; vide : `PLAYER_INTEGRATION_USER_EMAIL` |
 | `onyx_webhook_url` | URL des évènements ; vide : `ONYX_WEBHOOK_URL`, sinon `{onyx_url}/api/integrations/mediahub/events` |
-| `onyx_service_token`, `onyx_service_username` | compte de service (voir plus bas) ; jamais envoyé au navigateur |
 
 Tout se règle dans l'interface : aucune variable Docker n'est nécessaire. Les
 variables d'environnement restent lues en secours pour les installations d'avant.
 L'assistant d'installation accepte « Onyx » seul (URL d'Onyx, connexion Onyx,
 médiathèque Onyx).
 
-## Compte de service
+## Appels de MediaHub vers Onyx : la clé d'intégration
 
-Un administrateur Onyx (`is_owner` ou `manage_settings`, plus `manage_users`) se
-connecte une fois depuis le bloc Onyx des réglages (`POST /api/admin/onyx`
-`{action:"connect", username, password}` puis `{challenge, code}`). MediaHub garde
-la session (`onyx_service_token`) ; Onyx la fait glisser à chaque usage (90 jours
-d'inactivité au plus). Elle sert à :
+Aucun compte Onyx n'est gardé par MediaHub (ADR-0102 d'Onyx). Chaque appel présente
+`Authorization: Bearer <player_integration_api_key>` aux routes
+`{onyx}/api/integrations/mediahub/*` (capacité `mediahub_directory` du ping d'Onyx),
+par `lib/services/onyx-directory.ts` :
 
 - **importer les utilisateurs** : « Sync Onyx » (`POST /api/admin/users/sync`
-  `{provider:"onyx"}`) lit `GET {onyx}/api/users`, crée les comptes absents
-  (`<nom>@onyx.local`, admin si l'Onyx l'est, sinon rôle par défaut), délie ceux
-  qui ont disparu d'Onyx. Liaison par `users.onyx_user_id` seulement ;
+  `{provider:"onyx"}`) lit `GET /users` → `{users:[{id, username, is_owner,
+  permissions, avatar}]}` (`examples/onyx_integration_users.json`), crée les comptes
+  absents (`<nom>@onyx.local`, admin si l'Onyx l'est, sinon rôle par défaut), délie
+  ceux qui ont disparu d'Onyx. Liaison par `users.onyx_user_id` seulement ;
 - **la médiathèque** : `library_source = onyx` (ou Onyx seul configuré) lit
-  `GET /api/movies` et `GET /api/shows`, affiches TMDB. Pas de favoris ni
-  d'historique par compte ;
-- **configurer Onyx** : `{action:"link-onyx", mediahubUrl, apiKey?}` écrit
-  `mediahub_url` et `mediahub_api_key` par `PUT {onyx}/api/settings` (clé créée si
-  aucune). `{action:"test-webhook"}` envoie `webhook.test`.
+  `GET /movies` et `GET /shows` (forme de `/api/movies`, sans progression), affiches
+  TMDB. Pas de favoris ni d'historique par compte ;
+- **configurer Onyx** : `POST /api/admin/onyx {action:"link-onyx", mediahubUrl, apiKey?}`
+  écrit `mediahub_url` par `PUT /link` (`examples/onyx_integration_link.json`). La
+  première fois, Onyx ne connaît pas la clé (`409`, `needsKeyInOnyx`) : elle se copie
+  une fois dans les réglages d'Onyx. `{action:"rotate-key"}` tire une nouvelle clé,
+  l'envoie par `PUT /link {mediahub_api_key}` avec l'actuelle, puis l'enregistre ici.
+  `{action:"test-webhook"}` envoie `webhook.test`.
 
 ## Identité et liaison
 

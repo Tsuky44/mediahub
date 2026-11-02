@@ -705,6 +705,14 @@ function runMigrations(db: Database.Database): void {
     }
   }
 
+  // 7) Compte de service Onyx retiré : MediaHub lit Onyx avec la clé d'intégration
+  //    (lib/services/onyx-directory.ts). La session gardée ne sert plus, on l'oublie.
+  try {
+    db.prepare(`DELETE FROM "settings" WHERE key IN ('onyx_service_token', 'onyx_service_username')`).run();
+  } catch (err) {
+    console.warn('[Drizzle] Onyx service session cleanup skipped:', (err as Error).message);
+  }
+
   if (isDev) console.log('[Drizzle] Migrations applied successfully');
 }
 

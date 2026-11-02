@@ -14,7 +14,7 @@ interface LibrarySourceSettingsProps {
 interface Platform {
   id: 'emby' | 'jellyfin' | 'plex' | 'onyx'
   name: string
-  /** MediaHub sait lire sa bibliothèque (Emby, Jellyfin par l'API compatible, Onyx par son compte de service) */
+  /** MediaHub sait lire sa bibliothèque (Emby, Jellyfin par l'API compatible, Onyx par la clé d'intégration) */
   library: boolean
   selected: string
 }
@@ -32,9 +32,9 @@ export function LibrarySourceSettings({ formData, updateField, readOnly }: Libra
       {
         id: 'onyx',
         name: 'Onyx',
-        library: !!formData.onyx_service_username,
+        library: !!formData.player_integration_api_key,
         selected: ONYX_BRAND.selected,
-        on: !!(formData.onyx_url && (formData.auth_onyx_enabled || formData.onyx_service_username)),
+        on: !!(formData.onyx_url && (formData.auth_onyx_enabled || formData.player_integration_api_key)),
       },
     ] as const
   )
@@ -56,7 +56,7 @@ export function LibrarySourceSettings({ formData, updateField, readOnly }: Libra
           {current
             ? `${current.name} est la seule plateforme configurée : sa bibliothèque est affichée.`
             : configured[0].id === 'onyx'
-              ? "Onyx est la seule plateforme configurée : connectez son compte de service (bloc Onyx ci-dessous) pour afficher sa bibliothèque."
+              ? "Onyx est la seule plateforme configurée : enregistrez la clé d'intégration (bloc Onyx ci-dessous) pour afficher sa bibliothèque."
               : `${configured[0].name} est la seule plateforme configurée, mais MediaHub ne sait pas encore afficher sa bibliothèque.`}
         </p>
       ) : (

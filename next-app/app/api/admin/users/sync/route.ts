@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
 import { getEmbyServiceForUser, getPlexServiceForUser, getJellyfinServiceForUser } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
-import { getOnyxService, isOnyxAdmin } from '@/lib/services/onyx-admin'
+import { getOnyxDirectory, isOnyxAdmin } from '@/lib/services/onyx-directory'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -315,16 +315,16 @@ export async function POST(req: Request) {
         }
     }
 
-    // 4b. Sync Onyx Users (compte de service : GET /api/users d'Onyx)
+    // 4b. Sync Onyx Users (clé d'intégration : GET /api/integrations/mediahub/users d'Onyx)
     if (shouldSyncOnyx) {
-        const onyxService = await getOnyxService()
-        if (!onyxService && provider === 'onyx') {
-            throw new Error('Compte de service Onyx non connecté (onglet Media, bloc Onyx)')
+        const onyxDirectory = await getOnyxDirectory()
+        if (!onyxDirectory && provider === 'onyx') {
+            throw new Error("Adresse d'Onyx ou clé d'intégration absente (onglet Media, bloc Onyx)")
         }
 
-        if (onyxService) {
+        if (onyxDirectory) {
             try {
-                const onyxUsers = await onyxService.listUsers()
+                const onyxUsers = await onyxDirectory.listUsers()
                 if (onyxUsers.length > 0) {
                     onyxSyncSuccess = true
                     for (const u of onyxUsers) {
@@ -382,7 +382,7 @@ export async function POST(req: Request) {
                 }
             } catch (e: any) {
                 error(`[SyncUsers] Onyx sync failed:`, e)
-                // Synchro Onyx demandée seule : l'admin doit savoir pourquoi (session expirée, droits)
+                // Synchro Onyx demandée seule : l'admin doit savoir pourquoi (clé refusée, Onyx trop ancien)
                 if (provider === 'onyx') throw e
                 details.push(`Onyx sync failed: ${e.message}`)
             }

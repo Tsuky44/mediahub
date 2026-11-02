@@ -2,30 +2,18 @@ import { randomBytes } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { getRealUser } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
-import { checkRateLimit, clearRateLimit, registerLoginFailure } from '@/lib/auth/rate-limiter'
 import { getOnyxIntegrationConfig } from '@/lib/integrations/onyx-config'
 import { deliverOnyxEvent } from '@/lib/integrations/onyx-webhook'
 import { setSetting } from '@/lib/settings'
-import { OnyxAuthError, normalizeOnyxUrl, onyxLogin, onyxLogout, onyxVerifyOtp, type OnyxLoginResult } from '@/lib/services/onyx-auth'
-import {
-  clearOnyxServiceSession,
-  getOnyxService,
-  isOnyxAdmin,
-  OnyxService,
-  OnyxServiceError,
-  saveOnyxServiceSession,
-} from '@/lib/services/onyx-admin'
+import { clearOnyxLibraryCache, getOnyxDirectory, OnyxDirectoryError } from '@/lib/services/onyx-directory'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * Liaison MediaHub <-> Onyx, côté administrateur : état, compte de service (connexion avec OTP),
- * écriture de l'adresse et de la clé de MediaHub dans Onyx, test du webhook.
+ * Liaison MediaHub <-> Onyx, côté administrateur : état, écriture de l'adresse de MediaHub dans
+ * Onyx, rotation de la clé et test du webhook. Tout passe par l'API d'Onyx avec la clé
+ * d'intégration (routes /api/integrations/mediahub/* d'Onyx), sans compte Onyx.
  */
-
-function clientIp(request: NextRequest) {
-  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || '127.0.0.1'
-}
 
 async function requireAdmin() {
   const user = await getRealUser()
@@ -36,6 +24,10 @@ async function requireAdmin() {
 
 function hintOf(key: string) {
   return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`
+}
+
+function newKey() {
+  return randomBytes(32).toString('hex')
 }
 
 async function serverInfo(url: string) {
@@ -62,28 +54,21 @@ export async function GET() {
     webhookSource: config.webhookSource,
     fallbackEmail: config.fallbackEmail,
   }
-  if (!config.url) return NextResponse.json({ ...base, reachable: false, service: null, onyxSide: null })
+  if (!config.url) return NextResponse.json({ ...base, reachable: false, link: null })
 
-  const [info, service] = await Promise.all([serverInfo(config.url), getOnyxService()])
-  let serviceState: { username: string; ok: boolean; error?: string } | null = null
-  let onyxSide: { mediahubUrl: string; keySet: boolean; keyMatches: boolean | null } | null = null
-
-  if (service) {
+  const [info, directory] = await Promise.all([serverInfo(config.url), getOnyxDirectory()])
+  // La clé est acceptée dès qu'Onyx répond : c'est elle qui ouvre la route.
+  let link: { ok: boolean; mediahubUrl?: string; error?: string } | null = null
+  if (directory) {
     try {
-      const [me, settings] = await Promise.all([service.me(), service.getSettings()])
-      serviceState = { username: me.username, ok: isOnyxAdmin(me) && !!me.permissions?.manage_users }
-      if (!serviceState.ok) serviceState.error = `Le compte « ${me.username} » n'est pas administrateur d'Onyx`
-      onyxSide = {
-        mediahubUrl: settings.mediahub_url || '',
-        keySet: !!settings.mediahub_api_key_set,
-        keyMatches: settings.mediahub_api_key_set && config.apiKey ? settings.mediahub_api_key_hint === hintOf(config.apiKey) : null,
-      }
+      const state = await directory.link()
+      link = { ok: true, mediahubUrl: state.mediahub_url || '' }
     } catch (e) {
-      serviceState = { username: service.username, ok: false, error: e instanceof Error ? e.message : String(e) }
+      link = { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
   }
 
-  return NextResponse.json({ ...base, ...info, service: serviceState, onyxSide })
+  return NextResponse.json({ ...base, ...info, link })
 }
 
 export async function POST(request: NextRequest) {
@@ -96,16 +81,10 @@ export async function POST(request: NextRequest) {
 
   try {
     switch (action) {
-      case 'connect':
-        return await connect(request, body, adminId)
-      case 'disconnect': {
-        await (await getOnyxService())?.logout()
-        await clearOnyxServiceSession()
-        await logAction(adminId, 'UPDATE_SETTINGS', 'SYSTEM', 'onyx', { message: 'Compte de service Onyx déconnecté' })
-        return NextResponse.json({ connected: false })
-      }
       case 'link-onyx':
         return await linkOnyx(body, adminId)
+      case 'rotate-key':
+        return await rotateKey(adminId)
       case 'test-webhook': {
         const result = await deliverOnyxEvent('webhook.test', { message: 'MediaHub -> Onyx' })
         if (result.delivered) return NextResponse.json({ ok: true, message: 'Onyx a bien reçu l’évènement de test' })
@@ -118,87 +97,63 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Action inconnue' }, { status: 400 })
     }
   } catch (e) {
-    if (e instanceof OnyxServiceError) return NextResponse.json({ error: e.message }, { status: e.status === 401 || e.status === 403 ? 409 : 502 })
+    if (e instanceof OnyxDirectoryError) return NextResponse.json({ error: e.message }, { status: e.status === 401 || e.status === 404 ? 409 : 502 })
     throw e
   }
-}
-
-/** Ouvre la session du compte de service : { username, password } puis, si Onyx le demande, { challenge, code }. */
-async function connect(request: NextRequest, body: Record<string, unknown>, adminId: number) {
-  // Adresse saisie dans le formulaire, pas forcément encore enregistrée
-  const typedUrl = typeof body.onyxUrl === 'string' ? normalizeOnyxUrl(body.onyxUrl) : ''
-  const url = typedUrl || (await getOnyxIntegrationConfig()).url
-  if (!url) return NextResponse.json({ error: "Renseignez d'abord l'adresse du serveur Onyx" }, { status: 400 })
-
-  const ip = clientIp(request)
-  const subject = `service:${adminId}`
-  const rate = await checkRateLimit(ip, subject, 'onyx')
-  if (!rate.allowed) return NextResponse.json({ error: `Trop de tentatives. Réessayez dans ${rate.timeLeft} minute(s).` }, { status: 429 })
-
-  let result: OnyxLoginResult
-  try {
-    if (typeof body.challenge === 'string' && body.challenge) {
-      result = await onyxVerifyOtp(url, body.challenge, String(body.code ?? ''))
-    } else if (typeof body.username === 'string' && typeof body.password === 'string' && body.username.trim()) {
-      result = await onyxLogin(url, body.username.trim(), body.password)
-    } else {
-      return NextResponse.json({ error: 'Identifiants Onyx requis' }, { status: 400 })
-    }
-  } catch (e) {
-    if (e instanceof OnyxAuthError) {
-      await registerLoginFailure(ip, subject, 'onyx')
-      return NextResponse.json({ error: e.message }, { status: e.status === 429 ? 429 : 401 })
-    }
-    throw e
-  }
-
-  if (result.kind === 'otp') {
-    if (result.setup) {
-      return NextResponse.json({ error: "Onyx impose la validation en deux étapes : configurez-la d'abord dans l'application Onyx" }, { status: 400 })
-    }
-    return NextResponse.json({ otpRequired: true, challenge: result.challenge })
-  }
-
-  const service = new OnyxService(url, result.token, result.account.username)
-  const me = await service.me()
-  if (!isOnyxAdmin(me) || !me.permissions?.manage_users) {
-    await onyxLogout(url, result.token)
-    return NextResponse.json({ error: `Le compte « ${me.username} » n'est pas administrateur d'Onyx (gestion des utilisateurs et des réglages requise)` }, { status: 403 })
-  }
-
-  if (typedUrl) await setSetting('onyx_url', typedUrl)
-  await saveOnyxServiceSession(result.token, me.username)
-  await clearRateLimit(ip, subject, 'onyx')
-  await logAction(adminId, 'UPDATE_SETTINGS', 'SYSTEM', 'onyx', { message: `Compte de service Onyx connecté (${me.username})` })
-  return NextResponse.json({ connected: true, username: me.username })
 }
 
 /**
- * Écrit dans Onyx l'adresse de MediaHub et la clé d'intégration. Sans clé, MediaHub en crée une
- * et l'enregistre : les deux côtés partagent alors la même.
+ * Écrit dans Onyx l'adresse de MediaHub. Onyx n'accepte l'appel qu'avec une clé qu'il connaît déjà :
+ * sans clé, MediaHub en crée une et l'enregistre, à copier une fois dans les réglages d'Onyx.
  */
 async function linkOnyx(body: Record<string, unknown>, adminId: number) {
-  const service = await getOnyxService()
-  if (!service) return NextResponse.json({ error: "Connectez d'abord le compte de service Onyx" }, { status: 400 })
-
   const mediahubUrl = typeof body.mediahubUrl === 'string' ? body.mediahubUrl.trim().replace(/\/+$/, '') : ''
   if (!/^https?:\/\/[^\s]+$/i.test(mediahubUrl)) {
     return NextResponse.json({ error: 'Adresse de MediaHub invalide (http:// ou https://)' }, { status: 400 })
   }
 
-  const typedKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : ''
   const config = await getOnyxIntegrationConfig()
+  if (!config.url) return NextResponse.json({ error: "Renseignez d'abord l'adresse du serveur Onyx" }, { status: 400 })
+
+  const typedKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : ''
   let apiKey = typedKey || config.apiKey
   let generated = false
   if (!apiKey) {
-    apiKey = randomBytes(32).toString('hex')
+    apiKey = newKey()
     generated = true
   }
   if (apiKey !== config.apiKey || config.apiKeySource !== 'settings') {
     await setSetting('player_integration_api_key', apiKey)
+    clearOnyxLibraryCache()
   }
 
-  await service.linkMediaHub(mediahubUrl, apiKey)
-  await logAction(adminId, 'UPDATE_SETTINGS', 'SYSTEM', 'onyx', { message: `Adresse et clé de MediaHub écrites dans Onyx (${mediahubUrl})` })
+  const directory = await getOnyxDirectory()
+  if (!directory) return NextResponse.json({ error: "Clé d'intégration absente" }, { status: 400 })
+  try {
+    await directory.updateLink({ mediahubUrl })
+  } catch (e) {
+    // Première liaison : Onyx ne connaît pas encore la clé. L'administrateur la copie dans Onyx.
+    if (e instanceof OnyxDirectoryError && e.status === 401) {
+      return NextResponse.json({ ok: false, apiKey, generated, needsKeyInOnyx: true, error: e.message }, { status: 409 })
+    }
+    throw e
+  }
+  await logAction(adminId, 'UPDATE_SETTINGS', 'SYSTEM', 'onyx', { message: `Adresse de MediaHub écrite dans Onyx (${mediahubUrl})` })
   return NextResponse.json({ ok: true, apiKey, generated })
+}
+
+/**
+ * Nouvelle clé posée des deux côtés : Onyx la reçoit en présentant l'actuelle, puis MediaHub
+ * l'enregistre. Dans cet ordre, un échec chez Onyx laisse les deux sur l'ancienne.
+ */
+async function rotateKey(adminId: number) {
+  const directory = await getOnyxDirectory()
+  if (!directory) return NextResponse.json({ error: "Renseignez d'abord l'adresse d'Onyx et une clé acceptée par Onyx" }, { status: 400 })
+
+  const apiKey = newKey()
+  await directory.updateLink({ newApiKey: apiKey })
+  await setSetting('player_integration_api_key', apiKey)
+  clearOnyxLibraryCache()
+  await logAction(adminId, 'UPDATE_SETTINGS', 'SYSTEM', 'onyx', { message: "Clé d'intégration Onyx changée des deux côtés" })
+  return NextResponse.json({ ok: true, apiKey })
 }

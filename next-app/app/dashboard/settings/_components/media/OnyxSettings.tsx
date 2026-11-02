@@ -23,8 +23,8 @@ interface OnyxStatus {
   webhookUrl: string
   webhookSource: 'settings' | 'env' | 'derived' | null
   fallbackEmail: string
-  service: { username: string; ok: boolean; error?: string } | null
-  onyxSide: { mediahubUrl: string; keySet: boolean; keyMatches: boolean | null } | null
+  /** Réponse d'Onyx à la clé d'intégration (GET /api/integrations/mediahub/link) ; null sans clé */
+  link: { ok: boolean; mediahubUrl?: string; error?: string } | null
 }
 
 const BUTTON = 'rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15 disabled:opacity-50'
@@ -104,80 +104,9 @@ function OnyxLinkCard() {
   )
 }
 
-/**
- * Compte de service : un administrateur Onyx connecté une fois. MediaHub s'en sert pour importer
- * les comptes Onyx, afficher la bibliothèque Onyx et écrire sa propre adresse dans Onyx.
- */
-function OnyxServiceCard({ onyxUrl, status, readOnly, onChange }: { onyxUrl: string; status: OnyxStatus | null; readOnly?: boolean; onChange: (username: string) => void }) {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [code, setCode] = useState('')
-  const [challenge, setChallenge] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-
-  const run = async (body: Record<string, unknown>) => {
-    setBusy(true)
-    setMessage('')
-    try {
-      const { ok, data } = await adminCall(body)
-      if (!ok) { setMessage(data.error || 'Erreur'); return }
-      if (data.otpRequired) { setChallenge(data.challenge); setCode(''); return }
-      setChallenge(null)
-      setPassword('')
-      onChange(data.connected ? data.username : '')
-      setMessage(data.connected ? `Connecté en tant que ${data.username}` : 'Compte de service déconnecté')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const service = status?.service
-  return (
-    <div className={CARD}>
-      <div className="space-y-1">
-        <p className="text-sm font-semibold text-white/90">Compte de service Onyx</p>
-        <p className="text-xs text-white/50">
-          Un compte administrateur d&apos;Onyx, connecté une seule fois. Il permet d&apos;importer les utilisateurs Onyx (bouton « Sync Onyx »
-          des utilisateurs), d&apos;afficher la bibliothèque Onyx dans « Ma médiathèque » et de configurer Onyx depuis ici. MediaHub ne garde
-          pas le mot de passe, seulement la session.
-        </p>
-      </div>
-      {service ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className={`text-sm ${service.ok ? 'text-emerald-300' : 'text-amber-300'}`}>
-            {service.ok ? `Connecté : ${service.username}` : `${service.username} : ${service.error ?? 'à reconnecter'}`}
-          </p>
-          <button type="button" className={BUTTON} disabled={busy || readOnly} onClick={() => run({ action: 'disconnect' })}>Déconnecter</button>
-        </div>
-      ) : challenge ? (
-        <div className="flex gap-3">
-          <input value={code} onChange={e => setCode(e.target.value)} placeholder="Code de vérification Onyx" className={FIELD} />
-          <button type="button" className={BUTTON} disabled={busy || !code} onClick={() => run({ action: 'connect', challenge, code })}>Valider</button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-3">
-          <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Administrateur Onyx" className={FIELD} disabled={readOnly} />
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mot de passe" className={FIELD} disabled={readOnly} />
-          <button
-            type="button"
-            className={BUTTON}
-            disabled={busy || readOnly || !username || !password || !onyxUrl}
-            title={onyxUrl ? undefined : "Renseignez d'abord l'URL du serveur Onyx"}
-            onClick={() => run({ action: 'connect', username, password, onyxUrl })}
-          >
-            Connecter
-          </button>
-        </div>
-      )}
-      {message && <p className="text-sm text-gray-400">{message}</p>}
-    </div>
-  )
-}
-
 export function OnyxSettings({ formData, updateField, readOnly }: OnyxSettingsProps) {
   const [status, setStatus] = useState<OnyxStatus | null>(null)
-  const [busy, setBusy] = useState<'link' | 'webhook' | null>(null)
+  const [busy, setBusy] = useState<'link' | 'rotate' | 'webhook' | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
   const refresh = useCallback(() => {
@@ -185,19 +114,37 @@ export function OnyxSettings({ formData, updateField, readOnly }: OnyxSettingsPr
   }, [])
   useEffect(refresh, [refresh])
 
-  const onServiceChange = (username: string) => {
-    updateField('onyx_service_username', username)
-    refresh()
-  }
-
   const linkOnyx = async () => {
     setBusy('link')
     setMessage(null)
     try {
       const { ok, data } = await adminCall({ action: 'link-onyx', mediahubUrl: window.location.origin, apiKey: formData.player_integration_api_key })
+      if (data.apiKey) updateField('player_integration_api_key', data.apiKey)
+      if (!ok) {
+        setMessage({
+          ok: false,
+          text: data.needsKeyInOnyx
+            ? `Onyx ne connaît pas encore cette clé${data.generated ? ' (créée et enregistrée ici)' : ''} : copiez-la dans les réglages d'Onyx (MediaHub), puis recommencez.`
+            : data.error || 'Erreur',
+        })
+        refresh()
+        return
+      }
+      setMessage({ ok: true, text: `Onyx utilise maintenant ${window.location.origin}${data.generated ? ' et la clé créée' : ''}.` })
+      refresh()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const rotateKey = async () => {
+    setBusy('rotate')
+    setMessage(null)
+    try {
+      const { ok, data } = await adminCall({ action: 'rotate-key' })
       if (!ok) { setMessage({ ok: false, text: data.error || 'Erreur' }); return }
       updateField('player_integration_api_key', data.apiKey)
-      setMessage({ ok: true, text: `Onyx utilise maintenant ${window.location.origin} et la clé d'intégration${data.generated ? ' (créée et enregistrée)' : ''}.` })
+      setMessage({ ok: true, text: "Nouvelle clé enregistrée dans Onyx et ici." })
       refresh()
     } finally {
       setBusy(null)
@@ -216,7 +163,7 @@ export function OnyxSettings({ formData, updateField, readOnly }: OnyxSettingsPr
   }
 
   const derivedWebhook = formData.onyx_url ? `${formData.onyx_url.replace(/\/+$/, '')}/api/integrations/mediahub/events` : ''
-  const side = status?.onyxSide
+  const link = status?.link
 
   return (
     <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
@@ -252,14 +199,13 @@ export function OnyxSettings({ formData, updateField, readOnly }: OnyxSettingsPr
         />
       </div>
 
-      <OnyxServiceCard onyxUrl={formData.onyx_url} status={status} readOnly={readOnly} onChange={onServiceChange} />
-
-      <div className={`mt-6 ${CARD}`}>
+      <div className={CARD}>
         <div className="space-y-1">
           <p className="text-sm font-semibold text-white/90">Liaison avec l&apos;app Onyx</p>
           <p className="text-xs text-white/50">
-            Une même clé sert aux deux sens : Onyx l&apos;utilise pour les demandes, la recherche et le SSO, MediaHub pour signer ses évènements.
-            Le bouton ci-dessous l&apos;écrit dans Onyx avec l&apos;adresse de cette page, sans rien à copier.
+            Une même clé sert aux deux sens : Onyx l&apos;utilise pour les demandes, la recherche et le SSO, MediaHub pour importer les
+            comptes Onyx, lire sa bibliothèque et signer ses évènements. Aucun compte Onyx n&apos;est nécessaire. La première fois, copiez
+            la clé dans les réglages d&apos;Onyx (MediaHub) ; ensuite, l&apos;adresse et les changements de clé passent par l&apos;API.
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -273,23 +219,29 @@ export function OnyxSettings({ formData, updateField, readOnly }: OnyxSettingsPr
               readOnly={readOnly}
             />
           </div>
-          <button type="button" className={BUTTON} disabled={readOnly} onClick={() => updateField('player_integration_api_key', randomKey())}>Générer</button>
+          {link?.ok ? (
+            <button type="button" className={BUTTON} disabled={readOnly || busy !== null} onClick={rotateKey}>
+              {busy === 'rotate' ? 'Changement…' : 'Changer la clé'}
+            </button>
+          ) : (
+            <button type="button" className={BUTTON} disabled={readOnly} onClick={() => updateField('player_integration_api_key', randomKey())}>Générer</button>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             className={BUTTON}
-            disabled={readOnly || busy !== null || !status?.service?.ok}
-            title={status?.service?.ok ? undefined : "Connectez d'abord le compte de service Onyx"}
+            disabled={readOnly || busy !== null || !formData.onyx_url}
+            title={formData.onyx_url ? undefined : "Renseignez d'abord l'URL du serveur Onyx"}
             onClick={linkOnyx}
           >
             {busy === 'link' ? 'Configuration…' : 'Configurer Onyx automatiquement'}
           </button>
-          {side && (
-            <p className="text-xs text-white/60">
-              Côté Onyx : {side.mediahubUrl ? `MediaHub = ${side.mediahubUrl}` : 'adresse de MediaHub absente'}
-              {', '}
-              {!side.keySet ? 'aucune clé' : side.keyMatches === false ? 'clé différente de celle-ci' : side.keyMatches ? 'même clé' : 'clé enregistrée'}
+          {link && (
+            <p className={`text-xs ${link.ok ? 'text-white/60' : 'text-amber-300'}`}>
+              {link.ok
+                ? `Côté Onyx : clé acceptée, ${link.mediahubUrl ? `MediaHub = ${link.mediahubUrl}` : 'adresse de MediaHub absente'}`
+                : link.error}
             </p>
           )}
         </div>

@@ -2,7 +2,7 @@
 
 import { getWatchLaterList, areInWatchLater } from './watch-later-actions'
 import { getCurrentUser, getLibraryPlatform, getLibraryServer, getLibraryUserId, getTmdbServiceForUser } from '@/lib/auth'
-import { getOnyxService, OnyxServiceError } from '@/lib/services/onyx-admin'
+import { getOnyxDirectory, OnyxDirectoryError } from '@/lib/services/onyx-directory'
 import { logger } from '@/lib/logger'
 import axios from 'axios'
 import { createMemoCache } from '@/lib/cache'
@@ -73,7 +73,7 @@ function classifyLibraryError(e: unknown): { problem: LibraryProblem; detail: st
 const ONYX_PAGE_SIZE = 50
 
 /**
- * Bibliothèque d'Onyx, lue par le compte de service : tout compte Onyx voit toute la bibliothèque,
+ * Bibliothèque d'Onyx, lue avec la clé d'intégration : tout compte Onyx voit toute la bibliothèque,
  * donc pas besoin que le compte MediaHub soit lié. Onyx n'a pas de favoris pour MediaHub.
  */
 async function fetchOnyxMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false): Promise<LibraryPage> {
@@ -82,11 +82,11 @@ async function fetchOnyxMedia(page: number, type: 'movie' | 'tv' | 'all', query?
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const service = await getOnyxService()
-        if (!service) return { results: [], total_pages: 0, problem: 'no-server', source }
+        const directory = await getOnyxDirectory()
+        if (!directory) return { results: [], total_pages: 0, problem: 'no-server', source }
         if (favoritesOnly) return { results: [], total_pages: 0, source }
 
-        let items = await service.listLibrary()
+        let items = await directory.listLibrary()
         if (type !== 'all') items = items.filter((item) => (type === 'movie' ? item.type === 'movie' : item.type === 'show'))
         const needle = query?.trim().toLocaleLowerCase('fr')
         if (needle) items = items.filter((item) => item.title.toLocaleLowerCase('fr').includes(needle))
@@ -131,7 +131,7 @@ async function fetchOnyxMedia(page: number, type: 'movie' | 'tv' | 'all', query?
     } catch (e) {
         const detail = e instanceof Error ? e.message : String(e)
         logger.warn(`[Médiathèque] Lecture de la bibliothèque Onyx impossible : ${detail}`)
-        const status = e instanceof OnyxServiceError ? e.status : 0
+        const status = e instanceof OnyxDirectoryError ? e.status : 0
         const problem: LibraryProblem = status === 401 || status === 403 ? 'key-refused' : status ? 'account-refused' : 'unreachable'
         return { results: [], total_pages: 0, problem, detail, source }
     }

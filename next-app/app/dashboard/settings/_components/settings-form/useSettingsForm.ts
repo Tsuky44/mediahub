@@ -49,7 +49,6 @@ const initialFormData: SettingsFormData = {
   player_integration_api_key: '',
   player_integration_user_email: '',
   onyx_webhook_url: '',
-  onyx_service_username: '',
   library_source: '',
   auth_local_enabled: true,
   unraid_url: '',
