@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { getQBittorrentService, type Torrent } from './qbittorrent'
 import { getSetting } from '../settings'
 import { logger } from '@/lib/logger'
@@ -56,9 +57,26 @@ if (!g[GLOBAL_KEY]) g[GLOBAL_KEY] = { instance: null }
 const DEFAULT_POLL_INTERVAL_MS = 5_000
 const MIN_POLL_INTERVAL_MS = 2_000
 const SLOW_REFRESH_INTERVAL_MS = 60_000
+/** qBittorrent injoignable : les tentatives s'espacent (x2 à chaque échec) jusqu'à 5 min */
+const MAX_BACKOFF_MS = 5 * 60_000
+
+/** Cause lisible d'un échec (statut HTTP ou code réseau) */
+function describeFailure(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const status = err.response?.status
+    if (status) return `HTTP ${status}`
+    if (err.code) return err.code
+  }
+  return err instanceof Error ? err.message : String(err)
+}
 
 export class QBittorrentCache {
   private fastTimer: NodeJS.Timeout | null = null
+  private fastIntervalMs = DEFAULT_POLL_INTERVAL_MS
+  /** Échecs consécutifs (qBittorrent injoignable) */
+  private failures = 0
+  /** Boucle en cours : une boucle d'avant un stop()/start() s'arrête d'elle-même */
+  private loop = 0
   private slowTimer: NodeJS.Timeout | null = null
   private started = false
   private isFastTicking = false
@@ -94,8 +112,8 @@ export class QBittorrentCache {
     if (isNaN(intervalMs) || intervalMs < MIN_POLL_INTERVAL_MS) intervalMs = DEFAULT_POLL_INTERVAL_MS
 
     // Fast tick: sync/maindata only (torrent states, speeds, serverState)
-    this.fastTick().catch(() => {})
-    this.fastTimer = setInterval(() => this.fastTick().catch(() => {}), intervalMs)
+    this.fastIntervalMs = intervalMs
+    this.runFast(++this.loop)
     logger.info(`[QBittorrentCache] Fast tick every ${intervalMs}ms (setting: qbittorrent_poll_interval)`)
 
     // Slow tick: tags & categories (rarely change)
@@ -104,8 +122,38 @@ export class QBittorrentCache {
     logger.info(`[QBittorrentCache] Slow tick every ${SLOW_REFRESH_INTERVAL_MS}ms`)
   }
 
+  /** Tour rapide, puis le suivant : à l'intervalle réglé, ou plus tard si qBittorrent est injoignable */
+  private runFast(loop: number): void {
+    this.fastTick()
+      .catch(() => {})
+      .finally(() => {
+        if (!this.started || loop !== this.loop) return
+        const delay = this.failures
+          ? Math.min(this.fastIntervalMs * 2 ** this.failures, MAX_BACKOFF_MS)
+          : this.fastIntervalMs
+        this.fastTimer = setTimeout(() => this.runFast(loop), delay)
+      })
+  }
+
+  /** Un seul message au début d'une coupure (pas un par tentative), un autre au retour */
+  private markFailure(err: unknown): void {
+    this.failures++
+    if (this.failures === 1) {
+      logger.warn(
+        `[QBittorrentCache] qBittorrent injoignable (${describeFailure(err)}) : nouvelles tentatives espacées jusqu'à 5 min, message non répété jusqu'au retour`
+      )
+    }
+  }
+
+  private markSuccess(): void {
+    if (!this.failures) return
+    logger.info(`[QBittorrentCache] qBittorrent de nouveau joignable (après ${this.failures} tentative(s) en échec)`)
+    this.failures = 0
+  }
+
   stop(): void {
-    if (this.fastTimer) clearInterval(this.fastTimer)
+    this.loop++
+    if (this.fastTimer) clearTimeout(this.fastTimer)
     if (this.slowTimer) clearInterval(this.slowTimer)
     this.fastTimer = null
     this.slowTimer = null
@@ -202,13 +250,18 @@ export class QBittorrentCache {
         const msg = (err as Error).message
         if (msg.includes('401') || msg.includes('403')) {
           logger.error('[QBittorrentCache] fastTick: session expired, forcing re-init...')
-          await qbt.reinit()
+          try {
+            await qbt.reinit()
+          } catch (loginErr) {
+            this.markFailure(loginErr)
+          }
         } else {
-          logger.error('[QBittorrentCache] fastTick error:', msg)
           this.state.rid = 0
+          this.markFailure(err)
         }
         return
       }
+      this.markSuccess()
       if (!data) return
       if (typeof data !== 'object') {
         logger.error('[QBittorrentCache] fastTick: unexpected non-object response, resetting rid')
@@ -268,6 +321,8 @@ export class QBittorrentCache {
   }
 
   private async slowTick(): Promise<void> {
+    // Pendant une coupure, seul le tour rapide (espacé) sonde qBittorrent
+    if (this.failures) return
     let qbt = this.qbtService
     if (!qbt) {
       qbt = await getQBittorrentService()
