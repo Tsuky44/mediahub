@@ -444,6 +444,18 @@ export class EmbyService {
    * comme une bibliothèque vide).
    */
   async listUserItems(userId: string, filters: Record<string, unknown> = {}) {
+    return this.listFrom(`/Users/${userId}/Items`, filters)
+  }
+
+  /**
+   * Même liste pour tout le serveur (clé API seule, sans les données d'un compte : favoris, vu) :
+   * secours quand le compte de l'utilisateur ne répond pas.
+   */
+  async listItems(filters: Record<string, unknown> = {}) {
+    return this.listFrom('/Items', filters)
+  }
+
+  private async listFrom(path: string, filters: Record<string, unknown>) {
     const client = await this.getClient(15000)
     const params = {
       IncludeExternalContent: false,
@@ -451,7 +463,9 @@ export class EmbyService {
       Fields: 'UserData,SeriesInfo',
       ...filters
     }
-    const response = await client.get(`/Users/${userId}/Items`, { params })
+    const response = await client.get(path, { params })
+    // Page HTML (page de connexion d'un proxy devant Emby…) au lieu de la liste
+    if (typeof response.data === 'string') throw new Error('réponse HTML au lieu de la liste (proxy ou page de connexion devant le serveur ?)')
     return response.data
   }
 

@@ -89,6 +89,8 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
               <InfiniteEmbyList 
                  initialItems={initialData.results} 
                  problem={initialData.problem}
+                 detail={initialData.detail}
+                 serverWide={initialData.serverWide}
                  source={initialData.source}
                  type={currentType as 'all' | 'movie' | 'tv'} 
                  query={query} 

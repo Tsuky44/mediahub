@@ -3,6 +3,7 @@
 import { getWatchLaterList, areInWatchLater } from './watch-later-actions'
 import { getCurrentUser, getLibraryServer, getLibraryUserId, getTmdbServiceForUser } from '@/lib/auth'
 import { logger } from '@/lib/logger'
+import axios from 'axios'
 import { createMemoCache } from '@/lib/cache'
 import { MS } from '@/lib/constants'
 import type { EmbyService } from '@/lib/services/emby'
@@ -39,14 +40,30 @@ async function getSeriesTmdbId(mediaService: EmbyService, seriesId: string, user
  * Pourquoi la médiathèque est vide, quand ce n'est pas faute de médias : affiché sur la page à la
  * place d'une grille muette.
  */
-export type LibraryProblem = 'no-server' | 'not-linked' | 'unreachable'
+export type LibraryProblem = 'no-server' | 'not-linked' | 'unreachable' | 'slow' | 'key-refused' | 'account-refused'
 
 export interface LibraryPage {
     results: any[]
     total_pages: number
     problem?: LibraryProblem
+    /** Cause technique (statut HTTP, code réseau), affichée avec le message */
+    detail?: string
+    /** Liste du serveur entier affichée faute de pouvoir lire celle du compte */
+    serverWide?: boolean
     /** Plateforme lue (Emby, Jellyfin) */
     source?: 'emby' | 'jellyfin'
+}
+
+/** Échec d'une lecture de la bibliothèque : de quel genre, et sa cause en clair */
+function classifyLibraryError(e: unknown): { problem: LibraryProblem; detail: string } {
+    if (axios.isAxiosError(e)) {
+        const status = e.response?.status
+        if (status === 401 || status === 403) return { problem: 'key-refused', detail: `HTTP ${status}` }
+        if (status) return { problem: 'account-refused', detail: `HTTP ${status}` }
+        if (e.code === 'ECONNABORTED' || /timeout/i.test(e.message)) return { problem: 'slow', detail: 'délai de 15 s dépassé' }
+        return { problem: 'unreachable', detail: e.code || e.message }
+    }
+    return { problem: 'unreachable', detail: e instanceof Error ? e.message : String(e) }
 }
 
 export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false): Promise<LibraryPage> {
@@ -100,12 +117,42 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
             Ids: ids
         }
         // Clé par plateforme : passer d'Emby à Jellyfin ne ressert pas l'ancienne liste. Un échec n'est
-        // pas mis en cache (il remonte au catch) : il ne masque pas la bibliothèque les fois suivantes.
-        const data = await mediaReads.get(
-            `items:${library.type}:${userId}:${JSON.stringify(itemsQuery)}`,
-            () => mediaService.listUserItems(userId, itemsQuery),
-            { cacheIf: (d: any) => Array.isArray(d?.Items) }
-        )
+        // pas mis en cache : il ne masque pas la bibliothèque les fois suivantes.
+        const isList = (d: any) => Array.isArray(d?.Items)
+        let data: any
+        let serverWide = false
+        let accountDetail: string | undefined
+        try {
+            data = await mediaReads.get(
+                `items:${library.type}:${userId}:${JSON.stringify(itemsQuery)}`,
+                () => mediaService.listUserItems(userId, itemsQuery),
+                { cacheIf: isList }
+            )
+        } catch (accountError) {
+            const failure = classifyLibraryError(accountError)
+            logger.warn(`[Médiathèque] Bibliothèque du compte ${userId} illisible sur ${library.type} : ${failure.detail}`)
+            // Serveur injoignable, lent ou clé refusée : la liste du serveur entier échouerait aussi.
+            // Les favoris n'existent que pour un compte.
+            if (failure.problem !== 'account-refused' || favoritesOnly) {
+                return { results: [], total_pages: 0, ...failure, source }
+            }
+            // Compte refusé par le serveur (identifiant d'un ancien serveur…) : bibliothèque du serveur
+            // entier avec la clé API, sans les données du compte
+            try {
+                const { IsFavorite: _favorite, ...serverQuery } = itemsQuery
+                data = await mediaReads.get(
+                    `items:${library.type}:*:${JSON.stringify(serverQuery)}`,
+                    () => mediaService.listItems(serverQuery),
+                    { cacheIf: isList }
+                )
+                serverWide = true
+                accountDetail = failure.detail
+            } catch (serverError) {
+                const second = classifyLibraryError(serverError)
+                logger.warn(`[Médiathèque] Bibliothèque du serveur ${library.type} illisible aussi : ${second.detail}`)
+                return { results: [], total_pages: 0, problem: failure.problem, detail: `${failure.detail}, serveur : ${second.detail}`, source }
+            }
+        }
 
         const items = Array.isArray(data.Items) ? data.Items : []
 
@@ -149,11 +196,13 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
             results: enrichedItems,
             total_pages: Math.ceil((data.TotalRecordCount || 0) / limit),
             source,
+            ...(serverWide && { serverWide, detail: accountDetail }),
         }
     } catch (e) {
         // Visible en production : sans ce message, une bibliothèque injoignable ressemble à une vide
-        logger.warn(`[Médiathèque] Lecture de la bibliothèque ${source ?? ''} impossible :`, (e as Error)?.message || e)
-        return { results: [], total_pages: 0, problem: 'unreachable', source }
+        const failure = classifyLibraryError(e)
+        logger.warn(`[Médiathèque] Lecture de la bibliothèque ${source ?? ''} impossible : ${failure.detail}`)
+        return { results: [], total_pages: 0, ...failure, source }
     }
 }
 
