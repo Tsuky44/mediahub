@@ -58,8 +58,11 @@ export interface LibraryPage {
 function classifyLibraryError(e: unknown): { problem: LibraryProblem; detail: string } {
     if (axios.isAxiosError(e)) {
         const status = e.response?.status
-        if (status === 401 || status === 403) return { problem: 'key-refused', detail: `HTTP ${status}` }
-        if (status) return { problem: 'account-refused', detail: `HTTP ${status}` }
+        // Réponse du serveur en clair (première ligne) : distingue Emby d'un proxy placé devant
+        const body = typeof e.response?.data === 'string' ? e.response.data.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) : ''
+        const detail = body ? `HTTP ${status} : ${body}` : `HTTP ${status}`
+        if (status === 401 || status === 403) return { problem: 'key-refused', detail }
+        if (status) return { problem: 'account-refused', detail }
         if (e.code === 'ECONNABORTED' || /timeout/i.test(e.message)) return { problem: 'slow', detail: 'délai de 15 s dépassé' }
         return { problem: 'unreachable', detail: e.code || e.message }
     }

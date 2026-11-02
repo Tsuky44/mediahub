@@ -33,8 +33,9 @@ export class EmbyService {
    */
   constructor(baseUrl: string, apiKey: string, skipSslVerify: boolean = true) {
     // Remove trailing slash and /web/... if present
-    this.baseUrl = baseUrl.split('/web/')[0].replace(/\/$/, '')
-    this.apiKey = apiKey
+    // Espaces et retours à la ligne copiés avec la clé ou l'adresse : Emby refuserait la clé (HTTP 401)
+    this.baseUrl = (baseUrl || '').trim().split('/web/')[0].replace(/\/$/, '')
+    this.apiKey = (apiKey || '').trim()
     this.httpsAgent = getHttpsAgent(skipSslVerify)
     
     if (!this.baseUrl || !this.apiKey) {

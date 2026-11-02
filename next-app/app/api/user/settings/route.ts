@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
     await updateSetting('prowlarr_api_key', prowlarr_api_key)
     
     await updateSetting('emby_url', emby_url, { skipEmpty: true })
-    await updateSetting('emby_api_key', emby_api_key, { skipEmpty: true })
+    await updateSetting('emby_api_key', typeof emby_api_key === 'string' ? emby_api_key.trim() : emby_api_key, { skipEmpty: true })
     
     await updateSetting('plex_url', plex_url)
     await updateSetting('plex_token', plex_token)

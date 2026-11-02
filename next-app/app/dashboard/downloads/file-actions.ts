@@ -154,6 +154,9 @@ export async function testStorageConnection(config: {
 }
 
 export async function testEmbyConnection(url: string, apiKey: string) {
+    // Espaces copiés avec l'adresse ou la clé : ignorés, comme à l'utilisation
+    url = (url || '').trim()
+    apiKey = (apiKey || '').trim()
     try {
         // On extrait l'URL de base sans le chemin Emby
         const cleanUrl = url.split('/web/')[0].replace(/\/$/, '');
