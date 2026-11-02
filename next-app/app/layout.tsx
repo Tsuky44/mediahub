@@ -3,6 +3,7 @@ import { Bricolage_Grotesque, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers/Providers";
 import { getSession } from "@/lib/auth";
+import { PERF_MODE_SCRIPT } from "@/lib/perf-mode";
 
 const bricolage = Bricolage_Grotesque({
   variable: "--font-bricolage",
@@ -43,6 +44,8 @@ export default async function RootLayout({
             __html: `window.__ENV = { TRACKER_WS_URL: '${trackerUrl}' };`
           }}
         />
+        {/* Mode allégé des animations retenu pour cette machine, appliqué avant l'affichage */}
+        <script dangerouslySetInnerHTML={{ __html: PERF_MODE_SCRIPT }} />
       </head>
       <body className="antialiased">
         <Providers session={session}>

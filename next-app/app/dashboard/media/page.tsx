@@ -1,4 +1,4 @@
-import { fetchEmbyMedia, fetchRecentlyWatchedItems } from './actions'
+import { fetchEmbyMedia, fetchRecentlyWatchedItems, type LibraryPage } from './actions'
 import { InfiniteEmbyList } from './InfiniteEmbyList'
 import { SearchInput } from '@/components/global/SearchInput'
 import { Suspense } from 'react'
@@ -25,7 +25,7 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
   const isFavoritesOnly = favorites === 'true'
   const isWatchLaterOnly = watchLater === 'true'
   
-  let initialData: { results: any[]; total_pages: number } = { results: [], total_pages: 0 }
+  let initialData: LibraryPage = { results: [], total_pages: 0 }
   let recentlyWatchedItems: any[] = []
   
   const showRecentlyWatched = currentType === 'all' && !query && !isFavoritesOnly && !isWatchLaterOnly
@@ -88,6 +88,10 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
 
               <InfiniteEmbyList 
                  initialItems={initialData.results} 
+                 problem={initialData.problem}
+                 detail={initialData.detail}
+                 serverWide={initialData.serverWide}
+                 source={initialData.source}
                  type={currentType as 'all' | 'movie' | 'tv'} 
                  query={query} 
                  favoritesOnly={isFavoritesOnly} 

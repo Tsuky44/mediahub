@@ -33,8 +33,9 @@ export class EmbyService {
    */
   constructor(baseUrl: string, apiKey: string, skipSslVerify: boolean = true) {
     // Remove trailing slash and /web/... if present
-    this.baseUrl = baseUrl.split('/web/')[0].replace(/\/$/, '')
-    this.apiKey = apiKey
+    // Espaces et retours à la ligne copiés avec la clé ou l'adresse : Emby refuserait la clé (HTTP 401)
+    this.baseUrl = (baseUrl || '').trim().split('/web/')[0].replace(/\/$/, '')
+    this.apiKey = (apiKey || '').trim()
     this.httpsAgent = getHttpsAgent(skipSslVerify)
     
     if (!this.baseUrl || !this.apiKey) {
@@ -436,6 +437,37 @@ export class EmbyService {
         IncludeItemTypes: 'Movie,Episode',
         Fields: 'Overview,PrimaryImageAspectRatio,ProviderIds,UserData,SeriesInfo,ParentIndexNumber,IndexNumber,SeasonName,SeriesName,SeriesId'
     })
+  }
+
+  /**
+   * Liste de la bibliothèque (Ma médiathèque) : délai plus long que les petites requêtes (tri par
+   * nom sur toute une bibliothèque), et une erreur reste une erreur (à ne pas mettre en cache
+   * comme une bibliothèque vide).
+   */
+  async listUserItems(userId: string, filters: Record<string, unknown> = {}) {
+    return this.listFrom(`/Users/${userId}/Items`, filters)
+  }
+
+  /**
+   * Même liste pour tout le serveur (clé API seule, sans les données d'un compte : favoris, vu) :
+   * secours quand le compte de l'utilisateur ne répond pas.
+   */
+  async listItems(filters: Record<string, unknown> = {}) {
+    return this.listFrom('/Items', filters)
+  }
+
+  private async listFrom(path: string, filters: Record<string, unknown>) {
+    const client = await this.getClient(15000)
+    const params = {
+      IncludeExternalContent: false,
+      Recursive: true,
+      Fields: 'UserData,SeriesInfo',
+      ...filters
+    }
+    const response = await client.get(path, { params })
+    // Page HTML (page de connexion d'un proxy devant Emby…) au lieu de la liste
+    if (typeof response.data === 'string') throw new Error('réponse HTML au lieu de la liste (proxy ou page de connexion devant le serveur ?)')
+    return response.data
   }
 
   async getUserItems(userId: string, filters: Record<string, unknown> = {}) {

@@ -18,7 +18,7 @@ export default function MediaOverviewSection({
   keywords,
 }: MediaOverviewSectionProps) {
   return (
-    <div className="xl:col-span-8 space-y-10">
+    <div className="min-w-0 space-y-10">
       <MediaCrewGrid
         director={director}
         writers={writers}

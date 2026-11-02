@@ -676,7 +676,7 @@
    là. Elle bouge dans un calque fixe plein écran qui, pendant la transition, a sa propre paire
    « onyx-hero » au-dessus des pages, affichée telle quelle (toujours animée) ; la barre de
    navigation reste au-dessus de tout. */
-:root:is([data-onyx-nav="hero"], [data-onyx-nav="fly"]) .onyx-page[data-onyx-leaving] {
+:root[data-onyx-nav="hero"] .onyx-page[data-onyx-leaving] {
   filter: brightness(0.45) saturate(0.85);
   transition: filter 380ms var(--ease-out-onyx);
 }
@@ -717,6 +717,27 @@
    le chargement de la fiche. */
 .onyx-fly-layer {
   z-index: 45;
+}
+/* Voile sur la page quittée, et éclat à l'impact : des opacités, que le compositeur anime seul */
+.onyx-fly-dim {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.55);
+  opacity: 0;
+}
+.onyx-fly-shadow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 30px 70px rgb(0 0 0 / 0.6);
+  opacity: 0;
+}
+.onyx-fly-flash {
+  position: absolute;
+  inset: 0;
+  background: rgb(255 255 255 / 0.12);
+  opacity: 0;
+  pointer-events: none;
 }
 .onyx-fly-card,
 .onyx-fly {
@@ -795,6 +816,20 @@
 :root[data-onyx-fly] [data-onyx-backdrop] > img,
 [data-onyx-backdrop]:has(> .onyx-fly) > img {
   animation-play-state: paused;
+}
+/* Défilement (lib/perf-mode.ts, watchScroll) : hors du haut de page, l'image de fond ne zoome plus.
+   Sinon chaque image du défilement redessine toute l'image et les flous posés dessus */
+:root[data-onyx-scrolled] .animate-onyx-kenburns {
+  animation-play-state: paused;
+}
+/* ...et pendant qu'on défile, pas de survol : cette couche transparente prend la souris, les
+   affiches qui passent dessous ne lancent pas leurs effets. Sous la barre de navigation et les
+   fenêtres (z-50 et plus), qui restent cliquables */
+.onyx-scroll-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: none;
 }
 /* Atterrie : l'image est déjà là ; ses fondus arrivent et les textes tombent en place pendant
    l'écrasement, sans l'arrivée habituelle des blocs */
@@ -1024,4 +1059,62 @@
     animation: onyx-grow 1100ms var(--ease-out-onyx) backwards;
     animation-delay: 250ms;
   }
+}
+
+/* Mode allégé (lib/perf-mode.ts) : machines sans vraie carte graphique (Pentium, Celeron, rendu
+   logiciel). Mêmes mouvements, sans les flous d'arrière-plan ni les flous animés, recalculés à
+   chaque image quand le processeur fait tout ; des fonds un peu plus opaques à la place. */
+:root[data-onyx-lite] *,
+:root[data-onyx-lite] *::before,
+:root[data-onyx-lite] *::after {
+  backdrop-filter: none !important;
+}
+:root[data-onyx-lite]::view-transition-old(*),
+:root[data-onyx-lite]::view-transition-new(*),
+:root[data-onyx-lite] .onyx-page :is(h1, .onyx-title),
+:root[data-onyx-lite] .fixed.inset-0 > *,
+:root[data-onyx-lite] [data-onyx-ghost],
+:root[data-onyx-lite] [data-onyx-ghost] > *,
+:root[data-onyx-lite] .onyx-fly-blur {
+  filter: none !important;
+}
+:root[data-onyx-lite] .onyx-scroll-progress {
+  background-color: rgb(12 13 13 / 0.95);
+}
+:root[data-onyx-lite] .onyx-glass {
+  background-color: rgb(24 26 26 / 0.9);
+}
+:root[data-onyx-lite] .onyx-glass-2 {
+  background-color: rgb(24 26 26 / 0.97);
+}
+/* Voile des fenêtres un peu plus sombre, à la place du flou de la page derrière */
+:root[data-onyx-lite] .fixed.inset-0[class*="bg-black/"] {
+  background-color: rgb(0 0 0 / 0.84);
+}
+/* Envol : la page quittée s'efface sous un voile qui devient plein ; ensuite, plus rien à recomposer
+   sous l'image qui vole */
+:root[data-onyx-lite] .onyx-fly-dim {
+  background: #0c0d0d;
+}
+/* ...et sans l'éclat de l'impact : un calque plein écran de moins à mélanger pendant l'écrasement */
+:root[data-onyx-lite] .onyx-fly-flash {
+  display: none;
+}
+/* Image de fond de la fiche : fixe à son zoom de départ (celui où l'envol la pose). Le lent zoom de
+   14 s obligerait à rééchantillonner toute l'image à chaque image, deux fois plus long à dessiner */
+:root[data-onyx-lite] .animate-onyx-kenburns {
+  animation: none;
+  scale: 1.1;
+}
+/* Affiches qui entrent à l'écran : elles montent et apparaissent, sans le voile à fondre par-dessus
+   (un calque de plus par affiche à mélanger pendant le défilement) */
+:root[data-onyx-lite] .onyx-ignite::before {
+  content: none;
+}
+/* Au repos, les boucles décoratives s'arrêtent après quelques tours (le processeur se repose) */
+:root[data-onyx-lite] .onyx-shine-text {
+  animation-iteration-count: 1;
+}
+:root[data-onyx-lite] .onyx-breathe::before {
+  animation-iteration-count: 3;
 }

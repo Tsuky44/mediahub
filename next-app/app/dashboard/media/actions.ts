@@ -1,7 +1,9 @@
 'use server'
 
 import { getWatchLaterList, areInWatchLater } from './watch-later-actions'
-import { getCurrentUser, getMediaServerServiceForUser, getMediaServerUserId, getTmdbServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getLibraryServer, getLibraryUserId, getTmdbServiceForUser } from '@/lib/auth'
+import { logger } from '@/lib/logger'
+import axios from 'axios'
 import { createMemoCache } from '@/lib/cache'
 import { MS } from '@/lib/constants'
 import type { EmbyService } from '@/lib/services/emby'
@@ -34,22 +36,58 @@ async function getSeriesTmdbId(mediaService: EmbyService, seriesId: string, user
 }
 
 
-export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false) {
+/**
+ * Pourquoi la médiathèque est vide, quand ce n'est pas faute de médias : affiché sur la page à la
+ * place d'une grille muette.
+ */
+export type LibraryProblem = 'no-server' | 'not-linked' | 'unreachable' | 'slow' | 'key-refused' | 'account-refused'
+
+export interface LibraryPage {
+    results: any[]
+    total_pages: number
+    problem?: LibraryProblem
+    /** Cause technique (statut HTTP, code réseau), affichée avec le message */
+    detail?: string
+    /** Liste du serveur entier affichée faute de pouvoir lire celle du compte */
+    serverWide?: boolean
+    /** Plateforme lue (Emby, Jellyfin) */
+    source?: 'emby' | 'jellyfin'
+}
+
+/** Échec d'une lecture de la bibliothèque : de quel genre, et sa cause en clair */
+function classifyLibraryError(e: unknown): { problem: LibraryProblem; detail: string } {
+    if (axios.isAxiosError(e)) {
+        const status = e.response?.status
+        // Réponse du serveur en clair (première ligne) : distingue Emby d'un proxy placé devant
+        const body = typeof e.response?.data === 'string' ? e.response.data.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) : ''
+        const detail = body ? `HTTP ${status} : ${body}` : `HTTP ${status}`
+        if (status === 401 || status === 403) return { problem: 'key-refused', detail }
+        if (status) return { problem: 'account-refused', detail }
+        if (e.code === 'ECONNABORTED' || /timeout/i.test(e.message)) return { problem: 'slow', detail: 'délai de 15 s dépassé' }
+        return { problem: 'unreachable', detail: e.code || e.message }
+    }
+    return { problem: 'unreachable', detail: e instanceof Error ? e.message : String(e) }
+}
+
+export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false): Promise<LibraryPage> {
+    let source: 'emby' | 'jellyfin' | undefined
     try {
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const mediaService = await getMediaServerServiceForUser()
+        const library = await getLibraryServer()
         const tmdbService = await getTmdbServiceForUser()
-        
-        if (!mediaService) return { results: [], total_pages: 0 }
+
+        if (!library) return { results: [], total_pages: 0, problem: 'no-server' }
+        const mediaService = library.service
+        source = library.type
 
         const dbUser = await db.query.users.findFirst({
             where: eq(users.email, user.email)
         })
-        
-        const userId = getMediaServerUserId(dbUser)
-        if (!userId) return { results: [], total_pages: 0 }
+
+        const userId = getLibraryUserId(dbUser, library.type)
+        if (!userId) return { results: [], total_pages: 0, problem: 'not-linked', source }
         
         const limit = 50
         const startIndex = (page - 1) * limit
@@ -81,7 +119,43 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
             IsFavorite: favoritesOnly ? true : undefined,
             Ids: ids
         }
-        const data = await mediaReads.get(`items:${userId}:${JSON.stringify(itemsQuery)}`, () => mediaService.getUserItems(userId, itemsQuery))
+        // Clé par plateforme : passer d'Emby à Jellyfin ne ressert pas l'ancienne liste. Un échec n'est
+        // pas mis en cache : il ne masque pas la bibliothèque les fois suivantes.
+        const isList = (d: any) => Array.isArray(d?.Items)
+        let data: any
+        let serverWide = false
+        let accountDetail: string | undefined
+        try {
+            data = await mediaReads.get(
+                `items:${library.type}:${userId}:${JSON.stringify(itemsQuery)}`,
+                () => mediaService.listUserItems(userId, itemsQuery),
+                { cacheIf: isList }
+            )
+        } catch (accountError) {
+            const failure = classifyLibraryError(accountError)
+            logger.warn(`[Médiathèque] Bibliothèque du compte ${userId} illisible sur ${library.type} : ${failure.detail}`)
+            // Serveur injoignable, lent ou clé refusée : la liste du serveur entier échouerait aussi.
+            // Les favoris n'existent que pour un compte.
+            if (failure.problem !== 'account-refused' || favoritesOnly) {
+                return { results: [], total_pages: 0, ...failure, source }
+            }
+            // Compte refusé par le serveur (identifiant d'un ancien serveur…) : bibliothèque du serveur
+            // entier avec la clé API, sans les données du compte
+            try {
+                const { IsFavorite: _favorite, ...serverQuery } = itemsQuery
+                data = await mediaReads.get(
+                    `items:${library.type}:*:${JSON.stringify(serverQuery)}`,
+                    () => mediaService.listItems(serverQuery),
+                    { cacheIf: isList }
+                )
+                serverWide = true
+                accountDetail = failure.detail
+            } catch (serverError) {
+                const second = classifyLibraryError(serverError)
+                logger.warn(`[Médiathèque] Bibliothèque du serveur ${library.type} illisible aussi : ${second.detail}`)
+                return { results: [], total_pages: 0, problem: failure.problem, detail: `${failure.detail}, serveur : ${second.detail}`, source }
+            }
+        }
 
         const items = Array.isArray(data.Items) ? data.Items : []
 
@@ -123,11 +197,15 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
 
         return {
             results: enrichedItems,
-            total_pages: Math.ceil((data.TotalRecordCount || 0) / limit)
+            total_pages: Math.ceil((data.TotalRecordCount || 0) / limit),
+            source,
+            ...(serverWide && { serverWide, detail: accountDetail }),
         }
     } catch (e) {
-        error('Failed to fetch Emby media', e)
-        return { results: [], total_pages: 0 }
+        // Visible en production : sans ce message, une bibliothèque injoignable ressemble à une vide
+        const failure = classifyLibraryError(e)
+        logger.warn(`[Médiathèque] Lecture de la bibliothèque ${source ?? ''} impossible : ${failure.detail}`)
+        return { results: [], total_pages: 0, ...failure, source }
     }
 }
 
@@ -137,16 +215,17 @@ export async function fetchRecentlyWatchedItems() {
         const user = await getCurrentUser()
         if (!user || !user.email) return []
 
-        const mediaService = await getMediaServerServiceForUser()
+        const library = await getLibraryServer()
+        const mediaService = library?.service
         const tmdbService = await getTmdbServiceForUser()
         
-        if (!mediaService) return []
+        if (!library || !mediaService) return []
 
         const dbUser = await db.query.users.findFirst({
             where: eq(users.email, user.email)
         })
 
-        const userId = getMediaServerUserId(dbUser)
+        const userId = getLibraryUserId(dbUser, library.type)
         if (!userId) {
             log('[fetchRecentlyWatchedItems] User not linked to a media server')
             return []
@@ -233,7 +312,8 @@ export async function fetchUserRecommendations(page: number = 1) {
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const mediaService = await getMediaServerServiceForUser()
+        const library = await getLibraryServer()
+        const mediaService = library?.service
         const tmdbService = await getTmdbServiceForUser()
         
         if (!tmdbService) return { results: [], total_pages: 0 }
@@ -244,7 +324,7 @@ export async function fetchUserRecommendations(page: number = 1) {
 
         if (!dbUser) return { results: [], total_pages: 0 }
 
-        const mediaUserId = getMediaServerUserId(dbUser)
+        const mediaUserId = library ? getLibraryUserId(dbUser, library.type) : null
 
         // 1. Historique récent (serveur média) + 2. demandes récentes (DB locale), en parallèle
         const [historyData, requests] = await Promise.all([
@@ -348,7 +428,7 @@ export async function fetchServerTrends(page: number = 1) {
         const user = await getCurrentUser()
         if (!user) return { results: [], total_pages: 0 }
 
-        const mediaService = await getMediaServerServiceForUser()
+        const mediaService = (await getLibraryServer())?.service
         const tmdbService = await getTmdbServiceForUser()
         
         if (!tmdbService) return { results: [], total_pages: 0 }
@@ -465,14 +545,15 @@ export async function toggleFavorite(itemId: string, isFavorite: boolean) {
         const user = await getCurrentUser()
         if (!user || !user.email) return false
 
-        const mediaService = await getMediaServerServiceForUser()
-        if (!mediaService) return false
+        const library = await getLibraryServer()
+        const mediaService = library?.service
+        if (!library || !mediaService) return false
 
         const dbUser = await db.query.users.findFirst({
             where: eq(users.email, user.email)
         })
 
-        const userId = getMediaServerUserId(dbUser)
+        const userId = getLibraryUserId(dbUser, library.type)
         if (!userId) return false
         
         await mediaService.updateFavoriteStatus(userId, itemId, isFavorite)

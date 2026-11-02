@@ -155,7 +155,8 @@ export class QBittorrentService {
         }
       } catch (e) {
         if (axios.isAxiosError(e)) {
-            error('[qBittorrent] Authentication failed:', e.response?.status, e.response?.data || e.message)
+            // Corps tronqué : une page d'erreur HTML (proxy, Cloudflare) ferait des centaines de lignes
+            error('[qBittorrent] Authentication failed:', e.response?.status, String(e.response?.data || e.message).slice(0, 200))
              // If 404, maybe it's an old version using /login
              if (e.response?.status === 404) {
                  log('[qBittorrent] /api/v2/auth/login not found, trying legacy /login')

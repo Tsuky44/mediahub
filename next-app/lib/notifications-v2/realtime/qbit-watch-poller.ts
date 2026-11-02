@@ -27,6 +27,8 @@ export class QbitWatchPoller {
   /** clé (hash ou releaseName) → WatchEntry */
   private watches = new Map<string, WatchEntry>()
   private timer: NodeJS.Timeout | null = null
+  /** qBittorrent injoignable au dernier tour */
+  private unreachable = false
   private isRunning = false
 
   constructor(private readonly intervalMs = 15_000) {}
@@ -102,8 +104,16 @@ export class QbitWatchPoller {
       allTorrents = await qbit.getTorrents('all')
       if (!Array.isArray(allTorrents)) return
     } catch (err) {
-      logger.warn('[NotifV2][QbitWatchPoller] Failed to fetch torrents from qBittorrent:', (err as Error).message)
+      // Un message au début d'une coupure, pas un toutes les 15 s
+      if (!this.unreachable) {
+        this.unreachable = true
+        logger.warn('[NotifV2][QbitWatchPoller] Failed to fetch torrents from qBittorrent:', (err as Error).message)
+      }
       return
+    }
+    if (this.unreachable) {
+      this.unreachable = false
+      logger.info('[NotifV2][QbitWatchPoller] qBittorrent reachable again')
     }
 
     const now = Date.now()

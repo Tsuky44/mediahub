@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { NAVIGATION_ITEMS } from './navbar/_constants/navigation-items'
 import { isPhoneScreen } from '@/lib/screen'
+import { detectPerfMode, isLite, watchFrames, watchScroll } from '@/lib/perf-mode'
 
 /**
  * Mise en scène des changements de page et des fenêtres sur écran large (voir app/motion.css).
@@ -221,6 +222,10 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   const layer = document.createElement('div')
   layer.className = 'onyx-hero-layer onyx-fly-layer'
   layer.setAttribute('aria-hidden', 'true')
+  // La page quittée s'assombrit sous un voile (un filtre sur toute la page se recalculerait à
+  // chaque image sans carte graphique)
+  const dim = document.createElement('div')
+  dim.className = 'onyx-fly-dim'
 
   // Carte à la taille de l'affiche : recto la copie de l'affiche, verso l'image de fond
   const card = document.createElement('div')
@@ -232,6 +237,9 @@ function launchFly(frame: HTMLElement, backdrop: string) {
     height: `${box.height}px`,
     borderRadius: `${radius}px`,
   })
+  // Ombre peinte une fois, révélée en fondu (une ombre animée se repeindrait à chaque image)
+  const shade = document.createElement('div')
+  shade.className = 'onyx-fly-shadow'
   const turn = document.createElement('div')
   turn.className = 'onyx-fly-turn'
   const front = frame.cloneNode(true) as HTMLElement
@@ -243,7 +251,7 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   const cover = backdropImage(backdrop, 'onyx-fly-cover')
   back.append(...placeholder(poster, cover), cover)
   turn.append(front, back)
-  card.append(turn)
+  card.append(shade, turn)
 
   // Image plein écran, à sa taille finale, ramenée à chaque image au cadre du moment
   const flight = document.createElement('div')
@@ -256,21 +264,28 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   const img = backdropImage(backdrop, 'onyx-fly-img')
   img.style.width = `${end.w}px`
   img.style.height = `${end.h}px`
-  squash.append(...placeholder(poster, img), img)
+  // Éclat de lumière à l'impact : un voile clair, plutôt qu'un filtre sur l'image
+  const flash = document.createElement('div')
+  flash.className = 'onyx-fly-flash'
+  squash.append(...placeholder(poster, img), img, flash)
   flight.append(squash)
 
-  layer.append(card, flight)
+  layer.append(dim, card, flight)
   document.body.appendChild(layer)
   frame.style.visibility = 'hidden'
 
+  dim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 380, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' })
+  // Les coins s'effacent pendant que la carte se retourne : l'image qui prend le relais n'a pas de
+  // coins arrondis à recalculer à chaque image
   card.animate(
     [
-      { scale: 1, boxShadow: '0 0 0 rgb(0 0 0 / 0)' },
-      { scale: 1.08, boxShadow: '0 30px 70px rgb(0 0 0 / 0.6)', offset: 0.55 },
-      { scale: 1, boxShadow: '0 12px 30px rgb(0 0 0 / 0.4)' },
+      { scale: 1, borderRadius: `${radius}px` },
+      { scale: 1.08, borderRadius: `${radius}px`, offset: 0.55 },
+      { scale: 1, borderRadius: '0px' },
     ],
     { duration: FLY.turn, easing: 'ease-in-out', fill: 'both' }
   )
+  shade.animate([{ opacity: 0 }, { opacity: 1, offset: 0.55 }, { opacity: 0.6 }], { duration: FLY.turn, easing: 'ease-in-out', fill: 'both' })
   turn.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(180deg)' }], {
     duration: FLY.turn,
     easing: 'cubic-bezier(0.45, 0, 0.2, 1)',
@@ -285,7 +300,6 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   // uniformément), l'image l'est en sens inverse pour rester « cover » du cadre du moment.
   const outer: Keyframe[] = []
   const inner: Keyframe[] = []
-  const corner: Keyframe[] = []
   const N = 40
   for (let i = 0; i < N; i++) {
     const p = i / (N - 1)
@@ -297,39 +311,41 @@ function launchFly(frame: HTMLElement, backdrop: string) {
     const k = (BACKDROP.zoom * dw) / end.w
     const tx = (r.w / 2 - (BACKDROP.zoom * dw) / 2) / sx
     const ty = (r.h / 2 + BACKDROP.zoom * ((r.h - dh) * BACKDROP.focusY - r.h / 2)) / sy
-    const round = radius * (1 - p)
     outer.push({ transform: `translate(${r.x}px, ${r.y}px) scale(${sx}, ${sy})` })
     // La fiche montre son image à 80 % sur le fond de la page
     inner.push({ transform: `translate(${tx}px, ${ty}px) scale(${k / sx}, ${k / sy})`, opacity: 1 - 0.2 * p })
-    corner.push({ borderRadius: `${round / sx}px / ${round / sy}px` })
   }
   const trip: KeyframeAnimationOptions = { duration: FLY.flight, delay: FLY.turn, easing: 'cubic-bezier(0.5, 0, 0.75, 0.3)', fill: 'both' }
   const landing = flight.animate(outer, trip)
   img.animate(inner, trip)
-  squash.animate(corner, trip)
 
-  // Étirée par la vitesse, écrasée à l'arrivée, un rebond, posée ; un éclat de lumière à l'impact
+  // Étirée par la vitesse, écrasée à l'arrivée, un rebond, posée ; un éclat de lumière à l'impact.
+  // Mode allégé : posée sans rebond. Sans carte graphique, une image plein écran déformée doit être
+  // rééchantillonnée à chaque image (deux fois plus long à dessiner) ; la durée reste la même.
   const total = LAND + FLY.squash
   const bounce = squash.animate(
-    [
-      { scale: '1 1', offset: 0 },
-      { scale: '1 1', offset: FLY.turn / total },
-      { scale: '0.99 1.035', offset: LAND / total },
-      { scale: '1.024 0.952', offset: (LAND + 140) / total },
-      { scale: '0.996 1.012', offset: (LAND + 290) / total },
-      { scale: '1 1', offset: 1 },
-    ].map((kf) => ({ ...kf, easing: 'ease-in-out' })),
+    isLite()
+      ? []
+      : [
+          { scale: '1 1', offset: 0 },
+          { scale: '1 1', offset: FLY.turn / total },
+          { scale: '0.99 1.035', offset: LAND / total },
+          { scale: '1.024 0.952', offset: (LAND + 140) / total },
+          { scale: '0.996 1.012', offset: (LAND + 290) / total },
+          { scale: '1 1', offset: 1 },
+        ].map((kf) => ({ ...kf, easing: 'ease-in-out' })),
     { duration: total, fill: 'both' }
   )
-  img.animate(
+  flash.animate(
     [
-      { filter: 'brightness(1)', offset: 0 },
-      { filter: 'brightness(1)', offset: LAND / total },
-      { filter: 'brightness(1.14)', offset: (LAND + 40) / total },
-      { filter: 'brightness(1)', offset: 1 },
+      { opacity: 0, offset: 0 },
+      { opacity: 0, offset: LAND / total },
+      { opacity: 1, offset: (LAND + 40) / total },
+      { opacity: 0, offset: 1 },
     ].map((kf) => ({ ...kf, easing: 'ease-out' })),
     { duration: total, fill: 'both' }
   )
+  watchFrames(total)
 
   // La fiche reste masquée jusqu'à l'atterrissage, puis on guette son image de fond
   document.documentElement.dataset.onyxFly = ''
@@ -395,6 +411,7 @@ function settleFly() {
 function fadeFly(fly: FlyGhost) {
   if (nav.fly === fly) nav.fly = null
   arrived()
+  resumeViewTransitions()
   const out = fly.flight.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 320, easing: 'ease-out', fill: 'forwards' })
   out.onfinish = () => fly.flight.remove()
   out.oncancel = () => fly.flight.remove()
@@ -406,6 +423,7 @@ function dropFly(restore = false) {
   if (!fly) return
   nav.fly = null
   arrived()
+  resumeViewTransitions()
   fly.observer.disconnect()
   delete document.documentElement.dataset.onyxFly
   if (restore) fly.frame.style.visibility = ''
@@ -446,14 +464,45 @@ function onPointerOver(event: PointerEvent) {
   intent = window.setTimeout(() => preloadBackdrop(link.dataset.onyxBackdrop), 140)
 }
 
-function prepareNav(kind: NavKind, frame?: HTMLElement, backdrop?: string) {
+/**
+ * Envol sans View Transition (mode allégé : elle coûte trop sans carte graphique ; téléphone : il
+ * n'y en a pas) : la page change une fois l'écran voilé, pour que l'ancienne s'efface en douceur
+ * au lieu de disparaître d'un coup.
+ */
+const SWAP_MS = 160
+let swap = 0
+let vtSuspended = false
+
+function suspendViewTransitions() {
+  if (vtSuspended || typeof document.startViewTransition !== 'function') return
+  // Même procédé que template.tsx sur téléphone : React change alors la page sans transition
+  Object.defineProperty(document, 'startViewTransition', { value: undefined, configurable: true, writable: true })
+  vtSuspended = true
+}
+
+function resumeViewTransitions() {
+  if (!vtSuspended) return
+  delete (document as Partial<Pick<Document, 'startViewTransition'>>).startViewTransition
+  vtSuspended = false
+}
+
+/** Prépare la mise en scène ; renvoie le délai à attendre avant de changer de page (ms) */
+function prepareNav(kind: NavKind, frame?: HTMLElement, backdrop?: string): number {
   clearNav()
   dissolveHero(true)
   dropFly(true)
+  window.clearTimeout(swap)
+  passThrough = null
   // Sans image de fond connue (ou affiche invisible), l'affiche s'avance au centre (écran large)
-  if (kind === 'fly' && !(frame && backdrop && launchFly(frame, backdrop))) {
-    if (isPhoneScreen()) return
-    kind = 'hero'
+  let delay = 0
+  if (kind === 'fly') {
+    if (frame && backdrop && launchFly(frame, backdrop)) {
+      if (isLite() || isPhoneScreen()) {
+        suspendViewTransitions()
+        delay = SWAP_MS
+      }
+    } else if (isPhoneScreen()) return 0
+    else kind = 'hero'
   }
   document.documentElement.dataset.onyxNav = kind
   // La page quittée est marquée : l'arrivée animée ne concerne que la nouvelle page
@@ -468,6 +517,7 @@ function prepareNav(kind: NavKind, frame?: HTMLElement, backdrop?: string) {
     dissolveHero(true)
     dropFly(true)
   }, 6000)
+  return delay
 }
 
 /**
@@ -496,30 +546,41 @@ function posterFrame(image: Element) {
  * `hero` : l'élément qui s'envole vers une fiche (affiche d'une infobulle…) ; `backdrop` : l'image
  * de fond de cette fiche, si on la connaît.
  */
-export function prepareNavTo(href: string, hero?: Element | null, backdrop?: string) {
-  if (still()) return
+export function prepareNavTo(href: string, hero?: Element | null, backdrop?: string): number {
+  if (still()) return 0
   const url = new URL(href, location.href)
-  if (url.origin !== location.origin) return
+  if (url.origin !== location.origin) return 0
   const kind = navKind(location.pathname, url.pathname)
-  if (!kind) return
+  if (!kind) return 0
   const toMedia = hero instanceof HTMLElement && kind === 'dive' && MEDIA_PAGE.test(url.pathname)
   if (isPhoneScreen()) {
     // Téléphone : l'envol seulement ; tout autre trajet laisse la page changer normalement
-    if (toMedia && backdrop) prepareNav('fly', hero, backdrop)
-    else {
-      clearNav()
-      dropFly(true)
-    }
-  } else if (toMedia) prepareNav('fly', hero, backdrop)
-  else prepareNav(kind)
+    if (toMedia && backdrop) return prepareNav('fly', hero, backdrop)
+    clearNav()
+    dropFly(true)
+    return 0
+  }
+  return prepareNav(toMedia ? 'fly' : kind, toMedia ? hero : undefined, backdrop)
 }
+
+/** Lien dont le clic, retenu le temps de voiler l'écran, est rejoué tel quel */
+let passThrough: HTMLAnchorElement | null = null
 
 function onLinkClick(event: MouseEvent) {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || still()) return
   const link = (event.target as Element | null)?.closest?.('a[href]')
   if (!(link instanceof HTMLAnchorElement) || (link.target && link.target !== '_self') || link.hasAttribute('download')) return
+  if (link === passThrough) {
+    passThrough = null
+    return
+  }
   const image = link.closest('.onyx-page') ? link.querySelector('img') : null
-  prepareNavTo(link.href, image && posterFrame(image), link.dataset.onyxBackdrop)
+  const delay = prepareNavTo(link.href, image && posterFrame(image), link.dataset.onyxBackdrop)
+  if (delay) {
+    event.preventDefault()
+    passThrough = link
+    swap = window.setTimeout(() => link.click(), delay)
+  }
 }
 
 /* ---------- Fenêtres ---------- */
@@ -554,6 +615,7 @@ function overlaysIn(node: Node): HTMLElement[] {
 
 /** Origine de l'ouverture, depuis le centre de l'écran : le dernier clic s'il est récent */
 function stampOrigin(overlay: HTMLElement) {
+  watchFrames(660)
   const fresh = performance.now() - pointer.at < 1500
   overlay.style.setProperty('--onyx-ox', `${Math.round(fresh ? pointer.x - innerWidth / 2 : 0)}px`)
   overlay.style.setProperty('--onyx-oy', `${Math.round(fresh ? pointer.y - innerHeight / 2 : 48)}px`)
@@ -587,7 +649,7 @@ function playClose(overlay: HTMLElement) {
   const veil = ghost.matches(VEIL) ? null : ghost.querySelector<HTMLElement>(`:scope > .absolute.inset-0${VEIL}`)
   const fade = veil
     ? veil.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, easing: 'ease-out', fill: 'forwards' })
-    : ghost.animate([{}, { backgroundColor: 'rgb(0 0 0 / 0)', backdropFilter: 'blur(0px)' }], { duration: 300, easing: 'ease-out', fill: 'forwards' })
+    : ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, easing: 'ease-out', fill: 'forwards' })
   windowOf(ghost)?.animate(
     [
       { opacity: 1, translate: '0 0', scale: '1', filter: 'blur(0px)' },
@@ -624,6 +686,8 @@ export function MotionDirector() {
   const pathname = usePathname()
 
   useEffect(() => {
+    detectPerfMode()
+    const unwatchScroll = watchScroll()
     const observer = new MutationObserver(onMutations)
     observer.observe(document.body, { childList: true, subtree: true })
     // Retour arrière : remontée sur écran large ; sur téléphone, un envol en cours s'efface
@@ -634,6 +698,7 @@ export function MotionDirector() {
     document.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('popstate', onBack)
     return () => {
+      unwatchScroll()
       observer.disconnect()
       document.removeEventListener('click', onLinkClick, true)
       document.removeEventListener('pointerdown', onPointerDown, true)
@@ -646,6 +711,8 @@ export function MotionDirector() {
   // La nouvelle page est là : la copie de l'affiche s'y fond aussitôt ; le sens reste posé le
   // temps de l'arrivée, puis s'efface
   useEffect(() => {
+    // La nouvelle page est en place : les View Transitions suspendues pour un envol reviennent
+    resumeViewTransitions()
     const token = nav.token
     const id = window.setTimeout(() => token === nav.token && dissolveHero(), 60)
     // Envol : la fiche a 2,5 s pour poser son image de fond, sinon elle s'affiche telle quelle

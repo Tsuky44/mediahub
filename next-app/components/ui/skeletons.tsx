@@ -114,7 +114,7 @@ export function MediaHeroSkeleton() {
   return (
     <div className="relative -mx-2 sm:-mx-4 lg:-mx-6 -mt-24 min-h-screen bg-[#0c0d0d] overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-[70vh] md:h-[88vh] bg-gradient-to-b from-[#141616] via-[#101212] to-[#0c0d0d]" />
-      <div className="relative mx-auto max-w-[1600px] px-4 pt-36 pb-12 sm:px-8 lg:px-12">
+      <div className="relative px-4 pt-36 pb-12 sm:px-8 lg:px-12 2xl:px-16">
         <div className="flex flex-col justify-end min-h-[35vh] md:min-h-[50vh] pt-16 pb-6 mb-12 space-y-4 max-w-3xl">
           <SkeletonBlock className="h-5 w-28 rounded-full" />
           <SkeletonBlock className="h-14 w-3/4" />
@@ -124,14 +124,14 @@ export function MediaHeroSkeleton() {
             <SkeletonBlock className="h-12 w-12 rounded-full" />
           </div>
         </div>
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-12">
-          <div className="xl:col-span-8 space-y-3">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_28rem] gap-12">
+          <div className="min-w-0 space-y-3">
             <SkeletonBlock className="h-7 w-32" />
             <SkeletonBlock className="h-4 w-full border-0" />
             <SkeletonBlock className="h-4 w-11/12 border-0" />
             <SkeletonBlock className="h-4 w-4/5 border-0" />
           </div>
-          <SkeletonBlock className="xl:col-span-4 h-72 rounded-2xl" />
+          <SkeletonBlock className="h-72 rounded-2xl" />
         </div>
       </div>
     </div>

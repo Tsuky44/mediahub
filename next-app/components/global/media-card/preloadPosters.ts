@@ -1,4 +1,4 @@
-import { getPosterUrl } from './getPosterUrl'
+import { getFramelessPosterUrl } from './getPosterUrl'
 
 /**
  * Télécharge en avance les affiches d'une liste (même URL que MediaCard) :
@@ -7,7 +7,7 @@ import { getPosterUrl } from './getPosterUrl'
 export function preloadPosters(items: { poster_path?: string | null }[]) {
   if (typeof window === 'undefined') return
   for (const item of items) {
-    const url = getPosterUrl(item.poster_path ?? null, 'w342')
+    const url = getFramelessPosterUrl(item.poster_path ?? null, 'w342')
     if (url === '/placeholder.png') continue
     const img = new Image()
     img.decoding = 'async'

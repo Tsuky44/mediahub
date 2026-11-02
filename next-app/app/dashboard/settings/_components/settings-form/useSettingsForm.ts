@@ -46,6 +46,7 @@ const initialFormData: SettingsFormData = {
   auth_onyx_enabled: false,
   auth_onyx_auto_create: true,
   onyx_url: '',
+  library_source: '',
   auth_local_enabled: true,
   unraid_url: '',
   unraid_api_key: '',

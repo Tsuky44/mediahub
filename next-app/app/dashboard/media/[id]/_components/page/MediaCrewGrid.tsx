@@ -10,7 +10,7 @@ export default function MediaCrewGrid({
   editors,
 }: MediaCrewGridProps) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-y-8 gap-x-4 pt-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-5 gap-y-8 gap-x-4 pt-4">
       {director && (
         <div>
           <h4 className="font-bold text-white text-sm">Réalisateur</h4>

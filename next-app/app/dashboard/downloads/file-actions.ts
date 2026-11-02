@@ -154,6 +154,9 @@ export async function testStorageConnection(config: {
 }
 
 export async function testEmbyConnection(url: string, apiKey: string) {
+    // Espaces copiés avec l'adresse ou la clé : ignorés, comme à l'utilisation
+    url = (url || '').trim()
+    apiKey = (apiKey || '').trim()
     try {
         // On extrait l'URL de base sans le chemin Emby
         const cleanUrl = url.split('/web/')[0].replace(/\/$/, '');
@@ -164,11 +167,36 @@ export async function testEmbyConnection(url: string, apiKey: string) {
             httpsAgent: cleanUrl.startsWith('https') ? insecureHttpsAgent : undefined,
             validateStatus: (status) => status === 200
         });
-
-        return { success: true };
     } catch (e) {
         logger.error('Emby ping failed:', axios.isAxiosError(e) ? e.message : String(e));
         return { success: false, error: 'Serveur Emby injoignable ou invalide' };
+    }
+
+    // Serveur joignable : la clé API doit aussi être acceptée (la médiathèque et les statistiques en ont besoin)
+    if (!apiKey) return { success: false, error: 'Serveur joignable, mais aucune clé API renseignée' };
+    try {
+        const cleanUrl = url.split('/web/')[0].replace(/\/$/, '');
+        const users = await axios.get(`${cleanUrl}/Users`, {
+            timeout: 8000,
+            params: { api_key: apiKey },
+            headers: { 'X-Emby-Token': apiKey },
+            httpsAgent: cleanUrl.startsWith('https') ? insecureHttpsAgent : undefined,
+            validateStatus: (status) => status === 200
+        });
+        // Page web (proxy, page de connexion) au lieu de la réponse de l'API
+        if (typeof users.data === 'string') {
+            return { success: false, error: "Serveur joignable, mais l'API renvoie une page web (proxy ou page de connexion devant Emby ?)" };
+        }
+        return { success: true };
+    } catch (e) {
+        const status = axios.isAxiosError(e) ? e.response?.status : undefined
+        logger.error('Emby API key check failed:', axios.isAxiosError(e) ? e.message : String(e));
+        return {
+            success: false,
+            error: status === 401 || status === 403
+                ? 'Serveur joignable, mais la clé API est refusée'
+                : `Serveur joignable, mais la clé API n'a pas pu être vérifiée (${status ? `HTTP ${status}` : 'pas de réponse'})`,
+        };
     }
 }
 
