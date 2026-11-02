@@ -4,6 +4,7 @@ import { EmbySettings } from './media/EmbySettings'
 import { PlexSettings } from './media/PlexSettings'
 import { JellyfinSettings } from './media/JellyfinSettings'
 import { OnyxSettings } from './media/OnyxSettings'
+import { LibrarySourceSettings } from './media/LibrarySourceSettings'
 import { RequestSettings } from './media/RequestSettings'
 import type { SettingsFormData } from './types'
 
@@ -39,6 +40,7 @@ export const MediaSettings = ({ formData, updateField, readOnly }: Props) => {
   return (
     <div className="space-y-6">
       <RequestSettings formData={formData} updateField={updateField} readOnly={readOnly} />
+      <LibrarySourceSettings formData={formData} updateField={updateField} readOnly={readOnly} />
       <LocalAuthSection formData={formData} updateField={updateField} readOnly={readOnly} />
       <EmbySettings
         formData={formData}

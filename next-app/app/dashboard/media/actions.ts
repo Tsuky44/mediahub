@@ -1,7 +1,8 @@
 'use server'
 
 import { getWatchLaterList, areInWatchLater } from './watch-later-actions'
-import { getCurrentUser, getMediaServerServiceForUser, getMediaServerUserId, getTmdbServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getLibraryServer, getLibraryUserId, getTmdbServiceForUser } from '@/lib/auth'
+import { logger } from '@/lib/logger'
 import { createMemoCache } from '@/lib/cache'
 import { MS } from '@/lib/constants'
 import type { EmbyService } from '@/lib/services/emby'
@@ -34,22 +35,39 @@ async function getSeriesTmdbId(mediaService: EmbyService, seriesId: string, user
 }
 
 
-export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false) {
+/**
+ * Pourquoi la médiathèque est vide, quand ce n'est pas faute de médias : affiché sur la page à la
+ * place d'une grille muette.
+ */
+export type LibraryProblem = 'no-server' | 'not-linked' | 'unreachable'
+
+export interface LibraryPage {
+    results: any[]
+    total_pages: number
+    problem?: LibraryProblem
+    /** Plateforme lue (Emby, Jellyfin) */
+    source?: 'emby' | 'jellyfin'
+}
+
+export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false): Promise<LibraryPage> {
+    let source: 'emby' | 'jellyfin' | undefined
     try {
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const mediaService = await getMediaServerServiceForUser()
+        const library = await getLibraryServer()
         const tmdbService = await getTmdbServiceForUser()
-        
-        if (!mediaService) return { results: [], total_pages: 0 }
+
+        if (!library) return { results: [], total_pages: 0, problem: 'no-server' }
+        const mediaService = library.service
+        source = library.type
 
         const dbUser = await db.query.users.findFirst({
             where: eq(users.email, user.email)
         })
-        
-        const userId = getMediaServerUserId(dbUser)
-        if (!userId) return { results: [], total_pages: 0 }
+
+        const userId = getLibraryUserId(dbUser, library.type)
+        if (!userId) return { results: [], total_pages: 0, problem: 'not-linked', source }
         
         const limit = 50
         const startIndex = (page - 1) * limit
@@ -81,7 +99,13 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
             IsFavorite: favoritesOnly ? true : undefined,
             Ids: ids
         }
-        const data = await mediaReads.get(`items:${userId}:${JSON.stringify(itemsQuery)}`, () => mediaService.getUserItems(userId, itemsQuery))
+        // Clé par plateforme : passer d'Emby à Jellyfin ne ressert pas l'ancienne liste. Un échec n'est
+        // pas mis en cache (il remonte au catch) : il ne masque pas la bibliothèque les fois suivantes.
+        const data = await mediaReads.get(
+            `items:${library.type}:${userId}:${JSON.stringify(itemsQuery)}`,
+            () => mediaService.listUserItems(userId, itemsQuery),
+            { cacheIf: (d: any) => Array.isArray(d?.Items) }
+        )
 
         const items = Array.isArray(data.Items) ? data.Items : []
 
@@ -123,11 +147,13 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
 
         return {
             results: enrichedItems,
-            total_pages: Math.ceil((data.TotalRecordCount || 0) / limit)
+            total_pages: Math.ceil((data.TotalRecordCount || 0) / limit),
+            source,
         }
     } catch (e) {
-        error('Failed to fetch Emby media', e)
-        return { results: [], total_pages: 0 }
+        // Visible en production : sans ce message, une bibliothèque injoignable ressemble à une vide
+        logger.warn(`[Médiathèque] Lecture de la bibliothèque ${source ?? ''} impossible :`, (e as Error)?.message || e)
+        return { results: [], total_pages: 0, problem: 'unreachable', source }
     }
 }
 
@@ -137,16 +163,17 @@ export async function fetchRecentlyWatchedItems() {
         const user = await getCurrentUser()
         if (!user || !user.email) return []
 
-        const mediaService = await getMediaServerServiceForUser()
+        const library = await getLibraryServer()
+        const mediaService = library?.service
         const tmdbService = await getTmdbServiceForUser()
         
-        if (!mediaService) return []
+        if (!library || !mediaService) return []
 
         const dbUser = await db.query.users.findFirst({
             where: eq(users.email, user.email)
         })
 
-        const userId = getMediaServerUserId(dbUser)
+        const userId = getLibraryUserId(dbUser, library.type)
         if (!userId) {
             log('[fetchRecentlyWatchedItems] User not linked to a media server')
             return []
@@ -233,7 +260,8 @@ export async function fetchUserRecommendations(page: number = 1) {
         const user = await getCurrentUser()
         if (!user || !user.email) return { results: [], total_pages: 0 }
 
-        const mediaService = await getMediaServerServiceForUser()
+        const library = await getLibraryServer()
+        const mediaService = library?.service
         const tmdbService = await getTmdbServiceForUser()
         
         if (!tmdbService) return { results: [], total_pages: 0 }
@@ -244,7 +272,7 @@ export async function fetchUserRecommendations(page: number = 1) {
 
         if (!dbUser) return { results: [], total_pages: 0 }
 
-        const mediaUserId = getMediaServerUserId(dbUser)
+        const mediaUserId = library ? getLibraryUserId(dbUser, library.type) : null
 
         // 1. Historique récent (serveur média) + 2. demandes récentes (DB locale), en parallèle
         const [historyData, requests] = await Promise.all([
@@ -348,7 +376,7 @@ export async function fetchServerTrends(page: number = 1) {
         const user = await getCurrentUser()
         if (!user) return { results: [], total_pages: 0 }
 
-        const mediaService = await getMediaServerServiceForUser()
+        const mediaService = (await getLibraryServer())?.service
         const tmdbService = await getTmdbServiceForUser()
         
         if (!tmdbService) return { results: [], total_pages: 0 }
@@ -465,14 +493,15 @@ export async function toggleFavorite(itemId: string, isFavorite: boolean) {
         const user = await getCurrentUser()
         if (!user || !user.email) return false
 
-        const mediaService = await getMediaServerServiceForUser()
-        if (!mediaService) return false
+        const library = await getLibraryServer()
+        const mediaService = library?.service
+        if (!library || !mediaService) return false
 
         const dbUser = await db.query.users.findFirst({
             where: eq(users.email, user.email)
         })
 
-        const userId = getMediaServerUserId(dbUser)
+        const userId = getLibraryUserId(dbUser, library.type)
         if (!userId) return false
         
         await mediaService.updateFavoriteStatus(userId, itemId, isFavorite)

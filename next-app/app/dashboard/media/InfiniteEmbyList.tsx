@@ -1,24 +1,63 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useInView } from 'react-intersection-observer'
 import { MediaCard } from '@/components/global/MediaCard'
-import { fetchEmbyMedia } from './actions'
+import { fetchEmbyMedia, type LibraryProblem } from './actions'
 import { preloadPosters } from '@/components/global/media-card/preloadPosters'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Library, RotateCw } from 'lucide-react'
 
 interface InfiniteEmbyListProps {
   initialItems: any[]
+  /** Raison d'une liste vide (plateforme absente, compte non lié, serveur injoignable) */
+  problem?: LibraryProblem
+  source?: 'emby' | 'jellyfin'
   type: 'movie' | 'tv' | 'all'
   query?: string
   favoritesOnly?: boolean
   watchLaterOnly?: boolean
 }
 
-export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, watchLaterOnly }: InfiniteEmbyListProps) {
+const SOURCE_NAME = { emby: 'Emby', jellyfin: 'Jellyfin' } as const
+
+/** Médiathèque vide : dit pourquoi, au lieu d'une page blanche */
+function EmptyLibrary({ problem, source, filtered }: { problem?: LibraryProblem; source?: 'emby' | 'jellyfin'; filtered: boolean }) {
+  const router = useRouter()
+  const name = source ? SOURCE_NAME[source] : 'Le serveur média'
+  const text =
+    problem === 'no-server'
+      ? "Aucune plateforme de bibliothèque n'est configurée (Emby ou Jellyfin). Un administrateur peut l'ajouter dans les réglages."
+      : problem === 'not-linked'
+        ? `Votre compte n'est pas lié à ${name} : connectez-vous avec votre compte ${name} pour voir votre bibliothèque.`
+        : problem === 'unreachable'
+          ? `${name} ne répond pas pour le moment.`
+          : filtered
+            ? 'Aucun média ne correspond.'
+            : 'Votre bibliothèque est vide.'
+  return (
+    <div className="flex flex-col items-center gap-4 rounded-3xl border border-white/5 bg-white/[0.02] px-6 py-16 text-center">
+      <Library className="h-10 w-10 text-gray-500" />
+      <p className="max-w-md text-sm text-gray-300">{text}</p>
+      {problem === 'unreachable' && (
+        <button
+          type="button"
+          onClick={() => router.refresh()}
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
+        >
+          <RotateCw className="h-4 w-4" />
+          Réessayer
+        </button>
+      )}
+    </div>
+  )
+}
+
+export function InfiniteEmbyList({ initialItems, problem, source, type, query, favoritesOnly, watchLaterOnly }: InfiniteEmbyListProps) {
   const [items, setItems] = useState(initialItems)
   const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
+  // Liste vide pour une raison connue : rien à charger de plus
+  const [hasMore, setHasMore] = useState(!problem)
   const [loading, setLoading] = useState(false)
   
   // Déclenché bien avant le bas de la liste : les éléments (déjà préchargés) sont ajoutés hors écran
@@ -41,8 +80,8 @@ export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, wat
   useEffect(() => {
     setItems(initialItems)
     setPage(1)
-    setHasMore(true)
-  }, [initialItems, type, query, favoritesOnly, watchLaterOnly])
+    setHasMore(!problem)
+  }, [initialItems, problem, type, query, favoritesOnly, watchLaterOnly])
 
   const loadMore = async () => {
     if (loading || !hasMore) return
@@ -87,6 +126,10 @@ export function InfiniteEmbyList({ initialItems, type, query, favoritesOnly, wat
     prefetchRef.current = { key, promise }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, hasMore, loading, type, query, favoritesOnly, watchLaterOnly])
+
+  if (items.length === 0 && !hasMore) {
+    return <EmptyLibrary problem={problem} source={source} filtered={!!query || !!favoritesOnly || !!watchLaterOnly} />
+  }
 
   return (
     <div className="space-y-6">

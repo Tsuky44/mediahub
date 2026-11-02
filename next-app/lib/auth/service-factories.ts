@@ -68,6 +68,37 @@ export async function getMediaServerServiceForUser() {
   return new EmbyService(s.jellyfin_url, s.jellyfin_api_key)
 }
 
+/** Plateformes dont MediaHub sait afficher la bibliothèque (Jellyfin via l'API compatible Emby) */
+export type LibrarySource = 'emby' | 'jellyfin'
+
+/**
+ * Plateforme dont « Ma médiathèque » affiche la bibliothèque : celle choisie dans les réglages
+ * (library_source) si elle est configurée, sinon la seule configurée (Emby avant Jellyfin).
+ */
+export async function getLibraryServer(): Promise<{ service: EmbyService; type: LibrarySource } | null> {
+  const s = await readSettings(['library_source', 'emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key'])
+  const embyUrl = s.emby_url || process.env.EMBY_URL
+  const embyApiKey = s.emby_api_key || process.env.EMBY_API_KEY
+  const emby = embyUrl && embyApiKey ? { service: new EmbyService(embyUrl, embyApiKey), type: 'emby' as const } : null
+  const jellyfin = s.jellyfin_url
+    ? { service: new EmbyService(s.jellyfin_url, s.jellyfin_api_key), type: 'jellyfin' as const }
+    : null
+  if (s.library_source === 'jellyfin' && jellyfin) return jellyfin
+  if (s.library_source === 'emby' && emby) return emby
+  return emby || jellyfin
+}
+
+/** Compte de l'utilisateur sur la plateforme de la bibliothèque (l'autre en secours, comme avant) */
+export function getLibraryUserId(
+  dbUser: { embyUserId?: string | null; jellyfinUserId?: string | null } | null | undefined,
+  type: LibrarySource
+): string | null {
+  if (!dbUser) return null
+  return type === 'jellyfin'
+    ? dbUser.jellyfinUserId || dbUser.embyUserId || null
+    : dbUser.embyUserId || dbUser.jellyfinUserId || null
+}
+
 /**
  * Retourne l'ID utilisateur du serveur média (embyUserId ou jellyfinUserId).
  */

@@ -43,6 +43,8 @@ export interface SettingsFormData {
     auth_onyx_enabled: boolean
     auth_onyx_auto_create: boolean
     onyx_url: string
+    /** Plateforme affichée dans « Ma médiathèque » (vide : la seule configurée) */
+    library_source: string
     auth_local_enabled: boolean
     unraid_url: string
     unraid_api_key: string

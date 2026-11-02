@@ -438,6 +438,23 @@ export class EmbyService {
     })
   }
 
+  /**
+   * Liste de la bibliothèque (Ma médiathèque) : délai plus long que les petites requêtes (tri par
+   * nom sur toute une bibliothèque), et une erreur reste une erreur (à ne pas mettre en cache
+   * comme une bibliothèque vide).
+   */
+  async listUserItems(userId: string, filters: Record<string, unknown> = {}) {
+    const client = await this.getClient(15000)
+    const params = {
+      IncludeExternalContent: false,
+      Recursive: true,
+      Fields: 'UserData,SeriesInfo',
+      ...filters
+    }
+    const response = await client.get(`/Users/${userId}/Items`, { params })
+    return response.data
+  }
+
   async getUserItems(userId: string, filters: Record<string, unknown> = {}) {
     try {
       const client = await this.getClient(4000)
