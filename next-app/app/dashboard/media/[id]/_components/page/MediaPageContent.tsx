@@ -79,7 +79,8 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
     <div className="relative -mx-2 sm:-mx-4 lg:-mx-6 -mt-24 min-h-screen bg-[#0c0d0d] text-gray-300 overflow-x-hidden font-sans selection:bg-indigo-500/30">
       <MediaBackdrop backdropUrl={backdropUrl} alt={title} />
 
-      <div className="relative z-10 mx-auto max-w-[1600px] px-4 pt-36 pb-12 sm:px-8 lg:px-12">
+      {/* Pleine largeur de la fenêtre : seules les marges latérales encadrent le contenu */}
+      <div className="relative z-10 px-4 pt-36 pb-12 sm:px-8 lg:px-12 2xl:px-16">
         {/* Header Section (Hero Backdrop Layout) */}
         <div className="relative flex flex-col justify-end min-h-[35vh] md:min-h-[50vh] pt-16 pb-6 mb-12">
           {/* onyx-hero-copy : textes qui tombent en place quand l'affiche atterrit (motion.css) */}
@@ -125,7 +126,8 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
         </div>
 
         {/* Content Body Grid */}
-        <div className="onyx-reveal grid grid-cols-1 xl:grid-cols-12 gap-12">
+        {/* Encadré d'infos de largeur fixe : le reste de la largeur va au texte */}
+        <div className="onyx-reveal grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_28rem] gap-12">
           <MediaOverviewSection
             overview={overview}
             director={director}

@@ -16,7 +16,7 @@ export default function MediaSidebar({
   watchProviders,
 }: MediaSidebarProps) {
   return (
-    <div className="xl:col-span-4 space-y-4">
+    <div className="space-y-4">
       {details.belongs_to_collection && (
         <MediaCollectionCard collection={details.belongs_to_collection} />
       )}

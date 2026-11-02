@@ -445,14 +445,26 @@
 .onyx-backdrop-shade {
   position: absolute;
   inset: 0;
+}
+/* Vignettage (dessous), puis fondus (dessus) : le bas rejoint exactement la couleur de la page,
+   sans liseré sombre à la jonction */
+.onyx-backdrop-shade::before,
+.onyx-backdrop-shade::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.onyx-backdrop-shade::before {
   box-shadow: inset 0 0 180px rgb(0 0 0 / 0.55);
+}
+.onyx-backdrop-shade::after {
   background-image:
     linear-gradient(to top, #0c0d0d, rgb(12 13 13 / 0.55), transparent),
     linear-gradient(to bottom, rgb(12 13 13 / 0.85), transparent 12rem),
     linear-gradient(to right, rgb(12 13 13 / 0.5), transparent);
 }
 @media (min-width: 768px) {
-  .onyx-backdrop-shade {
+  .onyx-backdrop-shade::after {
     background-image:
       linear-gradient(to top, #0c0d0d, rgb(12 13 13 / 0.55), transparent),
       linear-gradient(to bottom, rgb(12 13 13 / 0.85), transparent 12rem),
