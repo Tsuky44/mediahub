@@ -16,24 +16,26 @@ interface InfiniteEmbyListProps {
   detail?: string
   /** Bibliothèque du serveur entier, faute de pouvoir lire celle du compte */
   serverWide?: boolean
-  source?: 'emby' | 'jellyfin'
+  source?: 'emby' | 'jellyfin' | 'onyx'
   type: 'movie' | 'tv' | 'all'
   query?: string
   favoritesOnly?: boolean
   watchLaterOnly?: boolean
 }
 
-const SOURCE_NAME = { emby: 'Emby', jellyfin: 'Jellyfin' } as const
+const SOURCE_NAME = { emby: 'Emby', jellyfin: 'Jellyfin', onyx: 'Onyx' } as const
 
 /** Médiathèque vide : dit pourquoi, au lieu d'une page blanche */
 const RETRY: LibraryProblem[] = ['unreachable', 'slow', 'key-refused', 'account-refused']
 
-function EmptyLibrary({ problem, detail, source, filtered }: { problem?: LibraryProblem; detail?: string; source?: 'emby' | 'jellyfin'; filtered: boolean }) {
+function EmptyLibrary({ problem, detail, source, filtered }: { problem?: LibraryProblem; detail?: string; source?: 'emby' | 'jellyfin' | 'onyx'; filtered: boolean }) {
   const router = useRouter()
   const name = source ? SOURCE_NAME[source] : 'Le serveur média'
   const text =
     problem === 'no-server'
-      ? "Aucune plateforme de bibliothèque n'est configurée (Emby ou Jellyfin). Un administrateur peut l'ajouter dans les réglages."
+      ? "Aucune plateforme de bibliothèque n'est configurée (Emby, Jellyfin ou Onyx). Un administrateur peut l'ajouter dans les réglages."
+      : problem === 'key-refused' && source === 'onyx'
+        ? "Onyx refuse le compte de service de MediaHub (session expirée ou droits retirés) : un administrateur doit le reconnecter (Réglages, Médias, Onyx)."
       : problem === 'not-linked'
         ? `Votre compte n'est pas lié à ${name} : connectez-vous avec votre compte ${name} pour voir votre bibliothèque.`
         : problem === 'key-refused'

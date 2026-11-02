@@ -68,6 +68,9 @@ export async function POST(request: NextRequest) {
         auth_onyx_enabled,
         auth_onyx_auto_create,
         onyx_url,
+        player_integration_api_key,
+        player_integration_user_email,
+        onyx_webhook_url,
         library_source,
         auth_local_enabled,
         unraid_url,
@@ -145,8 +148,13 @@ export async function POST(request: NextRequest) {
     await updateSetting('auth_onyx_enabled', auth_onyx_enabled)
     await updateSetting('auth_onyx_auto_create', auth_onyx_auto_create)
     await updateSetting('onyx_url', onyx_url)
+    // Liaison Onyx : vide = variable d'environnement d'avant, ou valeur déduite (lib/integrations/onyx-config.ts)
+    const trimmed = (v: unknown) => (typeof v === 'string' ? v.trim() : v)
+    await updateSetting('player_integration_api_key', trimmed(player_integration_api_key))
+    await updateSetting('player_integration_user_email', trimmed(player_integration_user_email))
+    await updateSetting('onyx_webhook_url', trimmed(onyx_webhook_url))
     // Plateforme de la médiathèque : seules celles dont la bibliothèque est lisible ; vide = automatique
-    await updateSetting('library_source', library_source === undefined ? undefined : library_source === 'emby' || library_source === 'jellyfin' ? library_source : '')
+    await updateSetting('library_source', library_source === undefined ? undefined : ['emby', 'jellyfin', 'onyx'].includes(library_source) ? library_source : '')
     await updateSetting('auth_local_enabled', auth_local_enabled)
     await updateSetting('request_all_seasons_enabled', request_all_seasons_enabled)
 

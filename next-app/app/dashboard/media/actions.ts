@@ -1,7 +1,8 @@
 'use server'
 
 import { getWatchLaterList, areInWatchLater } from './watch-later-actions'
-import { getCurrentUser, getLibraryServer, getLibraryUserId, getTmdbServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getLibraryPlatform, getLibraryServer, getLibraryUserId, getTmdbServiceForUser } from '@/lib/auth'
+import { getOnyxService, OnyxServiceError } from '@/lib/services/onyx-admin'
 import { logger } from '@/lib/logger'
 import axios from 'axios'
 import { createMemoCache } from '@/lib/cache'
@@ -50,8 +51,8 @@ export interface LibraryPage {
     detail?: string
     /** Liste du serveur entier affichée faute de pouvoir lire celle du compte */
     serverWide?: boolean
-    /** Plateforme lue (Emby, Jellyfin) */
-    source?: 'emby' | 'jellyfin'
+    /** Plateforme lue (Emby, Jellyfin, Onyx) */
+    source?: 'emby' | 'jellyfin' | 'onyx'
 }
 
 /** Échec d'une lecture de la bibliothèque : de quel genre, et sa cause en clair */
@@ -69,7 +70,75 @@ function classifyLibraryError(e: unknown): { problem: LibraryProblem; detail: st
     return { problem: 'unreachable', detail: e instanceof Error ? e.message : String(e) }
 }
 
+const ONYX_PAGE_SIZE = 50
+
+/**
+ * Bibliothèque d'Onyx, lue par le compte de service : tout compte Onyx voit toute la bibliothèque,
+ * donc pas besoin que le compte MediaHub soit lié. Onyx n'a pas de favoris pour MediaHub.
+ */
+async function fetchOnyxMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false): Promise<LibraryPage> {
+    const source = 'onyx' as const
+    try {
+        const user = await getCurrentUser()
+        if (!user || !user.email) return { results: [], total_pages: 0 }
+
+        const service = await getOnyxService()
+        if (!service) return { results: [], total_pages: 0, problem: 'no-server', source }
+        if (favoritesOnly) return { results: [], total_pages: 0, source }
+
+        let items = await service.listLibrary()
+        if (type !== 'all') items = items.filter((item) => (type === 'movie' ? item.type === 'movie' : item.type === 'show'))
+        const needle = query?.trim().toLocaleLowerCase('fr')
+        if (needle) items = items.filter((item) => item.title.toLocaleLowerCase('fr').includes(needle))
+
+        if (watchLaterOnly) {
+            const saved = await getWatchLaterList()
+            const keys = new Set((Array.isArray(saved) ? saved : []).flatMap((i) => [`${i.mediaType}:${i.mediaId}`, `${i.mediaType}:${i.tmdbId ?? ''}`]))
+            items = items.filter((item) => {
+                const mediaType = item.type === 'movie' ? 'movie' : 'tv'
+                return keys.has(`${mediaType}:${item.tmdb_id ?? ''}`) || keys.has(`${mediaType}:${item.id}`)
+            })
+        }
+
+        const slice = items.slice((page - 1) * ONYX_PAGE_SIZE, page * ONYX_PAGE_SIZE)
+        const tmdbService = await getTmdbServiceForUser()
+        const watchLaterKeys = new Set(await areInWatchLater(
+            slice.map((item) => ({ id: String(item.tmdb_id || item.id), mediaType: item.type === 'movie' ? 'movie' : 'tv' }))
+        ))
+
+        const results = await Promise.all(slice.map(async (item) => {
+            const mediaType = item.type === 'movie' ? 'movie' : 'tv'
+            const images = item.tmdb_id && tmdbService ? await tmdbService.getImagePaths(item.tmdb_id, mediaType).catch(() => null) : null
+            // Affiche d'Onyx en secours, seulement si elle se lit sans session (adresse complète)
+            const onyxPoster = item.poster_url && /^https?:\/\//i.test(item.poster_url) ? item.poster_url : null
+            const id = String(item.tmdb_id || item.id)
+            return {
+                id,
+                title: item.title,
+                name: item.title,
+                poster_path: images?.poster_path ?? onyxPoster,
+                backdrop_path: images?.backdrop_path ?? null,
+                media_type: mediaType,
+                overview: item.overview,
+                onyx_id: item.id,
+                tmdbId: item.tmdb_id || undefined,
+                isFavorite: false,
+                isWatchLater: watchLaterKeys.has(`${mediaType}:${id}`),
+            }
+        }))
+
+        return { results, total_pages: Math.ceil(items.length / ONYX_PAGE_SIZE), source }
+    } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e)
+        logger.warn(`[Médiathèque] Lecture de la bibliothèque Onyx impossible : ${detail}`)
+        const status = e instanceof OnyxServiceError ? e.status : 0
+        const problem: LibraryProblem = status === 401 || status === 403 ? 'key-refused' : status ? 'account-refused' : 'unreachable'
+        return { results: [], total_pages: 0, problem, detail, source }
+    }
+}
+
 export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false): Promise<LibraryPage> {
+    if ((await getLibraryPlatform()) === 'onyx') return fetchOnyxMedia(page, type, query, favoritesOnly, watchLaterOnly)
     let source: 'emby' | 'jellyfin' | undefined
     try {
         const user = await getCurrentUser()

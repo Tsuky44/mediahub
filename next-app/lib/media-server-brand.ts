@@ -40,3 +40,14 @@ export const BRAND: Record<MediaServerBrand, BrandClasses> = {
 export function isMediaServerBrand(value: string): value is MediaServerBrand {
   return value === 'emby' || value === 'plex' || value === 'jellyfin'
 }
+
+/**
+ * Onyx n'a pas de couleur de marque : il reprend l'encre du thème (blanc cassé), comme son bouton
+ * de connexion. Hors de BRAND pour ne pas changer les écrans qui testent isMediaServerBrand.
+ */
+export const ONYX_BRAND: BrandClasses = {
+  selected: 'bg-white/15 text-onyx-ink ring-1 ring-inset ring-white/30 shadow-[inset_0_1px_0_rgb(255_255_255/0.15)]',
+  solid: 'bg-onyx-ink text-onyx-bg shadow-[inset_0_1px_0_rgb(255_255_255/0.35)] hover:brightness-95',
+  badge: 'bg-white/10 text-onyx-ink border-white/25',
+  text: 'text-onyx-ink',
+}

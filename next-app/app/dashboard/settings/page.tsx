@@ -58,7 +58,8 @@ export default async function SettingsPage() {
       }),
       db.select({ key: settings.key, value: settings.value }).from(settings),
     ])
-    const settingsMap = Object.fromEntries(settingsList.map((s) => [s.key, s.value]))
+    // La session du compte de service Onyx ne part pas dans le navigateur : son nom suffit
+    const settingsMap = Object.fromEntries(settingsList.filter((s) => s.key !== 'onyx_service_token').map((s) => [s.key, s.value]))
 
     return (
       <AbilityProvider user={user}>

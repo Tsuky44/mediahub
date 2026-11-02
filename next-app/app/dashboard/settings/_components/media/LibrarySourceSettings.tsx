@@ -2,7 +2,7 @@
 
 import { Library } from 'lucide-react'
 import { SectionHeader } from '../SharedComponents'
-import { BRAND } from '@/lib/media-server-brand'
+import { BRAND, ONYX_BRAND } from '@/lib/media-server-brand'
 import type { SettingsFormData } from '../types'
 
 interface LibrarySourceSettingsProps {
@@ -14,7 +14,7 @@ interface LibrarySourceSettingsProps {
 interface Platform {
   id: 'emby' | 'jellyfin' | 'plex' | 'onyx'
   name: string
-  /** MediaHub sait lire sa bibliothèque (Emby, et Jellyfin par l'API compatible) */
+  /** MediaHub sait lire sa bibliothèque (Emby, Jellyfin par l'API compatible, Onyx par son compte de service) */
   library: boolean
   selected: string
 }
@@ -29,7 +29,13 @@ export function LibrarySourceSettings({ formData, updateField, readOnly }: Libra
       { id: 'emby', name: 'Emby', library: true, selected: BRAND.emby.selected, on: !!(formData.emby_url && formData.emby_api_key) },
       { id: 'jellyfin', name: 'Jellyfin', library: true, selected: BRAND.jellyfin.selected, on: !!formData.jellyfin_url },
       { id: 'plex', name: 'Plex', library: false, selected: BRAND.plex.selected, on: !!(formData.plex_url && formData.plex_token) },
-      { id: 'onyx', name: 'Onyx', library: false, selected: '', on: !!(formData.auth_onyx_enabled && formData.onyx_url) },
+      {
+        id: 'onyx',
+        name: 'Onyx',
+        library: !!formData.onyx_service_username,
+        selected: ONYX_BRAND.selected,
+        on: !!(formData.onyx_url && (formData.auth_onyx_enabled || formData.onyx_service_username)),
+      },
     ] as const
   )
     .filter((p) => p.on)
@@ -44,12 +50,14 @@ export function LibrarySourceSettings({ formData, updateField, readOnly }: Libra
       <SectionHeader icon={Library} title="Ma médiathèque" description="Plateforme dont la bibliothèque est affichée" />
 
       {configured.length === 0 ? (
-        <p className="text-sm text-white/60">Aucune plateforme configurée : renseignez Emby ou Jellyfin ci-dessous.</p>
+        <p className="text-sm text-white/60">Aucune plateforme configurée : renseignez Emby, Jellyfin ou Onyx ci-dessous.</p>
       ) : configured.length === 1 ? (
         <p className="text-sm text-white/70">
           {current
             ? `${current.name} est la seule plateforme configurée : sa bibliothèque est affichée.`
-            : `${configured[0].name} est la seule plateforme configurée, mais MediaHub ne sait pas encore afficher sa bibliothèque.`}
+            : configured[0].id === 'onyx'
+              ? "Onyx est la seule plateforme configurée : connectez son compte de service (bloc Onyx ci-dessous) pour afficher sa bibliothèque."
+              : `${configured[0].name} est la seule plateforme configurée, mais MediaHub ne sait pas encore afficher sa bibliothèque.`}
         </p>
       ) : (
         <div className="space-y-3">
@@ -65,7 +73,7 @@ export function LibrarySourceSettings({ formData, updateField, readOnly }: Libra
                   aria-checked={active}
                   disabled={readOnly || !p.library}
                   onClick={() => updateField('library_source', p.id)}
-                  title={p.library ? undefined : `MediaHub ne sait pas encore afficher la bibliothèque ${p.name}`}
+                  title={p.library ? undefined : p.id === 'onyx' ? 'Connectez le compte de service Onyx pour afficher sa bibliothèque' : `MediaHub ne sait pas encore afficher la bibliothèque ${p.name}`}
                   className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed ${
                     active
                       ? p.selected || 'bg-white/15 text-white ring-1 ring-inset ring-white/30'
@@ -73,7 +81,7 @@ export function LibrarySourceSettings({ formData, updateField, readOnly }: Libra
                   }`}
                 >
                   {p.name}
-                  {!p.library && <span className="ml-2 text-xs font-normal">(bientôt)</span>}
+                  {!p.library && <span className="ml-2 text-xs font-normal">{p.id === 'onyx' ? '(compte de service requis)' : '(bientôt)'}</span>}
                 </button>
               )
             })}

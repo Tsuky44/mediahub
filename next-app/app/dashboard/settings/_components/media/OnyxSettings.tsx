@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Play } from 'lucide-react'
 import { SectionHeader, CheckboxField, InputField } from '../SharedComponents'
 import type { SettingsFormData } from '../types'
+import { api, ApiError } from '@/lib/api-client'
 
 interface OnyxSettingsProps {
   formData: SettingsFormData
@@ -11,8 +12,40 @@ interface OnyxSettingsProps {
   readOnly?: boolean
 }
 
+/** Réponse de GET /api/admin/onyx */
+interface OnyxStatus {
+  url: string
+  reachable: boolean
+  version?: string | null
+  error?: string
+  apiKeySource: 'settings' | 'env' | null
+  apiKeyHint: string | null
+  webhookUrl: string
+  webhookSource: 'settings' | 'env' | 'derived' | null
+  fallbackEmail: string
+  service: { username: string; ok: boolean; error?: string } | null
+  onyxSide: { mediahubUrl: string; keySet: boolean; keyMatches: boolean | null } | null
+}
+
 const BUTTON = 'rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15 disabled:opacity-50'
 const FIELD = 'flex-1 rounded-xl border-white/10 bg-white/5 px-3 py-2 text-sm text-white'
+const CARD = 'space-y-4 rounded-xl border border-white/5 bg-black/20 p-4'
+
+function randomKey() {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** POST /api/admin/onyx : { ok, data } même en erreur, le message est dans data.error */
+async function adminCall(body: Record<string, unknown>): Promise<{ ok: boolean; data: Record<string, any> }> {
+  try {
+    return { ok: true, data: await api.post<Record<string, any>>('/api/admin/onyx', body) }
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, data: (e.data as Record<string, any>) ?? { error: e.message } }
+    return { ok: false, data: { error: 'Impossible de contacter MediaHub' } }
+  }
+}
 
 /** Lier le compte MediaHub courant a un compte Onyx (identifiants + OTP). */
 function OnyxLinkCard() {
@@ -48,7 +81,7 @@ function OnyxLinkCard() {
   if (linked === null) return null
 
   return (
-    <div className="mt-6 space-y-4 rounded-xl border border-white/5 bg-black/20 p-4">
+    <div className={CARD}>
       <p className="text-sm text-gray-300">
         Mon compte MediaHub : {linked ? 'lié à un compte Onyx' : "non lié à Onyx. Liez-le pour qu'Onyx et la connexion Onyx retrouvent ce compte."}
       </p>
@@ -71,33 +104,223 @@ function OnyxLinkCard() {
   )
 }
 
+/**
+ * Compte de service : un administrateur Onyx connecté une fois. MediaHub s'en sert pour importer
+ * les comptes Onyx, afficher la bibliothèque Onyx et écrire sa propre adresse dans Onyx.
+ */
+function OnyxServiceCard({ onyxUrl, status, readOnly, onChange }: { onyxUrl: string; status: OnyxStatus | null; readOnly?: boolean; onChange: (username: string) => void }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
+  const [challenge, setChallenge] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const run = async (body: Record<string, unknown>) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      const { ok, data } = await adminCall(body)
+      if (!ok) { setMessage(data.error || 'Erreur'); return }
+      if (data.otpRequired) { setChallenge(data.challenge); setCode(''); return }
+      setChallenge(null)
+      setPassword('')
+      onChange(data.connected ? data.username : '')
+      setMessage(data.connected ? `Connecté en tant que ${data.username}` : 'Compte de service déconnecté')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const service = status?.service
+  return (
+    <div className={CARD}>
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-white/90">Compte de service Onyx</p>
+        <p className="text-xs text-white/50">
+          Un compte administrateur d&apos;Onyx, connecté une seule fois. Il permet d&apos;importer les utilisateurs Onyx (bouton « Sync Onyx »
+          des utilisateurs), d&apos;afficher la bibliothèque Onyx dans « Ma médiathèque » et de configurer Onyx depuis ici. MediaHub ne garde
+          pas le mot de passe, seulement la session.
+        </p>
+      </div>
+      {service ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className={`text-sm ${service.ok ? 'text-emerald-300' : 'text-amber-300'}`}>
+            {service.ok ? `Connecté : ${service.username}` : `${service.username} : ${service.error ?? 'à reconnecter'}`}
+          </p>
+          <button type="button" className={BUTTON} disabled={busy || readOnly} onClick={() => run({ action: 'disconnect' })}>Déconnecter</button>
+        </div>
+      ) : challenge ? (
+        <div className="flex gap-3">
+          <input value={code} onChange={e => setCode(e.target.value)} placeholder="Code de vérification Onyx" className={FIELD} />
+          <button type="button" className={BUTTON} disabled={busy || !code} onClick={() => run({ action: 'connect', challenge, code })}>Valider</button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-3">
+          <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Administrateur Onyx" className={FIELD} disabled={readOnly} />
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mot de passe" className={FIELD} disabled={readOnly} />
+          <button
+            type="button"
+            className={BUTTON}
+            disabled={busy || readOnly || !username || !password || !onyxUrl}
+            title={onyxUrl ? undefined : "Renseignez d'abord l'URL du serveur Onyx"}
+            onClick={() => run({ action: 'connect', username, password, onyxUrl })}
+          >
+            Connecter
+          </button>
+        </div>
+      )}
+      {message && <p className="text-sm text-gray-400">{message}</p>}
+    </div>
+  )
+}
+
 export function OnyxSettings({ formData, updateField, readOnly }: OnyxSettingsProps) {
+  const [status, setStatus] = useState<OnyxStatus | null>(null)
+  const [busy, setBusy] = useState<'link' | 'webhook' | null>(null)
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const refresh = useCallback(() => {
+    api.get<OnyxStatus>('/api/admin/onyx', { cache: 'no-store' }).then(setStatus).catch(() => setStatus(null))
+  }, [])
+  useEffect(refresh, [refresh])
+
+  const onServiceChange = (username: string) => {
+    updateField('onyx_service_username', username)
+    refresh()
+  }
+
+  const linkOnyx = async () => {
+    setBusy('link')
+    setMessage(null)
+    try {
+      const { ok, data } = await adminCall({ action: 'link-onyx', mediahubUrl: window.location.origin, apiKey: formData.player_integration_api_key })
+      if (!ok) { setMessage({ ok: false, text: data.error || 'Erreur' }); return }
+      updateField('player_integration_api_key', data.apiKey)
+      setMessage({ ok: true, text: `Onyx utilise maintenant ${window.location.origin} et la clé d'intégration${data.generated ? ' (créée et enregistrée)' : ''}.` })
+      refresh()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const testWebhook = async () => {
+    setBusy('webhook')
+    setMessage(null)
+    try {
+      const { ok, data } = await adminCall({ action: 'test-webhook' })
+      setMessage({ ok, text: ok ? data.message : data.error || 'Erreur' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const derivedWebhook = formData.onyx_url ? `${formData.onyx_url.replace(/\/+$/, '')}/api/integrations/mediahub/events` : ''
+  const side = status?.onyxSide
+
   return (
     <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
-      <SectionHeader icon={Play} title="Onyx" description="Connexion à MediaHub avec un compte Onyx" />
+      <SectionHeader icon={Play} title="Onyx" description="Connexion, utilisateurs et bibliothèque d'un serveur Onyx" />
+
       <div className="mb-6 space-y-4">
+        <InputField
+          label="URL du serveur Onyx"
+          value={formData.onyx_url}
+          onChange={v => updateField('onyx_url', v)}
+          placeholder="http://onyx:8080"
+          readOnly={readOnly}
+          description="Adresse joignable depuis le conteneur MediaHub (nom Docker ou IP locale)."
+        />
+        {status?.url && (
+          <p className={`text-xs ${status.reachable ? 'text-emerald-300' : 'text-amber-300'}`}>
+            {status.reachable ? `Onyx répond${status.version ? ` (version ${status.version})` : ''}.` : status.error}
+          </p>
+        )}
         <CheckboxField
           label="Activer l'authentification Onyx"
           checked={formData.auth_onyx_enabled}
           onChange={v => updateField('auth_onyx_enabled', v)}
-          description="Permettre aux utilisateurs de se connecter avec leur compte Onyx (mot de passe, OTP ou code d'appairage)"
+          description="Permettre aux utilisateurs de se connecter avec leur compte Onyx (mot de passe, OTP, code d'appairage ou depuis l'app Onyx)"
           readOnly={readOnly}
         />
         <CheckboxField
           label="Créer automatiquement les comptes"
           checked={formData.auth_onyx_auto_create}
           onChange={v => updateField('auth_onyx_auto_create', v)}
-          description="Sinon, seuls les comptes MediaHub déjà liés à un compte Onyx peuvent se connecter. Le rôle par défaut s'applique aux nouveaux comptes."
+          description="Sinon, seuls les comptes MediaHub déjà liés (ou importés par « Sync Onyx ») peuvent se connecter. Le rôle par défaut s'applique aux nouveaux comptes."
           readOnly={readOnly}
         />
       </div>
-      <InputField
-        label="URL du serveur Onyx"
-        value={formData.onyx_url}
-        onChange={v => updateField('onyx_url', v)}
-        placeholder="http://onyx:8080"
-      />
-      <OnyxLinkCard />
+
+      <OnyxServiceCard onyxUrl={formData.onyx_url} status={status} readOnly={readOnly} onChange={onServiceChange} />
+
+      <div className={`mt-6 ${CARD}`}>
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-white/90">Liaison avec l&apos;app Onyx</p>
+          <p className="text-xs text-white/50">
+            Une même clé sert aux deux sens : Onyx l&apos;utilise pour les demandes, la recherche et le SSO, MediaHub pour signer ses évènements.
+            Le bouton ci-dessous l&apos;écrit dans Onyx avec l&apos;adresse de cette page, sans rien à copier.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[16rem] flex-1">
+            <InputField
+              label="Clé d'intégration"
+              type="password"
+              value={formData.player_integration_api_key}
+              onChange={v => updateField('player_integration_api_key', v)}
+              placeholder={status?.apiKeySource === 'env' ? `Variable PLAYER_INTEGRATION_API_KEY (${status.apiKeyHint})` : 'Aucune clé'}
+              readOnly={readOnly}
+            />
+          </div>
+          <button type="button" className={BUTTON} disabled={readOnly} onClick={() => updateField('player_integration_api_key', randomKey())}>Générer</button>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className={BUTTON}
+            disabled={readOnly || busy !== null || !status?.service?.ok}
+            title={status?.service?.ok ? undefined : "Connectez d'abord le compte de service Onyx"}
+            onClick={linkOnyx}
+          >
+            {busy === 'link' ? 'Configuration…' : 'Configurer Onyx automatiquement'}
+          </button>
+          {side && (
+            <p className="text-xs text-white/60">
+              Côté Onyx : {side.mediahubUrl ? `MediaHub = ${side.mediahubUrl}` : 'adresse de MediaHub absente'}
+              {', '}
+              {!side.keySet ? 'aucune clé' : side.keyMatches === false ? 'clé différente de celle-ci' : side.keyMatches ? 'même clé' : 'clé enregistrée'}
+            </p>
+          )}
+        </div>
+        <InputField
+          label="URL des évènements vers Onyx"
+          value={formData.onyx_webhook_url}
+          onChange={v => updateField('onyx_webhook_url', v)}
+          placeholder={derivedWebhook || 'http://onyx:8080/api/integrations/mediahub/events'}
+          readOnly={readOnly}
+          description="Laissez vide pour la déduire de l'URL d'Onyx. Onyx y apprend les nouveaux imports et les changements de demandes."
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" className={BUTTON} disabled={busy !== null} onClick={testWebhook}>
+            {busy === 'webhook' ? 'Envoi…' : "Tester l'envoi"}
+          </button>
+          <span className="text-xs text-white/40">Utilise les valeurs enregistrées.</span>
+        </div>
+        <InputField
+          label="Compte MediaHub de repli (e-mail)"
+          value={formData.player_integration_user_email}
+          onChange={v => updateField('player_integration_user_email', v)}
+          placeholder={status?.fallbackEmail || 'Facultatif'}
+          readOnly={readOnly}
+          description="Compte utilisé quand Onyx appelle sans dire pour quel utilisateur. Facultatif."
+        />
+        {message && <p className={`text-sm ${message.ok ? 'text-emerald-300' : 'text-amber-300'}`}>{message.text}</p>}
+      </div>
+
+      <div className="mt-6">
+        <OnyxLinkCard />
+      </div>
     </div>
   )
 }

@@ -13,6 +13,7 @@ services:
       - NODE_ENV=production
       - NEXTAUTH_URL=http://localhost:3008
       - NEXTAUTH_SECRET=fc6d0136203923971842095817349502934851029384
+      # Onyx : facultatif, tout se regle dans Reglages > Medias > Onyx (ces variables ne servent qu'en secours)
       - PLAYER_INTEGRATION_API_KEY=${PLAYER_INTEGRATION_API_KEY:-}
       - PLAYER_INTEGRATION_USER_EMAIL=${PLAYER_INTEGRATION_USER_EMAIL:-}
       # - DOCKER_HOST=unix:///var/run/docker.sock

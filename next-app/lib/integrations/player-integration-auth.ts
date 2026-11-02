@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'crypto'
 import { eq, or } from 'drizzle-orm'
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
+import { getOnyxIntegrationConfig } from '@/lib/integrations/onyx-config'
 
 export interface PlayerIntegrationUser {
   [key: string]: unknown
@@ -19,7 +20,7 @@ function isValidKey(providedKey: string, expectedKey: string) {
 }
 
 export async function authenticatePlayerIntegration(request: Request): Promise<PlayerIntegrationUser | null> {
-  const expectedKey = process.env.PLAYER_INTEGRATION_API_KEY?.trim()
+  const { apiKey: expectedKey, fallbackEmail: configuredEmail } = await getOnyxIntegrationConfig()
   const authorization = request.headers.get('authorization')
   const providedKey = authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : ''
 
@@ -27,7 +28,7 @@ export async function authenticatePlayerIntegration(request: Request): Promise<P
 
   const playerUsername = request.headers.get('x-player-username')?.trim()
   const playerId = request.headers.get('x-player-id')?.trim()
-  const fallbackEmail = process.env.PLAYER_INTEGRATION_USER_EMAIL?.trim()
+  const fallbackEmail = configuredEmail || undefined
   const withRole = { roleRef: { with: { permissions: true } } } as const
 
   // 1) Id stable du compte Onyx (liaison users.onyx_user_id), 2) nom ou email en repli.

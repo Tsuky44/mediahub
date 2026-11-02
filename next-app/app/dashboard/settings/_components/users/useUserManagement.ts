@@ -15,7 +15,8 @@ export function useUserManagement(users: User[], readOnly: boolean) {
         if (filterProvider === 'emby') return !!user.embyUserId
         if (filterProvider === 'plex') return !!user.plexUserId
         if (filterProvider === 'jellyfin') return !!user.jellyfinUserId
-        if (filterProvider === 'local') return !user.embyUserId && !user.plexUserId && !user.jellyfinUserId
+        if (filterProvider === 'onyx') return !!user.onyxUserId
+        if (filterProvider === 'local') return !user.embyUserId && !user.plexUserId && !user.jellyfinUserId && !user.onyxUserId
         return true
     }), [users, filterProvider])
 

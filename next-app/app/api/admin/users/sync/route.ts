@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/auth'
 import { getEmbyServiceForUser, getPlexServiceForUser, getJellyfinServiceForUser } from '@/lib/auth'
 import { logAction } from '@/lib/audit'
+import { getOnyxService, isOnyxAdmin } from '@/lib/services/onyx-admin'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: any[]) => { if (isDev) console.log(...args); };
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     const settings = await prisma.setting.findMany({
       where: {
         key: {
-          in: ['auth_emby_enabled', 'auth_plex_enabled', 'auth_jellyfin_enabled', 'default_role_id']
+          in: ['auth_emby_enabled', 'auth_plex_enabled', 'auth_jellyfin_enabled', 'auth_onyx_enabled', 'default_role_id']
         }
       },
       select: { key: true, value: true }
@@ -47,6 +48,7 @@ export async function POST(req: Request) {
     const isEmbyEnabled = settings.find((s: {key: string, value: string | null}) => s.key === 'auth_emby_enabled')?.value === 'true'
     const isPlexEnabled = settings.find((s: {key: string, value: string | null}) => s.key === 'auth_plex_enabled')?.value === 'true'
     const isJellyfinEnabled = settings.find((s: {key: string, value: string | null}) => s.key === 'auth_jellyfin_enabled')?.value === 'true'
+    const isOnyxEnabled = settings.find((s: {key: string, value: string | null}) => s.key === 'auth_onyx_enabled')?.value === 'true'
     const defaultRoleId = settings.find((s: {key: string, value: string | null}) => s.key === 'default_role_id')?.value
 
     // Fetch admin role
@@ -56,15 +58,21 @@ export async function POST(req: Request) {
     const shouldSyncEmby = (provider === 'all' || provider === 'emby') && isEmbyEnabled
     const shouldSyncPlex = (provider === 'all' || provider === 'plex') && isPlexEnabled
     const shouldSyncJellyfin = (provider === 'all' || provider === 'jellyfin') && isJellyfinEnabled
+    const shouldSyncOnyx = (provider === 'all' || provider === 'onyx') && isOnyxEnabled
+    if (provider === 'onyx' && !isOnyxEnabled) {
+      throw new Error("Activez d'abord l'authentification Onyx (onglet Media) : les comptes importés s'y connectent")
+    }
 
     let embySyncSuccess = false
     let plexSyncSuccess = false
     let jellyfinSyncSuccess = false
+    let onyxSyncSuccess = false
 
     const activeUserIds = new Set<string>()
     const activeEmbyIds = new Set<string>()
     const activePlexIds = new Set<string>()
     const activeJellyfinIds = new Set<string>()
+    const activeOnyxIds = new Set<string>()
 
     let createdCount = 0
     let updatedCount = 0
@@ -307,6 +315,80 @@ export async function POST(req: Request) {
         }
     }
 
+    // 4b. Sync Onyx Users (compte de service : GET /api/users d'Onyx)
+    if (shouldSyncOnyx) {
+        const onyxService = await getOnyxService()
+        if (!onyxService && provider === 'onyx') {
+            throw new Error('Compte de service Onyx non connecté (onglet Media, bloc Onyx)')
+        }
+
+        if (onyxService) {
+            try {
+                const onyxUsers = await onyxService.listUsers()
+                if (onyxUsers.length > 0) {
+                    onyxSyncSuccess = true
+                    for (const u of onyxUsers) {
+                        try {
+                            const onyxId = String(u.id)
+                            activeOnyxIds.add(onyxId)
+
+                            // Liaison par l'id stable d'Onyx uniquement : un homonyme ne reprend pas un compte
+                            // (docs/player-integration/v1/onyx-login-contract.md)
+                            const user = await prisma.user.findFirst({ where: { onyxUserId: onyxId } })
+                            if (user) {
+                                activeUserIds.add(user.id.toString())
+                                updatedCount++
+                                continue
+                            }
+
+                            // Même adresse que la création à la première connexion Onyx (lib/auth/onyx-link.ts)
+                            const base = u.username.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-') || `onyx-${onyxId}`
+                            let userEmail = `${base}@onyx.local`
+                            if (await prisma.user.findUnique({ where: { email: userEmail } })) {
+                                userEmail = `${base}.${onyxId}@onyx.local`
+                            }
+                            if (await prisma.user.findUnique({ where: { email: userEmail } })) {
+                                details.push(`Onyx user ${u.username}: Email collision for ${userEmail}`)
+                                continue
+                            }
+
+                            const isAdmin = isOnyxAdmin(u)
+                            const newUser = await prisma.user.create({
+                                data: {
+                                    name: u.username,
+                                    email: userEmail,
+                                    onyxUserId: onyxId,
+                                    role: isAdmin ? 'admin' : 'user',
+                                    roleId: isAdmin ? adminRoleId : defaultRoleId || undefined,
+                                }
+                            })
+
+                            await logAction(parseInt((session.user as any).id), 'CREATE', 'User', newUser.id.toString(), {
+                              provider: 'Onyx',
+                              userName: newUser.name,
+                              userEmail: newUser.email
+                            })
+
+                            activeUserIds.add(newUser.id.toString())
+                            createdCount++
+                        } catch (err: any) {
+                            error(`[SyncUsers] Failed to process Onyx user ${u.username}:`, err)
+                            details.push(`Onyx user ${u.username}: ${err.message}`)
+                        }
+                    }
+                } else {
+                    warn('[SyncUsers] Onyx returned 0 users. Skipping cleanup for Onyx.')
+                    details.push('Onyx: 0 users found (cleanup skipped)')
+                }
+            } catch (e: any) {
+                error(`[SyncUsers] Onyx sync failed:`, e)
+                // Synchro Onyx demandée seule : l'admin doit savoir pourquoi (session expirée, droits)
+                if (provider === 'onyx') throw e
+                details.push(`Onyx sync failed: ${e.message}`)
+            }
+        }
+    }
+
     // 5. Cleanup Logic
     // We want to remove users who are NOT present in ANY of the enabled services
     // BUT we must be careful not to delete the current admin user or users created manually (if any)
@@ -342,6 +424,15 @@ export async function POST(req: Request) {
     if (skipJellyfinCleanup) {
         warn(`[SyncUsers] Jellyfin Mass Unlink Protection: Existing ${existingJellyfinCount}, Found ${foundJellyfinCount}. Skipping cleanup.`)
         details.push(`Jellyfin: Mass unlink protection triggered (Existing: ${existingJellyfinCount}, Found: ${foundJellyfinCount}). Cleanup skipped.`)
+    }
+
+    const existingOnyxCount = allUsers.filter((u: any) => u.onyxUserId).length
+    const foundOnyxCount = activeOnyxIds.size
+    const skipOnyxCleanup = shouldSyncOnyx && onyxSyncSuccess && existingOnyxCount > 5 && foundOnyxCount < existingOnyxCount * 0.2
+
+    if (skipOnyxCleanup) {
+        warn(`[SyncUsers] Onyx Mass Unlink Protection: Existing ${existingOnyxCount}, Found ${foundOnyxCount}. Skipping cleanup.`)
+        details.push(`Onyx: Mass unlink protection triggered (Existing: ${existingOnyxCount}, Found: ${foundOnyxCount}). Cleanup skipped.`)
     }
 
     for (const user of allUsers) {
@@ -381,12 +472,22 @@ export async function POST(req: Request) {
             }
         }
 
+        // Check Onyx
+        if (user.onyxUserId) {
+            if (shouldSyncOnyx && onyxSyncSuccess && !skipOnyxCleanup) {
+                if (!activeOnyxIds.has(user.onyxUserId)) {
+                     await prisma.user.update({ where: { id: user.id }, data: { onyxUserId: null } })
+                }
+            }
+        }
+
         // Re-evaluate user after potential link removals
         const updatedUser = await prisma.user.findUnique({ where: { id: user.id } })
         
         const hasEmby = !!updatedUser?.embyUserId
         const hasPlex = !!updatedUser?.plexUserId
         const hasJellyfin = !!updatedUser?.jellyfinUserId
+        const hasOnyx = !!updatedUser?.onyxUserId
 
         // A user is "valid" if they have at least one link to an ACTIVE user on an ENABLED service (if sync succeeded),
         // OR a link to a DISABLED service (which we can't verify, so we keep).
@@ -399,7 +500,7 @@ export async function POST(req: Request) {
         const validPlex = hasPlex 
         const validJellyfin = hasJellyfin 
 
-        if (!validEmby && !validPlex && !validJellyfin) {
+        if (!validEmby && !validPlex && !validJellyfin && !hasOnyx) {
             // User has no valid links remaining.
             // Delete them.
             log(`[SyncUsers] Deleting user ${user.name} (ID: ${user.id}) - No longer found on any enabled service`)
@@ -438,10 +539,11 @@ export async function POST(req: Request) {
       emby: embySyncSuccess,
       plex: plexSyncSuccess,
       jellyfin: jellyfinSyncSuccess,
+      onyx: onyxSyncSuccess,
       details
     })
-  } catch (error: any) {
-    error('[SyncUsers] Error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (e: any) {
+    error('[SyncUsers] Error:', e)
+    return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }

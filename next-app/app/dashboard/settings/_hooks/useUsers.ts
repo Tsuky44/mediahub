@@ -17,7 +17,7 @@ export interface UseUsersResult {
 }
 
 /**
- * Gere la liste des utilisateurs (create, update role/notif, bulk, sync avec Emby/Plex/Jellyfin).
+ * Gere la liste des utilisateurs (create, update role/notif, bulk, sync avec Emby/Plex/Jellyfin/Onyx).
  */
 export function useUsers(initialUsers: User[]): UseUsersResult {
     const [users, setUsers] = useState<User[]>(initialUsers)
@@ -164,8 +164,8 @@ export function useUsers(initialUsers: User[]): UseUsersResult {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ provider }),
             })
-            if (!response.ok) throw new Error('Sync failed')
-            const data = await response.json()
+            const data = await response.json().catch(() => ({}))
+            if (!response.ok) throw new Error(data.error || 'Erreur lors de la synchronisation')
 
             if (data.details && data.details.length > 0) {
                 toast(`Sync terminée avec avertissements: ${data.details.length} erreurs`, { icon: '⚠️' })
@@ -174,8 +174,8 @@ export function useUsers(initialUsers: User[]): UseUsersResult {
 
             toast.success(`${data.created} utilisateurs ajoutés, ${data.updated} mis à jour, ${data.deleted} supprimés`)
             await refetch()
-        } catch (e) {
-            toast.error('Erreur lors de la synchronisation')
+        } catch (e: any) {
+            toast.error(e?.message || 'Erreur lors de la synchronisation')
             console.error(e)
         } finally {
             setSyncingProvider(null)
