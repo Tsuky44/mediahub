@@ -77,9 +77,11 @@ export function useReleaseCalendar() {
     const poster =
       document.querySelector('[data-onyx-tooltip-poster]') ??
       document.querySelector(`[data-onyx-event="${CSS.escape(event.id)}"] img`)
-    prepareNavTo(url, poster, event.backdropUrl)
+    const delay = prepareNavTo(url, poster, event.backdropUrl)
     poster?.closest('[data-onyx-tooltip]')?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: 'ease-out', fill: 'forwards' })
-    router.push(url)
+    // Sans View Transition (mode allégé, téléphone), la page change une fois l'écran voilé
+    if (delay) window.setTimeout(() => router.push(url), delay)
+    else router.push(url)
   }, [router])
 
   const getDayEvents = useCallback(

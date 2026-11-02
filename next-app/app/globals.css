@@ -438,6 +438,29 @@
   }
 }
 
+/* Image de fond d'une fiche (MediaBackdrop) : vignettage léger comme un écran de cinéma, fondu
+   du haut sous la barre de navigation, du bas jusqu'à la couleur de la page, et à gauche pour la
+   lisibilité du titre (plus marqué sur écran large, où le texte est sur l'image). Un seul calque,
+   léger à faire apparaître à l'arrivée d'un envol. */
+.onyx-backdrop-shade {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 180px rgb(0 0 0 / 0.55);
+  background-image:
+    linear-gradient(to top, #0c0d0d, rgb(12 13 13 / 0.55), transparent),
+    linear-gradient(to bottom, rgb(12 13 13 / 0.85), transparent 12rem),
+    linear-gradient(to right, rgb(12 13 13 / 0.5), transparent);
+}
+@media (min-width: 768px) {
+  .onyx-backdrop-shade {
+    background-image:
+      linear-gradient(to top, #0c0d0d, rgb(12 13 13 / 0.55), transparent),
+      linear-gradient(to bottom, rgb(12 13 13 / 0.85), transparent 12rem),
+      linear-gradient(to right, rgb(12 13 13 / 0.5), transparent),
+      linear-gradient(to right, #0c0d0d, rgb(12 13 13 / 0.75) 35%, transparent 70%);
+  }
+}
+
 /* Verre (design.md) : niveau 1 pour les cartes, niveau 2 pour les modales.
    Arête haute à 15 % de blanc, une seule ombre pour décoller les modales. */
 @utility onyx-glass {
