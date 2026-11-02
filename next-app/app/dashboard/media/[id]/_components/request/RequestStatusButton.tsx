@@ -1,7 +1,7 @@
 'use client'
 
 import { CalendarClock, Check, CircleDashed, Download, Plus } from 'lucide-react'
-import { useMediaServerType } from '@/app/dashboard/_hooks/useMediaServerType'
+import { useAvailabilityServerName } from '@/app/dashboard/_hooks/useMediaServerType'
 import { OnyxBeam, OnyxTrack, type OnyxPhase } from '@/components/ui/onyx'
 import { cn } from '@/lib/utils'
 import { formatReleaseDate } from '@/lib/release-date'
@@ -58,8 +58,7 @@ export function RequestStatusButton({
   onSeasonClick,
   onStatusClick,
 }: RequestStatusButtonProps) {
-  const serverType = useMediaServerType()
-  const serverName = serverType === 'jellyfin' ? 'Jellyfin' : 'Emby'
+  const serverName = useAvailabilityServerName()
 
   // La confirmation reste affichée avant de laisser place au statut « en cours »
   if (phase === 'idle' || phase === 'error' || !canRequest) {

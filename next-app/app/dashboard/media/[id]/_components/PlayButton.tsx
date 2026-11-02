@@ -2,33 +2,44 @@
 
 import { useState } from 'react'
 import { Play } from 'lucide-react'
-import { useMediaServerType } from '@/app/dashboard/_hooks/useMediaServerType'
+import { useIsOnyxAccount, useMediaServerType } from '@/app/dashboard/_hooks/useMediaServerType'
 
 interface PlayButtonProps {
-    embyUrl: string
+    embyUrl: string | null
     embyItemId: string
-    serverId: string
+    serverId: string | null
+    tmdbId: number
+    mediaType: 'movie' | 'tv'
 }
 
-export function PlayButton({ embyUrl, embyItemId, serverId }: PlayButtonProps) {
+export function PlayButton({ embyUrl, embyItemId, serverId, tmdbId, mediaType }: PlayButtonProps) {
     const [showWebOption, setShowWebOption] = useState(false)
     const serverType = useMediaServerType()
+    const isOnyx = useIsOnyxAccount()
     const isJellyfin = serverType === 'jellyfin'
-    const serverName = isJellyfin ? 'Jellyfin' : 'Emby'
+    const serverName = isOnyx ? 'Onyx' : isJellyfin ? 'Jellyfin' : 'Emby'
     const appScheme = isJellyfin ? 'jellyfin://' : 'emby://'
 
-    const handlePlay = () => {
-        const webUrl = `${embyUrl}/web/index.html#!/item?id=${embyItemId}&serverId=${serverId}`
-        const appUrl = webUrl.replace(/^https?:\/\//, appScheme)
+    // Sans réglage du serveur média, seul un compte Onyx peut lire (l'app Onyx reprend là où on s'est arrêté)
+    if (!isOnyx && (!embyUrl || !serverId)) return null
 
-        window.location.href = appUrl
+    const webUrl = embyUrl && serverId
+        ? `${embyUrl}/web/index.html#!/item?id=${embyItemId}&serverId=${serverId}`
+        : null
+
+    const handlePlay = () => {
+        if (isOnyx) {
+            window.location.href = `onyx://play?tmdbId=${tmdbId}&type=${mediaType}`
+            return
+        }
+        if (!webUrl) return
+        window.location.href = webUrl.replace(/^https?:\/\//, appScheme)
         setShowWebOption(true)
     }
 
     const openWeb = (e: React.MouseEvent) => {
         e.stopPropagation()
-        const webUrl = `${embyUrl}/web/index.html#!/item?id=${embyItemId}&serverId=${serverId}`
-        window.open(webUrl, '_blank')
+        if (webUrl) window.open(webUrl, '_blank')
     }
 
     return (
@@ -40,9 +51,9 @@ export function PlayButton({ embyUrl, embyItemId, serverId }: PlayButtonProps) {
                 <Play className="h-4 w-4 fill-current" />
                 <span>Lire<span className="hidden sm:inline">{` sur ${serverName}`}</span></span>
             </button>
-            
-            {showWebOption && (
-                <button 
+
+            {showWebOption && !isOnyx && (
+                <button
                     onClick={openWeb}
                     className="ml-2 text-xs text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
                 >

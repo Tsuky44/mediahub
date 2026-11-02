@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { authenticate } from '@/lib/integrations/player-v1'
+import { authenticate, canInteractiveSearch } from '@/lib/integrations/player-v1'
 import { getOnyxWebhookTarget, PLAYER_API_VERSION } from '@/lib/integrations/onyx-webhook'
 import { VersionService } from '@/lib/services/version'
 
@@ -17,6 +17,7 @@ const FEATURES = [
   'request-feed',
   'request-moderation',
   'request-delete',
+  'interactive-search',
   'webhook-events',
 ]
 
@@ -44,6 +45,7 @@ export async function GET(request: Request) {
         readAllRequests: ability.can('read', 'MediaRequest'),
         moderate: ability.can('update', 'MediaRequest'),
         delete: ability.can('delete', 'MediaRequest'),
+        interactiveSearch: canInteractiveSearch(ability),
       },
     },
   })

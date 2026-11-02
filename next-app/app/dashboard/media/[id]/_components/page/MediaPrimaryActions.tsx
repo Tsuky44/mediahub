@@ -53,7 +53,8 @@ export default function MediaPrimaryActions({
   canTriggerSearch,
   canInteractiveSearch,
 }: MediaPrimaryActionsProps) {
-  const canPlay = Boolean(embyItem && embyServerId && embyUrl)
+  // Les comptes Onyx lisent via l'app Onyx : PlayButton se masque seul si ni Onyx ni serveur média ne conviennent
+  const canPlay = Boolean(embyItem)
   return (
     <div className="flex flex-col gap-3 sm:gap-5 pt-4 border-t border-white/5 w-full">
       {/* Téléphone : « Lire » (ou « Demander »), bande-annonce et menu sur la première
@@ -73,12 +74,14 @@ export default function MediaPrimaryActions({
           tvdbId={details.external_ids?.tvdb_id}
         />
         </div>
-        {canPlay && embyUrl && embyServerId && (
+        {canPlay && (
           <div className="min-w-0 flex-1 sm:flex-none">
             <PlayButton
-              embyUrl={embyUrl.split('/web/')[0].replace(/\/$/, '')}
+              embyUrl={embyUrl ? embyUrl.split('/web/')[0].replace(/\/$/, '') : null}
               embyItemId={embyItem.Id}
               serverId={embyServerId}
+              tmdbId={tmdbId}
+              mediaType={mediaType}
             />
           </div>
         )}

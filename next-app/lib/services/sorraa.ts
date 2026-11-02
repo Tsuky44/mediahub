@@ -80,6 +80,46 @@ export interface SorraaRequestDraft {
   requester: { name: string; ref?: string }
 }
 
+export interface SorraaUnit {
+  id: number
+  kind: 'movie' | 'season' | 'episode'
+  seasonNumber?: number
+  episodeNumber?: number
+}
+
+export interface SorraaMedia {
+  id: number
+  kind: SorraaKind
+  title: string
+  tmdbId: number
+  units: SorraaUnit[]
+}
+
+/** Pourquoi sorraa ne prendrait pas une release ; les champs en plus dependent de `reason`. */
+export interface SorraaRejection {
+  reason: string
+  quality?: string
+  score?: number
+  minimum?: number
+  actual?: number
+  limit?: number
+}
+
+/** Une release que les indexeurs offrent, jugee par le moteur de sorraa (recherche interactive). */
+export interface SorraaFoundRelease {
+  /** Nomme la release 30 minutes : c'est ce qu'on rend a `POST /grabs`. */
+  id: string
+  indexerId: number
+  indexer: string
+  protocol: 'usenet' | 'torrent'
+  name: string
+  size: number
+  publishedAt?: string
+  seeders?: number
+  leechers?: number
+  decision: { accepted: boolean; quality: string; formatScore: number; rejections: SorraaRejection[] }
+}
+
 export class SorraaError extends Error {
   constructor(message: string, public readonly status: number, public readonly code?: string) {
     super(message)
@@ -199,6 +239,46 @@ export class SorraaService {
     if (opts.stopSearching) q.set('stopSearching', 'true')
     const suffix = q.toString() ? `?${q}` : ''
     await this.call('DELETE', `/requests/${id}${suffix}`)
+  }
+
+  /** Le titre de la bibliotheque de sorraa, demande ou non ; null s'il n'y est pas. */
+  async findMedia(kind: SorraaKind, tmdbId: number): Promise<SorraaMedia | null> {
+    const q = new URLSearchParams({ kind, tmdbId: String(tmdbId), limit: '1' })
+    const page = await this.call<{ items: Array<{ id: number }> }>('GET', `/media?${q}`)
+    const found = page.items?.[0]
+    return found ? this.call<SorraaMedia>('GET', `/media/${found.id}`) : null
+  }
+
+  /** Ajoute le titre a la bibliotheque sans rien chercher : la recherche interactive choisira. */
+  async addMedia(kind: SorraaKind, tmdbId: number): Promise<SorraaMedia> {
+    try {
+      const added = await this.call<SorraaMedia>('POST', '/media', { body: { kind, tmdbId, search: false }, timeoutMs: 30_000 })
+      return added
+    } catch (e) {
+      // deja ajoute entre-temps : on le relit
+      if (!(e instanceof SorraaError) || e.status !== 409) throw e
+      const existing = await this.findMedia(kind, tmdbId)
+      if (existing) return existing
+      throw e
+    }
+  }
+
+  /**
+   * Interroge tous les indexeurs pour une unite (film, saison ou episode) et juge chaque release.
+   * La recherche compte dans les limites des indexeurs et peut durer : l'echeance reste sous celle
+   * d'Onyx (30 s).
+   */
+  async searchReleases(mediaId: number, unitId: number): Promise<SorraaFoundRelease[]> {
+    const res = await this.call<{ releases: SorraaFoundRelease[] }>('POST', `/media/${mediaId}/release-searches`, {
+      body: { unitId },
+      timeoutMs: 27_000,
+    })
+    return res.releases ?? []
+  }
+
+  /** Envoie au client de telechargement la release que `searchReleases` a rendue sous ce jeton. */
+  async grabRelease(releaseId: string): Promise<SorraaGrab> {
+    return this.call<SorraaGrab>('POST', '/grabs', { body: { releaseId }, timeoutMs: 30_000 })
   }
 
   async listActiveGrabs(mediaId?: number): Promise<SorraaGrab[]> {

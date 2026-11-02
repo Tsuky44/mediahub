@@ -31,6 +31,10 @@ const batches: number[] = []
 const seen: Array<{ method: string; url: string; auth?: string }> = []
 let nextId = 1
 const requests: Json[] = []
+const library: Json[] = []
+const addedMedia: Json[] = []
+const searches: Json[] = []
+const grabbedTokens: string[] = []
 let availabilitySupported = false
 let libraryProgress: number | undefined
 
@@ -85,6 +89,52 @@ function startFakeSorraa() {
         const items = JSON.parse(body).items as Array<{ kind: string; tmdbId: number }>
         batches.push(items.length)
         return send(200, { items: items.map((it) => availabilityOf(it.kind, it.tmdbId)) })
+      }
+      // --- recherche interactive : bibliotheque, ajout, recherche, envoi ---
+      if (url.pathname === '/api/v1/media' && req.method === 'GET') {
+        const tmdb = Number(url.searchParams.get('tmdbId'))
+        return send(200, { items: library.filter((m) => m.tmdbId === tmdb && m.kind === url.searchParams.get('kind')) })
+      }
+      if (url.pathname === '/api/v1/media' && req.method === 'POST') {
+        const draft = JSON.parse(body)
+        addedMedia.push(draft)
+        const media = {
+          id: 200 + library.length, kind: draft.kind, tmdbId: draft.tmdbId, title: `Titre ${draft.tmdbId}`,
+          units: draft.kind === 'movie'
+            ? [{ id: 1, kind: 'movie' }]
+            : [
+                { id: 10, kind: 'season', seasonNumber: 1 }, { id: 11, kind: 'episode', seasonNumber: 1, episodeNumber: 1 },
+                { id: 12, kind: 'episode', seasonNumber: 1, episodeNumber: 2 }, { id: 20, kind: 'season', seasonNumber: 2 },
+              ],
+        }
+        library.push(media)
+        return send(201, media)
+      }
+      const libraryMedia = url.pathname.match(/^\/api\/v1\/media\/(\d+)$/)
+      if (libraryMedia && Number(libraryMedia[1]) >= 200) return send(200, library.find((m) => m.id === Number(libraryMedia[1])))
+      const releaseSearch = url.pathname.match(/^\/api\/v1\/media\/(\d+)\/release-searches$/)
+      if (releaseSearch && req.method === 'POST') {
+        searches.push({ mediaId: Number(releaseSearch[1]), ...JSON.parse(body) })
+        const found = (id: string, name: string, decision: Json) => ({
+          id, indexerId: 3, indexer: 'Idx', protocol: 'torrent', name, size: 2_000_000_000, seeders: 12, leechers: 1,
+          publishedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), release: {}, decision,
+        })
+        return send(200, {
+          query: { text: 'x' }, indexers: [],
+          releases: [
+            found('tok-1', 'Show.S01E02.MULTi.1080p.WEB-GRP', { accepted: true, quality: 'webdl-1080p', formatScore: 5, rejections: [] }),
+            found('tok-2', 'Show.S01E02.720p.HDTV-GRP', {
+              accepted: false, quality: 'hdtv-720p', formatScore: 0,
+              rejections: [{ reason: 'seeders_too_low', actual: 1, limit: 3 }, { reason: 'wrong_unit' }],
+            }),
+          ],
+        })
+      }
+      if (url.pathname === '/api/v1/grabs' && req.method === 'POST') {
+        const { releaseId } = JSON.parse(body)
+        if (releaseId !== 'tok-1') return send(410, { title: 'Gone', status: 410, code: 'release_expired', detail: 'unknown token' })
+        grabbedTokens.push(releaseId)
+        return send(201, { id: 7, mediaId: 200, releaseName: 'Show.S01E02.MULTi.1080p.WEB-GRP', status: 'sent', progress: 0, sizeLeft: 0, speed: 0 })
       }
       if (url.pathname === '/api/v1/grabs') {
         return send(200, { items: libraryProgress === undefined ? [] : [{ id: 1, mediaId: 12, releaseName: 'Matrix.1999.1080p', status: 'downloading', progress: libraryProgress, sizeLeft: 2147483648, speed: 1048576 }] })
@@ -199,6 +249,68 @@ async function main() {
   assert.equal(posted.length, before)
   assert.equal((await createMediaRequest(user, { tmdbId: 550, mediaType: 'movie', title: 'Fight Club' })).status, 200)
   assert.equal(posted.length, before + 1)
+  await setSetting('download_manager_tv', 'sorraa')
+
+  // --- recherche interactive : sorraa cherche, juge et prend la release -----------
+  const releasesRoute = await import('../app/api/integrations/player/v1/releases/route')
+  const admin_headers = { 'content-type': 'application/json', authorization: 'Bearer ' + PLAYER_KEY, 'x-player-username': 'root' }
+  const search = (query: string) => releasesRoute.GET(new Request(`http://mediahub.test/?${query}`, { headers: admin_headers }))
+  const grab = (body: Json) =>
+    releasesRoute.POST(new Request('http://mediahub.test/', { method: 'POST', headers: admin_headers, body: JSON.stringify(body) }))
+
+  const noRights = await releasesRoute.GET(new Request('http://mediahub.test/?tmdbId=777&type=tv&season=1', { headers: { authorization: 'Bearer ' + PLAYER_KEY } }))
+  assert.equal(noRights.status, 403, 'sans interactive_search, rien ne part')
+  assert.equal(searches.length, 0)
+
+  // un episode d'un titre absent de sorraa : il y est ajoute sans recherche, puis l'unite de l'episode est cherchee
+  let res = await search('tmdbId=777&type=tv&season=1&episode=2')
+  assert.equal(res.status, 200)
+  let json = await res.json()
+  assert.equal(json.manager, 'sorraa')
+  assert.deepEqual(addedMedia, [{ kind: 'series', tmdbId: 777, search: false }])
+  assert.deepEqual(searches[0], { mediaId: 200, unitId: 12 })
+  assert.deepEqual(json.releases.map((r: Json) => [r.id, r.accepted]), [['tok-1', true], ['tok-2', false]])
+  assert.equal(json.releases[0].downloadUrl, undefined, 'sorraa ne rend jamais l\'adresse d\'un indexeur')
+  assert.equal(json.releases[0].protocol, 'torrent')
+  assert.equal(Math.round(json.releases[0].age), 3)
+  assert.deepEqual(json.releases[1].rejections, ['Pas assez de seeders (1 pour 3 demandés)', 'Ne contient pas la saison ou l’épisode voulu'])
+
+  // une saison : l'unite de la saison, sans rajouter le titre
+  assert.equal((await search('tmdbId=777&type=tv&season=2')).status, 200)
+  assert.equal(addedMedia.length, 1)
+  assert.deepEqual(searches[1], { mediaId: 200, unitId: 20 })
+  assert.equal((await search('tmdbId=777&type=tv&season=9')).status, 404)
+  assert.equal(searches.length, 2, 'une saison qui n\'existe pas ne lance aucune recherche')
+
+  // un film
+  assert.equal((await search('tmdbId=778&type=movie')).status, 200)
+  assert.deepEqual(searches[2], { mediaId: 201, unitId: 1 })
+
+  // le choix : le jeton suffit, sorraa a gardé la release
+  res = await grab({ tmdbId: 777, mediaType: 'tv', season: 1, episode: 2, release: { id: 'tok-1' } })
+  assert.equal(res.status, 200)
+  assert.deepEqual(grabbedTokens, ['tok-1'])
+  assert.equal((await grab({ tmdbId: 777, mediaType: 'tv', season: 1, release: { guid: 'tok-1' } })).status, 200, 'un Onyx qui n\'envoie que guid')
+  res = await grab({ tmdbId: 777, mediaType: 'tv', season: 1, release: { id: 'tok-perime' } })
+  assert.equal(res.status, 410)
+  assert.match((await res.json()).error, /expiré/)
+  assert.equal((await grab({ tmdbId: 777, mediaType: 'tv', season: 1, release: {} })).status, 400)
+  assert.equal(grabbedTokens.length, 2)
+
+  // sorraa choisi mais pas regle : comme les demandes, une erreur claire, pas Sonarr
+  await setSetting('sorraa_api_key', '')
+  res = await search('tmdbId=777&type=tv&season=1')
+  assert.equal(res.status, 503)
+  assert.match((await res.json()).error, /sorraa/)
+  await setSetting('sorraa_api_key', API_KEY)
+
+  // Radarr/Sonarr choisi : sorraa n'est pas appele, et la release doit porter son adresse
+  await setSetting('download_manager_tv', 'arr')
+  const asked = seen.length
+  res = await search('tmdbId=777&type=tv&season=1')
+  assert.equal(res.status, 503, 'Prowlarr n\'est pas regle ici')
+  assert.equal((await grab({ tmdbId: 777, mediaType: 'tv', season: 1, release: { id: 'guid-indexeur', indexerId: 3, title: 'Show.S01' } })).status, 400, 'sans adresse, Sonarr ne peut rien prendre')
+  assert.equal(seen.length, asked, 'sorraa n\'est pas appele quand Radarr/Sonarr est choisi')
   await setSetting('download_manager_tv', 'sorraa')
 
   // --- webhook : signature ------------------------------------------------------
