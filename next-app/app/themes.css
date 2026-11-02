@@ -1,0 +1,196 @@
+/*
+ * Thèmes MediaHub
+ * =================
+ *
+ * Tailwind 4 compile chaque utilitaire de couleur en `var(--color-*)` et chaque
+ * rayon en `var(--radius-*)`. Redéfinir ces variables sous `html[data-theme=...]`
+ * re-skinne donc les ~4 200 classes déjà écrites dans les 417 composants, sans
+ * en modifier un seul.
+ *
+ * Spécificité : `html[data-theme="x"]` (0,1,1) l'emporte sur le `:root` (0,1,0)
+ * émis par Tailwind, sur le même élément.
+ *
+ * Thème par défaut = l'existant : aucune surcharge ici, on hérite de Tailwind.
+ *
+ * Ce qui NE passe pas par les jetons et se règle plus bas, à la main :
+ *   - les ombres (`shadow-lg` inline sa valeur au lieu de lire une variable) ;
+ *   - les valeurs arbitraires entre crochets (`bg-[#0f172a]`, `shadow-[0_0_20px_...]`).
+ */
+
+/* ========================================================================
+   ARDOISE — sombre, plat, filets 1px, accent rare
+   ======================================================================== */
+
+html:is([data-theme='ardoise'], [data-theme='studio']) {
+  color-scheme: dark;
+
+  /* Fond de page : plat. Remplace le dégradé radial #2d3e5a → #020617. */
+  --app-bg: #0a0a0b;
+  --app-bg-image: none;
+
+  --background: #0a0a0b;
+  --foreground: #f2f2f3;
+
+  /* ---- Neutres ------------------------------------------------------
+     La rampe `gray` est reprise à luminosité comparable mais désaturée
+     (Tailwind tire le gris vers le bleu), et nettement assombrie sur les
+     tons foncés pour obtenir des surfaces empilées plutôt qu'un aplat. */
+  --color-gray-50: #f7f7f8;
+  --color-gray-100: #f2f2f3; /* texte principal */
+  --color-gray-200: #e2e2e5;
+  --color-gray-300: #c2c2c8; /* texte secondaire appuyé */
+  --color-gray-400: #a0a0a8; /* texte secondaire — l'usage le plus courant */
+  --color-gray-500: #6e6e78; /* texte atténué */
+  --color-gray-600: #4a4a53; /* texte discret */
+  --color-gray-700: #26262c; /* filets, surface élevée */
+  --color-gray-800: #131316; /* carte */
+  --color-gray-900: #0d0d0f; /* rail, panneau */
+  --color-gray-950: #060607;
+
+  /* Mêmes valeurs pour les rampes neutres voisines, au cas où elles
+     apparaissent : slate/zinc/neutral doivent rester cohérents avec gray. */
+  --color-slate-300: #c2c2c8;
+  --color-slate-400: #a0a0a8;
+  --color-slate-500: #6e6e78;
+  --color-slate-600: #4a4a53;
+  --color-slate-700: #26262c;
+  --color-slate-800: #131316;
+  --color-slate-900: #0d0d0f;
+  --color-slate-950: #060607;
+  --color-zinc-700: #26262c;
+  --color-zinc-800: #131316;
+  --color-zinc-900: #0d0d0f;
+  --color-neutral-700: #26262c;
+  --color-neutral-800: #131316;
+  --color-neutral-900: #0d0d0f;
+
+  /* Blanc adouci : `text-white` est utilisé ~880 fois, le blanc pur est dur
+     sur fond quasi-noir. Les modificateurs d'opacité (`bg-white/10`) suivent. */
+  --color-white: #f2f2f3;
+
+  /* ---- Accent -------------------------------------------------------
+     L'indigo saturé devient un bleu ardoise. Les teintes 500/600 servent de
+     fond à du texte blanc dans les composants existants : elles restent donc
+     assez sombres pour garder un contraste lisible (~4,6:1 et ~5,4:1). */
+  --color-indigo-200: #d2e0f0;
+  --color-indigo-300: #a9c5e6;
+  --color-indigo-400: #7aa2d6; /* texte / icône d'accent */
+  --color-indigo-500: #4f77ab; /* fond, bordure, anneau de focus */
+  --color-indigo-600: #456a9c;
+  --color-indigo-700: #3a5a85;
+  --color-indigo-800: #2f4869;
+  --color-indigo-900: #23364e;
+
+  /* Violet et pourpre rejoignent la même famille, sinon ils ressortent. */
+  --color-violet-400: #9d94c4;
+  --color-violet-500: #7a70a8;
+  --color-purple-400: #9d94c4;
+  --color-purple-500: #7a70a8;
+  --color-fuchsia-400: #b08cb8;
+
+  /* ---- Sémantique ---------------------------------------------------
+     Désaturée : l'information passe par la position et le libellé, la
+     couleur ne fait que confirmer. */
+  --color-emerald-300: #8fcbaa;
+  --color-emerald-400: #6fb894;
+  --color-emerald-500: #5fa87f;
+  --color-emerald-600: #4e8e6b;
+  --color-green-300: #8fcbaa;
+  --color-green-400: #6fb894;
+  --color-green-500: #5fa87f;
+  --color-green-600: #4e8e6b;
+
+  --color-amber-300: #dfc189;
+  --color-amber-400: #d4b070;
+  --color-amber-500: #c9a15f;
+  --color-amber-600: #ad8a4f;
+  --color-yellow-400: #d4b070;
+  --color-yellow-500: #c9a15f;
+  --color-orange-400: #d09a72;
+  --color-orange-500: #bd8760;
+
+  --color-red-300: #e3a5a5;
+  --color-red-400: #d98a8a;
+  --color-red-500: #c96f6f;
+  --color-red-600: #b25c5c;
+  --color-rose-400: #d98a8a;
+  --color-rose-500: #c96f6f;
+  --color-pink-400: #cf8fa8;
+
+  --color-blue-300: #a9c5e6;
+  --color-blue-400: #7aa2d6;
+  --color-blue-500: #4f77ab;
+  --color-blue-600: #456a9c;
+  --color-sky-400: #7aa2d6;
+  --color-sky-500: #4f77ab;
+  --color-cyan-400: #74aab5;
+  --color-cyan-500: #5b8f9a;
+  --color-teal-400: #6fb0a8;
+  --color-teal-500: #5a968f;
+
+  /* ---- Rayons -------------------------------------------------------
+     Le levier le plus visible après la couleur. `rounded-2xl` (cartes média,
+     modales) tombe de 16 px à 10 px, `rounded-xl` de 12 à 8. */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 10px;
+  --radius-3xl: 12px;
+  --radius-4xl: 16px;
+}
+
+/* ---- Ombres --------------------------------------------------------
+   `shadow-lg` & co. n'utilisent pas de variable de thème : Tailwind écrit la
+   valeur directement dans `--tw-shadow`. On surcharge donc la classe.
+   L'ardoise ne porte qu'une ombre, discrète, pour décoller les sur-couches. */
+html:is([data-theme='ardoise'], [data-theme='studio']) .shadow-md,
+html:is([data-theme='ardoise'], [data-theme='studio']) .shadow-lg,
+html:is([data-theme='ardoise'], [data-theme='studio']) .shadow-xl,
+html:is([data-theme='ardoise'], [data-theme='studio']) .shadow-2xl {
+  --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.45));
+}
+
+/* Les lueurs colorées — `shadow-[0_0_20px_rgba(79,70,229,0.3)]` et une
+   trentaine de variantes — sont la signature qu'on veut supprimer.
+   Le sélecteur d'attribut évite d'avoir à échapper les crochets. */
+html:is([data-theme='ardoise'], [data-theme='studio']) [class*='shadow-[0_0_'] {
+  --tw-shadow: 0 0 #0000;
+}
+
+/* Fonds arbitraires en dur : ramenés sur la rampe du thème. */
+html:is([data-theme='ardoise'], [data-theme='studio']) [class*='bg-[#0a0a0a]' i] {
+  background-color: #0a0a0b;
+}
+html:is([data-theme='ardoise'], [data-theme='studio']) [class*='bg-[#0f172a]' i],
+html:is([data-theme='ardoise'], [data-theme='studio']) [class*='bg-[#1e293b]' i] {
+  background-color: #131316;
+}
+
+/* Studio keeps the existing feature layouts, including Docker's card view. */
+html[data-theme='studio'] {
+  --app-bg: #101214;
+  --background: #101214;
+  --color-gray-950: #0c0e10;
+  --color-gray-900: #16191d;
+  --color-gray-800: #1e2227;
+  --color-gray-700: #343a42;
+  --color-gray-600: #646d78;
+  --color-gray-500: #9099a5;
+  --color-gray-400: #aab2bd;
+  --color-slate-950: #0c0e10;
+  --color-slate-900: #16191d;
+  --color-slate-800: #1e2227;
+  --color-slate-700: #343a42;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-3xl: 16px;
+}
+
+html[data-theme='studio'] .app-navbar {
+  background: rgb(16 18 20 / 96%);
+}
+html[data-theme='studio'] .dashboard-home {
+  --color-indigo-200: #c4d5ec;
+}

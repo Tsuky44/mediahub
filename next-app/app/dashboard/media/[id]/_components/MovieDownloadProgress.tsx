@@ -1,6 +1,7 @@
 'use client'
 
 import type { DownloadStatus } from '../download-status-actions'
+import { useSmoothProgress } from '../_hooks/useSmoothProgress'
 
 interface MovieDownloadProgressProps {
   status: DownloadStatus
@@ -8,14 +9,15 @@ interface MovieDownloadProgressProps {
 }
 
 export function MovieDownloadProgress({ status, color }: MovieDownloadProgressProps) {
+  const smooth = useSmoothProgress(status.progress)
   return (
     <div className="px-3 py-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
       <div className="flex items-center gap-3 mb-2">
         <div className="flex-1">
           <div className="h-1.5 w-full bg-gray-700/50 rounded-full overflow-hidden">
             <div
-              className={`h-full bg-${color}-500 transition-all duration-500 ease-out`}
-              style={{ width: `${status.progress}%` }}
+              className={`h-full bg-${color}-500`}
+              style={{ width: `${smooth}%` }}
             />
           </div>
         </div>

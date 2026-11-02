@@ -1,7 +1,7 @@
 'use client'
 
 import clsx from 'clsx'
-import { Server, Tv, MonitorPlay, UserCircle } from 'lucide-react'
+import { Server, Tv, MonitorPlay, UserCircle, Play } from 'lucide-react'
 import { getProviderColor, type EnabledProviders, type LoginProvider } from '../_utils/login-providers'
 
 const PROVIDER_OPTIONS: Array<{ id: LoginProvider; label: string; Icon: React.ComponentType<{ className?: string }> }> = [
@@ -9,6 +9,7 @@ const PROVIDER_OPTIONS: Array<{ id: LoginProvider; label: string; Icon: React.Co
     { id: 'emby', label: 'Emby', Icon: Server },
     { id: 'plex', label: 'Plex', Icon: Tv },
     { id: 'jellyfin', label: 'Jellyfin', Icon: MonitorPlay },
+    { id: 'onyx', label: 'Onyx', Icon: Play },
 ]
 
 interface ProviderSelectorProps {
@@ -17,11 +18,15 @@ interface ProviderSelectorProps {
     onChange: (p: LoginProvider) => void
 }
 
-/** Grille de selection du provider d'authentification (4 boutons max). */
+/** Grille de selection du provider d'authentification. */
 export function ProviderSelector({ enabled, current, onChange }: ProviderSelectorProps) {
+    const options = PROVIDER_OPTIONS.filter(opt => enabled[opt.id])
     return (
-        <div className="grid grid-cols-4 gap-2 mb-8 p-1 bg-black/25 border border-white/5 rounded-2xl">
-            {PROVIDER_OPTIONS.filter(opt => enabled[opt.id]).map(({ id, label, Icon }) => (
+        <div
+            className="grid gap-2 mb-8 p-1 bg-black/25 border border-white/5 rounded-2xl"
+            style={{ gridTemplateColumns: `repeat(${Math.min(options.length, 5)}, minmax(0, 1fr))` }}
+        >
+            {options.map(({ id, label, Icon }) => (
                 <button
                     key={id}
                     type="button"

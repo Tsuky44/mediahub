@@ -14,6 +14,8 @@ import { mediaRequests } from '@/lib/db/schema';
 import { eq, and, ne, like } from 'drizzle-orm';
 import { dispatch } from '@/lib/notifications-v2/dispatcher';
 import { logger } from '@/lib/logger';
+import { notifyOnyx } from '@/lib/integrations/onyx-webhook';
+import { emitRequestStatus } from '@/lib/integrations/player-v1';
 import { NOTIFICATION_EVENTS, type NotificationEvent } from '@/lib/notifications-v2/types';
 import { getSonarrService } from '@/lib/services/sonarr';
 
@@ -178,14 +180,28 @@ async function handleImportEvent(body: any) {
     // Update request status: 5=available, 4=partial
     // The AvailabilityPoller will dispatch the notification with proper dedup
     const newStatus = isComplete ? 5 : 4;
+    const toUpdate = and(
+      eq(mediaRequests.tmdbId, tmdbId),
+      eq(mediaRequests.mediaType, 'tv'),
+      like(mediaRequests.metadata || '', `%"seasons":[${seasonNum}]%`),
+      ne(mediaRequests.status, 5)
+    );
+    const changedIds = (await db.select({ id: mediaRequests.id }).from(mediaRequests).where(toUpdate)).map((r) => r.id);
     await db.update(mediaRequests)
       .set({ status: newStatus, updatedAt: new Date() })
-      .where(and(
-        eq(mediaRequests.tmdbId, tmdbId),
-        eq(mediaRequests.mediaType, 'tv'),
-        like(mediaRequests.metadata || '', `%"seasons":[${seasonNum}]%`),
-        ne(mediaRequests.status, 5)
-      ));
+      .where(toUpdate);
+    await emitRequestStatus(changedIds);
+    const importedPaths: string[] = [];
+    const seriesPath: string | undefined = body.series?.path;
+    const files: Array<{ path?: string; relativePath?: string; seasonNumber?: number }> = [
+      ...(Array.isArray(body.episodeFiles) ? body.episodeFiles : []),
+      ...(body.episodeFile ? [body.episodeFile] : []),
+    ];
+    for (const file of files) {
+      const full = file.path || (seriesPath && file.relativePath ? `${seriesPath}/${file.relativePath}` : undefined);
+      if (full) importedPaths.push(full);
+    }
+    notifyOnyx('media.imported', { tmdbId: Number(tmdbId), mediaType: 'tv', seasons: [seasonNum], paths: importedPaths });
 
     logger.info(`[SonarrWebhook V2] Season ${seasonNum}: ${isComplete ? 'complete' : 'partial'} (${fileCount}/${totalEpisodes}) -> request status=${newStatus}. AvailabilityPoller will dispatch.`);
 

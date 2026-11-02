@@ -96,6 +96,7 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
       "emby_user_id" TEXT UNIQUE,
       "jellyfin_user_id" TEXT UNIQUE,
       "plex_user_id" TEXT UNIQUE,
+      "onyx_user_id" TEXT UNIQUE,
       "jellyseerr_user_id" TEXT,
       "role" TEXT NOT NULL DEFAULT 'user',
       "role_id" TEXT REFERENCES "roles"("id"),
@@ -109,6 +110,10 @@ const TABLE_DEFINITIONS: ReadonlyArray<{ name: string; ddl: string; indexes?: st
       "created_at" INTEGER NOT NULL,
       "updated_at" INTEGER NOT NULL
     );`,
+    // Les DB legacy reçoivent onyx_user_id par ALTER (sans UNIQUE) : l'index le garantit.
+    indexes: [
+      `CREATE UNIQUE INDEX IF NOT EXISTS "users_onyx_user_id_unique" ON "users" ("onyx_user_id");`,
+    ],
   },
   {
     name: 'account_requests',
@@ -500,6 +505,7 @@ const COLUMN_PATCHES: ReadonlyArray<{ table: string; column: string; type: strin
   { table: 'users', column: 'has_seen_welcome', type: 'INTEGER NOT NULL DEFAULT 0' },
   { table: 'users', column: 'jellyfin_user_id', type: 'TEXT' },
   { table: 'users', column: 'plex_user_id', type: 'TEXT' },
+  { table: 'users', column: 'onyx_user_id', type: 'TEXT' },
   { table: 'media_requests', column: 'is_on_emby', type: 'INTEGER NOT NULL DEFAULT 0' },
   { table: 'media_requests', column: 'emby_item_id', type: 'TEXT' },
   { table: 'media_requests', column: 'requester_name', type: 'TEXT' },

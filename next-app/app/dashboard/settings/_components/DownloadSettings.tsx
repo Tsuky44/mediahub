@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Download, Globe } from 'lucide-react'
 import { InputField, SectionHeader, TestButton, TestResult } from './SharedComponents'
 import { SettingsFormData } from './types'
-import { testProwlarrConnectionAction, testQBittorrentConnectionAction } from '../actions'
+import { testProwlarrConnectionAction, testQBittorrentConnectionAction, testSorraaConnectionAction } from '../actions'
 
 interface Props {
     formData: SettingsFormData
@@ -38,6 +38,28 @@ export const DownloadSettings = ({ formData, updateField, readOnly }: Props) => 
             setQbitLoading(false)
         }
     }
+
+    // sorraa States
+    const [sorraaLoading, setSorraaLoading] = useState(false)
+    const [sorraaResult, setSorraaResult] = useState<TestResult | null>(null)
+
+    const handleTestSorraa = async () => {
+        setSorraaLoading(true)
+        setSorraaResult(null)
+        try {
+            const res = await testSorraaConnectionAction(formData.sorraa_url, formData.sorraa_api_key)
+            setSorraaResult({ success: res.success, message: res.message || (res.success ? 'Connexion réussie' : 'Échec de la connexion') })
+        } catch (e: any) {
+            setSorraaResult({ success: false, message: e.message })
+        } finally {
+            setSorraaLoading(false)
+        }
+    }
+
+    const managerSelects: Array<{ field: 'download_manager_movie' | 'download_manager_tv'; label: string }> = [
+        { field: 'download_manager_movie', label: 'Films' },
+        { field: 'download_manager_tv', label: 'Séries' },
+    ]
 
     const handleTestProwlarr = async () => {
         setProwlarrLoading(true)
@@ -99,6 +121,45 @@ export const DownloadSettings = ({ formData, updateField, readOnly }: Props) => 
                     loading={qbitLoading} 
                     result={qbitResult} 
                 />
+            </div>
+
+            {/* sorraa Section */}
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
+                <SectionHeader
+                    icon={Download}
+                    title="sorraa"
+                    description="Gestionnaire de téléchargement à la place de Radarr et Sonarr, au choix pour les films et pour les séries"
+                />
+                <div className="grid gap-6 md:grid-cols-2">
+                    {managerSelects.map(({ field, label }) => (
+                        <div key={field} className="space-y-1.5 w-full">
+                            <label className="block text-sm font-semibold text-white/80">Gestionnaire des {label.toLowerCase()}</label>
+                            <select
+                                value={formData[field] === 'sorraa' ? 'sorraa' : 'arr'}
+                                onChange={(e) => updateField(field, e.target.value)}
+                                disabled={readOnly}
+                                className="block w-full rounded-xl border border-white/10 bg-white/5 py-2.5 px-4 text-white focus:border-indigo-500 focus:outline-none sm:text-sm disabled:opacity-50"
+                            >
+                                <option value="arr" className="bg-neutral-900">{label === 'Films' ? 'Radarr' : 'Sonarr'}</option>
+                                <option value="sorraa" className="bg-neutral-900">sorraa</option>
+                            </select>
+                        </div>
+                    ))}
+                    <InputField
+                        label="URL"
+                        value={formData.sorraa_url}
+                        onChange={(v) => updateField('sorraa_url', v)}
+                        placeholder="http://localhost:8686"
+                    />
+                    <InputField
+                        label="Clé API"
+                        value={formData.sorraa_api_key}
+                        onChange={(v) => updateField('sorraa_api_key', v)}
+                        type="password"
+                        description="Clé créée dans sorraa (réglages, clés API). Le webhook entrant se règle dans l'onglet Automatisation."
+                    />
+                </div>
+                <TestButton onClick={handleTestSorraa} loading={sorraaLoading} result={sorraaResult} />
             </div>
 
             {/* Prowlarr Section */}

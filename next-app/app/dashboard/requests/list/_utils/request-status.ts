@@ -17,6 +17,7 @@ const quiet = { color: 'text-gray-200', bg: 'bg-white/[0.04]', border: 'border-w
 
 /** Map entre un code de statut numerique (Overseerr) et la representation UI. */
 export const REQUEST_STATUS_INFO: Record<number | 'default', StatusInfo> = {
+    6: { label: 'Refusée', ...quiet, iconColor: 'text-red-400', icon: Info },
     5: { label: 'Disponible', color: 'text-gray-100', iconColor: 'text-green-400', bg: 'bg-white/[0.06]', border: 'border-white/15', icon: CheckCircle2, motion: 'beam' },
     4: { label: 'Partiel', ...quiet, iconColor: 'text-amber-400', icon: CircleDashed },
     3: { label: 'En cours', ...quiet, iconColor: 'text-amber-400', icon: Hourglass, motion: 'track' },
@@ -53,6 +54,7 @@ export function mapStatus(status: number): string {
         case 3: return 'processing'
         case 2: return 'processing'
         case 1: return 'pending'
+        case 6: return 'declined'
         default: return 'unknown'
     }
 }

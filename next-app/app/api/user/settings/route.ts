@@ -50,6 +50,10 @@ export async function POST(request: NextRequest) {
         radarr_api_key,
         sonarr_url,
         sonarr_api_key,
+        sorraa_url,
+        sorraa_api_key,
+        download_manager_movie,
+        download_manager_tv,
         prowlarr_url,
         prowlarr_api_key,
         emby_url,
@@ -61,6 +65,9 @@ export async function POST(request: NextRequest) {
         auth_emby_enabled,
         auth_plex_enabled,
         auth_jellyfin_enabled,
+        auth_onyx_enabled,
+        auth_onyx_auto_create,
+        onyx_url,
         auth_local_enabled,
         unraid_url,
         unraid_api_key,
@@ -68,6 +75,7 @@ export async function POST(request: NextRequest) {
         request_all_seasons_enabled,
         webhook_sonarr_secret,
         webhook_radarr_secret,
+        webhook_sorraa_secret,
         webhook_emby_secret
     } = body
 
@@ -112,6 +120,11 @@ export async function POST(request: NextRequest) {
     
     await updateSetting('sonarr_url', sonarr_url)
     await updateSetting('sonarr_api_key', sonarr_api_key)
+
+    await updateSetting('sorraa_url', sorraa_url)
+    await updateSetting('sorraa_api_key', sorraa_api_key)
+    await updateSetting('download_manager_movie', download_manager_movie === 'sorraa' ? 'sorraa' : download_manager_movie === undefined ? undefined : 'arr')
+    await updateSetting('download_manager_tv', download_manager_tv === 'sorraa' ? 'sorraa' : download_manager_tv === undefined ? undefined : 'arr')
     
     await updateSetting('prowlarr_url', prowlarr_url)
     await updateSetting('prowlarr_api_key', prowlarr_api_key)
@@ -128,6 +141,9 @@ export async function POST(request: NextRequest) {
     await updateSetting('auth_emby_enabled', auth_emby_enabled)
     await updateSetting('auth_plex_enabled', auth_plex_enabled)
     await updateSetting('auth_jellyfin_enabled', auth_jellyfin_enabled)
+    await updateSetting('auth_onyx_enabled', auth_onyx_enabled)
+    await updateSetting('auth_onyx_auto_create', auth_onyx_auto_create)
+    await updateSetting('onyx_url', onyx_url)
     await updateSetting('auth_local_enabled', auth_local_enabled)
     await updateSetting('request_all_seasons_enabled', request_all_seasons_enabled)
 
@@ -138,6 +154,7 @@ export async function POST(request: NextRequest) {
 
     await updateSetting('webhook_sonarr_secret', webhook_sonarr_secret)
     await updateSetting('webhook_radarr_secret', webhook_radarr_secret)
+    await updateSetting('webhook_sorraa_secret', webhook_sorraa_secret)
     await updateSetting('webhook_emby_secret', webhook_emby_secret)
 
     await logAction(

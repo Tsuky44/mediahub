@@ -11,6 +11,8 @@ import { mediaRequests } from '@/lib/db/schema';
 import { eq, and, ne } from 'drizzle-orm';
 import { dispatch } from '@/lib/notifications-v2/dispatcher';
 import { logger } from '@/lib/logger';
+import { notifyOnyx } from '@/lib/integrations/onyx-webhook';
+import { emitRequestStatus } from '@/lib/integrations/player-v1';
 import { NOTIFICATION_EVENTS, type NotificationEvent } from '@/lib/notifications-v2/types';
 
 export const dynamic = 'force-dynamic'
@@ -52,13 +54,19 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true });
       }
       const tmdbId = String(movie.tmdbId);
+      const toUpdate = and(
+        eq(mediaRequests.tmdbId, tmdbId),
+        eq(mediaRequests.mediaType, 'movie'),
+        ne(mediaRequests.status, 5)
+      );
+      const changedIds = (await db.select({ id: mediaRequests.id }).from(mediaRequests).where(toUpdate)).map((r) => r.id);
       await db.update(mediaRequests)
         .set({ status: 5, updatedAt: new Date() })
-        .where(and(
-          eq(mediaRequests.tmdbId, tmdbId),
-          eq(mediaRequests.mediaType, 'movie'),
-          ne(mediaRequests.status, 5)
-        ));
+        .where(toUpdate);
+      await emitRequestStatus(changedIds);
+      const importedPath = body.movieFile?.path
+        || (movie.folderPath && body.movieFile?.relativePath ? `${movie.folderPath}/${body.movieFile.relativePath}` : undefined);
+      notifyOnyx('media.imported', { tmdbId: movie.tmdbId, mediaType: 'movie', paths: importedPath ? [importedPath] : [] });
       logger.info(`[RadarrWebhook V2] Download event: marked requests for TMDB ${tmdbId} as available (status=5). AvailabilityPoller will dispatch notification.`);
       return NextResponse.json({ success: true });
     }

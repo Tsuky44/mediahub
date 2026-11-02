@@ -313,6 +313,24 @@ export async function testProwlarrConnectionAction(url: string, key: string) {
     }
 }
 
+export async function testSorraaConnectionAction(url: string, key: string) {
+    try {
+        const user = await getCurrentUser()
+        if (!user || user?.role !== 'admin') {
+            throw new Error('Unauthorized')
+        }
+        if (!url || !key) return { success: false, message: "Renseignez l'URL et la clé API de sorraa." }
+
+        const { SorraaService } = await import('@/lib/services/sorraa')
+        const { version } = await new SorraaService(url, key).testConnection()
+        return { success: true, message: `Connexion réussie ! sorraa ${version}.` }
+    } catch (error) {
+        const e = error as Error & { status?: number }
+        if (e.status === 401 || e.status === 403) return { success: false, message: 'Clé API refusée par sorraa.' }
+        return { success: false, message: e.message }
+    }
+}
+
 export async function fixMissingTitlesAction() {
     try {
         const user = await getCurrentUser()

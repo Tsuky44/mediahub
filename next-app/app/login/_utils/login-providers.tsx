@@ -1,13 +1,14 @@
-import { Server, Tv, MonitorPlay, UserCircle } from 'lucide-react'
+import { Server, Tv, MonitorPlay, UserCircle, Play } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { BRAND, isMediaServerBrand } from '@/lib/media-server-brand'
 
-export type LoginProvider = 'emby' | 'plex' | 'jellyfin' | 'local'
+export type LoginProvider = 'emby' | 'plex' | 'jellyfin' | 'onyx' | 'local'
 
 export interface EnabledProviders {
     emby: boolean
     plex: boolean
     jellyfin: boolean
+    onyx?: boolean
     local: boolean
 }
 
@@ -16,6 +17,7 @@ export function getDefaultProvider(enabled: EnabledProviders): LoginProvider {
     if (enabled.emby) return 'emby'
     if (enabled.jellyfin) return 'jellyfin'
     if (enabled.plex) return 'plex'
+    if (enabled.onyx) return 'onyx'
     if (enabled.local) return 'local'
     return 'local'
 }
@@ -39,6 +41,7 @@ export function getProviderLabel(p: LoginProvider): string {
         case 'emby': return 'Emby'
         case 'plex': return 'Plex'
         case 'jellyfin': return 'Jellyfin'
+        case 'onyx': return 'Onyx'
         case 'local': return 'Local'
     }
 }
@@ -49,6 +52,7 @@ export function getProviderIcon(p: LoginProvider): ReactNode {
         case 'emby': return <Server className={`h-5 w-5 ${BRAND.emby.text}`} />
         case 'plex': return <Tv className={`h-5 w-5 ${BRAND.plex.text}`} />
         case 'jellyfin': return <MonitorPlay className={`h-5 w-5 ${BRAND.jellyfin.text}`} />
+        case 'onyx': return <Play className="h-5 w-5 text-gray-400" />
         case 'local': return <UserCircle className="h-5 w-5 text-gray-400" />
     }
 }

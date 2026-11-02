@@ -1,6 +1,8 @@
 'use server'
 
 import { getRadarrServiceForUser, getSonarrServiceForUser } from '@/lib/auth'
+import { getDownloadManager } from '@/lib/download-managers'
+import type { SorraaDownloadManager } from '@/lib/download-managers/sorraa'
 import { QBittorrentCache } from '@/lib/services/qbittorrent-cache'
 import { RadarrQueueItem } from '@/lib/services/radarr'
 import { SonarrQueueItem, SonarrSeries, SonarrSeason } from '@/lib/services/sonarr'
@@ -25,6 +27,20 @@ export interface SeasonInfo {
     isSeasonPack?: boolean
 }
 
+/** Import d'un telechargement dans la bibliotheque, tel que le rapporte le gestionnaire (sorraa). */
+export interface ImportInfo {
+    releaseName: string
+    progress: number // 0-100
+    files: number
+    filesDone: number
+    size: string
+    sizeDone: string
+    sizeLeft: string
+    current?: string
+    failed: boolean
+    message?: string
+}
+
 export interface DownloadStatus {
     isDownloading: boolean
     progress: number // 0-100
@@ -39,6 +55,7 @@ export interface DownloadStatus {
     dateAdded?: string
     language?: string
     seasons?: SeasonInfo[]
+    imports?: ImportInfo[]
 }
 
 function formatTime(seconds: number) {
@@ -76,6 +93,10 @@ export async function checkDownloadStatus(
 ): Promise<DownloadStatus | null> {
     try {
         log(`Checking download status for ${mediaType} TMDB:${tmdbId} TVDB:${tvdbId} Title:${mediaTitle}`)
+        const manager = await getDownloadManager(mediaType)
+        if (manager.kind === 'sorraa') {
+            return await (manager as SorraaDownloadManager).getDownloadStatus(tmdbId, mediaType, mediaTitle)
+        }
         if (mediaType === 'movie') {
             const radarr = await getRadarrServiceForUser()
             if (!radarr) {

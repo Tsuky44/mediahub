@@ -29,12 +29,14 @@ export default async function LoginPage() {
   const embyEnabled = await db.query.settings.findFirst({ where: eq(settings.key, 'auth_emby_enabled'), columns: { value: true } })
   const plexEnabled = await db.query.settings.findFirst({ where: eq(settings.key, 'auth_plex_enabled'), columns: { value: true } })
   const jellyfinEnabled = await db.query.settings.findFirst({ where: eq(settings.key, 'auth_jellyfin_enabled'), columns: { value: true } })
+  const onyxEnabled = await db.query.settings.findFirst({ where: eq(settings.key, 'auth_onyx_enabled'), columns: { value: true } })
   const localEnabled = await db.query.settings.findFirst({ where: eq(settings.key, 'auth_local_enabled'), columns: { value: true } })
 
   const enabledProviders = {
     emby: embyEnabled ? embyEnabled.value === 'true' : true, // Default true
     plex: plexEnabled ? plexEnabled.value === 'true' : false, // Default false
     jellyfin: jellyfinEnabled ? jellyfinEnabled.value === 'true' : false, // Default false
+    onyx: onyxEnabled ? onyxEnabled.value === 'true' : false, // Default false
     local: localEnabled ? localEnabled.value === 'true' : true // Default true for local
   }
 
