@@ -817,6 +817,20 @@
 [data-onyx-backdrop]:has(> .onyx-fly) > img {
   animation-play-state: paused;
 }
+/* Défilement (lib/perf-mode.ts, watchScroll) : hors du haut de page, l'image de fond ne zoome plus.
+   Sinon chaque image du défilement redessine toute l'image et les flous posés dessus */
+:root[data-onyx-scrolled] .animate-onyx-kenburns {
+  animation-play-state: paused;
+}
+/* ...et pendant qu'on défile, pas de survol : cette couche transparente prend la souris, les
+   affiches qui passent dessous ne lancent pas leurs effets. Sous la barre de navigation et les
+   fenêtres (z-50 et plus), qui restent cliquables */
+.onyx-scroll-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: none;
+}
 /* Atterrie : l'image est déjà là ; ses fondus arrivent et les textes tombent en place pendant
    l'écrasement, sans l'arrivée habituelle des blocs */
 .onyx-page[data-onyx-drop] > * > :not(.fixed) {
@@ -1091,6 +1105,11 @@
 :root[data-onyx-lite] .animate-onyx-kenburns {
   animation: none;
   scale: 1.1;
+}
+/* Affiches qui entrent à l'écran : elles montent et apparaissent, sans le voile à fondre par-dessus
+   (un calque de plus par affiche à mélanger pendant le défilement) */
+:root[data-onyx-lite] .onyx-ignite::before {
+  content: none;
 }
 /* Au repos, les boucles décoratives s'arrêtent après quelques tours (le processeur se repose) */
 :root[data-onyx-lite] .onyx-shine-text {

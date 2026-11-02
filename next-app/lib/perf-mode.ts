@@ -60,6 +60,13 @@ export function detectPerfMode() {
 
 let rough = 0
 
+/** Une animation (ou un défilement) dont le quart des images les plus lentes dépasse 30 ms est saccadée */
+function judge(gaps: number[], min: number) {
+  if (gaps.length < min) return
+  gaps.sort((a, b) => a - b)
+  if (gaps[Math.floor(gaps.length * 0.75)] > 30 && ++rough >= 2) enableLite()
+}
+
 /**
  * Filet de sécurité : pendant une grande animation, compte les images trop lentes. Deux animations
  * saccadées et le mode allégé s'active (et reste) : les suivantes seront fluides.
@@ -74,10 +81,78 @@ export function watchFrames(duration: number) {
     if (last) gaps.push(now - last)
     last = now
     if (now - start < duration) requestAnimationFrame(tick)
-    else if (gaps.length >= 6) {
-      gaps.sort((a, b) => a - b)
-      if (gaps[Math.floor(gaps.length * 0.75)] > 30 && ++rough >= 2) enableLite()
-    }
+    else judge(gaps, 6)
   }
   requestAnimationFrame(tick)
+}
+
+/**
+ * Défilement (motion.css) :
+ * - pendant qu'on défile, une couche transparente (onyx-scroll-shield) prend la souris : sinon
+ *   chaque affiche qui passe sous la souris immobile lance ses effets (agrandissement, ombre,
+ *   voile). Une couche à montrer ou cacher, plutôt qu'un style sur toute la page à recalculer ;
+ * - sorti du haut de page (data-onyx-scrolled), le lent zoom de l'image de fond s'arrête : il
+ *   obligerait à redessiner toute l'image, et les flous posés dessus, à chaque image ;
+ * - un défilement saccadé compte comme une animation saccadée.
+ */
+export function watchScroll() {
+  const root = document.documentElement
+  let scrolled = false
+  let gaps: number[] = []
+  let last = 0
+  let raf = 0
+  let idle = 0
+  let rest = 0
+  // Écrans à souris seulement (au doigt, pas de survol)
+  const shield = matchMedia('(hover: hover)').matches ? document.createElement('div') : null
+  if (shield) {
+    shield.className = 'onyx-scroll-shield'
+    shield.setAttribute('aria-hidden', 'true')
+    document.body.appendChild(shield)
+  }
+  let shielded = false
+  const tick = (now: number) => {
+    if (last) gaps.push(now - last)
+    last = now
+    raf = requestAnimationFrame(tick)
+  }
+  // Fin du défilement (plus d'événement depuis 250 ms) : verdict sur les images mesurées
+  const settle = () => {
+    cancelAnimationFrame(raf)
+    raf = 0
+    last = 0
+    judge(gaps, 12)
+    gaps = []
+  }
+  const stop = () => {
+    shielded = false
+    if (shield) shield.style.display = ''
+  }
+  const onScroll = () => {
+    const away = window.scrollY > 24
+    if (away !== scrolled) {
+      scrolled = away
+      root.toggleAttribute('data-onyx-scrolled', away)
+    }
+    // Souris rendue 200 ms après le dernier mouvement
+    if (shield && !shielded) {
+      shielded = true
+      shield.style.display = 'block'
+    }
+    window.clearTimeout(rest)
+    rest = window.setTimeout(stop, 200)
+    if (isLite() || navigator.webdriver) return
+    if (!raf) raf = requestAnimationFrame(tick)
+    window.clearTimeout(idle)
+    idle = window.setTimeout(settle, 250)
+  }
+  window.addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
+  return () => {
+    window.removeEventListener('scroll', onScroll)
+    cancelAnimationFrame(raf)
+    window.clearTimeout(idle)
+    window.clearTimeout(rest)
+    shield?.remove()
+  }
 }

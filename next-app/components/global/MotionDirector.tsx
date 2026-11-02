@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { NAVIGATION_ITEMS } from './navbar/_constants/navigation-items'
 import { isPhoneScreen } from '@/lib/screen'
-import { detectPerfMode, isLite, watchFrames } from '@/lib/perf-mode'
+import { detectPerfMode, isLite, watchFrames, watchScroll } from '@/lib/perf-mode'
 
 /**
  * Mise en scène des changements de page et des fenêtres sur écran large (voir app/motion.css).
@@ -687,6 +687,7 @@ export function MotionDirector() {
 
   useEffect(() => {
     detectPerfMode()
+    const unwatchScroll = watchScroll()
     const observer = new MutationObserver(onMutations)
     observer.observe(document.body, { childList: true, subtree: true })
     // Retour arrière : remontée sur écran large ; sur téléphone, un envol en cours s'efface
@@ -697,6 +698,7 @@ export function MotionDirector() {
     document.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('popstate', onBack)
     return () => {
+      unwatchScroll()
       observer.disconnect()
       document.removeEventListener('click', onLinkClick, true)
       document.removeEventListener('pointerdown', onPointerDown, true)
