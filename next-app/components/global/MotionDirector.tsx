@@ -319,17 +319,21 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   const landing = flight.animate(outer, trip)
   img.animate(inner, trip)
 
-  // Étirée par la vitesse, écrasée à l'arrivée, un rebond, posée ; un éclat de lumière à l'impact
+  // Étirée par la vitesse, écrasée à l'arrivée, un rebond, posée ; un éclat de lumière à l'impact.
+  // Mode allégé : posée sans rebond. Sans carte graphique, une image plein écran déformée doit être
+  // rééchantillonnée à chaque image (deux fois plus long à dessiner) ; la durée reste la même.
   const total = LAND + FLY.squash
   const bounce = squash.animate(
-    [
-      { scale: '1 1', offset: 0 },
-      { scale: '1 1', offset: FLY.turn / total },
-      { scale: '0.99 1.035', offset: LAND / total },
-      { scale: '1.024 0.952', offset: (LAND + 140) / total },
-      { scale: '0.996 1.012', offset: (LAND + 290) / total },
-      { scale: '1 1', offset: 1 },
-    ].map((kf) => ({ ...kf, easing: 'ease-in-out' })),
+    isLite()
+      ? []
+      : [
+          { scale: '1 1', offset: 0 },
+          { scale: '1 1', offset: FLY.turn / total },
+          { scale: '0.99 1.035', offset: LAND / total },
+          { scale: '1.024 0.952', offset: (LAND + 140) / total },
+          { scale: '0.996 1.012', offset: (LAND + 290) / total },
+          { scale: '1 1', offset: 1 },
+        ].map((kf) => ({ ...kf, easing: 'ease-in-out' })),
     { duration: total, fill: 'both' }
   )
   flash.animate(

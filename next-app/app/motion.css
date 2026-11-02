@@ -1086,6 +1086,12 @@
 :root[data-onyx-lite] .onyx-fly-flash {
   display: none;
 }
+/* Image de fond de la fiche : fixe à son zoom de départ (celui où l'envol la pose). Le lent zoom de
+   14 s obligerait à rééchantillonner toute l'image à chaque image, deux fois plus long à dessiner */
+:root[data-onyx-lite] .animate-onyx-kenburns {
+  animation: none;
+  scale: 1.1;
+}
 /* Au repos, les boucles décoratives s'arrêtent après quelques tours (le processeur se repose) */
 :root[data-onyx-lite] .onyx-shine-text {
   animation-iteration-count: 1;
