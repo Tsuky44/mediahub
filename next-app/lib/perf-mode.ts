@@ -16,9 +16,16 @@ export const PERF_MODE_SCRIPT = `try{if(localStorage.getItem('${KEY}')==='lite')
 
 export const isLite = () => document.documentElement.hasAttribute(ATTR)
 
+/**
+ * Verdict « machine correcte », daté de la version de la détection : une détection améliorée
+ * réévalue les machines jugées correctes par la précédente (« full », avant la lecture du nom de la
+ * puce graphique sous Firefox). Le mode allégé, lui, reste acquis.
+ */
+const FULL = 'full-2'
+
 function remember(mode: 'lite' | 'full') {
   try {
-    localStorage.setItem(KEY, mode)
+    localStorage.setItem(KEY, mode === 'full' ? FULL : mode)
   } catch {}
 }
 
@@ -35,8 +42,11 @@ function weakGraphics(): boolean {
   // Le navigateur refuse ce contexte quand il n'aurait qu'un rendu logiciel ou très dégradé
   const gl = canvas.getContext('webgl', { failIfMajorPerformanceCaveat: true }) as WebGLRenderingContext | null
   if (!gl) return true
+  // Nom de la puce : extension dédiée (Chrome), sinon RENDERER, que les navigateurs au moteur de
+  // Firefox renseignent directement (l'extension y est dépréciée, ou masquée par la protection
+  // contre le pistage : sans ce secours, une petite puce Intel n'y était jamais reconnue)
   const info = gl.getExtension('WEBGL_debug_renderer_info')
-  const renderer = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : ''
+  const renderer = String((info && gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) || gl.getParameter(gl.RENDERER) || '')
   gl.getExtension('WEBGL_lose_context')?.loseContext()
   if (/swiftshader|llvmpipe|softpipe|software|basic render/i.test(renderer)) return true
   const cores = navigator.hardwareConcurrency || 4
@@ -49,7 +59,7 @@ export function detectPerfMode() {
   try {
     known = localStorage.getItem(KEY)
   } catch {}
-  if (known) return
+  if (known === 'lite' || known === FULL) return
   const run = () => {
     if (weakGraphics()) enableLite()
     else remember('full')

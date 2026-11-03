@@ -1062,8 +1062,9 @@
 }
 
 /* Mode allégé (lib/perf-mode.ts) : machines sans vraie carte graphique (Pentium, Celeron, rendu
-   logiciel). Mêmes mouvements, sans les flous d'arrière-plan ni les flous animés, recalculés à
-   chaque image quand le processeur fait tout ; des fonds un peu plus opaques à la place. */
+   logiciel). Mêmes mouvements, sans les flous d'arrière-plan ni les flous animés (titres, bulles,
+   fenêtres, menus, panneaux, changement de page), recalculés à chaque image quand le processeur
+   fait tout ; des fonds un peu plus opaques à la place. */
 :root[data-onyx-lite] *,
 :root[data-onyx-lite] *::before,
 :root[data-onyx-lite] *::after {
@@ -1072,7 +1073,12 @@
 :root[data-onyx-lite]::view-transition-old(*),
 :root[data-onyx-lite]::view-transition-new(*),
 :root[data-onyx-lite] .onyx-page :is(h1, .onyx-title),
+:root[data-onyx-lite] .onyx-page[data-onyx-leaving],
+:root[data-onyx-lite] .onyx-tip-text > *,
 :root[data-onyx-lite] .fixed.inset-0 > *,
+:root[data-onyx-lite] .animate-pop-in,
+:root[data-onyx-lite] .animate-pop-in > *,
+:root[data-onyx-lite] .animate-in,
 :root[data-onyx-lite] [data-onyx-ghost],
 :root[data-onyx-lite] [data-onyx-ghost] > *,
 :root[data-onyx-lite] .onyx-fly-blur {
