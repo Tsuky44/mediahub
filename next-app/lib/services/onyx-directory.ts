@@ -35,7 +35,10 @@ export interface OnyxUser {
   avatar?: string
 }
 
-/** Film ou série de la bibliothèque Onyx (GET /api/integrations/mediahub/movies, /shows) */
+/**
+ * Film ou série de la bibliothèque Onyx (GET /api/integrations/mediahub/movies, /shows). La
+ * progression est celle du compte nommé par X-Player-Id : absente (zéro) sans compte lié.
+ */
 export interface OnyxLibraryItem {
   id: number
   type: 'movie' | 'show'
@@ -44,6 +47,21 @@ export interface OnyxLibraryItem {
   poster_url?: string
   release_date?: string
   tmdb_id?: number
+  /** Film : position de lecture et durée en secondes, fini ou non */
+  current_position_seconds?: number
+  duration?: number
+  is_finished?: boolean
+  /** Série : épisodes sur le disque, finis, commencés */
+  available_episode_count?: number
+  watched_episode_count?: number
+  started_episode_count?: number
+}
+
+/** Totaux de la bibliothèque Onyx (GET /api/integrations/mediahub/counts) */
+export interface OnyxLibraryCounts {
+  movies: number
+  shows: number
+  episodes: number
 }
 
 /** État de la liaison vu d'Onyx (GET|PUT /api/integrations/mediahub/link) */
@@ -57,7 +75,8 @@ const BASE = '/api/integrations/mediahub'
 const TIMEOUT_MS = 15_000
 
 // Catalogue entier : Onyx le rend d'un bloc, MediaHub le pagine. Relu en arrière-plan passé 1 min.
-const libraryCache = createMemoCache({ max: 4, ttl: MS.MINUTE, stale: 10 * MS.MINUTE })
+// Une entrée par compte Onyx : la progression diffère d'un compte à l'autre.
+const libraryCache = createMemoCache({ max: 64, ttl: MS.MINUTE, stale: 10 * MS.MINUTE })
 
 /** Un compte Onyx administrateur au sens de MediaHub : propriétaire ou gestion du serveur */
 export function isOnyxAdmin(user: Pick<OnyxUser, 'is_owner' | 'permissions'>) {
@@ -67,12 +86,16 @@ export function isOnyxAdmin(user: Pick<OnyxUser, 'is_owner' | 'permissions'>) {
 export class OnyxDirectory {
   constructor(readonly baseUrl: string, private readonly apiKey: string) {}
 
-  private async request<T>(method: 'GET' | 'PUT', path: string, body?: unknown): Promise<T> {
+  private async request<T>(method: 'GET' | 'PUT', path: string, body?: unknown, playerId?: string): Promise<T> {
     let res: Response
     try {
       res = await fetch(`${this.baseUrl}${BASE}${path}`, {
         method,
-        headers: { Authorization: `Bearer ${this.apiKey}`, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(playerId ? { 'X-Player-Id': playerId } : {}),
+        },
         body: body !== undefined ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(TIMEOUT_MS),
         redirect: 'error',
@@ -110,12 +133,18 @@ export class OnyxDirectory {
     return Array.isArray(data?.users) ? data.users : []
   }
 
-  /** Films et séries d'Onyx, rangés par titre */
-  listLibrary(): Promise<OnyxLibraryItem[]> {
-    return libraryCache.get(`library:${this.baseUrl}`, async () => {
+  /** Totaux de la bibliothèque (accueil) */
+  counts() {
+    return this.request<OnyxLibraryCounts>('GET', '/counts')
+  }
+
+  /** Films et séries d'Onyx rangés par titre, avec la progression du compte Onyx `playerId` */
+  listLibrary(playerId?: string | null): Promise<OnyxLibraryItem[]> {
+    const account = playerId || undefined
+    return libraryCache.get(`library:${this.baseUrl}:${account ?? '-'}`, async () => {
       const [movies, shows] = await Promise.all([
-        this.request<OnyxLibraryItem[]>('GET', '/movies'),
-        this.request<OnyxLibraryItem[]>('GET', '/shows'),
+        this.request<OnyxLibraryItem[]>('GET', '/movies', undefined, account),
+        this.request<OnyxLibraryItem[]>('GET', '/shows', undefined, account),
       ])
       return [...(Array.isArray(movies) ? movies : []), ...(Array.isArray(shows) ? shows : [])]
         .filter((item) => item && typeof item.id === 'number' && (item.type === 'movie' || item.type === 'show'))

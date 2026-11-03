@@ -3,6 +3,7 @@
 import { getWatchLaterList, areInWatchLater } from './watch-later-actions'
 import { getCurrentUser, getLibraryPlatform, getLibraryServer, getLibraryUserId, getTmdbServiceForUser } from '@/lib/auth'
 import { getOnyxDirectory, OnyxDirectoryError } from '@/lib/services/onyx-directory'
+import { embyWatchState, onyxWatchState } from '@/lib/library/watch-state'
 import { logger } from '@/lib/logger'
 import axios from 'axios'
 import { createMemoCache } from '@/lib/cache'
@@ -74,7 +75,8 @@ const ONYX_PAGE_SIZE = 50
 
 /**
  * Bibliothèque d'Onyx, lue avec la clé d'intégration : tout compte Onyx voit toute la bibliothèque,
- * donc pas besoin que le compte MediaHub soit lié. Onyx n'a pas de favoris pour MediaHub.
+ * donc pas besoin que le compte MediaHub soit lié. Lié (users.onyx_user_id), la progression de son
+ * compte Onyx vient avec : pastilles « vu » et épisodes restants. Onyx n'a pas de favoris pour MediaHub.
  */
 async function fetchOnyxMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false): Promise<LibraryPage> {
     const source = 'onyx' as const
@@ -86,7 +88,8 @@ async function fetchOnyxMedia(page: number, type: 'movie' | 'tv' | 'all', query?
         if (!directory) return { results: [], total_pages: 0, problem: 'no-server', source }
         if (favoritesOnly) return { results: [], total_pages: 0, source }
 
-        let items = await directory.listLibrary()
+        const account = await db.query.users.findFirst({ where: eq(users.email, user.email), columns: { onyxUserId: true } })
+        let items = await directory.listLibrary(account?.onyxUserId)
         if (type !== 'all') items = items.filter((item) => (type === 'movie' ? item.type === 'movie' : item.type === 'show'))
         const needle = query?.trim().toLocaleLowerCase('fr')
         if (needle) items = items.filter((item) => item.title.toLocaleLowerCase('fr').includes(needle))
@@ -124,6 +127,7 @@ async function fetchOnyxMedia(page: number, type: 'movie' | 'tv' | 'all', query?
                 tmdbId: item.tmdb_id || undefined,
                 isFavorite: false,
                 isWatchLater: watchLaterKeys.has(`${mediaType}:${id}`),
+                watch_state: onyxWatchState(item),
             }
         }))
 
@@ -260,7 +264,8 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
                 emby_id: item.Id,
                 tmdbId: tmdbId,
                 isFavorite: item.UserData?.IsFavorite || false,
-                isWatchLater: isWatchLaterItem
+                isWatchLater: isWatchLaterItem,
+                watch_state: serverWide ? undefined : embyWatchState(item)
             }
         }))
 

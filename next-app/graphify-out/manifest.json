@@ -468,9 +468,9 @@
     "semantic_hash": ""
   },
   "app/dashboard/dashboard-actions.ts": {
-    "mtime": 1793451873.0317078,
-    "seen": 1793658178.4730198,
-    "ast_hash": "a72ea5c30951339f9aeea0c135cc087e",
+    "mtime": 1793693707.0984101,
+    "seen": 1793693770.575339,
+    "ast_hash": "410aaf9a048769a3c79b9c42b1146dde",
     "semantic_hash": ""
   },
   "app/dashboard/downloads/[hash]/_components/MediaInfoCard.tsx": {
@@ -1272,9 +1272,9 @@
     "semantic_hash": ""
   },
   "app/dashboard/media/actions.ts": {
-    "mtime": 1793657970.9488158,
-    "seen": 1793658178.4731562,
-    "ast_hash": "ccebe1afb656765e2991950a8af49904",
+    "mtime": 1793693684.2036917,
+    "seen": 1793693770.57932,
+    "ast_hash": "7118fa884f36d634199a0242d41f7270",
     "semantic_hash": ""
   },
   "app/dashboard/media/collection/[id]/page.tsx": {
@@ -2718,9 +2718,9 @@
     "semantic_hash": ""
   },
   "components/global/MediaCard.tsx": {
-    "mtime": 1793656750.2817504,
-    "seen": 1793658178.473381,
-    "ast_hash": "1ccbdba94498301ad1eac2905f9cf59e",
+    "mtime": 1793693668.0105047,
+    "seen": 1793693770.5860522,
+    "ast_hash": "ded19556268d486f66594943b84cb5e2",
     "semantic_hash": ""
   },
   "components/global/MediaFilters.tsx": {
@@ -2808,9 +2808,9 @@
     "semantic_hash": ""
   },
   "components/global/media-card/useMediaCardActions.ts": {
-    "mtime": 1793451873.0582187,
-    "seen": 1793658178.473397,
-    "ast_hash": "2aa614004dc67b96e88d86e307d72eda",
+    "mtime": 1793693668.0099242,
+    "seen": 1793693770.586533,
+    "ast_hash": "921f7b644736fa76334c0d77dbea70cf",
     "semantic_hash": ""
   },
   "components/global/media-filters/DateRangeCard.tsx": {
@@ -4242,9 +4242,9 @@
     "semantic_hash": ""
   },
   "lib/services/onyx-directory.ts": {
-    "mtime": 1793657936.4811504,
-    "seen": 1793658178.4735281,
-    "ast_hash": "b6adc13048ea8075f31dafe79cc60131",
+    "mtime": 1793693654.6648471,
+    "seen": 1793693770.589801,
+    "ast_hash": "0a11cb1688ff1208eb74ce5d4d8d62d6",
     "semantic_hash": ""
   },
   "lib/services/sorraa-releases.ts": {
@@ -4301,9 +4301,21 @@
     "ast_hash": "f1c30012e06e1b6a3643767f2bca05c7",
     "semantic_hash": ""
   },
+  "components/global/media-card/MediaCardWatchState.tsx": {
+    "mtime": 1793693667.9391055,
+    "seen": 1793693770.586478,
+    "ast_hash": "e18ec39ab491d0a9a04f02531272235b",
+    "semantic_hash": ""
+  },
+  "lib/library/watch-state.ts": {
+    "mtime": 1793693694.569135,
+    "seen": 1793693770.588659,
+    "ast_hash": "0de818e4b12be5b10bfb304be71ec07e",
+    "semantic_hash": ""
+  },
   "pnpm-lock.yaml": {
-    "mtime": 1793658100.5668654,
-    "seen": 1793658178.4735758,
+    "mtime": 1793693720.0583298,
+    "seen": 1793693770.590903,
     "ast_hash": "bde355ca55751c5a83dba85606fb9027",
     "semantic_hash": ""
   }
