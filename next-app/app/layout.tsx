@@ -11,9 +11,12 @@ const bricolage = Bricolage_Grotesque({
   axes: ["opsz"],
 });
 
+// Police à chasse fixe : quelques pages seulement (statistiques, téléchargements, réglages). Pas de
+// préchargement sur toutes les pages : chargée là où elle sert (Firefox signalait un préchargement inutilisé)
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  preload: false,
 });
 
 export const metadata: Metadata = {

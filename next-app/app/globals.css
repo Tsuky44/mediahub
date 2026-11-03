@@ -381,14 +381,23 @@
 @layer base {
   body {
     background-color: var(--onyx-bg);
-    /* La lumière du projecteur, très diffuse, depuis le haut de l'écran */
-    background-image: radial-gradient(ellipse 80% 50% at 50% -12%, rgb(242 240 237 / 0.09), transparent 70%);
-    background-attachment: fixed;
     color: var(--foreground);
     font-family: var(--font-sans);
     min-height: 100vh;
     font-kerning: normal;
     text-rendering: optimizeLegibility;
+  }
+  /* La lumière du projecteur, très diffuse, depuis le haut de l'écran : un calque fixe derrière la
+     page plutôt qu'un fond « attaché » à l'écran (background-attachment: fixed), que certains
+     navigateurs redessinent en entier à chaque image du défilement. Sur la racine : body::before et
+     body::after portent déjà les deux halos (motion.css) */
+  html::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: radial-gradient(ellipse 80% 50% at 50% -12%, rgb(242 240 237 / 0.09), transparent 70%);
   }
 
   ::selection {
