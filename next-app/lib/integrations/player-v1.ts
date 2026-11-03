@@ -76,6 +76,14 @@ export async function authenticate(request: Request): Promise<AuthResult> {
   return { ok: true, user, ability: defineAbilityFor(user), userId: Number.isInteger(id) && id > 0 ? id : null }
 }
 
+/** Meme regle que les server actions de la fiche : interactive_search sur Media ou Downloads, ou la gestion des telechargements. */
+export function canInteractiveSearch(ability: ReturnType<typeof defineAbilityFor>): boolean {
+  return ability.can('interactive_search', 'Media')
+    || ability.can('interactive_search', 'Downloads')
+    || ability.can('manage', 'Media')
+    || ability.can('manage', 'Downloads')
+}
+
 export function parseId(raw: string): number | null {
   const id = Number.parseInt(raw, 10)
   return Number.isInteger(id) && id > 0 ? id : null

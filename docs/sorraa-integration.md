@@ -22,6 +22,10 @@ Côté sorraa, une demande MediaHub devient un `POST /requests` (tmdbId, saisons
 
 La progression (`progress`) alimente la barre et la fenêtre de statut du média (détail via `GET /grabs?active&mediaId`) et le champ `progress` (0-100) de l'API joueur ; la raison d'attente passe dans `waiting` (avec `nextAttemptAt`).
 
+## Recherche interactive (API du lecteur)
+
+`GET` et `POST /api/integrations/player/v1/releases` (voir `player-integration/v1/README.md`) suivent le même réglage `download_manager_*` : avec sorraa, `lib/services/interactive-search.ts` retrouve le titre (`GET /media?kind&tmdbId`, ajouté par `POST /media` sans recherche s'il manque), l'unité visée (film, saison ou épisode, dans `units` du média), lance `POST /media/{id}/release-searches` et rend les releases avec le verdict du moteur ; le choix part en `POST /grabs` avec le jeton de la release. Le téléchargement suit ensuite le chemin habituel (`grabbed`, `imported`). C'est Onyx qui s'en sert (ADR-0098 d'Onyx).
+
 ## Webhook entrant
 
 `POST /api/webhooks/sorraa`. Dans sorraa, déclarer un webhook vers cette URL avec le secret affiché dans les réglages. Signature : `sha256=` + HMAC-SHA256(secret, `<X-Sorraa-Timestamp>.<corps>`), tolérance de 5 minutes ; sans secret configuré, tout est refusé.
@@ -38,7 +42,7 @@ Les statuts viennent de `requests[]` du payload ; chaque changement émet `reque
 
 ## Limites (volontaires)
 
-Ces fonctions restent liées à Radarr/Sonarr et ne voient pas les médias gérés par sorraa : fenêtre de gestion du média, recherche interactive Prowlarr, imports bloqués, calendrier, suppression depuis les stats de stockage, synchronisation des demandes. Les titres inconnus de la bibliothèque sorraa valent `unknown` (sorraa lit sans appeler TMDb).
+Ces fonctions restent liées à Radarr/Sonarr et ne voient pas les médias gérés par sorraa : fenêtre de gestion du média, recherche interactive de l'interface web (Prowlarr, qui envoie des adresses de téléchargement que sorraa ne rend jamais), imports bloqués, calendrier, suppression depuis les stats de stockage, synchronisation des demandes. Les titres inconnus de la bibliothèque sorraa valent `unknown` (sorraa lit sans appeler TMDb).
 
 ## Vérification
 
