@@ -15,21 +15,27 @@ import type {
   NormalizedCredits,
 } from '../_types/media-page'
 
+/** Ce qui vient de Radarr/Sonarr, des listes et d'Emby : plus lent, affiché dès qu'il arrive */
+export interface MediaPageExtras {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  availability: any
+  isWatchLaterItem: boolean
+  isSubscribed: boolean
+  embyUrl: string | null
+  progress: MediaEmbyProgress
+  requestAllSeasonsEnabled: boolean
+}
+
 export interface MediaPageData {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   details: any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   user: any
   ability: ReturnType<typeof defineAbilityFor>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  availability: any
-  isWatchLaterItem: boolean
-  isSubscribed: boolean
-  embyUrl: string | null
   credits: NormalizedCredits
   meta: MediaDerivedMeta
-  progress: MediaEmbyProgress
-  requestAllSeasonsEnabled: boolean
+  /** En attente : la fiche s'affiche avec TMDB seul, boutons et saisons suivent (Suspense) */
+  extras: Promise<MediaPageExtras>
 }
 
 export type MediaPageDataResult =
@@ -38,9 +44,9 @@ export type MediaPageDataResult =
   | { kind: 'ok'; data: MediaPageData }
 
 /**
- * Charge en parallele tout ce dont la page de details a besoin :
- * details TMDB, ability, availability, watch-later, subscription, settings,
- * credits normalises, meta derivees et progression Emby.
+ * Charge la fiche en deux temps : détails TMDB et droits (attendus, la fiche s'affiche avec), puis
+ * disponibilité, listes, réglages et progression Emby, renvoyés en promesse : la page les attend
+ * dans ses blocs Suspense (boutons, saisons) sans retarder le reste.
  */
 export async function loadMediaPageData(params: {
   tmdbId: number
@@ -81,15 +87,7 @@ export async function loadMediaPageData(params: {
   const credits = normalizeCredits(details, mediaType)
   const meta = deriveMediaMeta(details, credits)
 
-  const [
-    availability,
-    isWatchLaterItem,
-    isSubscribed,
-    progress,
-    embyUrlSetting,
-    jellyfinUrlSetting,
-    requestAllSeasonsEnabled,
-  ] = await Promise.all([
+  const extras: Promise<MediaPageExtras> = Promise.all([
     early.availability,
     early.isWatchLaterItem,
     early.isSubscribed,
@@ -102,23 +100,21 @@ export async function loadMediaPageData(params: {
     early.embyUrl,
     early.jellyfinUrl,
     early.requestAllSeasons,
-  ])
-  const embyUrl = embyUrlSetting || jellyfinUrlSetting
-
-  return {
-    kind: 'ok',
-    data: {
-      details,
-      user,
-      ability,
+  ]).then(
+    ([availability, isWatchLaterItem, isSubscribed, progress, embyUrlSetting, jellyfinUrlSetting, requestAllSeasons]) => ({
       availability,
       isWatchLaterItem,
       isSubscribed,
-      embyUrl: embyUrl ?? null,
-      credits,
-      meta,
+      embyUrl: (embyUrlSetting || jellyfinUrlSetting) ?? null,
       progress,
-      requestAllSeasonsEnabled: requestAllSeasonsEnabled === 'true',
-    },
+      requestAllSeasonsEnabled: requestAllSeasons === 'true',
+    })
+  )
+  // Attendue par les blocs Suspense de la page ; une erreur y remonte, sans rejet orphelin ici
+  extras.catch(() => {})
+
+  return {
+    kind: 'ok',
+    data: { details, user, ability, credits, meta, extras },
   }
 }

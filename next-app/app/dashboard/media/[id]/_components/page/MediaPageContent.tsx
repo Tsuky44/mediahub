@@ -1,9 +1,14 @@
-import { SeasonList } from '../SeasonList'
-import { UserActivityButton } from '../UserActivityButton'
+import { Suspense } from 'react'
 import MediaBackdrop from './MediaBackdrop'
-import MediaAvailabilityBadges from './MediaAvailabilityBadges'
 import MediaTitleHeader from './MediaTitleHeader'
-import MediaPrimaryActions from './MediaPrimaryActions'
+import {
+  ActionsSkeleton,
+  SeasonsSkeleton,
+  StreamedActions,
+  StreamedSeasons,
+  StreamedStatusBadge,
+  StreamedWatchedBadge,
+} from './MediaStreamedParts'
 import MediaHeroFacts from './MediaHeroFacts'
 import MediaLede from './MediaLede'
 import MediaCountdown from './MediaCountdown'
@@ -22,27 +27,9 @@ interface MediaPageContentProps {
 }
 
 export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageContentProps) {
-  const {
-    details,
-    ability,
-    availability,
-    isWatchLaterItem,
-    isSubscribed,
-    embyUrl,
-    credits: normalizedCredits,
-    meta,
-    progress,
-    requestAllSeasonsEnabled,
-  } = data
-
+  // extras (Radarr/Sonarr, listes, Emby) : attendus seulement par les blocs en Suspense
+  const { details, ability, extras, credits: normalizedCredits, meta } = data
   const { director, writers, editors, keywords, watchProviders } = meta
-  const {
-    embyItem,
-    embyServerId,
-    userProgress,
-    seasonProgress,
-    isInCalendar,
-  } = progress
 
   const videos = details.videos?.results || []
   const trailer = videos.find(
@@ -91,12 +78,17 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
             {/* onyx-hero-copy : textes qui tombent en place quand l'affiche atterrit (motion.css) */}
             <div className="onyx-hero-copy min-w-0 max-w-6xl space-y-6">
               <div className="onyx-stagger space-y-4">
-                <MediaAvailabilityBadges status={availability.status} />
+                <Suspense fallback={null}>
+                  <StreamedStatusBadge extras={extras} />
+                </Suspense>
                 <MediaTitleHeader
                   title={title}
                   releaseDate={releaseDate}
-                  mediaType={mediaType}
-                  watched={!!userProgress?.played}
+                  watchedSlot={
+                    <Suspense fallback={null}>
+                      <StreamedWatchedBadge extras={extras} mediaType={mediaType} />
+                    </Suspense>
+                  }
                   contentRating={rating?.short}
                   runtime={runtime}
                   genres={details.genres}
@@ -107,27 +99,22 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
               </div>
 
               <div className="flex flex-wrap gap-4 items-center">
-                <MediaPrimaryActions
-                  tmdbId={tmdbId}
-                  mediaType={mediaType}
-                  title={title}
-                  availability={availability}
-                  details={details}
-                  embyItem={embyItem}
-                  embyServerId={embyServerId}
-                  embyUrl={embyUrl}
-                  trailer={trailer}
-                  ability={ability}
-                  requestAllSeasonsEnabled={requestAllSeasonsEnabled}
-                  id={id}
-                  isWatchLaterItem={isWatchLaterItem}
-                  isSubscribed={isSubscribed}
-                  isInCalendar={isInCalendar}
-                  tvdbId={tvdbId}
-                  canManageSettings={ability.can('manage_settings', 'Media')}
-                  canTriggerSearch={ability.can('trigger_search', 'Media')}
-                  canInteractiveSearch={ability.can('interactive_search', 'Media')}
-                />
+                <Suspense fallback={<ActionsSkeleton />}>
+                  <StreamedActions
+                    extras={extras}
+                    tmdbId={tmdbId}
+                    mediaType={mediaType}
+                    title={title}
+                    details={details}
+                    trailer={trailer}
+                    ability={ability}
+                    id={id}
+                    tvdbId={tvdbId}
+                    canManageSettings={ability.can('manage_settings', 'Media')}
+                    canTriggerSearch={ability.can('trigger_search', 'Media')}
+                    canInteractiveSearch={ability.can('interactive_search', 'Media')}
+                  />
+                </Suspense>
               </div>
             </div>
             {countdown && (
@@ -143,53 +130,18 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
         {/* Saisons, distribution et cartel, puis recommandations */}
         <div className="space-y-16">
           {mediaType === 'tv' && details.seasons && (
-            <section>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <h2 className="text-2xl font-bold text-white">Saisons</h2>
-                <div className="flex flex-wrap items-center gap-4">
-                  {embyItem && (
-                    <UserActivityButton
-                      tmdbId={tmdbId}
-                      mediaType={mediaType}
-                      title={title}
-                    />
-                  )}
-                  {userProgress &&
-                    userProgress.totalEpisodes !== undefined &&
-                    userProgress.totalEpisodes > 0 && (
-                      <div className="flex items-center gap-3 w-full sm:w-64">
-                        <div className="flex-1 relative h-2 rounded-full overflow-hidden bg-gray-800/60 border border-white/5">
-                          <div
-                            className="onyx-grow absolute inset-y-0 left-0 rounded-full transition-all duration-700"
-                            style={{
-                              width: `${userProgress.playedPercentage}%`,
-                              background: 'linear-gradient(90deg, #9a9794, #f2f0ed)',
-                              boxShadow: '0 0 8px rgba(232,230,228,0.24)',
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs font-bold text-white whitespace-nowrap">
-                          {Math.round(userProgress.playedPercentage)}%
-                          <span className="text-gray-500 ml-1 font-normal">
-                            ({userProgress.totalEpisodes - userProgress.unplayedItemCount}/{userProgress.totalEpisodes})
-                          </span>
-                        </span>
-                      </div>
-                    )}
-                </div>
-              </div>
-              <SeasonList
-                tvId={tmdbId}
+            <Suspense fallback={<SeasonsSkeleton count={details.seasons.length} />}>
+              <StreamedSeasons
+                extras={extras}
+                tmdbId={tmdbId}
                 tvdbId={tvdbId}
                 title={title}
                 seasons={details.seasons}
-                seasonStatuses={availability.seasons || []}
-                seasonProgress={seasonProgress}
                 canTriggerSearch={ability.can('trigger_search', 'Media')}
                 canInteractiveSearch={ability.can('interactive_search', 'Media')}
                 canRequest={ability.can('create', 'MediaRequest')}
               />
-            </section>
+            </Suspense>
           )}
           <MediaCastAndFacts
             credits={normalizedCredits}

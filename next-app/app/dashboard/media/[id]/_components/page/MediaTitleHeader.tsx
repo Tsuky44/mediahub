@@ -1,12 +1,12 @@
+import type { ReactNode } from 'react'
 import { Clock } from 'lucide-react'
-import type { MediaType } from '../../_types/media-page'
 import { runtimeLabel } from '../../_utils/media-labels'
 
 interface MediaTitleHeaderProps {
   title: string
   releaseDate?: string
-  mediaType: MediaType
-  watched: boolean
+  /** Badge « Vu » (film), affiché quand la progression Emby arrive */
+  watchedSlot?: ReactNode
   contentRating?: string
   runtime?: number
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,8 +17,7 @@ interface MediaTitleHeaderProps {
 export default function MediaTitleHeader({
   title,
   releaseDate,
-  mediaType,
-  watched,
+  watchedSlot,
   contentRating,
   runtime,
   genres,
@@ -43,22 +42,7 @@ export default function MediaTitleHeader({
         </h1>
       )}
 
-      {mediaType === 'movie' && watched && (
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold uppercase tracking-wider backdrop-blur-md mb-2">
-          <svg
-            className="w-4 h-4"
-            fill="currentColor"
-            viewBox="0 0 20 20"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <span>Vu</span>
-        </div>
-      )}
+      {watchedSlot}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-gray-400">
         {logoPath && releaseDate && (
@@ -94,5 +78,25 @@ export default function MediaTitleHeader({
         )}
       </div>
     </>
+  )
+}
+
+/** Badge « Vu » d'un film regardé */
+export function WatchedBadge() {
+  return (
+    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-bold uppercase tracking-wider backdrop-blur-md mb-2">
+      <svg
+        className="w-4 h-4"
+        fill="currentColor"
+        viewBox="0 0 20 20"
+      >
+        <path
+          fillRule="evenodd"
+          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+          clipRule="evenodd"
+        />
+      </svg>
+      <span>Vu</span>
+    </div>
   )
 }
