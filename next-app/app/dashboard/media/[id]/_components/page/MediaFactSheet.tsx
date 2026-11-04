@@ -36,8 +36,8 @@ interface Fact {
 }
 
 /**
- * Cartel de la fiche (fond clair, comme l'étiquette d'une œuvre au musée) : nature, langue et pays,
- * créateurs, infos clés en cases, puis l'équipe en lignes et les thèmes.
+ * Cartel de la fiche (verre discret, globals.css onyx-cartel) : nature, langue et pays, créateurs,
+ * infos clés en cases, puis l'équipe en lignes et les thèmes en petites bulles.
  */
 export default function MediaFactSheet({
   details,
@@ -110,7 +110,7 @@ export default function MediaFactSheet({
   if (collection?.id) {
     rows.push([
       'Saga',
-      <Link key="saga" href={`/dashboard/media/collection/${collection.id}`} className="font-semibold underline decoration-black/25 underline-offset-2 hover:decoration-black">
+      <Link key="saga" href={`/dashboard/media/collection/${collection.id}`} className="font-medium">
         {collection.name}
       </Link>,
     ])

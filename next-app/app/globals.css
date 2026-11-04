@@ -762,23 +762,50 @@
   }
 }
 
-/* ---------- Fiche média : cartel (fond clair, comme l'étiquette d'une œuvre) ---------- */
+/* ---------- Fiche média : cartel ----------
+   Verre presque invisible, comme le panneau des épisodes (bordure fine, filet de lumière en haut),
+   à peine teinté crème ; textes assourdis (pas de blanc vif) ; thèmes en petites bulles. */
 .onyx-cartel {
+  position: relative;
   width: 100%;
+  overflow: hidden;
   padding: 22px 22px 18px;
-  border-radius: 8px;
-  color: #1a1b1b;
-  background: linear-gradient(180deg, #efece7, #e4e1dc);
+  border-radius: 24px;
+  color: #b9b6b1;
+  background: rgb(242 236 226 / 0.025);
   box-shadow:
-    0 30px 60px -30px rgb(0 0 0 / 0.95),
-    0 0 0 1px rgb(255 255 255 / 0.12);
+    inset 0 0 0 1px rgb(255 255 255 / 0.065),
+    inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+.onyx-cartel::before,
+.onyx-cartel::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+}
+.onyx-cartel::before {
+  left: -60px;
+  top: 1px;
+  width: 320px;
+  height: 112px;
+  background: radial-gradient(50% 60% at 50% 0%, rgb(242 240 237 / 0.07), transparent);
+}
+.onyx-cartel::after {
+  left: 0;
+  width: 176px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.4), transparent);
+}
+.onyx-cartel > * {
+  position: relative;
 }
 .onyx-cartel-kind {
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #6d6a66;
+  color: #7f7c78;
 }
 .onyx-cartel-title {
   margin-top: 6px;
@@ -786,16 +813,16 @@
   font-weight: 800;
   line-height: 1.05;
   letter-spacing: -0.03em;
-  color: #111;
+  color: #d3d0cb;
 }
 .onyx-cartel-by {
   margin-top: 6px;
   font-size: 14px;
-  color: #3a3b3b;
+  color: #a8a5a0;
 }
 .onyx-cartel-by b {
-  font-weight: 600;
-  color: #111;
+  font-weight: 500;
+  color: #d3d0cb;
 }
 .onyx-cartel-facts {
   display: grid;
@@ -803,8 +830,8 @@
   gap: 12px 14px;
   margin-top: 16px;
   padding: 14px 0;
-  border-top: 1px solid rgb(0 0 0 / 0.12);
-  border-bottom: 1px solid rgb(0 0 0 / 0.12);
+  border-top: 1px solid rgb(255 255 255 / 0.07);
+  border-bottom: 1px solid rgb(255 255 255 / 0.07);
 }
 .onyx-cartel-facts > div {
   display: flex;
@@ -814,19 +841,19 @@
 .onyx-cartel-facts svg {
   flex: none;
   margin-top: 1px;
-  color: #6d6a66;
+  color: #7f7c78;
 }
 .onyx-cartel-facts small {
   display: block;
   font-size: 11.5px;
-  color: #6d6a66;
+  color: #7f7c78;
 }
 .onyx-cartel-facts b {
   display: block;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.3;
-  color: #141515;
+  color: #d3d0cb;
 }
 .onyx-cartel-rows {
   display: grid;
@@ -840,34 +867,45 @@
 .onyx-cartel-rows dd {
   margin: 0;
   padding: 7px 0;
-  border-bottom: 1px solid rgb(0 0 0 / 0.07);
+  border-bottom: 1px solid rgb(255 255 255 / 0.045);
   font-size: 13.5px;
   line-height: 1.4;
 }
 .onyx-cartel-rows dt {
   padding-right: 16px;
-  color: #6d6a66;
+  color: #7f7c78;
 }
 .onyx-cartel-rows dd {
-  color: #1a1b1b;
+  color: #b9b6b1;
+}
+.onyx-cartel-rows a {
+  color: #d3d0cb;
+  text-decoration: underline;
+  text-decoration-color: rgb(255 255 255 / 0.2);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms;
+}
+.onyx-cartel-rows a:hover {
+  text-decoration-color: rgb(255 255 255 / 0.6);
 }
 .onyx-cartel-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px 10px;
-  margin-top: 12px;
-  font-size: 12.5px;
+  gap: 6px;
+  margin-top: 14px;
 }
 .onyx-cartel-tags a {
-  color: #55524f;
-  transition: color 150ms;
-}
-.onyx-cartel-tags a::before {
-  content: "#";
-  color: #9a9792;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #a8a5a1;
+  background: rgb(255 255 255 / 0.04);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  transition: color 150ms, background-color 150ms;
 }
 .onyx-cartel-tags a:hover {
-  color: #111;
+  color: var(--onyx-ink);
+  background: rgb(255 255 255 / 0.08);
 }
 
 /* Verre (design.md) : niveau 1 pour les cartes, niveau 2 pour les modales.
