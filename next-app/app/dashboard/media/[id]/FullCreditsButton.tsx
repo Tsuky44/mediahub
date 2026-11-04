@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X, User } from 'lucide-react'
 import Link from 'next/link'
@@ -59,6 +59,14 @@ interface FullCreditsButtonProps {
 export default function FullCreditsButton({ cast, crew, children }: FullCreditsButtonProps) {
     const [isOpen, setIsOpen] = useState(false)
 
+    // Échap ferme la fenêtre
+    useEffect(() => {
+        if (!isOpen) return
+        const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setIsOpen(false)
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+    }, [isOpen])
+
     // Group crew by department
     const departments = crew.reduce((acc, member) => {
         const dept = DEPT_TRANSLATIONS[member.department] || member.department
@@ -80,20 +88,25 @@ export default function FullCreditsButton({ cast, crew, children }: FullCreditsB
                     onClick={() => setIsOpen(true)}
                     className="text-sm text-gray-400 hover:text-white transition flex items-center gap-1"
                 >
-                    Voir l'équipe complète <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    Voir l&apos;équipe complète <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </button>
             )}
 
             {/* Portail : la fenêtre reste plein écran même ouverte depuis un bloc transformé ou
                 un conteneur (@container), qui piégerait sinon sa position fixe */}
             {isOpen && createPortal(
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+                    // Clic sur le voile, à côté de la fenêtre : fermeture
+                    onClick={(event) => event.target === event.currentTarget && setIsOpen(false)}
+                >
                     <div className="bg-[#1f2121] w-full max-w-4xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 border-b border-white/5">
                             <h2 className="text-2xl font-bold text-white">Équipe complète</h2>
                             <button 
                                 onClick={() => setIsOpen(false)}
+                                aria-label="Fermer"
                                 className="p-2 hover:bg-white/5 rounded-full text-gray-400 hover:text-white transition"
                             >
                                 <X className="w-6 h-6" />
