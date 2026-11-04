@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, User } from 'lucide-react'
 import Link from 'next/link'
 
@@ -83,7 +84,9 @@ export default function FullCreditsButton({ cast, crew, children }: FullCreditsB
                 </button>
             )}
 
-            {isOpen && (
+            {/* Portail : la fenêtre reste plein écran même ouverte depuis un bloc transformé ou
+                un conteneur (@container), qui piégerait sinon sa position fixe */}
+            {isOpen && createPortal(
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-[#1f2121] w-full max-w-4xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
                         {/* Header */}
@@ -175,7 +178,8 @@ export default function FullCreditsButton({ cast, crew, children }: FullCreditsB
                             ))}
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     )

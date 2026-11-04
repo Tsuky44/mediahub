@@ -1124,3 +1124,6 @@
 :root[data-onyx-lite] .onyx-breathe::before {
   animation-iteration-count: 3;
 }
+:root[data-onyx-lite] .onyx-countdown-dot::after {
+  animation-iteration-count: 3;
+}

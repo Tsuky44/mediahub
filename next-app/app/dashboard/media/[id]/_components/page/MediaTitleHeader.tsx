@@ -1,5 +1,6 @@
 import { Clock } from 'lucide-react'
 import type { MediaType } from '../../_types/media-page'
+import { runtimeLabel } from '../../_utils/media-labels'
 
 interface MediaTitleHeaderProps {
   title: string
@@ -73,9 +74,7 @@ export default function MediaTitleHeader({
         {runtime !== undefined && runtime > 0 && (
           <div className="flex items-center gap-1.5">
             <Clock className="w-4 h-4 text-gray-500" />
-            <span>
-              {Math.floor(runtime / 60)}h {runtime % 60}m
-            </span>
+            <span>{runtimeLabel(runtime)}</span>
           </div>
         )}
         {genres && (

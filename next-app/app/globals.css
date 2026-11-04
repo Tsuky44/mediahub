@@ -482,6 +482,394 @@
   }
 }
 
+/* ---------- Fiche média : compte à rebours de l'en-tête (prochain épisode, sortie) ----------
+   Sans cadre, posé sur l'image de fond ; un halo sombre (dégradé, pas de flou) garde le texte
+   lisible. Aligné à droite sur grand écran, à gauche sous les boutons sur téléphone. */
+.onyx-countdown {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.onyx-countdown::before {
+  content: "";
+  position: absolute;
+  inset: -36px -36px -36px -64px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgb(12 13 13 / 0.62), transparent);
+}
+@media (min-width: 1024px) {
+  .onyx-countdown {
+    align-items: flex-end;
+    text-align: right;
+  }
+}
+.onyx-countdown-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a8a5a1;
+}
+.onyx-countdown-dot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--onyx-ink);
+}
+.onyx-countdown[data-kind="next"] .onyx-countdown-dot {
+  background: #85c174;
+}
+.onyx-countdown[data-kind="last"] .onyx-countdown-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px #a8a5a1;
+}
+/* Pouls : anneau qui grandit et s'efface (transformation et opacité seulement) */
+.onyx-countdown[data-kind="next"] .onyx-countdown-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #85c174;
+  animation: onyx-countdown-pulse 2.4s ease-out infinite;
+}
+@keyframes onyx-countdown-pulse {
+  from {
+    opacity: 0.55;
+    scale: 1;
+  }
+  70%,
+  to {
+    opacity: 0;
+    scale: 2.8;
+  }
+}
+.onyx-countdown-big {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.onyx-countdown-big b {
+  font-size: 64px;
+  font-weight: 200;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  color: var(--onyx-ink);
+  white-space: nowrap;
+  text-shadow: 0 4px 24px rgb(0 0 0 / 0.5);
+}
+.onyx-countdown-big span {
+  padding-left: 16px;
+  border-left: 1px solid rgb(255 255 255 / 0.2);
+  font-size: 15px;
+  line-height: 1.3;
+  text-align: left;
+  color: #dfdcd9;
+}
+.onyx-countdown-bar {
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.12);
+}
+.onyx-countdown-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgb(242 240 237 / 0.35), var(--onyx-ink));
+  box-shadow: 0 0 10px rgb(242 240 237 / 0.4);
+}
+.onyx-countdown-caption {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* ---------- Fiche média : distribution en éventail ----------
+   Placement en CSS selon la largeur du bloc (unités cqw) : rendu juste dès le serveur, sans
+   mesure. --n : cartes affichées (4 + « tout le casting » en étroit) ; --after : cartes à droite
+   de la carte choisie, décalées pour qu'elle se montre en entier ; --m : marge réservée aux
+   cartes des bords, qui penchent vers l'extérieur. Transformations seulement. */
+.onyx-fan-wrap {
+  container-type: inline-size;
+}
+.onyx-fan {
+  position: relative;
+  height: 196px;
+  --cw: 88px;
+  --m: 40px;
+  --n: var(--n-narrow);
+}
+@container (min-width: 600px) {
+  .onyx-fan {
+    height: 286px;
+    --cw: 140px;
+    --m: 104px;
+    --n: var(--n-wide);
+  }
+}
+@container (min-width: 760px) {
+  .onyx-fan {
+    height: 300px;
+    --cw: 150px;
+  }
+}
+.onyx-fan-card {
+  --step: min((100cqw - var(--m) - 2 * var(--cw)) / max(var(--n) - 2, 1), var(--cw) * 0.78);
+  --gap: max(0px, var(--cw) - var(--step) + 8px);
+  --start: calc((100cqw - (var(--step) * (var(--n) - 1) + var(--cw) + var(--gap))) / 2);
+  --k: calc(var(--i) - (var(--n) - 1) / 2);
+  position: absolute;
+  bottom: 18px;
+  left: 0;
+  width: var(--cw);
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #1f2121;
+  text-align: left;
+  cursor: pointer;
+  transform-origin: 50% 150%;
+  translate: calc(var(--start) + var(--i) * var(--step) + var(--after, 0) * var(--gap))
+    calc(var(--k) * var(--k) * 1.4px + var(--lift, 0px));
+  rotate: calc(var(--k) * 2.2deg);
+  scale: var(--grow, 1);
+  box-shadow:
+    -10px 0 22px -12px rgb(0 0 0 / 0.9),
+    0 18px 30px -16px rgb(0 0 0 / 0.9),
+    inset 0 0 0 1px rgb(255 255 255 / 0.09);
+  transition:
+    translate 480ms var(--ease-out-onyx),
+    rotate 480ms var(--ease-out-onyx),
+    scale 480ms var(--ease-out-onyx),
+    box-shadow 300ms;
+}
+.onyx-fan-card[data-on] {
+  --lift: -18px;
+  --grow: 1.04;
+  rotate: 0deg;
+  box-shadow:
+    0 26px 40px -16px rgb(0 0 0 / 0.95),
+    0 0 0 2px rgb(242 240 237 / 0.85);
+}
+@media (hover: hover) {
+  .onyx-fan-card:not([data-on]):hover {
+    --lift: -10px;
+  }
+}
+.onyx-fan-card:focus-visible {
+  outline: 2px solid rgb(242 240 237 / 0.7);
+  outline-offset: 3px;
+}
+/* Nom lisible : prénom puis nom, calés à gauche dans la partie visible de la carte */
+.onyx-fan-name {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 30px 7px 8px;
+  line-height: 1.15;
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.55) 30%, rgb(0 0 0 / 0.88));
+}
+.onyx-fan-name b,
+.onyx-fan-name span {
+  display: block;
+  font-size: 12px;
+  color: #dfdcd9;
+}
+.onyx-fan-name b {
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.6);
+}
+@container (min-width: 600px) {
+  .onyx-fan-name {
+    padding: 36px 10px 10px;
+  }
+  .onyx-fan-name b,
+  .onyx-fan-name span {
+    font-size: 13.5px;
+  }
+}
+.onyx-fan-plus {
+  --i: calc(var(--n) - 1);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  background: #1e1f1f;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.09),
+    -10px 0 22px -12px rgb(0 0 0 / 0.9);
+}
+.onyx-fan-plus b {
+  display: block;
+  font-size: 24px;
+  font-weight: 300;
+  color: var(--onyx-ink);
+}
+.onyx-fan-plus small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: #a8a5a1;
+}
+@container (min-width: 600px) {
+  .onyx-fan-plus b {
+    font-size: 30px;
+  }
+  .onyx-fan-plus small {
+    font-size: 12px;
+  }
+}
+@container (max-width: 599.98px) {
+  .onyx-fan-extra,
+  .onyx-fan-plus:not([data-narrow]),
+  .onyx-fan-more-wide {
+    display: none;
+  }
+}
+@container (min-width: 600px) {
+  .onyx-fan-plus:not([data-wide]),
+  .onyx-fan-more-narrow {
+    display: none;
+  }
+}
+.onyx-fan-arrow {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  color: var(--onyx-ink);
+  background: rgb(255 255 255 / 0.05);
+  box-shadow:
+    inset 0 1px 0.5px rgb(255 255 255 / 0.2),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  transition: background-color 200ms;
+}
+.onyx-fan-arrow:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .onyx-fan-card {
+    transition: none;
+  }
+}
+
+/* ---------- Fiche média : cartel (fond clair, comme l'étiquette d'une œuvre) ---------- */
+.onyx-cartel {
+  width: 100%;
+  padding: 22px 22px 18px;
+  border-radius: 8px;
+  color: #1a1b1b;
+  background: linear-gradient(180deg, #efece7, #e4e1dc);
+  box-shadow:
+    0 30px 60px -30px rgb(0 0 0 / 0.95),
+    0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.onyx-cartel-kind {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #6d6a66;
+}
+.onyx-cartel-title {
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: #111;
+}
+.onyx-cartel-by {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #3a3b3b;
+}
+.onyx-cartel-by b {
+  font-weight: 600;
+  color: #111;
+}
+.onyx-cartel-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+  margin-top: 16px;
+  padding: 14px 0;
+  border-top: 1px solid rgb(0 0 0 / 0.12);
+  border-bottom: 1px solid rgb(0 0 0 / 0.12);
+}
+.onyx-cartel-facts > div {
+  display: flex;
+  gap: 9px;
+  min-width: 0;
+}
+.onyx-cartel-facts svg {
+  flex: none;
+  margin-top: 1px;
+  color: #6d6a66;
+}
+.onyx-cartel-facts small {
+  display: block;
+  font-size: 11.5px;
+  color: #6d6a66;
+}
+.onyx-cartel-facts b {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #141515;
+}
+.onyx-cartel-rows {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin-top: 4px;
+}
+.onyx-cartel-rows > div {
+  display: contents;
+}
+.onyx-cartel-rows dt,
+.onyx-cartel-rows dd {
+  margin: 0;
+  padding: 7px 0;
+  border-bottom: 1px solid rgb(0 0 0 / 0.07);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.onyx-cartel-rows dt {
+  padding-right: 16px;
+  color: #6d6a66;
+}
+.onyx-cartel-rows dd {
+  color: #1a1b1b;
+}
+.onyx-cartel-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  margin-top: 12px;
+  font-size: 12.5px;
+}
+.onyx-cartel-tags a {
+  color: #55524f;
+  transition: color 150ms;
+}
+.onyx-cartel-tags a::before {
+  content: "#";
+  color: #9a9792;
+}
+.onyx-cartel-tags a:hover {
+  color: #111;
+}
+
 /* Verre (design.md) : niveau 1 pour les cartes, niveau 2 pour les modales.
    Arête haute à 15 % de blanc, une seule ombre pour décoller les modales. */
 @utility onyx-glass {

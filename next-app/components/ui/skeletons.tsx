@@ -115,23 +115,34 @@ export function MediaHeroSkeleton() {
     <div className="relative -mx-2 sm:-mx-4 lg:-mx-6 -mt-24 min-h-screen bg-[#0c0d0d] overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-[70vh] md:h-[88vh] bg-gradient-to-b from-[#141616] via-[#101212] to-[#0c0d0d]" />
       <div className="relative px-4 pt-36 pb-12 sm:px-8 lg:px-12 2xl:px-16">
-        <div className="flex flex-col justify-end min-h-[35vh] md:min-h-[50vh] pt-16 pb-6 mb-12 space-y-4 max-w-3xl">
-          <SkeletonBlock className="h-5 w-28 rounded-full" />
-          <SkeletonBlock className="h-14 w-3/4" />
-          <SkeletonBlock className="h-4 w-1/3 border-0" />
-          <div className="flex gap-4 pt-4">
-            <SkeletonBlock className="h-12 w-60 rounded-full" />
-            <SkeletonBlock className="h-12 w-12 rounded-full" />
+        {/* Même découpe que la fiche : titre, notes et résumé à gauche, compte à rebours à droite,
+            puis distribution en éventail et cartel */}
+        <div className="flex flex-col justify-end min-h-[35vh] md:min-h-[50vh] pt-16 pb-6 mb-12">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-start lg:gap-12">
+            <div className="max-w-3xl space-y-4">
+              <SkeletonBlock className="h-5 w-28 rounded-full" />
+              <SkeletonBlock className="h-14 w-3/4" />
+              <SkeletonBlock className="h-4 w-1/3 border-0" />
+              <SkeletonBlock className="h-4 w-1/2 border-0" />
+              <div className="max-w-2xl space-y-2 pt-1">
+                <SkeletonBlock className="h-4 w-full border-0" />
+                <SkeletonBlock className="h-4 w-11/12 border-0" />
+                <SkeletonBlock className="h-4 w-4/5 border-0" />
+              </div>
+              <div className="flex gap-4 pt-4">
+                <SkeletonBlock className="h-12 w-60 rounded-full" />
+                <SkeletonBlock className="h-12 w-12 rounded-full" />
+              </div>
+            </div>
+            <SkeletonBlock className="hidden h-28 rounded-2xl border-0 lg:block" />
           </div>
         </div>
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_28rem] gap-12">
-          <div className="min-w-0 space-y-3">
-            <SkeletonBlock className="h-7 w-32" />
-            <SkeletonBlock className="h-4 w-full border-0" />
-            <SkeletonBlock className="h-4 w-11/12 border-0" />
-            <SkeletonBlock className="h-4 w-4/5 border-0" />
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_27rem] lg:gap-12">
+          <div className="min-w-0 space-y-5">
+            <SkeletonBlock className="h-7 w-40" />
+            <SkeletonBlock className="h-64 rounded-2xl" />
           </div>
-          <SkeletonBlock className="h-72 rounded-2xl" />
+          <SkeletonBlock className="h-96 rounded-lg" />
         </div>
       </div>
     </div>

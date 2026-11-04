@@ -250,7 +250,8 @@ export class TmdbService {
     try {
       const details = await this.cachedGet(`/${type}/${id}`, {
         language: 'fr-FR',
-        append_to_response: `videos,images,${type === 'tv' ? 'aggregate_credits' : 'credits'},watch/providers,keywords,external_ids,recommendations,similar`,
+        // content_ratings / release_dates : classification d'âge de la fiche
+        append_to_response: `videos,images,${type === 'tv' ? 'aggregate_credits,content_ratings' : 'credits,release_dates'},watch/providers,keywords,external_ids,recommendations,similar`,
         include_image_language: 'fr,en,null'
       }, CACHE_TTL.API_STATIC)
       // Alimente le cache des images (évite un appel getImagePaths ultérieur)
