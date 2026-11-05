@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Loader2, Play } from 'lucide-react'
 import clsx from 'clsx'
 import type { PlaybackPlatform } from '@/lib/playback-platform'
-import { getPlexLink } from '@/app/dashboard/media/play-actions'
+import { getOnyxLink, getPlexLink } from '@/app/dashboard/media/play-actions'
 
 interface PlayInPlatformButtonProps {
   /** Plateforme de connexion de l'utilisateur (lib/auth/playback-platform) */
@@ -28,7 +28,8 @@ interface PlayInPlatformButtonProps {
 /**
  * « Lire dans Emby », « Reprendre dans Plex »… : ouvre le média sur la plateforme avec laquelle
  * l'utilisateur s'est connecté. Emby et Jellyfin : la page du média dans le lecteur web de leur
- * serveur, ouverte directement ; Plex : la page du média dans l'app Plex ; Onyx : l'app Onyx.
+ * serveur, ouverte directement ; Plex : la page du média dans l'app Plex ; Onyx : sa fiche dans l'app
+ * web d'Onyx (sur Android et iOS, l'app Onyx par onyx://play).
  */
 export function PlayInPlatformButton({
   platform,
@@ -55,22 +56,37 @@ export function PlayInPlatformButton({
   // Emby / Jellyfin sans adresse du serveur ou sans élément : rien à ouvrir
   if (isServer && !webUrl) return null
 
+  /** Onglet ouvert tout de suite (sinon bloqué comme fenêtre surgissante), rempli ensuite */
+  const openInNewTab = async (resolve: () => Promise<string | null>) => {
+    const tab = window.open('', '_blank')
+    setOpening(true)
+    try {
+      const url = await resolve()
+      if (!url) {
+        tab?.close()
+        return
+      }
+      if (tab) tab.location.href = url
+      else window.location.href = url
+    } catch {
+      tab?.close()
+    } finally {
+      setOpening(false)
+    }
+  }
+
   const handlePlay = async () => {
     if (platform.id === 'onyx') {
-      window.location.href = `onyx://play?tmdbId=${tmdbId}&type=${mediaType}`
+      // onyx://play n'est déclaré que par l'app Android et iOS (ADR-0091 d'Onyx) : ailleurs, l'app web
+      if (/android|iphone|ipad|ipod/i.test(navigator.userAgent)) {
+        window.location.href = `onyx://play?tmdbId=${tmdbId}&type=${mediaType}`
+        return
+      }
+      await openInNewTab(() => getOnyxLink({ tmdbId, mediaType }))
       return
     }
     if (platform.id === 'plex') {
-      // Onglet ouvert tout de suite (sinon bloqué comme fenêtre surgissante), rempli ensuite
-      const tab = window.open('', '_blank')
-      setOpening(true)
-      try {
-        const url = await getPlexLink({ title, originalTitle, year, mediaType, ratingKey: itemId ?? undefined })
-        if (tab) tab.location.href = url
-        else window.location.href = url
-      } finally {
-        setOpening(false)
-      }
+      await openInNewTab(() => getPlexLink({ title, originalTitle, year, mediaType, ratingKey: itemId ?? undefined }))
       return
     }
     if (!webUrl) return
