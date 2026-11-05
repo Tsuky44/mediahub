@@ -9,7 +9,7 @@ import { defineAbilityFor } from '@/lib/ability'
 
 export const dynamic = 'force-dynamic'
 
-export default async function DiscoverPage({ searchParams }: { searchParams: Promise<{ q?: string; filter?: string; sort_by?: string; start_date?: string; end_date?: string; genres?: string; language?: string; watch_region?: string; watch_providers?: string }> }) {
+export default async function DiscoverPage({ searchParams }: { searchParams: Promise<{ q?: string; filter?: string; sort_by?: string; start_date?: string; end_date?: string; genres?: string; language?: string; watch_region?: string; watch_providers?: string; public_domain?: string }> }) {
   const session = await getSession()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const user = session?.user as any
@@ -32,6 +32,7 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
     language,
     watch_region,
     watch_providers,
+    public_domain,
   } = await searchParams
   // Only allow query if view permission is present
   const query = canView ? rawQuery : undefined
@@ -45,6 +46,7 @@ export default async function DiscoverPage({ searchParams }: { searchParams: Pro
     ...(language && { language }),
     ...(watch_region && { watch_region }),
     ...(watch_providers && { watch_providers: watch_providers.split(',').map(Number).filter(Boolean) }),
+    ...(public_domain === 'true' && { public_domain: true }),
   }
 
   let recommendationData: { results: any[]; total_pages: number } = { results: [], total_pages: 0 }

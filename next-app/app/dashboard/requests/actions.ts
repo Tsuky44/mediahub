@@ -4,6 +4,7 @@ import { getTmdbServiceForUser } from '@/lib/auth'
 import { getWatchLaterList, areInWatchLater } from '../media/watch-later-actions'
 import { fetchUserRecommendations, fetchServerTrends } from '../media/actions'
 import { getMediaAvailability, type MediaAvailability } from '@/lib/services/media-status'
+import { publicDomainYearLimit } from '@/lib/public-domain'
 
 // Les cartes n'affichent que le statut : inutile d'envoyer au navigateur l'objet
 // Radarr/Sonarr complet (`details`, plusieurs Ko par carte).
@@ -15,6 +16,18 @@ function toCardStatus({ details: _details, ...status }: MediaAvailability) {
 // carte s'affiche sans badge de statut (comme en cas d'erreur). Le calcul continue en
 // arrière-plan et alimente le cache : le statut apparaît au chargement suivant.
 const STATUS_TIME_BUDGET_MS = 2500
+
+// Filtre « Libre de droits » sur une recherche textuelle : `/search` n'accepte pas de borne de
+// date (contrairement à `/discover`, filtré côté TMDB), le filtrage se fait donc sur les résultats renvoyés.
+function keepPublicDomain(results: any[]): any[] {
+    const limit = publicDomainYearLimit(new Date().toISOString().slice(0, 10))
+    if (limit === null) return results
+    return results.filter((item: any) => {
+        const day = item?.release_date || item?.first_air_date
+        const year = Number(String(day ?? '').slice(0, 4))
+        return Number.isInteger(year) && year <= limit
+    })
+}
 
 function withTimeBudget<T>(promise: Promise<T>): Promise<T | null> {
     return new Promise((resolve, reject) => {
@@ -52,6 +65,10 @@ export async function fetchMedia(page: number, type: 'all' | 'movie' | 'tv' | 'w
         data = await tmdbService.search(type, search, page)
       } else {
         data = await tmdbService.searchMulti(search, page)
+      }
+
+      if (filters?.public_domain && data?.results) {
+        data = { ...data, results: keepPublicDomain(data.results) }
       }
     } else if (type === 'recommendations') {
         return await fetchUserRecommendations(page)

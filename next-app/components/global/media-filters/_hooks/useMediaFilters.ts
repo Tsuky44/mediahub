@@ -49,6 +49,7 @@ export function useMediaFilters({
     ...filters,
     genres: filters?.genres ?? [],
     watch_providers: filters?.watch_providers ?? [],
+    public_domain: filters?.public_domain ?? false,
   })
 
   const [filters, setFilters] = useState<MediaFiltersValue>(

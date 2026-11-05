@@ -55,6 +55,7 @@ function parseFiltersFromURL(params: URLSearchParams): Partial<MediaFiltersValue
   if (params.has('language')) filters.language = params.get('language')!
   if (params.has('watch_region')) filters.watch_region = params.get('watch_region')!
   if (params.has('watch_providers')) filters.watch_providers = params.get('watch_providers')!.split(',').map(Number).filter(Boolean)
+  if (params.has('public_domain')) filters.public_domain = params.get('public_domain') === 'true'
   
   return filters
 }
@@ -83,6 +84,9 @@ function buildURLParams(filters: Partial<MediaFiltersValue>): URLSearchParams {
   
   if (filters.watch_providers?.length) params.set('watch_providers', filters.watch_providers.join(','))
   else params.delete('watch_providers')
+  
+  if (filters.public_domain) params.set('public_domain', 'true')
+  else params.delete('public_domain')
   
   return params
 }

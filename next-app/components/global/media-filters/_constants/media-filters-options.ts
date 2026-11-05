@@ -50,4 +50,5 @@ export const DEFAULT_MEDIA_FILTERS: MediaFiltersValue = {
   max_duration: '',
   watch_region: 'FR',
   watch_providers: [],
+  public_domain: false,
 }

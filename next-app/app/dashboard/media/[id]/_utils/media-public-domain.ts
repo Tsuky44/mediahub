@@ -1,24 +1,13 @@
 /**
- * Domaine public (« libre de droits ») pour la fiche média.
- *
- * TMDB n'expose aucun champ de droits. Deux signaux exploitables :
- *  1. les mots-clés TMDB (« public domain ») quand ils sont renseignés ;
- *  2. la règle américaine : une œuvre publiée il y a plus de 95 ans tombe dans le domaine
- *     public le 1er janvier suivant (publication en N -> domaine public au 1er janvier N+96).
- *
- * La règle européenne (70 ans après la mort du dernier auteur) n'est pas calculable depuis
- * TMDB : le libellé précise donc la juridiction au lieu d'affirmer un domaine public mondial.
+ * Pastille « Libre de droits » de la fiche média : habillage en français de la règle partagée
+ * de `lib/public-domain.ts` (mot-clé TMDB, sinon durée du droit d'auteur américain).
  */
 
-/** Durée du droit d'auteur américain pour une œuvre publiée (années depuis la publication) */
-const US_TERM_YEARS = 95
-
-/**
- * Mots-clés TMDB (en minuscules) qui signalent explicitement une œuvre libre de droits.
- * Correspondance exacte : « public domain character » désigne un personnage libre de droits,
- * pas le film lui-même.
- */
-const PD_KEYWORDS = ['public domain', 'domaine public', 'libre de droits', 'libre de droit']
+import {
+  US_COPYRIGHT_TERM_YEARS,
+  hasPublicDomainKeyword,
+  isPublicDomainYear,
+} from '@/lib/public-domain'
 
 export interface PublicDomainInfo {
   /** Pastille de l'en-tête */
@@ -52,16 +41,6 @@ function earliestYear(details: any, mediaType: 'movie' | 'tv'): number | null {
   return years.length > 0 ? Math.min(...years) : null
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function hasPublicDomainKeyword(details: any): boolean {
-  const keywords: { name?: string }[] =
-    details.keywords?.keywords || details.keywords?.results || []
-  return keywords.some((keyword) => {
-    const name = keyword?.name?.trim().toLowerCase()
-    return Boolean(name) && PD_KEYWORDS.includes(name!)
-  })
-}
-
 /**
  * `today` : AAAA-MM-JJ (même valeur que le compte à rebours, pour un rendu serveur stable).
  * Renvoie null quand rien ne permet d'affirmer que l'œuvre est libre de droits.
@@ -85,14 +64,11 @@ export function getPublicDomain(
     }
   }
 
-  const currentYear = Number(today.slice(0, 4))
-  if (!year || !Number.isInteger(currentYear)) return null
-  // Publication en N : domaine public américain au 1er janvier N + 95 + 1
-  if (currentYear < year + US_TERM_YEARS + 1) return null
+  if (year === null || !isPublicDomainYear(year, today)) return null
 
   return {
     label: 'Libre de droits',
-    detail: `Domaine public aux États-Unis : publiée en ${year}, soit plus de ${US_TERM_YEARS} ans`,
+    detail: `Domaine public aux États-Unis : publiée en ${year}, soit plus de ${US_COPYRIGHT_TERM_YEARS} ans`,
     year,
     source: 'term',
   }
