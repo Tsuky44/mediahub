@@ -98,10 +98,13 @@ export async function getPlatformServer(type: LibrarySource): Promise<{ service:
   return url && apiKey ? { service: new EmbyService(url, apiKey), url } : null
 }
 
-/** Plateformes dont MediaHub sait afficher la bibliothèque : Onyx passe par la clé d'intégration */
-export type LibraryPlatform = LibrarySource | 'onyx'
+/**
+ * Plateformes dont MediaHub sait afficher la bibliothèque : Onyx passe par la clé d'intégration,
+ * Plex par le jeton du serveur
+ */
+export type LibraryPlatform = LibrarySource | 'onyx' | 'plex'
 
-const LIBRARY_KEYS = ['library_source', 'emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key', 'onyx_url', 'player_integration_api_key'] as const
+const LIBRARY_KEYS = ['library_source', 'emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key', 'onyx_url', 'player_integration_api_key', 'plex_url', 'plex_token'] as const
 
 function resolveLibrary(s: Record<(typeof LIBRARY_KEYS)[number], string>, account: LibraryPlatform | null) {
   const embyUrl = s.emby_url || process.env.EMBY_URL
@@ -111,28 +114,30 @@ function resolveLibrary(s: Record<(typeof LIBRARY_KEYS)[number], string>, accoun
     ? { service: new EmbyService(s.jellyfin_url, s.jellyfin_api_key, true, 'jellyfin'), type: 'jellyfin' as const }
     : null
   const onyx = !!(s.onyx_url && (s.player_integration_api_key || process.env.PLAYER_INTEGRATION_API_KEY))
+  const plex = !!(s.plex_url && s.plex_token)
   let platform: LibraryPlatform | null
   // La plateforme du compte connecté passe avant le choix de l'administrateur, si elle est configurée
   if (account === 'onyx' && onyx) platform = 'onyx'
+  else if (account === 'plex' && plex) platform = 'plex'
   else if (account === 'jellyfin' && jellyfin) platform = 'jellyfin'
   else if (account === 'emby' && emby) platform = 'emby'
   else if (s.library_source === 'onyx' && onyx) platform = 'onyx'
+  else if (s.library_source === 'plex' && plex) platform = 'plex'
   else if (s.library_source === 'jellyfin' && jellyfin) platform = 'jellyfin'
   else if (s.library_source === 'emby' && emby) platform = 'emby'
-  else platform = emby ? 'emby' : jellyfin ? 'jellyfin' : onyx ? 'onyx' : null
+  else platform = emby ? 'emby' : jellyfin ? 'jellyfin' : onyx ? 'onyx' : plex ? 'plex' : null
   return { platform, emby, jellyfin }
 }
 
 /**
- * Plateforme du compte connecté, si « Ma médiathèque » sait l'afficher (Plex : non). Hors requête
- * (tâches de fond) ou sans session : null, le réglage de l'administrateur s'applique.
+ * Plateforme du compte connecté (sauf compte d'un groupe « comptes liés »). Hors requête (tâches de
+ * fond) ou sans session : null, le réglage de l'administrateur s'applique.
  */
 async function accountLibraryPlatform(): Promise<LibraryPlatform | null> {
   try {
     // Import dynamique : playback-platform importe ce module
-    const { getAccountPlatform } = await import('./playback-platform')
-    const id = await getAccountPlatform()
-    return id === 'emby' || id === 'jellyfin' || id === 'onyx' ? id : null
+    const { getLibraryAccountPlatform } = await import('./playback-platform')
+    return await getLibraryAccountPlatform()
   } catch {
     return null
   }
@@ -145,8 +150,9 @@ async function resolveLibraryForUser() {
 
 /**
  * Plateforme dont « Ma médiathèque » affiche la bibliothèque : celle du compte connecté (connexion
- * Jellyfin -> bibliothèque Jellyfin…) si elle est configurée, sinon celle choisie dans les réglages
- * (library_source), sinon la seule configurée (Emby, Jellyfin, puis Onyx).
+ * Jellyfin -> bibliothèque Jellyfin, Plex -> Plex…) si elle est configurée, sinon celle choisie dans
+ * les réglages (library_source) : toujours le cas d'un compte d'un groupe « comptes liés ». Sinon la
+ * seule configurée (Emby, Jellyfin, Onyx, puis Plex).
  */
 export async function getLibraryPlatform(): Promise<LibraryPlatform | null> {
   return (await resolveLibraryForUser()).platform

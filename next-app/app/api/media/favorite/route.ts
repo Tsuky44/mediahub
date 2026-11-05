@@ -1,5 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
-import { getUserMediaServer, getMediaServerUserId, getCurrentUser } from '@/lib/auth'
+import { getUserMediaServer, getMediaServerUserId, getCurrentUser, withLinkedAccounts } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -19,9 +19,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Media server unavailable' }, { status: 503 })
     }
 
-    const dbUser = await db.query.users.findFirst({
+    const dbUser = await withLinkedAccounts(await db.query.users.findFirst({
         where: eq(users.email, user.email)
-    })
+    }))
 
     const mediaUserId = getMediaServerUserId(dbUser, mediaService.flavor)
     if (!mediaUserId) {

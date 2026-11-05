@@ -11,6 +11,7 @@ import {
   type PlaybackPlatformId,
 } from '@/lib/playback-platform'
 import { getSession } from './index'
+import { getLinkedAccounts } from './account-group'
 import { getMediaServerType, getPlatformServer } from './service-factories'
 
 /**
@@ -47,6 +48,18 @@ export const getAccountPlatform = cache(async (): Promise<PlaybackPlatformId | n
     }
   }
   return null
+})
+
+/**
+ * Plateforme dont la médiathèque du compte connecté s'affiche : celle de sa connexion, sauf pour un
+ * compte d'un groupe « comptes liés » (plusieurs plateformes pour une même personne) : null, le
+ * réglage de l'administrateur s'applique.
+ */
+export const getLibraryAccountPlatform = cache(async (): Promise<PlaybackPlatformId | null> => {
+  const session = await getSession()
+  const id = parseInt(session?.user?.id ?? '')
+  if (!isNaN(id) && (await getLinkedAccounts(id).catch(() => null))) return null
+  return getAccountPlatform()
 })
 
 /**

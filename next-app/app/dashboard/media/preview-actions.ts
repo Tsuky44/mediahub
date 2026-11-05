@@ -1,7 +1,7 @@
 'use server'
 
 import { eq } from 'drizzle-orm'
-import { findPlayTarget, getCurrentUser, getLibraryServer, getLibraryUserId, getPlaybackPlatform } from '@/lib/auth'
+import { findPlayTarget, getCurrentUser, getLibraryServer, getLibraryUserId, getPlaybackPlatform, withLinkedAccounts } from '@/lib/auth'
 import { createMemoCache } from '@/lib/cache'
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
@@ -99,7 +99,7 @@ export async function getLibraryPreview(embyId: string): Promise<LibraryPreviewD
   if (!user?.email) return null
   const library = await getLibraryServer()
   if (!library) return null
-  const dbUser = await db.query.users.findFirst({ where: eq(users.email, user.email) })
+  const dbUser = await withLinkedAccounts(await db.query.users.findFirst({ where: eq(users.email, user.email) }))
   const userId = getLibraryUserId(dbUser, library.type)
   if (!userId) return null
   const service = library.service

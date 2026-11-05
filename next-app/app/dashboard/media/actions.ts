@@ -1,7 +1,7 @@
 'use server'
 
 import { getWatchLaterList, areInWatchLater } from './watch-later-actions'
-import { getCurrentUser, getLibraryPlatform, getLibraryServer, getLibraryUserId, getTmdbServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getLibraryPlatform, getLibraryServer, getLibraryUserId, getPlexServiceForUser, getTmdbServiceForUser, withLinkedAccounts } from '@/lib/auth'
 import { getOnyxDirectory, OnyxDirectoryError } from '@/lib/services/onyx-directory'
 import { embyWatchState, onyxWatchState } from '@/lib/library/watch-state'
 import { logger } from '@/lib/logger'
@@ -52,8 +52,8 @@ export interface LibraryPage {
     detail?: string
     /** Liste du serveur entier affichée faute de pouvoir lire celle du compte */
     serverWide?: boolean
-    /** Plateforme lue (Emby, Jellyfin, Onyx) */
-    source?: 'emby' | 'jellyfin' | 'onyx'
+    /** Plateforme lue (Emby, Jellyfin, Onyx, Plex) */
+    source?: 'emby' | 'jellyfin' | 'onyx' | 'plex'
 }
 
 /** Échec d'une lecture de la bibliothèque : de quel genre, et sa cause en clair */
@@ -88,7 +88,7 @@ async function fetchOnyxMedia(page: number, type: 'movie' | 'tv' | 'all', query?
         if (!directory) return { results: [], total_pages: 0, problem: 'no-server', source }
         if (favoritesOnly) return { results: [], total_pages: 0, source }
 
-        const account = await db.query.users.findFirst({ where: eq(users.email, user.email), columns: { onyxUserId: true } })
+        const account = await withLinkedAccounts(await db.query.users.findFirst({ where: eq(users.email, user.email), columns: { id: true, onyxUserId: true } }))
         let items = await directory.listLibrary(account?.onyxUserId)
         if (type !== 'all') items = items.filter((item) => (type === 'movie' ? item.type === 'movie' : item.type === 'show'))
         const needle = query?.trim().toLocaleLowerCase('fr')
@@ -141,8 +141,68 @@ async function fetchOnyxMedia(page: number, type: 'movie' | 'tv' | 'all', query?
     }
 }
 
+const PLEX_PAGE_SIZE = 50
+
+/**
+ * Bibliothèque Plex, lue avec le jeton du serveur (réglages) : films et séries de toutes ses
+ * bibliothèques, comme Onyx. Plex n'expose ni favoris ni progression par compte avec ce jeton :
+ * pas de pastille « vu ». Les éléments sans identifiant TMDB n'ont pas de fiche : ils sont omis.
+ */
+async function fetchPlexMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false): Promise<LibraryPage> {
+    const source = 'plex' as const
+    try {
+        const user = await getCurrentUser()
+        if (!user || !user.email) return { results: [], total_pages: 0 }
+
+        const plex = await getPlexServiceForUser()
+        if (!plex) return { results: [], total_pages: 0, problem: 'no-server', source }
+        if (favoritesOnly) return { results: [], total_pages: 0, source }
+
+        let items = (await plex.listLibrary()).filter((item) => item.tmdbId)
+        if (type !== 'all') items = items.filter((item) => item.type === type)
+        const needle = query?.trim().toLocaleLowerCase('fr')
+        if (needle) items = items.filter((item) => item.title.toLocaleLowerCase('fr').includes(needle))
+
+        if (watchLaterOnly) {
+            const saved = await getWatchLaterList()
+            const keys = new Set((Array.isArray(saved) ? saved : []).flatMap((i) => [`${i.mediaType}:${i.mediaId}`, `${i.mediaType}:${i.tmdbId ?? ''}`]))
+            items = items.filter((item) => keys.has(`${item.type}:${item.tmdbId}`))
+        }
+
+        const slice = items.slice((page - 1) * PLEX_PAGE_SIZE, page * PLEX_PAGE_SIZE)
+        const tmdbService = await getTmdbServiceForUser()
+        const watchLaterKeys = new Set(await areInWatchLater(slice.map((item) => ({ id: String(item.tmdbId), mediaType: item.type }))))
+
+        const results = await Promise.all(slice.map(async (item) => {
+            const id = String(item.tmdbId)
+            const images = tmdbService ? await tmdbService.getImagePaths(item.tmdbId!, item.type).catch(() => null) : null
+            return {
+                id,
+                title: item.title,
+                name: item.title,
+                poster_path: images?.poster_path ?? null,
+                backdrop_path: images?.backdrop_path ?? null,
+                media_type: item.type,
+                overview: item.summary,
+                plex_key: item.ratingKey,
+                tmdbId: item.tmdbId,
+                isFavorite: false,
+                isWatchLater: watchLaterKeys.has(`${item.type}:${id}`),
+            }
+        }))
+
+        return { results, total_pages: Math.ceil(items.length / PLEX_PAGE_SIZE), source }
+    } catch (e) {
+        const failure = classifyLibraryError(e)
+        logger.warn(`[Médiathèque] Lecture de la bibliothèque Plex impossible : ${failure.detail}`)
+        return { results: [], total_pages: 0, ...failure, source }
+    }
+}
+
 export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all', query?: string, favoritesOnly: boolean = false, watchLaterOnly: boolean = false): Promise<LibraryPage> {
-    if ((await getLibraryPlatform()) === 'onyx') return fetchOnyxMedia(page, type, query, favoritesOnly, watchLaterOnly)
+    const platform = await getLibraryPlatform()
+    if (platform === 'onyx') return fetchOnyxMedia(page, type, query, favoritesOnly, watchLaterOnly)
+    if (platform === 'plex') return fetchPlexMedia(page, type, query, favoritesOnly, watchLaterOnly)
     let source: 'emby' | 'jellyfin' | undefined
     try {
         const user = await getCurrentUser()
@@ -155,9 +215,10 @@ export async function fetchEmbyMedia(page: number, type: 'movie' | 'tv' | 'all',
         const mediaService = library.service
         source = library.type
 
-        const dbUser = await db.query.users.findFirst({
+        // Compte complété par son groupe « comptes liés » (identifiant de la plateforme lue)
+        const dbUser = await withLinkedAccounts(await db.query.users.findFirst({
             where: eq(users.email, user.email)
-        })
+        }))
 
         const userId = getLibraryUserId(dbUser, library.type)
         if (!userId) return { results: [], total_pages: 0, problem: 'not-linked', source }
@@ -295,9 +356,10 @@ export async function fetchRecentlyWatchedItems() {
         
         if (!library || !mediaService) return []
 
-        const dbUser = await db.query.users.findFirst({
+        // Compte complété par son groupe « comptes liés » (identifiant de la plateforme lue)
+        const dbUser = await withLinkedAccounts(await db.query.users.findFirst({
             where: eq(users.email, user.email)
-        })
+        }))
 
         const userId = getLibraryUserId(dbUser, library.type)
         if (!userId) {
@@ -392,9 +454,10 @@ export async function fetchUserRecommendations(page: number = 1) {
         
         if (!tmdbService) return { results: [], total_pages: 0 }
 
-        const dbUser = await db.query.users.findFirst({
+        // Compte complété par son groupe « comptes liés » (identifiant de la plateforme lue)
+        const dbUser = await withLinkedAccounts(await db.query.users.findFirst({
             where: eq(users.email, user.email)
-        })
+        }))
 
         if (!dbUser) return { results: [], total_pages: 0 }
 
@@ -623,9 +686,10 @@ export async function toggleFavorite(itemId: string, isFavorite: boolean) {
         const mediaService = library?.service
         if (!library || !mediaService) return false
 
-        const dbUser = await db.query.users.findFirst({
+        // Compte complété par son groupe « comptes liés » (identifiant de la plateforme lue)
+        const dbUser = await withLinkedAccounts(await db.query.users.findFirst({
             where: eq(users.email, user.email)
-        })
+        }))
 
         const userId = getLibraryUserId(dbUser, library.type)
         if (!userId) return false

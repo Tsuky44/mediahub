@@ -2,7 +2,7 @@ import 'server-only'
 import { db } from '@/lib/db/drizzle'
 import { users, userCalendarEvents } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
-import { findPlayTarget, getMediaServerUserId, getUserMediaServer } from '@/lib/auth'
+import { findPlayTarget, getMediaServerUserId, getPlexServiceForUser, getUserMediaServer, withLinkedAccounts } from '@/lib/auth'
 import type { PlaybackPlatformId, PlayTarget } from '@/lib/playback-platform'
 import type {
   MediaEmbyProgress,
@@ -59,8 +59,8 @@ interface ProgressParams {
  * connexion), cherchées en parallèle.
  *
  * Emby / Jellyfin : le média se retrouve sur le serveur avec lequel l'utilisateur s'est connecté,
- * avec son compte et son adresse. Plex / Onyx ouvrent leur propre app : ils n'ont besoin que de
- * savoir que le média existe dans la bibliothèque.
+ * avec son compte et son adresse. Plex : dans la bibliothèque du serveur Plex (élément ouvert dans
+ * l'app Plex). Onyx ouvre son app : il suffit de savoir que le média est dans la bibliothèque.
  */
 export async function fetchMediaEmbyProgress(
   params: ProgressParams & { platform: PlaybackPlatformId }
@@ -70,10 +70,14 @@ export async function fetchMediaEmbyProgress(
 
   const [progress, serverPlay] = await Promise.all([
     loadProgress(progressParams),
-    isServerPlatform ? findServerPlay(platform, progressParams) : Promise.resolve(null),
+    isServerPlatform
+      ? findServerPlay(platform, progressParams)
+      : platform === 'plex'
+        ? findPlexPlay(progressParams)
+        : Promise.resolve(null),
   ])
 
-  const play: PlayTarget | null = isServerPlatform
+  const play: PlayTarget | null = isServerPlatform || platform === 'plex'
     ? serverPlay
     : progress.embyItem
       ? { serverUrl: null, serverId: progress.embyServerId, itemId: String(progress.embyItem.Id) }
@@ -87,10 +91,22 @@ async function findServerPlay(
 ): Promise<PlayTarget | null> {
   if (!userEmail) return null
   try {
-    const dbUser = await db.query.users.findFirst({ where: eq(users.email, userEmail) })
+    const dbUser = await withLinkedAccounts(await db.query.users.findFirst({ where: eq(users.email, userEmail) }))
     return await findPlayTarget(platform, dbUser, tmdbId, mediaType)
   } catch (e) {
     errorLog('Failed to resolve play target', e)
+    return null
+  }
+}
+
+/** Élément de la bibliothèque Plex (ratingKey), ou null : pas de Plex, ou média absent */
+async function findPlexPlay({ tmdbId, mediaType }: ProgressParams): Promise<PlayTarget | null> {
+  try {
+    const plex = await getPlexServiceForUser()
+    const item = plex ? await plex.findByTmdbId(tmdbId, mediaType) : null
+    return item ? { serverUrl: null, serverId: null, itemId: item.ratingKey } : null
+  } catch (e) {
+    errorLog('Failed to find Plex item', e)
     return null
   }
 }
@@ -103,9 +119,10 @@ async function loadProgress(params: ProgressParams): Promise<Omit<MediaEmbyProgr
   const { userEmail, tmdbId, mediaType, details } = params
   if (!userEmail) return EMPTY_PROGRESS
 
-  const dbUser = await db.query.users.findFirst({
+  // Compte complété par son groupe « comptes liés »
+  const dbUser = await withLinkedAccounts(await db.query.users.findFirst({
     where: eq(users.email, userEmail),
-  })
+  }))
   if (!dbUser) return EMPTY_PROGRESS
 
   const calendarEvent = await db.query.userCalendarEvents.findFirst({

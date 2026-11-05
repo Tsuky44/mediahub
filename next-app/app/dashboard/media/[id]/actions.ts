@@ -1,6 +1,6 @@
 'use server'
 
-import { getMediaServerUserId, getTmdbServiceForUser, getUserMediaServer } from '@/lib/auth'
+import { getMediaServerUserId, getTmdbServiceForUser, getUserMediaServer, withLinkedAccounts } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
@@ -23,7 +23,8 @@ export async function getSeasonDetails(tvId: number, seasonNumber: number) {
 
     let embyUserId: string | undefined = undefined
     if (user && user.email) {
-        const [dbUser] = await db.select().from(users).where(eq(users.email, user.email)).limit(1)
+        const [row] = await db.select().from(users).where(eq(users.email, user.email)).limit(1)
+        const dbUser = await withLinkedAccounts(row)
         const mediaUserId = getMediaServerUserId(dbUser, mediaService?.flavor)
         if (mediaUserId) {
             embyUserId = mediaUserId

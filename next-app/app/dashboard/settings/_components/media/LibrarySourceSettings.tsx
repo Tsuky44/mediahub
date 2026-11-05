@@ -14,7 +14,7 @@ interface LibrarySourceSettingsProps {
 interface Platform {
   id: 'emby' | 'jellyfin' | 'plex' | 'onyx'
   name: string
-  /** MediaHub sait lire sa bibliothèque (Emby, Jellyfin par l'API compatible, Onyx par la clé d'intégration) */
+  /** MediaHub sait lire sa bibliothèque (Emby, Jellyfin par l'API compatible, Plex par le jeton, Onyx par la clé d'intégration) */
   library: boolean
   selected: string
 }
@@ -28,7 +28,7 @@ export function LibrarySourceSettings({ formData, updateField, readOnly }: Libra
     [
       { id: 'emby', name: 'Emby', library: true, selected: BRAND.emby.selected, on: !!(formData.emby_url && formData.emby_api_key) },
       { id: 'jellyfin', name: 'Jellyfin', library: true, selected: BRAND.jellyfin.selected, on: !!formData.jellyfin_url },
-      { id: 'plex', name: 'Plex', library: false, selected: BRAND.plex.selected, on: !!(formData.plex_url && formData.plex_token) },
+      { id: 'plex', name: 'Plex', library: true, selected: BRAND.plex.selected, on: !!(formData.plex_url && formData.plex_token) },
       {
         id: 'onyx',
         name: 'Onyx',

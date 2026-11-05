@@ -1,5 +1,39 @@
 import axios from 'axios';
 import { insecureHttpsAgent, keepAliveHttpAgent } from '../http-agents'
+// Imports relatifs, comme les autres services
+import { createMemoCache } from '../cache'
+
+/** Film ou série d'une bibliothèque Plex */
+export interface PlexLibraryItem {
+  ratingKey: string
+  type: 'movie' | 'tv'
+  title: string
+  year?: number
+  summary?: string
+  /** Date d'ajout (secondes Unix) */
+  addedAt: number
+  tmdbId: number | null
+  /** Séries : nombre d'épisodes */
+  leafCount?: number
+}
+
+// Bibliothèque complète (sans données de visionnage) par serveur : relue au plus toutes les 2 min
+const plexLibraries = createMemoCache({ max: 10, ttl: 2 * 60_000 })
+// Identifiant du serveur (machineIdentifier), stable
+const plexMachineIds = createMemoCache({ max: 10, ttl: 60 * 60_000 })
+
+/**
+ * Identifiant TMDB d'un élément Plex : agents récents (Guid[] « tmdb://603 », avec includeGuids=1),
+ * sinon ancien agent (guid « com.plexapp.agents.themoviedb://603?lang=fr »).
+ */
+export function plexTmdbId(item: { guid?: string; Guid?: Array<{ id?: string }> }): number | null {
+  const ids = [...(item.Guid ?? []).map((g) => g.id ?? ''), item.guid ?? '']
+  for (const id of ids) {
+    const match = id.match(/^(?:tmdb|com\.plexapp\.agents\.themoviedb):\/\/(\d+)/)
+    if (match) return Number(match[1])
+  }
+  return null
+}
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
 const log = (...args: unknown[]) => { if (isDev) console.log(...args); };
@@ -124,6 +158,62 @@ export class PlexService {
       error('[PlexService] findWebLink failed:', e.message);
       return null;
     }
+  }
+
+  /** Identifiant du serveur, pour les liens vers l'app Plex */
+  async getMachineId(): Promise<string | null> {
+    return plexMachineIds.get(this.baseUrl, async () => {
+      const client = await this.getClient(6000);
+      const identity = await client.get('/identity');
+      return (identity.data?.MediaContainer?.machineIdentifier as string | undefined) ?? null;
+    }, { cacheIf: (id) => Boolean(id) });
+  }
+
+  /** Page d'un élément dans l'app Plex (web) */
+  async webLinkFor(ratingKey: string): Promise<string | null> {
+    const machineId = await this.getMachineId().catch(() => null);
+    return machineId
+      ? `https://app.plex.tv/desktop/#!/server/${machineId}/details?key=${encodeURIComponent(`/library/metadata/${ratingKey}`)}`
+      : null;
+  }
+
+  /**
+   * Films et séries de toutes les bibliothèques « movie » et « show » du serveur, avec leur
+   * identifiant TMDB. Lus avec le jeton du serveur : pas de données de visionnage par compte.
+   * Une erreur (serveur injoignable, jeton refusé) remonte à l'appelant.
+   */
+  async listLibrary(): Promise<PlexLibraryItem[]> {
+    // Par serveur et par jeton : un autre jeton peut voir d'autres bibliothèques
+    return plexLibraries.get(`${this.baseUrl}|${this.token}`, async () => {
+      const client = await this.getClient(20000);
+      const sections: Array<{ key?: string | number; type?: string }> =
+        (await client.get('/library/sections')).data?.MediaContainer?.Directory ?? [];
+      const lists = await Promise.all(
+        sections
+          .filter((s) => (s.type === 'movie' || s.type === 'show') && s.key != null)
+          .map(async (s) => {
+            const res = await client.get(`/library/sections/${s.key}/all`, { params: { includeGuids: 1 } });
+            const metadata: Array<Record<string, any>> = res.data?.MediaContainer?.Metadata ?? [];
+            return metadata.map((m): PlexLibraryItem => ({
+              ratingKey: String(m.ratingKey),
+              type: s.type === 'movie' ? 'movie' : 'tv',
+              title: String(m.title ?? ''),
+              year: typeof m.year === 'number' ? m.year : undefined,
+              summary: typeof m.summary === 'string' ? m.summary : undefined,
+              addedAt: typeof m.addedAt === 'number' ? m.addedAt : 0,
+              tmdbId: plexTmdbId(m),
+              leafCount: typeof m.leafCount === 'number' ? m.leafCount : undefined,
+            }));
+          })
+      );
+      return lists.flat().sort((a, b) => b.addedAt - a.addedAt);
+    }, { cacheIf: (items) => items.length > 0 });
+  }
+
+  /** Élément de la bibliothèque correspondant à un identifiant TMDB, ou null */
+  async findByTmdbId(tmdbId: number, type: 'movie' | 'tv'): Promise<PlexLibraryItem | null> {
+    const items = await this.listLibrary();
+    return items.find((i) => i.tmdbId === tmdbId && i.type === type) ?? null;
   }
 
   async getItemDetails(ratingKey: string) {

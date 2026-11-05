@@ -14,9 +14,15 @@ export async function getPlexLink(params: {
   originalTitle?: string
   year?: number
   mediaType: 'movie' | 'tv'
+  /** Élément Plex déjà connu (bibliothèque Plex) : lien direct, sans recherche par titre */
+  ratingKey?: string
 }): Promise<string> {
   const plex = await getPlexServiceForUser()
   if (!plex) return PLEX_HOME
+  if (params.ratingKey && /^\d+$/.test(params.ratingKey)) {
+    const direct = await plex.webLinkFor(params.ratingKey)
+    if (direct) return direct
+  }
   const link = await plex.findWebLink(
     [params.title, params.originalTitle ?? ''],
     params.year,

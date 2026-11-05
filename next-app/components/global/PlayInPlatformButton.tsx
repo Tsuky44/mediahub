@@ -65,7 +65,7 @@ export function PlayInPlatformButton({
       const tab = window.open('', '_blank')
       setOpening(true)
       try {
-        const url = await getPlexLink({ title, originalTitle, year, mediaType })
+        const url = await getPlexLink({ title, originalTitle, year, mediaType, ratingKey: itemId ?? undefined })
         if (tab) tab.location.href = url
         else window.location.href = url
       } finally {

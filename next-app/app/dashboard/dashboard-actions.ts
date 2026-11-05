@@ -2,7 +2,7 @@
 
 import { getSetting } from '@/lib/settings'
 import { testEmbyConnection } from './downloads/file-actions'
-import { getCurrentUser, getLibraryPlatform, getMediaServerServiceForUser, getMediaServerType, getTmdbServiceForUser, getUserMediaServer } from '@/lib/auth'
+import { getCurrentUser, getLibraryPlatform, getMediaServerServiceForUser, getMediaServerType, getPlexServiceForUser, getTmdbServiceForUser, getUserMediaServer } from '@/lib/auth'
 import { getOnyxDirectory } from '@/lib/services/onyx-directory'
 import type { LibraryStats } from './_types/dashboard'
 import { defineAbilityFor } from '@/lib/ability'
@@ -112,8 +112,8 @@ export async function getRecentRequests() {
 const execPromise = promisify(exec)
 
 /**
- * Totaux de la médiathèque : ceux d'Onyx quand c'est la plateforme de « Ma médiathèque », sinon
- * ceux d'Emby/Jellyfin, avec Onyx en secours quand ce serveur ne répond rien.
+ * Totaux de la médiathèque : ceux d'Onyx ou de Plex quand c'est la plateforme de « Ma médiathèque »,
+ * sinon ceux d'Emby/Jellyfin, avec Onyx en secours quand ce serveur ne répond rien.
  */
 async function readLibraryStats(mediaService: Awaited<ReturnType<typeof getMediaServerServiceForUser>>): Promise<LibraryStats | null> {
   const readOnyx = async (): Promise<LibraryStats | null> => {
@@ -128,7 +128,23 @@ async function readLibraryStats(mediaService: Awaited<ReturnType<typeof getMedia
     }
   }
 
-  if ((await getLibraryPlatform()) === 'onyx') return readOnyx()
+  const platform = await getLibraryPlatform()
+  if (platform === 'onyx') return readOnyx()
+  if (platform === 'plex') {
+    try {
+      const items = (await (await getPlexServiceForUser())?.listLibrary()) ?? null
+      if (!items) return null
+      const shows = items.filter((i) => i.type === 'tv')
+      return {
+        movies: items.length - shows.length,
+        series: shows.length,
+        episodes: shows.reduce((sum, show) => sum + (show.leafCount ?? 0), 0),
+      }
+    } catch (e) {
+      logger.warn(`[Accueil] Totaux Plex illisibles : ${e instanceof Error ? e.message : String(e)}`)
+      return null
+    }
+  }
 
   const stats = mediaService ? await mediaService.getLibraryStats().catch(() => null) : null
   if (stats && (stats.MovieCount || stats.SeriesCount || stats.EpisodeCount)) {

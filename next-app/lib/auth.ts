@@ -27,6 +27,7 @@ export {
 } from './auth/service-factories'
 
 export { getPlaybackPlatform, findPlayTarget } from './auth/playback-platform'
+export { withLinkedAccounts } from './auth/account-group'
 
 // Re-export providers for direct access if needed
 export { localProvider } from './auth/providers/local'
