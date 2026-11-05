@@ -571,8 +571,11 @@ function onLinkClick(event: MouseEvent) {
     passThrough = null
     return
   }
-  const image = link.closest('.onyx-page') ? link.querySelector('img') : null
-  const delay = prepareNavTo(link.href, image && posterFrame(image), link.dataset.onyxBackdrop)
+  // Aperçu de la médiathèque (hors de la page) : c'est sa bannière qui se retourne et s'envole
+  const preview = link.closest('[data-onyx-preview]')
+  const image = preview ? null : link.closest('.onyx-page') ? link.querySelector('img') : null
+  const frame = preview ? preview.querySelector('[data-onyx-preview-banner]') : image && posterFrame(image)
+  const delay = prepareNavTo(link.href, frame, link.dataset.onyxBackdrop)
   if (delay) {
     event.preventDefault()
     passThrough = link

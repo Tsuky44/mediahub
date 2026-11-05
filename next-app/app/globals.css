@@ -926,6 +926,11 @@
     animation: none;
   }
 }
+/* Copie de la bannière qui s'envole vers la fiche : figée à son zoom, sans rejouer l'ouverture */
+.onyx-hero-ghost .onyx-preview-banner {
+  animation: none;
+  scale: 1.06;
+}
 
 /* Verre (design.md) : niveau 1 pour les cartes, niveau 2 pour les modales.
    Arête haute à 15 % de blanc, une seule ombre pour décoller les modales. */

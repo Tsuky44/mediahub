@@ -15,6 +15,8 @@ import { getLibraryPreview, type LibraryPreviewData } from '../preview-actions'
 const OPEN_MS = 520
 /** Survol avant de demander les infos au serveur (prêtes à l'ouverture) */
 const FETCH_MS = 160
+/** Aperçu déjà ouvert, pointeur sur une autre affiche : il y glisse, plus vite qu'une ouverture */
+const SWITCH_MS = 240
 const MARGIN = 12
 
 // Infos déjà reçues (ou en cours) : un second survol s'ouvre complet aussitôt
@@ -70,7 +72,17 @@ function PreviewActions({ item }: { item: any }) {
 interface Open {
   index: number
   rect: DOMRect
+  /** Position de l'aperçu précédent : il glisse de là jusqu'à la nouvelle affiche */
+  from?: { left: number; top: number }
 }
+
+type Shown = LibraryPreviewData & { endsAt?: string }
+
+/** « Fin à 22:45 » : heure de fin si l'on lance la lecture maintenant */
+const withEnd = (d: LibraryPreviewData | null | undefined): Shown | null | undefined =>
+  d && d.status.minutes
+    ? { ...d, endsAt: new Date(Date.now() + d.status.minutes * 60_000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) }
+    : d
 
 /**
  * Aperçu au survol d'une affiche de la médiathèque (souris seulement) : la bannière du média
@@ -81,12 +93,14 @@ interface Open {
 export function LibraryHoverPreview({ items, children }: { items: any[]; children: ReactNode }) {
   const [open, setOpen] = useState<Open | null>(null)
   const [closing, setClosing] = useState(false)
-  const [data, setData] = useState<LibraryPreviewData | null | undefined>(undefined)
+  const [data, setData] = useState<Shown | null | undefined>(undefined)
   const grid = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const timers = useRef<{ open?: number; fetch?: number; close?: number }>({})
   const hovered = useRef<number | null>(null)
   const canHover = useRef(false)
+  // Clic vers la fiche : l'aperçu s'efface pendant l'envol (sans être retiré : le clic peut être rejoué)
+  const leaving = useRef(false)
 
   useEffect(() => {
     const mq = window.matchMedia('(hover: hover) and (pointer: fine)')
@@ -113,8 +127,22 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
     return { index: Array.prototype.indexOf.call(root.children, card) as number, card }
   }
 
+  const leave = (event: React.MouseEvent) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    clear('open', 'fetch', 'close')
+    hovered.current = null
+    leaving.current = true
+    panel.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-out', fill: 'forwards' })
+    // Navigation annulée : l'aperçu se referme pour de bon
+    window.setTimeout(() => {
+      if (!leaving.current) return
+      leaving.current = false
+      setOpen(null)
+    }, 4000)
+  }
+
   const onPointerOver = (event: React.PointerEvent) => {
-    if (event.pointerType !== 'mouse' || !canHover.current) return
+    if (event.pointerType !== 'mouse' || !canHover.current || leaving.current) return
     // Événements de l'aperçu lui-même (portail, remontés par React) : rien à faire ici
     if (panel.current?.contains(event.target as Node)) return
     // Pointeur sur les boutons de l'affiche (à regarder plus tard, favori) : on vise ces boutons
@@ -125,6 +153,13 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
     }
     const hit = cardIndex(event.target)
     if (!hit || hit.index === hovered.current) return
+    // Retour sur l'affiche déjà en aperçu : il reste ouvert
+    if (open && !closing && hit.index === open.index) {
+      clear('open', 'close')
+      hovered.current = hit.index
+      return
+    }
+    const switching = Boolean(open && !closing)
     clear('open', 'fetch', 'close')
     hovered.current = hit.index
     const item = items[hit.index]
@@ -133,13 +168,15 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
     timers.current.fetch = window.setTimeout(() => void load(embyId), FETCH_MS)
     timers.current.open = window.setTimeout(() => {
       if (hovered.current !== hit.index || !hit.card.isConnected) return
+      const el = panel.current
+      const from = switching && el ? { left: parseFloat(el.style.left), top: parseFloat(el.style.top) } : undefined
       setClosing(false)
-      setData(ready.has(embyId) ? ready.get(embyId) : undefined)
-      setOpen({ index: hit.index, rect: hit.card.getBoundingClientRect() })
+      setData(ready.has(embyId) ? withEnd(ready.get(embyId)) : undefined)
+      setOpen({ index: hit.index, rect: hit.card.getBoundingClientRect(), from })
       load(embyId).then((d) => {
-        if (hovered.current === hit.index) setData(d)
+        if (hovered.current === hit.index) setData(withEnd(d))
       })
-    }, OPEN_MS)
+    }, switching ? SWITCH_MS : OPEN_MS)
   }
 
   const onPointerOut = (event: React.PointerEvent) => {
@@ -149,7 +186,7 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
     // Sortie de l'affiche : rien ne s'ouvre ; aperçu ouvert : il se referme sauf si on y entre
     clear('open', 'fetch')
     hovered.current = null
-    if (open) timers.current.close = window.setTimeout(close, 140)
+    if (open) timers.current.close = window.setTimeout(close, 180)
   }
 
   // Défilement, Échap, changement de page : fermé
@@ -182,6 +219,15 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
     el.style.top = `${top}px`
     el.style.transformOrigin = `${cx - left}px ${cy - top}px`
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    // Passage d'une affiche à l'autre : l'aperçu glisse jusqu'à la nouvelle, son contenu se fond
+    if (open.from) {
+      const easing = 'cubic-bezier(0.16, 1, 0.3, 1)'
+      el.animate([{ transform: `translate(${open.from.left - left}px, ${open.from.top - top}px)` }, { transform: 'none' }], { duration: 340, easing })
+      el.querySelectorAll<HTMLElement>('[data-preview-part]').forEach((part) =>
+        part.animate([{ opacity: 0.25 }, { opacity: 1 }], { duration: 260, easing: 'ease-out' })
+      )
+      return
+    }
     const from = Math.max(0.45, rect.width / width)
     el.animate([{ opacity: 0, transform: `scale(${from})` }, { opacity: 1, transform: 'scale(1)' }], {
       duration: 300,
@@ -215,6 +261,9 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
     }
   }, [closing, open])
 
+  // Nouvelle page : l'effacement de l'envol est terminé
+  useEffect(() => () => void (leaving.current = false), [])
+
   const item = open ? items[open.index] : null
   const href = item ? `/dashboard/media/${item.tmdbId || item.id}?type=${item.media_type || 'movie'}` : '#'
   const backdrop = item?.backdrop_path ? getPosterUrl(item.backdrop_path, 'original') : undefined
@@ -232,18 +281,20 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
             ref={panel}
             role="dialog"
             aria-label={`Aperçu : ${title}`}
+            data-onyx-preview
             onPointerEnter={() => clear('close')}
             onPointerLeave={() => {
               hovered.current = null
-              timers.current.close = window.setTimeout(close, 120)
+              if (!leaving.current) timers.current.close = window.setTimeout(close, 180)
             }}
             style={{ position: 'fixed', top: -9999, left: -9999, zIndex: 70 }}
             className="onyx-preview overflow-hidden rounded-2xl border border-white/[0.08] bg-[#161717] shadow-[0_30px_70px_-20px_rgb(0_0_0/0.9)]"
           >
-            <div className="relative">
+            <div className="relative" data-preview-part>
             <PreviewActions item={item} />
-            <Link href={href} data-onyx-backdrop={backdrop} onClick={close} className="relative block aspect-video overflow-hidden bg-gray-900">
-              {banner && <img src={banner} alt="" decoding="async" className="onyx-preview-banner absolute inset-0 h-full w-full object-cover" />}
+            {/* Bannière : au clic, c'est elle qui se retourne et s'envole vers la fiche (MotionDirector) */}
+            <Link href={href} data-onyx-backdrop={backdrop} data-onyx-preview-banner onClick={leave} className="relative block aspect-video overflow-hidden bg-gray-900">
+              {banner && <img key={banner} src={banner} alt="" decoding="async" className="onyx-preview-banner absolute inset-0 h-full w-full object-cover" />}
               <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-[#161717] via-transparent to-transparent" />
               {data?.status.progress != null && (
                 <span aria-hidden className="absolute inset-x-4 bottom-3 h-1 overflow-hidden rounded-full bg-white/20">
@@ -253,11 +304,12 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
             </Link>
             </div>
 
-            <div className="space-y-3 px-4 pb-4 pt-2">
+            <div className="space-y-3 px-4 pb-4 pt-2" data-preview-part>
               <div>
-                <Link href={href} onClick={close} className="block truncate text-lg font-bold text-white hover:text-gray-200">
+                <Link href={href} data-onyx-backdrop={backdrop} onClick={leave} className="block truncate text-lg font-bold text-white hover:text-gray-200">
                   {title}
                 </Link>
+                {data?.tagline && <p className="truncate text-xs italic text-gray-400">{data.tagline}</p>}
                 {data === undefined ? (
                   <span aria-hidden className="onyx-skeleton mt-1.5 block h-4 w-2/3 rounded" />
                 ) : data ? (
@@ -288,7 +340,8 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
                 ) : null}
                 <Link
                   href={href}
-                  onClick={close}
+                  data-onyx-backdrop={backdrop}
+                  onClick={leave}
                   aria-label="Voir la fiche"
                   title="Voir la fiche"
                   className="grid size-10 shrink-0 place-items-center rounded-full border border-white/15 text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
@@ -303,7 +356,21 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
                   {data.status.unplayed} épisode{data.status.unplayed > 1 ? 's' : ''} non vu{data.status.unplayed > 1 ? 's' : ''}
                 </p>
               )}
+              {data && data.badges.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {data.badges.map((badge) => (
+                    <span key={badge} className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[11px] font-semibold text-gray-300">
+                      {badge}
+                    </span>
+                  ))}
+                </div>
+              )}
               {item.overview && <p className="line-clamp-3 text-sm leading-relaxed text-gray-300">{item.overview}</p>}
+              {data && (data.endsAt || data.added || data.studio) && (
+                <p className="border-t border-white/[0.06] pt-2.5 text-[11px] text-gray-500">
+                  {[data.endsAt && `Fin à ${data.endsAt}`, data.added, data.studio].filter(Boolean).join(' · ')}
+                </p>
+              )}
             </div>
           </div>,
           document.body

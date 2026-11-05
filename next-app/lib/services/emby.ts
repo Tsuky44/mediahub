@@ -511,7 +511,7 @@ export class EmbyService {
   async getPreviewItem(userId: string, itemId: string) {
     const client = await this.getClient(4000)
     const response = await client.get(`/Users/${userId}/Items/${itemId}`, {
-      params: { Fields: 'Overview,Genres,ProductionYear,EndDate,Status,CommunityRating,OfficialRating,ChildCount,UserData' },
+      params: { Fields: 'Overview,Genres,ProductionYear,EndDate,Status,CommunityRating,OfficialRating,ChildCount,UserData,DateCreated,Studios,Taglines,MediaStreams' },
     })
     return response.data
   }
@@ -520,7 +520,7 @@ export class EmbyService {
   async getSeriesResume(userId: string, seriesId: string) {
     const client = await this.getClient(4000)
     const response = await client.get(`/Users/${userId}/Items/Resume`, {
-      params: { ParentId: seriesId, Recursive: true, IncludeItemTypes: 'Episode', Limit: 1, Fields: 'UserData' },
+      params: { ParentId: seriesId, Recursive: true, IncludeItemTypes: 'Episode', Limit: 1, Fields: 'UserData,MediaStreams' },
     })
     return response.data?.Items?.[0] ?? null
   }
@@ -529,7 +529,7 @@ export class EmbyService {
   async getNextUp(userId: string, seriesId: string) {
     const client = await this.getClient(4000)
     const response = await client.get('/Shows/NextUp', {
-      params: { UserId: userId, SeriesId: seriesId, Limit: 1, Fields: 'UserData' },
+      params: { UserId: userId, SeriesId: seriesId, Limit: 1, Fields: 'UserData,MediaStreams' },
     })
     return response.data?.Items?.[0] ?? null
   }

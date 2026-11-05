@@ -17,6 +17,8 @@ export interface PreviewStatus {
   progress?: number
   /** Séries : épisodes pas encore vus */
   unplayed?: number
+  /** Minutes de lecture restantes (film ou épisode à lire) : « Fin à 22:45 » */
+  minutes?: number
 }
 
 export interface LibraryPreviewData {
@@ -28,6 +30,40 @@ export interface LibraryPreviewData {
   play: { serverUrl: string | null; serverId: string | null; itemId: string; resume: boolean }
   originalTitle?: string
   year?: number
+  /** Qualité et langues du fichier : « 4K », « HDR », « Audio FR · EN », « ST FR » */
+  badges: string[]
+  /** « Ajouté le 3 novembre 2026 » */
+  added?: string
+  tagline?: string
+  studio?: string
+}
+
+/** Langue d'une piste (code ISO à 3 lettres d'Emby) en abrégé : « fre » → « FR » */
+const LANG: Record<string, string> = { fre: 'FR', fra: 'FR', eng: 'EN', spa: 'ES', ger: 'DE', deu: 'DE', ita: 'IT', jpn: 'JA', kor: 'KO', por: 'PT', chi: 'ZH', zho: 'ZH', rus: 'RU', ara: 'AR', dut: 'NL', nld: 'NL' }
+const lang = (code?: string) => (code ? LANG[code.toLowerCase()] ?? code.slice(0, 2).toUpperCase() : undefined)
+
+/** Qualité (définition, HDR) et langues audio / sous-titres d'une liste de pistes Emby */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function streamBadges(streams: any[] | undefined): string[] {
+  if (!Array.isArray(streams) || !streams.length) return []
+  const video = streams.find((s) => s.Type === 'Video')
+  const badges: string[] = []
+  const h = Number(video?.Height) || 0
+  const w = Number(video?.Width) || 0
+  if (h >= 2000 || w >= 3800) badges.push('4K')
+  else if (h >= 1000 || w >= 1900) badges.push('1080p')
+  else if (h >= 700 || w >= 1260) badges.push('720p')
+  else if (h > 0) badges.push('SD')
+  const range = `${video?.VideoRange ?? ''} ${video?.VideoRangeType ?? ''}`
+  if (/dolby|dovi/i.test(range)) badges.push('Dolby Vision')
+  else if (/hdr/i.test(range)) badges.push('HDR')
+  const unique = (type: string) =>
+    [...new Set(streams.filter((s) => s.Type === type).map((s) => lang(s.Language)).filter((l): l is string => Boolean(l)))].slice(0, 4)
+  const audio = unique('Audio')
+  const subs = unique('Subtitle')
+  if (audio.length) badges.push(`Audio ${audio.join(' · ')}`)
+  if (subs.length) badges.push(`ST ${subs.join(' · ')}`)
+  return badges
 }
 
 const TICKS_PER_MINUTE = 600_000_000
@@ -83,10 +119,13 @@ export async function getLibraryPreview(embyId: string): Promise<LibraryPreviewD
       let status: PreviewStatus
       let playItemId = String(item.Id ?? embyId)
       let resume = false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let episodeStreams: any[] | undefined
       if (isSeries) {
         const unplayed = typeof data.UnplayedItemCount === 'number' ? data.UnplayedItemCount : undefined
         const current = await service.getSeriesResume(userId, embyId).catch(() => null)
         const next = current ?? (await service.getNextUp(userId, embyId).catch(() => null))
+        episodeStreams = next?.MediaStreams
         const pos = next?.UserData?.PlaybackPositionTicks
         if (next && pos > 0) {
           const left = minutesLeft(next.RunTimeTicks, pos)
@@ -95,11 +134,12 @@ export async function getLibraryPreview(embyId: string): Promise<LibraryPreviewD
             line: [episodeLabel(next), left ? `${left} min restantes` : null].filter(Boolean).join(' · '),
             progress: next.RunTimeTicks ? Math.min(1, pos / next.RunTimeTicks) : undefined,
             unplayed,
+            minutes: left,
           }
           playItemId = String(next.Id)
           resume = true
         } else if (next) {
-          status = { kind: 'next', line: `À suivre : ${episodeLabel(next)}`, unplayed }
+          status = { kind: 'next', line: `À suivre : ${episodeLabel(next)}`, unplayed, minutes: minutesLeft(next.RunTimeTicks, 1) }
           playItemId = String(next.Id)
         } else if (data.Played) {
           status = { kind: 'watched', line: 'Série vue en entier' }
@@ -114,12 +154,13 @@ export async function getLibraryPreview(embyId: string): Promise<LibraryPreviewD
             kind: 'resume',
             line: left ? `${left} min restantes` : 'Lecture commencée',
             progress: item.RunTimeTicks ? Math.min(1, pos / item.RunTimeTicks) : undefined,
+            minutes: left,
           }
           resume = true
         } else if (data.Played) {
-          status = { kind: 'watched', line: 'Vu' }
+          status = { kind: 'watched', line: 'Vu', minutes: minutesLeft(item.RunTimeTicks, 1) }
         } else {
-          status = { kind: 'new', line: 'Pas encore vu' }
+          status = { kind: 'new', line: 'Pas encore vu', minutes: minutesLeft(item.RunTimeTicks, 1) }
         }
       }
 
@@ -144,6 +185,13 @@ export async function getLibraryPreview(embyId: string): Promise<LibraryPreviewD
         play: { serverUrl: url ? url.split('/web/')[0].replace(/\/$/, '') : null, serverId, itemId: playItemId, resume },
         originalTitle: item.OriginalTitle || undefined,
         year: startYear,
+        // Séries : qualité et langues de l'épisode à lire
+        badges: streamBadges(isSeries ? episodeStreams : item.MediaStreams),
+        added: item.DateCreated
+          ? `Ajouté le ${new Date(item.DateCreated).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
+          : undefined,
+        tagline: Array.isArray(item.Taglines) && item.Taglines[0] ? String(item.Taglines[0]) : undefined,
+        studio: Array.isArray(item.Studios) && item.Studios[0]?.Name ? String(item.Studios[0].Name) : undefined,
       }
     })
   } catch {
