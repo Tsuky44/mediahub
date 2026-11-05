@@ -10,17 +10,25 @@ import {
   type PlaybackPlatform,
   type PlaybackPlatformId,
 } from '@/lib/playback-platform'
+import { readSettings } from '@/lib/settings'
 import { getSession } from './index'
-import { getLinkedAccounts } from './account-group'
-import { getMediaServerType, getPlatformServer } from './service-factories'
+import { getLinkedAccounts, type PlatformAccountIds } from './account-group'
+import { getLibraryPlatform, getMediaServerType, getPlatformServer } from './service-factories'
 
 /**
- * Plateforme de lecture de l'utilisateur courant : celle de sa connexion. Session ouverte avant
- * que la connexion ne soit retenue, ou compte local : son compte lié (Onyx, Emby, Jellyfin, Plex),
- * sinon le serveur média configuré.
+ * Plateforme de lecture de l'utilisateur courant (« Lire dans … », « Disponible sur … ») : celle de
+ * « Ma médiathèque », pour que les boutons et la bibliothèque affichée concordent. C'est la
+ * plateforme de connexion, sauf quand le réglage de l'administrateur s'applique
+ * (getLibraryAccountPlatform). En secours : la plateforme du compte, puis le serveur média configuré.
  */
 export async function getPlaybackPlatform(): Promise<PlaybackPlatform> {
-  return playbackPlatform((await getAccountPlatform()) ?? (await getMediaServerType()) ?? 'emby')
+  const id =
+    (await getLibraryAccountPlatform()) ??
+    (await getLibraryPlatform().catch(() => null)) ??
+    (await getAccountPlatform()) ??
+    (await getMediaServerType()) ??
+    'emby'
+  return playbackPlatform(id)
 }
 
 /**
@@ -50,15 +58,40 @@ export const getAccountPlatform = cache(async (): Promise<PlaybackPlatformId | n
   return null
 })
 
+const ACCOUNT_KEY: Record<PlaybackPlatformId, keyof PlatformAccountIds> = {
+  emby: 'embyUserId',
+  jellyfin: 'jellyfinUserId',
+  plex: 'plexUserId',
+  onyx: 'onyxUserId',
+}
+
 /**
- * Plateforme dont la médiathèque du compte connecté s'affiche : celle de sa connexion, sauf pour un
- * compte d'un groupe « comptes liés » (plusieurs plateformes pour une même personne) : null, le
- * réglage de l'administrateur s'applique.
+ * Plateforme dont la médiathèque du compte connecté s'affiche : celle de sa connexion. Null (le
+ * réglage « Ma médiathèque » de l'administrateur s'applique) pour un compte d'un groupe « comptes
+ * liés » (plusieurs plateformes pour une même personne), ou pour un compte qui a aussi un compte sur
+ * la plateforme choisie dans ce réglage : connecté avec Onyx mais lié à Jellyfin, réglage Jellyfin
+ * -> Jellyfin.
  */
 export const getLibraryAccountPlatform = cache(async (): Promise<PlaybackPlatformId | null> => {
   const session = await getSession()
   const id = parseInt(session?.user?.id ?? '')
-  if (!isNaN(id) && (await getLinkedAccounts(id).catch(() => null))) return null
+  if (!isNaN(id)) {
+    if (await getLinkedAccounts(id).catch(() => null)) return null
+    const account = await getAccountPlatform()
+    try {
+      const { library_source: chosen } = await readSettings(['library_source'] as const)
+      if (account && isPlaybackPlatform(chosen) && chosen !== account) {
+        const row = await db.query.users.findFirst({
+          where: eq(users.id, id),
+          columns: { embyUserId: true, jellyfinUserId: true, plexUserId: true, onyxUserId: true },
+        })
+        if (row?.[ACCOUNT_KEY[chosen]]) return null
+      }
+    } catch {
+      // Base injoignable : plateforme de connexion
+    }
+    return account
+  }
   return getAccountPlatform()
 })
 
