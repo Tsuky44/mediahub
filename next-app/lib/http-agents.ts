@@ -24,6 +24,14 @@ export const insecureHttpsAgent = new https.Agent({ ...KEEP_ALIVE, rejectUnautho
 /** Vérification SSL stricte. */
 export const strictHttpsAgent = new https.Agent({ ...KEEP_ALIVE, rejectUnauthorized: true })
 
+/**
+ * Connexions neuves, sans réutilisation de socket : pour les requêtes non idempotentes
+ * (connexion utilisateur) où une socket gardée ouverte puis coupée par un proxy donnerait
+ * une erreur aléatoire.
+ */
+export const freshHttpAgent = new http.Agent({ keepAlive: false })
+export const freshInsecureHttpsAgent = new https.Agent({ keepAlive: false, rejectUnauthorized: false })
+
 export function getHttpsAgent(skipSslVerify = true): https.Agent {
   return skipSslVerify ? insecureHttpsAgent : strictHttpsAgent
 }

@@ -2,7 +2,7 @@ import CredentialsProvider from "next-auth/providers/credentials"
 import { db } from "@/lib/db/drizzle"
 import { users, settings as settingsTable, roles } from "@/lib/db/schema"
 import { eq, sql } from "drizzle-orm"
-import { JellyfinService } from "@/lib/services/jellyfin"
+import { JellyfinService, JellyfinAuthError } from "@/lib/services/jellyfin"
 import { checkRateLimit, registerLoginFailure, clearRateLimit } from "../rate-limiter"
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
@@ -159,7 +159,11 @@ export const jellyfinProvider = CredentialsProvider({
       }
     } catch (e: any) {
       error("[Auth] Jellyfin Authorize error:", e)
-      await registerLoginFailure(ip, username, 'jellyfin')
+      // Seuls de vrais identifiants faux comptent : une erreur passagère du serveur ne doit pas
+      // mener au blocage de 15 minutes après 5 essais
+      if (e instanceof JellyfinAuthError && e.kind === 'invalid-credentials') {
+        await registerLoginFailure(ip, username, 'jellyfin')
+      }
       throw new Error(e.message || "Erreur d'authentification Jellyfin")
     }
   }
