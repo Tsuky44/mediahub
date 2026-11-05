@@ -511,7 +511,7 @@ export class EmbyService {
   async getPreviewItem(userId: string, itemId: string) {
     const client = await this.getClient(4000)
     const response = await client.get(`/Users/${userId}/Items/${itemId}`, {
-      params: { Fields: 'Overview,Genres,ProductionYear,EndDate,Status,CommunityRating,OfficialRating,ChildCount,UserData,DateCreated,Studios,Taglines,MediaStreams' },
+      params: { Fields: 'Overview,Genres,ProductionYear,EndDate,Status,CommunityRating,OfficialRating,ChildCount,UserData,DateCreated,Studios,Taglines,MediaStreams,ProviderIds' },
     })
     return response.data
   }

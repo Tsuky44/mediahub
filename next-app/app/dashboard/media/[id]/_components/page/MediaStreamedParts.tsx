@@ -27,18 +27,17 @@ export async function StreamedWatchedBadge({ extras, mediaType }: Extras & { med
 
 type ActionsProps = Omit<
   ComponentProps<typeof MediaPrimaryActions>,
-  'availability' | 'embyItem' | 'embyServerId' | 'embyUrl' | 'requestAllSeasonsEnabled' | 'isWatchLaterItem' | 'isSubscribed' | 'isInCalendar' | 'platform'
+  'availability' | 'embyItem' | 'play' | 'requestAllSeasonsEnabled' | 'isWatchLaterItem' | 'isSubscribed' | 'isInCalendar' | 'platform'
 >
 
 export async function StreamedActions({ extras, ...props }: Extras & ActionsProps) {
-  const { availability, progress, embyUrl, requestAllSeasonsEnabled, isWatchLaterItem, isSubscribed, platform } = await extras
+  const { availability, progress, requestAllSeasonsEnabled, isWatchLaterItem, isSubscribed, platform } = await extras
   return (
     <MediaPrimaryActions
       {...props}
       availability={availability}
       embyItem={progress.embyItem}
-      embyServerId={progress.embyServerId}
-      embyUrl={embyUrl}
+      play={progress.play}
       requestAllSeasonsEnabled={requestAllSeasonsEnabled}
       isWatchLaterItem={isWatchLaterItem}
       isSubscribed={isSubscribed}

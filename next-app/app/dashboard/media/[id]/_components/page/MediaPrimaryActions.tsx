@@ -5,7 +5,7 @@ import { TrailerButton } from '../TrailerButton'
 import MediaActionsRow from './MediaActionsRow'
 import { MediaDownloadProgressBar } from './MediaDownloadProgressBar'
 import type { MediaType } from '../../_types/media-page'
-import type { PlaybackPlatform } from '@/lib/playback-platform'
+import type { PlaybackPlatform, PlayTarget } from '@/lib/playback-platform'
 
 interface MediaPrimaryActionsProps {
   tmdbId: number
@@ -17,8 +17,8 @@ interface MediaPrimaryActionsProps {
   details: any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   embyItem: any | null
-  embyServerId: string | null
-  embyUrl: string | null
+  /** Où ouvrir le média pour « Lire » (serveur de la plateforme de connexion) ; null : rien à lire */
+  play: PlayTarget | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   trailer: any
   ability: ReturnType<typeof defineAbilityFor>
@@ -42,8 +42,7 @@ export default function MediaPrimaryActions({
   availability,
   details,
   embyItem,
-  embyServerId,
-  embyUrl,
+  play,
   trailer,
   ability,
   requestAllSeasonsEnabled,
@@ -58,7 +57,7 @@ export default function MediaPrimaryActions({
   platform,
 }: MediaPrimaryActionsProps) {
   // Les comptes Onyx lisent via l'app Onyx : PlayButton se masque seul si ni Onyx ni serveur média ne conviennent
-  const canPlay = Boolean(embyItem)
+  const canPlay = Boolean(play)
   // Année de sortie : aide à retrouver le média sur Plex (bouton « Lire dans Plex »)
   const releaseYear = parseInt(String(details.release_date || details.first_air_date || '').slice(0, 4)) || undefined
   return (
@@ -81,12 +80,12 @@ export default function MediaPrimaryActions({
           platformName={platform.name}
         />
         </div>
-        {canPlay && (
+        {play && (
           <div className="min-w-0 flex-1 sm:flex-none">
             <PlayButton
-              embyUrl={embyUrl ? embyUrl.split('/web/')[0].replace(/\/$/, '') : null}
-              embyItemId={embyItem.Id}
-              serverId={embyServerId}
+              embyUrl={play.serverUrl}
+              embyItemId={play.itemId}
+              serverId={play.serverId}
               tmdbId={tmdbId}
               mediaType={mediaType}
               platform={platform}

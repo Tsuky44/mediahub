@@ -71,6 +71,21 @@ export async function getMediaServerServiceForUser() {
 /** Plateformes lues par l'API Emby (Jellyfin via l'API compatible) */
 export type LibrarySource = 'emby' | 'jellyfin'
 
+/**
+ * Serveur Emby ou Jellyfin d'une plateforme de connexion : son adresse (pour ouvrir le média dans
+ * son lecteur) et le service qui le lit. Null si cette plateforme n'est pas configurée. Contrairement
+ * à getMediaServerServiceForUser, Jellyfin n'est jamais écarté au profit d'Emby.
+ */
+export async function getPlatformServer(type: LibrarySource): Promise<{ service: EmbyService; url: string } | null> {
+  const s = await readSettings(['emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key'])
+  if (type === 'jellyfin') {
+    return s.jellyfin_url ? { service: new EmbyService(s.jellyfin_url, s.jellyfin_api_key), url: s.jellyfin_url } : null
+  }
+  const url = s.emby_url || process.env.EMBY_URL
+  const apiKey = s.emby_api_key || process.env.EMBY_API_KEY
+  return url && apiKey ? { service: new EmbyService(url, apiKey), url } : null
+}
+
 /** Plateformes dont MediaHub sait afficher la bibliothèque : Onyx passe par la clé d'intégration */
 export type LibraryPlatform = LibrarySource | 'onyx'
 

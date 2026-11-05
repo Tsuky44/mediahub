@@ -22,7 +22,6 @@ export interface MediaPageExtras {
   availability: any
   isWatchLaterItem: boolean
   isSubscribed: boolean
-  embyUrl: string | null
   progress: MediaEmbyProgress
   requestAllSeasonsEnabled: boolean
   /** Plateforme de connexion (bouton « Lire dans … ») */
@@ -69,8 +68,6 @@ export async function loadMediaPageData(params: {
     availability: quiet(getMediaAvailability(tmdbId, mediaType, true)),
     isWatchLaterItem: quiet(isInWatchLater(externalId, mediaType)),
     isSubscribed: quiet(getSubscriptionStatus(externalId, mediaType)),
-    embyUrl: quiet(getSetting('emby_url')),
-    jellyfinUrl: quiet(getSetting('jellyfin_url')),
     requestAllSeasons: quiet(getSetting('request_all_seasons_enabled')),
     platform: quiet(getPlaybackPlatform()),
   }
@@ -95,22 +92,22 @@ export async function loadMediaPageData(params: {
     early.availability,
     early.isWatchLaterItem,
     early.isSubscribed,
-    fetchMediaEmbyProgress({
-      userEmail: user?.email,
-      tmdbId,
-      mediaType,
-      details,
-    }),
-    early.embyUrl,
-    early.jellyfinUrl,
+    early.platform.then((platform) =>
+      fetchMediaEmbyProgress({
+        userEmail: user?.email,
+        tmdbId,
+        mediaType,
+        details,
+        platform: platform.id,
+      })
+    ),
     early.requestAllSeasons,
     early.platform,
   ]).then(
-    ([availability, isWatchLaterItem, isSubscribed, progress, embyUrlSetting, jellyfinUrlSetting, requestAllSeasons, platform]) => ({
+    ([availability, isWatchLaterItem, isSubscribed, progress, requestAllSeasons, platform]) => ({
       availability,
       isWatchLaterItem,
       isSubscribed,
-      embyUrl: (embyUrlSetting || jellyfinUrlSetting) ?? null,
       progress,
       requestAllSeasonsEnabled: requestAllSeasons === 'true',
       platform,

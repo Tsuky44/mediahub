@@ -5,6 +5,8 @@
  * dans le composant restent typees via les helpers _utils.
  */
 
+import type { PlayTarget } from '@/lib/playback-platform'
+
 export type MediaType = 'movie' | 'tv'
 
 export interface MediaSearchParams {
@@ -67,6 +69,8 @@ export interface MediaEmbyProgress {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   embyItem: any | null
   embyServerId: string | null
+  /** Où ouvrir le média pour « Lire » : sur le serveur de la plateforme de connexion */
+  play: PlayTarget | null
   userProgress: UserProgress | null
   seasonProgress: SeasonProgressEntry[]
   isInCalendar: boolean

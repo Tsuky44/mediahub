@@ -27,8 +27,8 @@ interface PlayInPlatformButtonProps {
 
 /**
  * « Lire dans Emby », « Reprendre dans Plex »… : ouvre le média sur la plateforme avec laquelle
- * l'utilisateur s'est connecté. Emby et Jellyfin : leur app (lien emby:// ou jellyfin://), avec le
- * lecteur web en secours ; Plex : la page du média dans l'app Plex ; Onyx : l'app Onyx.
+ * l'utilisateur s'est connecté. Emby et Jellyfin : la page du média dans le lecteur web de leur
+ * serveur, ouverte directement ; Plex : la page du média dans l'app Plex ; Onyx : l'app Onyx.
  */
 export function PlayInPlatformButton({
   platform,
@@ -44,12 +44,13 @@ export function PlayInPlatformButton({
   variant = 'hero',
   className,
 }: PlayInPlatformButtonProps) {
-  const [showWebOption, setShowWebOption] = useState(false)
   const [opening, setOpening] = useState(false)
 
   const isServer = platform.id === 'emby' || platform.id === 'jellyfin'
+  // Page d'un média : Jellyfin la sert sur #/details (l'ancien #!/ est déprécié et n'a pas de route
+  // « item »), Emby sur #!/item
   const webUrl = isServer && serverUrl && serverId && itemId
-    ? `${serverUrl.replace(/\/$/, '')}/web/index.html#!/item?id=${itemId}&serverId=${serverId}`
+    ? `${serverUrl.replace(/\/$/, '')}/web/index.html#${platform.id === 'jellyfin' ? '/details' : '!/item'}?id=${itemId}&serverId=${serverId}`
     : null
   // Emby / Jellyfin sans adresse du serveur ou sans élément : rien à ouvrir
   if (isServer && !webUrl) return null
@@ -73,13 +74,8 @@ export function PlayInPlatformButton({
       return
     }
     if (!webUrl) return
-    window.location.href = webUrl.replace(/^https?:\/\//, platform.id === 'jellyfin' ? 'jellyfin://' : 'emby://')
-    setShowWebOption(true)
-  }
-
-  const openWeb = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (webUrl) window.open(webUrl, '_blank')
+    // Nouvel onglet ; si le navigateur le bloque, on ouvre dans l'onglet courant
+    if (!window.open(webUrl, '_blank')) window.location.href = webUrl
   }
 
   const verb = resume ? 'Reprendre' : 'Lire'
@@ -104,16 +100,6 @@ export function PlayInPlatformButton({
           <span>{`${verb} dans ${platform.name}`}</span>
         )}
       </button>
-
-      {showWebOption && (
-        <button
-          type="button"
-          onClick={openWeb}
-          className="ml-2 text-xs text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
-        >
-          Ouvrir le lecteur web si l&apos;app ne se lance pas
-        </button>
-      )}
     </div>
   )
 }

@@ -10,6 +10,13 @@ export interface PlaybackPlatform {
   name: string
 }
 
+/** Où ouvrir un média sur Emby ou Jellyfin : adresse du serveur, son identifiant et l'élément (film, série ou épisode) */
+export interface PlayTarget {
+  serverUrl: string | null
+  serverId: string | null
+  itemId: string
+}
+
 export const PLATFORM_NAMES: Record<PlaybackPlatformId, string> = {
   emby: 'Emby',
   jellyfin: 'Jellyfin',

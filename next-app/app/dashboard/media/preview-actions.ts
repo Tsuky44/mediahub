@@ -1,7 +1,7 @@
 'use server'
 
 import { eq } from 'drizzle-orm'
-import { getCurrentUser, getLibraryServer, getLibraryUserId, getPlaybackPlatform } from '@/lib/auth'
+import { findPlayTarget, getCurrentUser, getLibraryServer, getLibraryUserId, getPlaybackPlatform } from '@/lib/auth'
 import { createMemoCache } from '@/lib/cache'
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
@@ -178,11 +178,30 @@ export async function getLibraryPreview(embyId: string): Promise<LibraryPreviewD
         item.OfficialRating || undefined,
       ].filter((v): v is string => Boolean(v))
 
+      // Connecté sur l'autre serveur que celui de la médiathèque : l'identifiant ci-dessus n'y existe
+      // pas. Le média se retrouve par son identifiant TMDB (page du film ou de la série) ; sans
+      // équivalent, pas de lien plutôt qu'un lien vers un autre serveur.
+      let play: LibraryPreviewData['play'] = {
+        serverUrl: url ? url.split('/web/')[0].replace(/\/$/, '') : null,
+        serverId,
+        itemId: playItemId,
+        resume,
+      }
+      if ((platform.id === 'emby' || platform.id === 'jellyfin') && platform.id !== library.type) {
+        const tmdbId = Number(item.ProviderIds?.Tmdb)
+        const target = tmdbId
+          ? await findPlayTarget(platform.id, dbUser, tmdbId, isSeries ? 'tv' : 'movie').catch(() => null)
+          : null
+        play = target
+          ? { ...target, resume: false }
+          : { serverUrl: null, serverId: null, itemId: '', resume: false }
+      }
+
       return {
         meta,
         status,
         platform,
-        play: { serverUrl: url ? url.split('/web/')[0].replace(/\/$/, '') : null, serverId, itemId: playItemId, resume },
+        play,
         originalTitle: item.OriginalTitle || undefined,
         year: startYear,
         // Séries : qualité et langues de l'épisode à lire

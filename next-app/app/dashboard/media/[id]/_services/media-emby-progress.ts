@@ -2,7 +2,8 @@ import 'server-only'
 import { db } from '@/lib/db/drizzle'
 import { users, userCalendarEvents } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
-import { getMediaServerServiceForUser, getMediaServerUserId } from '@/lib/auth'
+import { findPlayTarget, getMediaServerServiceForUser, getMediaServerUserId } from '@/lib/auth'
+import type { PlaybackPlatformId, PlayTarget } from '@/lib/playback-platform'
 import type {
   MediaEmbyProgress,
   MediaType,
@@ -37,7 +38,7 @@ interface EmbyApiEpisode {
   };
 }
 
-const EMPTY_PROGRESS: MediaEmbyProgress = {
+const EMPTY_PROGRESS: Omit<MediaEmbyProgress, 'play'> = {
   embyUserId: null,
   embyItem: null,
   embyServerId: null,
@@ -46,16 +47,59 @@ const EMPTY_PROGRESS: MediaEmbyProgress = {
   isInCalendar: false,
 }
 
-/**
- * Recupere la progression Emby (et le statut calendrier) pour l'utilisateur courant.
- * Effectue silencieusement un fallback en cas d'echec sur Emby.
- */
-export async function fetchMediaEmbyProgress(params: {
+interface ProgressParams {
   userEmail: string | null | undefined
   tmdbId: number
   mediaType: MediaType
   details: Record<string, unknown>
-}): Promise<MediaEmbyProgress> {
+}
+
+/**
+ * Progression (serveur média par défaut) et cible du bouton « Lire » (serveur de la plateforme de
+ * connexion), cherchées en parallèle.
+ *
+ * Emby / Jellyfin : le média se retrouve sur le serveur avec lequel l'utilisateur s'est connecté,
+ * avec son compte et son adresse. Plex / Onyx ouvrent leur propre app : ils n'ont besoin que de
+ * savoir que le média existe dans la bibliothèque.
+ */
+export async function fetchMediaEmbyProgress(
+  params: ProgressParams & { platform: PlaybackPlatformId }
+): Promise<MediaEmbyProgress> {
+  const { platform, ...progressParams } = params
+  const isServerPlatform = platform === 'emby' || platform === 'jellyfin'
+
+  const [progress, serverPlay] = await Promise.all([
+    loadProgress(progressParams),
+    isServerPlatform ? findServerPlay(platform, progressParams) : Promise.resolve(null),
+  ])
+
+  const play: PlayTarget | null = isServerPlatform
+    ? serverPlay
+    : progress.embyItem
+      ? { serverUrl: null, serverId: progress.embyServerId, itemId: String(progress.embyItem.Id) }
+      : null
+  return { ...progress, play }
+}
+
+async function findServerPlay(
+  platform: 'emby' | 'jellyfin',
+  { userEmail, tmdbId, mediaType }: ProgressParams
+): Promise<PlayTarget | null> {
+  if (!userEmail) return null
+  try {
+    const dbUser = await db.query.users.findFirst({ where: eq(users.email, userEmail) })
+    return await findPlayTarget(platform, dbUser, tmdbId, mediaType)
+  } catch (e) {
+    errorLog('Failed to resolve play target', e)
+    return null
+  }
+}
+
+/**
+ * Recupere la progression Emby (et le statut calendrier) pour l'utilisateur courant.
+ * Effectue silencieusement un fallback en cas d'echec sur Emby.
+ */
+async function loadProgress(params: ProgressParams): Promise<Omit<MediaEmbyProgress, 'play'>> {
   const { userEmail, tmdbId, mediaType, details } = params
   if (!userEmail) return EMPTY_PROGRESS
 
