@@ -20,18 +20,31 @@ const TMDB_INDEX_NOT_FOUND_TTL_MS = 60_000
 // Id du serveur (statique) mis en cache par URL
 const serverIds = createMemoCache({ max: 20, ttl: 60 * 60_000 })
 
+/**
+ * En-tête d'authentification standard de Jellyfin. Depuis que `EnableLegacyAuthorization` vaut
+ * false par défaut, Jellyfin ignore `X-Emby-Token`, `X-MediaBrowser-Token` et `?api_key=` : la clé
+ * API doit passer dans `Authorization: MediaBrowser Token="…"` (ou `?ApiKey=`).
+ */
+export function jellyfinAuthorization(apiKey: string): string {
+  return `MediaBrowser Client="MediaHub", Device="MediaHub", DeviceId="mediahub-server", Version="1.0.0", Token="${apiKey}"`
+}
+
 export class EmbyService {
   private baseUrl: string
   private apiKey: string
   private httpsAgent: https.Agent
   /** Un client axios par timeout, réutilisé (évite axios.create à chaque appel). */
   private clients = new Map<number, AxiosInstance>()
+  /** Serveur Emby, ou Jellyfin lu par l'API compatible (seule l'authentification diffère) */
+  readonly flavor: 'emby' | 'jellyfin'
 
   /**
    * @param skipSslVerify - Si true (défaut), ignore les erreurs de certificat SSL (comportement historique).
    *                        Passer false pour activer la vérification stricte SSL.
+   * @param flavor - 'jellyfin' : clé API envoyée aussi dans l'en-tête standard de Jellyfin.
    */
-  constructor(baseUrl: string, apiKey: string, skipSslVerify: boolean = true) {
+  constructor(baseUrl: string, apiKey: string, skipSslVerify: boolean = true, flavor: 'emby' | 'jellyfin' = 'emby') {
+    this.flavor = flavor
     // Remove trailing slash and /web/... if present
     // Espaces et retours à la ligne copiés avec la clé ou l'adresse : Emby refuserait la clé (HTTP 401)
     this.baseUrl = (baseUrl || '').trim().split('/web/')[0].replace(/\/$/, '')
@@ -59,7 +72,8 @@ export class EmbyService {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-Emby-Token': this.apiKey // Some proxies/Emby versions prefer this
+        'X-Emby-Token': this.apiKey, // Some proxies/Emby versions prefer this
+        ...(this.flavor === 'jellyfin' ? { Authorization: jellyfinAuthorization(this.apiKey) } : {}),
       }
     })
     this.clients.set(timeout, client)

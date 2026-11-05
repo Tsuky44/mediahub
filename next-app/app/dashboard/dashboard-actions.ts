@@ -2,7 +2,7 @@
 
 import { getSetting } from '@/lib/settings'
 import { testEmbyConnection } from './downloads/file-actions'
-import { getCurrentUser, getLibraryPlatform, getMediaServerServiceForUser, getMediaServerType, getTmdbServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getLibraryPlatform, getMediaServerServiceForUser, getMediaServerType, getTmdbServiceForUser, getUserMediaServer } from '@/lib/auth'
 import { getOnyxDirectory } from '@/lib/services/onyx-directory'
 import type { LibraryStats } from './_types/dashboard'
 import { defineAbilityFor } from '@/lib/ability'
@@ -147,9 +147,11 @@ export async function getDashboardStats() {
       return null
     }
 
-    // Patch 9: Cache serveur 30s — évite d'appeler Emby + Unraid à chaque client
-    return await remember('dashboard_stats', 30 * 1000, async () => {
-    const mediaService = await getMediaServerServiceForUser()
+    // Patch 9: Cache serveur 30s — évite d'appeler Emby + Unraid à chaque client.
+    // Une entrée par médiathèque : les totaux suivent le compte connecté (Emby, Jellyfin, Onyx)
+    const libraryPlatform = await getLibraryPlatform()
+    return await remember(`dashboard_stats:${libraryPlatform ?? 'none'}`, 30 * 1000, async () => {
+    const mediaService = await getUserMediaServer()
     const library = await readLibraryStats(mediaService)
     if (!mediaService && !library) return null
 

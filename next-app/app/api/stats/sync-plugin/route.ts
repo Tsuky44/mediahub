@@ -268,7 +268,7 @@ async function syncEmbyLike(source: 'emby' | 'jellyfin', settings: Array<Record<
     if (!targetUrl || !targetKey) throw new Error(`${source} not configured`);
 
     log(`[SyncPlugin] Syncing from ${source} (${targetUrl})...`);
-    const service = new EmbyService(targetUrl, targetKey);
+    const service = new EmbyService(targetUrl, targetKey, true, source);
     
     let userMap = new Map<string, string>();
     try {

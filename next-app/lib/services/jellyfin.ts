@@ -6,6 +6,7 @@ import {
   insecureHttpsAgent,
   keepAliveHttpAgent,
 } from '../http-agents'
+import { jellyfinAuthorization } from './emby'
 import { logger } from '../logger'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
@@ -79,8 +80,9 @@ export class JellyfinService {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-Emby-Token': this.apiKey, // Jellyfin accepts X-Emby-Token or X-MediaBrowser-Token
-        'X-MediaBrowser-Token': this.apiKey
+        'X-Emby-Token': this.apiKey, // ignorés si EnableLegacyAuthorization est désactivé
+        'X-MediaBrowser-Token': this.apiKey,
+        Authorization: jellyfinAuthorization(this.apiKey),
       }
     })
   }

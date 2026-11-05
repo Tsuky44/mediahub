@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser, getMediaServerServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getUserMediaServer } from '@/lib/auth'
 import { getSetting } from '@/lib/settings'
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true';
@@ -43,7 +43,7 @@ export async function GET(
         finalMediaType = cached.mediaType
       } else {
         try {
-          const mediaService = await getMediaServerServiceForUser()
+          const mediaService = await getUserMediaServer()
           
           if (mediaService) {
             const item = await mediaService.getItemDetails(id)
@@ -150,7 +150,7 @@ export async function GET(
     }
 
     // Fallback to media server (Emby or Jellyfin) for direct image
-    const mediaService = await getMediaServerServiceForUser()
+    const mediaService = await getUserMediaServer()
     
     if (!mediaService) {
       error('[Image Proxy]: No media server configured')

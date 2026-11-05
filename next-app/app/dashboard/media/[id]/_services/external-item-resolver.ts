@@ -1,6 +1,6 @@
 import 'server-only'
 import {
-  getMediaServerServiceForUser,
+  getUserMediaServer,
   getJellyfinServiceForUser,
   getPlexServiceForUser,
   getTmdbServiceForUser,
@@ -90,7 +90,7 @@ async function fetchExternalItem(
   }
 
   // Default: Emby/Jellyfin (unified)
-  const mediaService = await getMediaServerServiceForUser()
+  const mediaService = await getUserMediaServer()
   if (!mediaService) return null
   try {
     const item = await mediaService.getItemDetails(id)

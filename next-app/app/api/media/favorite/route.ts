@@ -1,5 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
-import { getMediaServerServiceForUser, getMediaServerUserId, getCurrentUser } from '@/lib/auth'
+import { getUserMediaServer, getMediaServerUserId, getCurrentUser } from '@/lib/auth'
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const mediaService = await getMediaServerServiceForUser()
+    const mediaService = await getUserMediaServer()
     
     if (!mediaService) {
         return NextResponse.json({ error: 'Media server unavailable' }, { status: 503 })
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
         where: eq(users.email, user.email)
     })
 
-    const mediaUserId = getMediaServerUserId(dbUser)
+    const mediaUserId = getMediaServerUserId(dbUser, mediaService.flavor)
     if (!mediaUserId) {
         return NextResponse.json({ error: 'Media server user not connected' }, { status: 400 })
     }

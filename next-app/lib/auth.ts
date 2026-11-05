@@ -12,6 +12,7 @@ export {
   getPlexServiceForUser,
   getJellyfinServiceForUser,
   getMediaServerServiceForUser,
+  getUserMediaServer,
   getMediaServerUserId,
   getMediaServerType,
   getLibraryServer,

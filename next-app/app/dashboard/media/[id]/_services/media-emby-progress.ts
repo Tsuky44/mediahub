@@ -2,7 +2,7 @@ import 'server-only'
 import { db } from '@/lib/db/drizzle'
 import { users, userCalendarEvents } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
-import { findPlayTarget, getMediaServerServiceForUser, getMediaServerUserId } from '@/lib/auth'
+import { findPlayTarget, getMediaServerUserId, getUserMediaServer } from '@/lib/auth'
 import type { PlaybackPlatformId, PlayTarget } from '@/lib/playback-platform'
 import type {
   MediaEmbyProgress,
@@ -117,12 +117,12 @@ async function loadProgress(params: ProgressParams): Promise<Omit<MediaEmbyProgr
   })
   const isInCalendar = !!calendarEvent
 
-  const mediaUserId = getMediaServerUserId(dbUser)
+  // Serveur de la médiathèque du compte (connexion Jellyfin -> Jellyfin) et compte sur ce serveur
+  const mediaService = await getUserMediaServer()
+  const mediaUserId = getMediaServerUserId(dbUser, mediaService?.flavor)
   if (!mediaUserId) {
     return { ...EMPTY_PROGRESS, isInCalendar }
   }
-
-  const mediaService = await getMediaServerServiceForUser()
   if (!mediaService) {
     return { ...EMPTY_PROGRESS, isInCalendar, embyUserId: mediaUserId }
   }

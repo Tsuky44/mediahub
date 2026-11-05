@@ -65,7 +65,17 @@ export async function getMediaServerServiceForUser() {
   // Jellyfin fallback: utiliser EmbyService avec les settings Jellyfin (API compatible)
   if (!s.jellyfin_url) return null
 
-  return new EmbyService(s.jellyfin_url, s.jellyfin_api_key)
+  return new EmbyService(s.jellyfin_url, s.jellyfin_api_key, true, 'jellyfin')
+}
+
+/**
+ * Serveur Emby ou Jellyfin à lire pour l'utilisateur connecté : celui de sa médiathèque
+ * (getLibraryServer, qui suit son compte), sinon le serveur média configuré. Pour tout ce qui lit
+ * la bibliothèque d'un compte (fiche, favoris, images) ; son compte dessus :
+ * getMediaServerUserId(dbUser, service.flavor).
+ */
+export async function getUserMediaServer(): Promise<EmbyService | null> {
+  return (await getLibraryServer())?.service ?? (await getMediaServerServiceForUser())
 }
 
 /** Plateformes lues par l'API Emby (Jellyfin via l'API compatible) */
@@ -79,7 +89,9 @@ export type LibrarySource = 'emby' | 'jellyfin'
 export async function getPlatformServer(type: LibrarySource): Promise<{ service: EmbyService; url: string } | null> {
   const s = await readSettings(['emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key'])
   if (type === 'jellyfin') {
-    return s.jellyfin_url ? { service: new EmbyService(s.jellyfin_url, s.jellyfin_api_key), url: s.jellyfin_url } : null
+    return s.jellyfin_url
+      ? { service: new EmbyService(s.jellyfin_url, s.jellyfin_api_key, true, 'jellyfin'), url: s.jellyfin_url }
+      : null
   }
   const url = s.emby_url || process.env.EMBY_URL
   const apiKey = s.emby_api_key || process.env.EMBY_API_KEY
@@ -91,16 +103,20 @@ export type LibraryPlatform = LibrarySource | 'onyx'
 
 const LIBRARY_KEYS = ['library_source', 'emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key', 'onyx_url', 'player_integration_api_key'] as const
 
-function resolveLibrary(s: Record<(typeof LIBRARY_KEYS)[number], string>) {
+function resolveLibrary(s: Record<(typeof LIBRARY_KEYS)[number], string>, account: LibraryPlatform | null) {
   const embyUrl = s.emby_url || process.env.EMBY_URL
   const embyApiKey = s.emby_api_key || process.env.EMBY_API_KEY
   const emby = embyUrl && embyApiKey ? { service: new EmbyService(embyUrl, embyApiKey), type: 'emby' as const } : null
   const jellyfin = s.jellyfin_url
-    ? { service: new EmbyService(s.jellyfin_url, s.jellyfin_api_key), type: 'jellyfin' as const }
+    ? { service: new EmbyService(s.jellyfin_url, s.jellyfin_api_key, true, 'jellyfin'), type: 'jellyfin' as const }
     : null
   const onyx = !!(s.onyx_url && (s.player_integration_api_key || process.env.PLAYER_INTEGRATION_API_KEY))
   let platform: LibraryPlatform | null
-  if (s.library_source === 'onyx' && onyx) platform = 'onyx'
+  // La plateforme du compte connecté passe avant le choix de l'administrateur, si elle est configurée
+  if (account === 'onyx' && onyx) platform = 'onyx'
+  else if (account === 'jellyfin' && jellyfin) platform = 'jellyfin'
+  else if (account === 'emby' && emby) platform = 'emby'
+  else if (s.library_source === 'onyx' && onyx) platform = 'onyx'
   else if (s.library_source === 'jellyfin' && jellyfin) platform = 'jellyfin'
   else if (s.library_source === 'emby' && emby) platform = 'emby'
   else platform = emby ? 'emby' : jellyfin ? 'jellyfin' : onyx ? 'onyx' : null
@@ -108,11 +124,32 @@ function resolveLibrary(s: Record<(typeof LIBRARY_KEYS)[number], string>) {
 }
 
 /**
- * Plateforme dont « Ma médiathèque » affiche la bibliothèque : celle choisie dans les réglages
- * (library_source) si elle est configurée, sinon la seule configurée (Emby, Jellyfin, puis Onyx).
+ * Plateforme du compte connecté, si « Ma médiathèque » sait l'afficher (Plex : non). Hors requête
+ * (tâches de fond) ou sans session : null, le réglage de l'administrateur s'applique.
+ */
+async function accountLibraryPlatform(): Promise<LibraryPlatform | null> {
+  try {
+    // Import dynamique : playback-platform importe ce module
+    const { getAccountPlatform } = await import('./playback-platform')
+    const id = await getAccountPlatform()
+    return id === 'emby' || id === 'jellyfin' || id === 'onyx' ? id : null
+  } catch {
+    return null
+  }
+}
+
+async function resolveLibraryForUser() {
+  const [settings, account] = await Promise.all([readSettings(LIBRARY_KEYS), accountLibraryPlatform()])
+  return resolveLibrary(settings, account)
+}
+
+/**
+ * Plateforme dont « Ma médiathèque » affiche la bibliothèque : celle du compte connecté (connexion
+ * Jellyfin -> bibliothèque Jellyfin…) si elle est configurée, sinon celle choisie dans les réglages
+ * (library_source), sinon la seule configurée (Emby, Jellyfin, puis Onyx).
  */
 export async function getLibraryPlatform(): Promise<LibraryPlatform | null> {
-  return resolveLibrary(await readSettings(LIBRARY_KEYS)).platform
+  return (await resolveLibraryForUser()).platform
 }
 
 /**
@@ -120,7 +157,7 @@ export async function getLibraryPlatform(): Promise<LibraryPlatform | null> {
  * lib/services/onyx-directory.ts, et l'historique ou les favoris d'Emby n'y correspondraient pas.
  */
 export async function getLibraryServer(): Promise<{ service: EmbyService; type: LibrarySource } | null> {
-  const { platform, emby, jellyfin } = resolveLibrary(await readSettings(LIBRARY_KEYS))
+  const { platform, emby, jellyfin } = await resolveLibraryForUser()
   if (platform === 'emby') return emby
   if (platform === 'jellyfin') return jellyfin
   return null
@@ -138,10 +175,15 @@ export function getLibraryUserId(
 }
 
 /**
- * Retourne l'ID utilisateur du serveur média (embyUserId ou jellyfinUserId).
+ * Retourne l'ID utilisateur du serveur média (embyUserId ou jellyfinUserId). Avec `type` (le
+ * `flavor` du service) : le compte de ce serveur-là, comme getLibraryUserId.
  */
-export function getMediaServerUserId(dbUser: { embyUserId?: string | null; jellyfinUserId?: string | null } | null | undefined): string | null {
+export function getMediaServerUserId(
+  dbUser: { embyUserId?: string | null; jellyfinUserId?: string | null } | null | undefined,
+  type?: LibrarySource
+): string | null {
   if (!dbUser) return null
+  if (type) return getLibraryUserId(dbUser, type)
   return dbUser.embyUserId || dbUser.jellyfinUserId || null
 }
 

@@ -1,8 +1,15 @@
 import 'server-only'
+import { cache } from 'react'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
-import { isPlaybackPlatform, playbackPlatform, type PlayTarget, type PlaybackPlatform } from '@/lib/playback-platform'
+import {
+  isPlaybackPlatform,
+  playbackPlatform,
+  type PlayTarget,
+  type PlaybackPlatform,
+  type PlaybackPlatformId,
+} from '@/lib/playback-platform'
 import { getSession } from './index'
 import { getMediaServerType, getPlatformServer } from './service-factories'
 
@@ -12,9 +19,17 @@ import { getMediaServerType, getPlatformServer } from './service-factories'
  * sinon le serveur média configuré.
  */
 export async function getPlaybackPlatform(): Promise<PlaybackPlatform> {
+  return playbackPlatform((await getAccountPlatform()) ?? (await getMediaServerType()) ?? 'emby')
+}
+
+/**
+ * Plateforme du compte connecté (connexion, sinon compte lié), ou null : pas de session, ou
+ * compte local sans compte lié. Une fois par requête.
+ */
+export const getAccountPlatform = cache(async (): Promise<PlaybackPlatformId | null> => {
   const session = await getSession()
   const login = session?.user?.loginProvider
-  if (isPlaybackPlatform(login)) return playbackPlatform(login)
+  if (isPlaybackPlatform(login)) return login
 
   const id = parseInt(session?.user?.id ?? '')
   if (!isNaN(id)) {
@@ -23,16 +38,16 @@ export async function getPlaybackPlatform(): Promise<PlaybackPlatform> {
         where: eq(users.id, id),
         columns: { onyxUserId: true, embyUserId: true, jellyfinUserId: true, plexUserId: true },
       })
-      if (row?.onyxUserId) return playbackPlatform('onyx')
-      if (row?.embyUserId) return playbackPlatform('emby')
-      if (row?.jellyfinUserId) return playbackPlatform('jellyfin')
-      if (row?.plexUserId) return playbackPlatform('plex')
+      if (row?.onyxUserId) return 'onyx'
+      if (row?.embyUserId) return 'emby'
+      if (row?.jellyfinUserId) return 'jellyfin'
+      if (row?.plexUserId) return 'plex'
     } catch {
       // Base injoignable : repli sur le serveur configuré
     }
   }
-  return playbackPlatform((await getMediaServerType()) ?? 'emby')
-}
+  return null
+})
 
 /**
  * Retrouve un média sur le serveur de la plateforme de connexion (Emby ou Jellyfin), avec le compte
