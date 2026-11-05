@@ -7,6 +7,8 @@ import { DateRangeCard } from './media-filters/DateRangeCard'
 import { LanguageCard } from './media-filters/LanguageCard'
 import { GenresCard } from './media-filters/GenresCard'
 import { StreamingCard } from './media-filters/StreamingCard'
+import { PublicDomainCard } from './media-filters/PublicDomainCard'
+import { publicDomainYearLimit } from '@/lib/public-domain'
 import type {
   MediaFiltersType,
   MediaFiltersValue,
@@ -62,6 +64,11 @@ export function MediaFilters({ type, onFilterChange, initialFilters }: MediaFilt
           <LanguageCard
             value={filters.language}
             onChange={(value) => handleChange('language', value)}
+          />
+          <PublicDomainCard
+            enabled={filters.public_domain}
+            onChange={(value) => handleChange('public_domain', value)}
+            yearLimit={publicDomainYearLimit(new Date().toISOString().slice(0, 10))}
           />
         </div>
 

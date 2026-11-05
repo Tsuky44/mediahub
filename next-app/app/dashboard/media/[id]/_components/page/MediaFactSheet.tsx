@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { Banknote, CalendarDays, Clock, Layers, ShieldCheck, Tv, TrendingUp } from 'lucide-react'
+import { Banknote, CalendarDays, Clock, Globe, Layers, ShieldCheck, Tv, TrendingUp } from 'lucide-react'
 import type { MediaType } from '../../_types/media-page'
 import {
   countryName,
@@ -11,6 +11,7 @@ import {
   runtimeLabel,
   type AgeRating,
 } from '../../_utils/media-labels'
+import type { PublicDomainInfo } from '../../_utils/media-public-domain'
 
 interface MediaKeyword {
   id: number
@@ -27,6 +28,7 @@ interface MediaFactSheetProps {
   writers: string[]
   editors: string[]
   keywords: MediaKeyword[]
+  publicDomain?: PublicDomainInfo | null
 }
 
 interface Fact {
@@ -48,6 +50,7 @@ export default function MediaFactSheet({
   writers,
   editors,
   keywords,
+  publicDomain,
 }: MediaFactSheetProps) {
   const isTv = mediaType === 'tv'
   const title = details.title || details.name
@@ -73,8 +76,8 @@ export default function MediaFactSheet({
   const seasons = details.number_of_seasons
   const episodes = details.number_of_episodes
   const networks: string[] = (details.networks || []).map((n: { name: string }) => n.name).filter(Boolean)
-  const facts: Fact[] = (
-    isTv
+  const facts: Fact[] = [
+    ...(isTv
       ? [
           { icon: CalendarDays, label: 'Première diffusion', value: longDate(details.first_air_date) },
           { icon: Tv, label: networks.length > 1 ? 'Chaînes' : 'Chaîne', value: networks.join(', ') },
@@ -93,8 +96,9 @@ export default function MediaFactSheet({
           { icon: ShieldCheck, label: 'Âge conseillé', value: rating?.long },
           { icon: Banknote, label: 'Budget', value: moneyLabel(details.budget) },
           { icon: TrendingUp, label: 'Recettes', value: moneyLabel(details.revenue) },
-        ]
-  ).filter((f): f is Fact => Boolean(f.value))
+        ]),
+    ...(publicDomain ? [{ icon: Globe, label: 'Droits', value: publicDomain.detail }] : []),
+  ].filter((f): f is Fact => Boolean(f.value))
 
   const studios: string[] = (details.production_companies || [])
     .slice(0, 3)

@@ -4,6 +4,7 @@ import { createMemoCache } from '@/lib/cache'
 import { CACHE_TTL, MS, TIMEOUT } from '@/lib/constants'
 import { getSetting } from '@/lib/settings'
 import { logger } from '@/lib/logger'
+import { publicDomainDateLimit } from '@/lib/public-domain'
 
 // Caches process-wide partagés par toutes les instances de TmdbService.
 // - responses : réponses JSON TMDB (copie à la lecture : certains appelants enrichissent les objets)
@@ -50,6 +51,8 @@ interface DiscoverParams {
     max_duration?: number
     watch_region?: string
     watch_providers?: number[]
+    /** Domaine public : borne la date de publication (voir lib/public-domain.ts) */
+    public_domain?: boolean
 }
 
 export class TmdbService {
@@ -139,6 +142,17 @@ export class TmdbService {
     if (params.max_duration) queryParams['with_runtime.lte'] = params.max_duration
     if (params.watch_region) queryParams.watch_region = params.watch_region
     if (params.watch_providers && params.watch_providers.length > 0) queryParams.with_watch_providers = params.watch_providers.join('|')
+
+    // Domaine public : borne haute de publication, sans élargir une période déjà plus étroite.
+    // (TMDB n'a pas de champ de droits ; `with_keywords` demanderait un identifiant de mot-clé.)
+    if (params.public_domain) {
+      const limit = publicDomainDateLimit(new Date().toISOString().slice(0, 10))
+      if (limit) {
+        const key = type === 'movie' ? 'primary_release_date.lte' : 'first_air_date.lte'
+        const current = queryParams[key]
+        queryParams[key] = typeof current === 'string' && current < limit ? current : limit
+      }
+    }
 
     return this.cachedGet(`/discover/${type}`, queryParams, CACHE_TTL.API_DYNAMIC)
   }

@@ -36,4 +36,6 @@ export interface MediaFiltersValue {
   max_duration: string
   watch_region: string
   watch_providers: number[]
+  /** Ne garder que les œuvres du domaine public (voir lib/public-domain.ts) */
+  public_domain: boolean
 }

@@ -2,6 +2,7 @@ import MediaCastFan, { type FanActor } from './MediaCastFan'
 import MediaFactSheet from './MediaFactSheet'
 import type { MediaType, NormalizedCredits } from '../../_types/media-page'
 import type { AgeRating } from '../../_utils/media-labels'
+import type { PublicDomainInfo } from '../../_utils/media-public-domain'
 
 interface MediaCastAndFactsProps {
   credits: NormalizedCredits
@@ -15,6 +16,7 @@ interface MediaCastAndFactsProps {
   editors: string[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   keywords: any[]
+  publicDomain?: PublicDomainInfo | null
 }
 
 /** Têtes d'affiche dans l'éventail (le reste via « Tout le casting ») */

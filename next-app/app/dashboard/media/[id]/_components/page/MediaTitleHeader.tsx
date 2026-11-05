@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
-import { Clock } from 'lucide-react'
+import { Clock, Globe } from 'lucide-react'
 import { runtimeLabel } from '../../_utils/media-labels'
+import type { PublicDomainInfo } from '../../_utils/media-public-domain'
 
 interface MediaTitleHeaderProps {
   title: string
@@ -12,6 +13,8 @@ interface MediaTitleHeaderProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   genres?: any[]
   logoPath?: string
+  /** Pastille « Libre de droits » quand l'œuvre est dans le domaine public */
+  publicDomain?: PublicDomainInfo | null
 }
 
 export default function MediaTitleHeader({
@@ -22,6 +25,7 @@ export default function MediaTitleHeader({
   runtime,
   genres,
   logoPath,
+  publicDomain,
 }: MediaTitleHeaderProps) {
   return (
     <>
@@ -53,6 +57,15 @@ export default function MediaTitleHeader({
         {contentRating && (
           <span className="border border-white/20 px-2 py-0.5 rounded text-xs text-gray-300 bg-white/5 backdrop-blur-sm">
             {contentRating}
+          </span>
+        )}
+        {publicDomain && (
+          <span
+            title={publicDomain.detail}
+            className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-300 backdrop-blur-sm"
+          >
+            <Globe aria-hidden className="w-3.5 h-3.5" />
+            {publicDomain.label}
           </span>
         )}
         {runtime !== undefined && runtime > 0 && (
