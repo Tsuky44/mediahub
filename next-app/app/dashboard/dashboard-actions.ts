@@ -2,7 +2,9 @@
 
 import { getSetting } from '@/lib/settings'
 import { testEmbyConnection } from './downloads/file-actions'
-import { getCurrentUser, getMediaServerServiceForUser, getMediaServerType, getTmdbServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getLibraryPlatform, getMediaServerServiceForUser, getMediaServerType, getTmdbServiceForUser } from '@/lib/auth'
+import { getOnyxDirectory } from '@/lib/services/onyx-directory'
+import type { LibraryStats } from './_types/dashboard'
 import { defineAbilityFor } from '@/lib/ability'
 import { UnraidService } from '@/lib/services/unraid'
 import { exec } from 'child_process'
@@ -109,6 +111,32 @@ export async function getRecentRequests() {
 
 const execPromise = promisify(exec)
 
+/**
+ * Totaux de la médiathèque : ceux d'Onyx quand c'est la plateforme de « Ma médiathèque », sinon
+ * ceux d'Emby/Jellyfin, avec Onyx en secours quand ce serveur ne répond rien.
+ */
+async function readLibraryStats(mediaService: Awaited<ReturnType<typeof getMediaServerServiceForUser>>): Promise<LibraryStats | null> {
+  const readOnyx = async (): Promise<LibraryStats | null> => {
+    const directory = await getOnyxDirectory()
+    if (!directory) return null
+    try {
+      const counts = await directory.counts()
+      return { movies: counts.movies, series: counts.shows, episodes: counts.episodes }
+    } catch (e) {
+      logger.warn(`[Accueil] Totaux Onyx illisibles : ${e instanceof Error ? e.message : String(e)}`)
+      return null
+    }
+  }
+
+  if ((await getLibraryPlatform()) === 'onyx') return readOnyx()
+
+  const stats = mediaService ? await mediaService.getLibraryStats().catch(() => null) : null
+  if (stats && (stats.MovieCount || stats.SeriesCount || stats.EpisodeCount)) {
+    return { movies: stats.MovieCount || 0, series: stats.SeriesCount || 0, episodes: stats.EpisodeCount || 0 }
+  }
+  return (await readOnyx()) ?? (stats ? { movies: 0, series: 0, episodes: 0 } : null)
+}
+
 export async function getDashboardStats() {
   try {
     const user = await getCurrentUser()
@@ -122,10 +150,8 @@ export async function getDashboardStats() {
     // Patch 9: Cache serveur 30s — évite d'appeler Emby + Unraid à chaque client
     return await remember('dashboard_stats', 30 * 1000, async () => {
     const mediaService = await getMediaServerServiceForUser()
-    if (!mediaService) return null
-
-    // Get Library Stats
-    const libraryStats = await mediaService.getLibraryStats()
+    const library = await readLibraryStats(mediaService)
+    if (!mediaService && !library) return null
 
     // Get Disk Usage
     let diskUsage = { total: '0', used: '0', free: '0', percent: 0 }
@@ -172,11 +198,7 @@ export async function getDashboardStats() {
     }
 
     return {
-      library: {
-        movies: libraryStats?.MovieCount || 0,
-        series: libraryStats?.SeriesCount || 0,
-        episodes: libraryStats?.EpisodeCount || 0
-      },
+      library: library ?? { movies: 0, series: 0, episodes: 0 },
       disk: diskUsage
     }
     }) // end remember

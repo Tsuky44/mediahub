@@ -12,7 +12,36 @@ formats Onyx sont ceux de `server/handlers/auth.go`, `otp.go`,
 | `onyx_url` | adresse du serveur Onyx joignable depuis MediaHub |
 | `auth_onyx_auto_create` | crée le compte MediaHub à la première connexion (défaut : oui) ; sinon seuls les comptes déjà liés se connectent |
 | `default_role_id` | rôle des comptes créés (le premier compte de l'instance est admin) |
-| `PLAYER_INTEGRATION_API_KEY` (env) | clé d'intégration, aussi utilisée pour racheter les codes SSO |
+| `player_integration_api_key` | clé d'intégration, aussi utilisée pour racheter les codes SSO ; vide : variable `PLAYER_INTEGRATION_API_KEY` |
+| `player_integration_user_email` | compte de repli de l'API du lecteur ; vide : `PLAYER_INTEGRATION_USER_EMAIL` |
+| `onyx_webhook_url` | URL des évènements ; vide : `ONYX_WEBHOOK_URL`, sinon `{onyx_url}/api/integrations/mediahub/events` |
+
+Tout se règle dans l'interface : aucune variable Docker n'est nécessaire. Les
+variables d'environnement restent lues en secours pour les installations d'avant.
+L'assistant d'installation accepte « Onyx » seul (URL d'Onyx, connexion Onyx,
+médiathèque Onyx).
+
+## Appels de MediaHub vers Onyx : la clé d'intégration
+
+Aucun compte Onyx n'est gardé par MediaHub (ADR-0102 d'Onyx). Chaque appel présente
+`Authorization: Bearer <player_integration_api_key>` aux routes
+`{onyx}/api/integrations/mediahub/*` (capacité `mediahub_directory` du ping d'Onyx),
+par `lib/services/onyx-directory.ts` :
+
+- **importer les utilisateurs** : « Sync Onyx » (`POST /api/admin/users/sync`
+  `{provider:"onyx"}`) lit `GET /users` → `{users:[{id, username, is_owner,
+  permissions, avatar}]}` (`examples/onyx_integration_users.json`), crée les comptes
+  absents (`<nom>@onyx.local`, admin si l'Onyx l'est, sinon rôle par défaut), délie
+  ceux qui ont disparu d'Onyx. Liaison par `users.onyx_user_id` seulement ;
+- **la médiathèque** : `library_source = onyx` (ou Onyx seul configuré) lit
+  `GET /movies` et `GET /shows` (forme de `/api/movies`, sans progression), affiches
+  TMDB. Pas de favoris ni d'historique par compte ;
+- **configurer Onyx** : `POST /api/admin/onyx {action:"link-onyx", mediahubUrl, apiKey?}`
+  écrit `mediahub_url` par `PUT /link` (`examples/onyx_integration_link.json`). La
+  première fois, Onyx ne connaît pas la clé (`409`, `needsKeyInOnyx`) : elle se copie
+  une fois dans les réglages d'Onyx. `{action:"rotate-key"}` tire une nouvelle clé,
+  l'envoie par `PUT /link {mediahub_api_key}` avec l'actuelle, puis l'enregistre ici.
+  `{action:"test-webhook"}` envoie `webhook.test`.
 
 ## Identité et liaison
 

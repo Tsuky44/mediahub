@@ -1,7 +1,7 @@
 'use client'
 
 import { UserPlus } from 'lucide-react'
-import { BRAND } from '@/lib/media-server-brand'
+import { BRAND, ONYX_BRAND } from '@/lib/media-server-brand'
 import type { SyncProvider } from '../../_types/user'
 
 interface UserSyncButtonsProps {
@@ -21,10 +21,11 @@ const SYNC_BUTTONS: SyncButtonConfig[] = [
     { provider: 'emby', label: 'Sync Emby', className: BRAND.emby.solid },
     { provider: 'plex', label: 'Sync Plex', className: BRAND.plex.solid },
     { provider: 'jellyfin', label: 'Sync Jellyfin', className: BRAND.jellyfin.solid },
+    { provider: 'onyx', label: 'Sync Onyx', className: ONYX_BRAND.solid },
 ]
 
 /**
- * Groupe de boutons : créer un utilisateur + synchroniser avec Emby/Plex/Jellyfin.
+ * Groupe de boutons : créer un utilisateur + synchroniser avec Emby/Plex/Jellyfin/Onyx.
  */
 export function UserSyncButtons({ syncingProvider, readOnly, onSync, onOpenCreate }: UserSyncButtonsProps) {
     return (

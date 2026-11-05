@@ -4,6 +4,16 @@ import { useState, useSyncExternalStore } from 'react'
 import { toggleFavorite } from '@/app/dashboard/media/actions'
 import { toggleWatchLater } from '@/app/dashboard/media/watch-later-actions'
 
+/** Ce que le compte a vu d'un titre (Onyx, Emby) */
+export interface MediaWatchState {
+  /** Film fini, ou série dont chaque épisode présent est fini */
+  watched: boolean
+  /** Avancement de 0 à 1 : position dans un film, épisodes finis d'une série commencée */
+  progress?: number
+  /** Épisodes présents encore à regarder, pour une série commencée */
+  remaining?: number
+}
+
 export interface MediaCardItem {
   id: string | number
   title?: string
@@ -23,6 +33,7 @@ export interface MediaCardItem {
   tmdbId?: string | number
   isFavorite?: boolean
   isWatchLater?: boolean
+  watch_state?: MediaWatchState
 }
 
 /*

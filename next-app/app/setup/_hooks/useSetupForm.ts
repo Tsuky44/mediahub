@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 
-type ServerType = 'emby' | 'jellyfin'
+type ServerType = 'emby' | 'jellyfin' | 'onyx'
 
 interface FormData {
   server_type: ServerType
@@ -12,6 +12,7 @@ interface FormData {
   emby_api_key: string
   jellyfin_url: string
   jellyfin_api_key: string
+  onyx_url: string
 }
 
 export function useSetupForm() {
@@ -25,6 +26,7 @@ export function useSetupForm() {
     emby_api_key: '',
     jellyfin_url: '',
     jellyfin_api_key: '',
+    onyx_url: '',
   })
 
   const [restorePassword, setRestorePassword] = useState('')
@@ -61,7 +63,7 @@ export function useSetupForm() {
         throw new Error(data.error || 'Une erreur est survenue')
       }
 
-      const providerName = formData.server_type === 'jellyfin' ? 'Jellyfin' : 'Emby'
+      const providerName = { emby: 'Emby', jellyfin: 'Jellyfin', onyx: 'Onyx' }[formData.server_type]
       toast.success(`Configuration terminée ! Connectez-vous avec votre compte ${providerName}.`)
       router.push('/login')
       router.refresh()

@@ -1,5 +1,5 @@
 import { createHmac, randomUUID } from 'crypto'
-import { getSetting } from '@/lib/settings'
+import { getOnyxIntegrationConfig } from '@/lib/integrations/onyx-config'
 import { logger } from '@/lib/logger'
 
 export const PLAYER_API_VERSION = 1
@@ -28,10 +28,12 @@ export interface DeliveryResult {
 const ATTEMPTS = 3
 const TIMEOUT_MS = 5000
 
-/** URL d'Onyx (reglage `onyx_webhook_url` ou variable ONYX_WEBHOOK_URL) et cle partagee. */
+/**
+ * URL d'Onyx (reglage `onyx_webhook_url`, variable ONYX_WEBHOOK_URL, sinon deduite de `onyx_url`)
+ * et cle partagee. Voir lib/integrations/onyx-config.ts.
+ */
 export async function getOnyxWebhookTarget(): Promise<{ url: string; key: string } | null> {
-  const url = (await getSetting('onyx_webhook_url')).trim()
-  const key = (process.env.PLAYER_INTEGRATION_API_KEY || '').trim()
+  const { webhookUrl: url, apiKey: key } = await getOnyxIntegrationConfig()
   if (!url || !key) return null
   return { url, key }
 }

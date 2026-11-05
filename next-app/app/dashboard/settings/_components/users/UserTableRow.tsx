@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { BRAND } from '@/lib/media-server-brand'
+import { BRAND, ONYX_BRAND } from '@/lib/media-server-brand'
 import type { User, UserRole } from '../../_types/user'
 import { NotificationsEditor } from './NotificationsEditor'
 
@@ -19,7 +19,7 @@ interface UserTableRowProps {
     onUpdateNotification: (field: string, value: string) => void
 }
 
-/** Badge de provider (Emby/Plex/Jellyfin/Local). */
+/** Badge de provider (Emby/Plex/Jellyfin/Onyx/Local). */
 function ProviderBadges({ user }: { user: User }) {
     return (
         <div className="flex gap-1">
@@ -32,7 +32,10 @@ function ProviderBadges({ user }: { user: User }) {
             {user.jellyfinUserId && (
                 <span className={`px-1.5 py-0.5 rounded text-xs font-medium border ${BRAND.jellyfin.badge}`}>Jellyfin</span>
             )}
-            {!user.embyUserId && !user.plexUserId && !user.jellyfinUserId && (
+            {user.onyxUserId && (
+                <span className={`px-1.5 py-0.5 rounded text-xs font-medium border ${ONYX_BRAND.badge}`}>Onyx</span>
+            )}
+            {!user.embyUserId && !user.plexUserId && !user.jellyfinUserId && !user.onyxUserId && (
                 <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-300 border border-gray-500/30">Local</span>
             )}
         </div>

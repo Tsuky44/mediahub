@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getOnyxAuthConfig, OnyxLinkError, resolveOnyxUser } from '@/lib/auth/onyx-link'
 import { checkRateLimit, registerLoginFailure } from '@/lib/auth/rate-limiter'
 import { OnyxAuthError, onyxSsoRedeem } from '@/lib/services/onyx-auth'
+import { getPlayerIntegrationKey } from '@/lib/integrations/onyx-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
   if (!rate.allowed) return fail(`Trop de tentatives de connexion via Onyx. Réessayez dans ${rate.timeLeft} minute(s).`)
 
   const config = await getOnyxAuthConfig()
-  const apiKey = process.env.PLAYER_INTEGRATION_API_KEY?.trim()
+  const apiKey = await getPlayerIntegrationKey()
   if (!config.enabled || !config.url) return fail("L'authentification via Onyx est désactivée")
   if (!apiKey) return fail("Clé d'intégration Onyx non configurée")
 

@@ -8,6 +8,7 @@ import { getFramelessPosterUrl, getPosterUrl } from './media-card/getPosterUrl'
 import { MediaCardStatus } from './media-card/MediaCardStatus'
 import { MediaCardOverlay } from './media-card/MediaCardOverlay'
 import { MediaCardActions } from './media-card/MediaCardActions'
+import { MediaCardWatchState } from './media-card/MediaCardWatchState'
 
 export interface MediaItem extends MediaCardItem {}
 
@@ -51,6 +52,7 @@ export const MediaCard = memo(function MediaCard({ item, showFavoriteButton = fa
             </div>
           )}
 
+          <MediaCardWatchState state={item.watch_state} />
           <MediaCardStatus status={item.media_status?.status} message={item.media_status?.message} releaseDate={item.media_status?.releaseDate} />
           <MediaCardOverlay title={title} mediaType={item.media_type} overview={item.overview} />
         </div>

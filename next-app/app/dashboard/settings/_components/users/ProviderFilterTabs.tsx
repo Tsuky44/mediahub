@@ -1,6 +1,6 @@
 'use client'
 
-import { BRAND, isMediaServerBrand } from '@/lib/media-server-brand'
+import { BRAND, ONYX_BRAND, isMediaServerBrand } from '@/lib/media-server-brand'
 import type { ProviderFilter } from '../../_types/user'
 
 const PROVIDERS: { id: ProviderFilter; label: string }[] = [
@@ -8,6 +8,7 @@ const PROVIDERS: { id: ProviderFilter; label: string }[] = [
     { id: 'emby', label: 'Emby' },
     { id: 'plex', label: 'Plex' },
     { id: 'jellyfin', label: 'Jellyfin' },
+    { id: 'onyx', label: 'Onyx' },
     { id: 'local', label: 'Local' },
 ]
 
@@ -28,6 +29,8 @@ export function ProviderFilterTabs({ value, onChange }: ProviderFilterTabsProps)
                             ? 'text-gray-400 hover:text-white hover:bg-white/5'
                             : isMediaServerBrand(provider.id)
                               ? BRAND[provider.id].selected
+                              : provider.id === 'onyx'
+                              ? ONYX_BRAND.selected
                               : 'bg-white/15 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.15)]'
                     }`}
                 >

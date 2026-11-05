@@ -15,6 +15,7 @@ export {
   getMediaServerUserId,
   getMediaServerType,
   getLibraryServer,
+  getLibraryPlatform,
   getLibraryUserId,
   getTmdbServiceForUser,
   getRadarrServiceForUser,

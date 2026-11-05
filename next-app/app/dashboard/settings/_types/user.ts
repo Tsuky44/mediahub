@@ -9,6 +9,7 @@ export interface User {
     embyUserId: string | null
     plexUserId: string | null
     jellyfinUserId: string | null
+    onyxUserId: string | null
     telegramChatId: string | null
     whatsappNumber: string | null
     discordUserId: string | null
@@ -21,9 +22,9 @@ export interface UserRole {
     name: string
 }
 
-export type ProviderFilter = 'all' | 'emby' | 'plex' | 'jellyfin' | 'local'
+export type ProviderFilter = 'all' | 'emby' | 'plex' | 'jellyfin' | 'onyx' | 'local'
 
-export type SyncProvider = 'emby' | 'plex' | 'jellyfin'
+export type SyncProvider = 'emby' | 'plex' | 'jellyfin' | 'onyx'
 
 export interface CreateUserPayload {
     name: string

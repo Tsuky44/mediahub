@@ -1,9 +1,9 @@
 'use client'
 
-import { Server, Loader2, MonitorPlay } from 'lucide-react'
-import { BRAND } from '@/lib/media-server-brand'
+import { Server, Loader2, MonitorPlay, Play } from 'lucide-react'
+import { BRAND, ONYX_BRAND } from '@/lib/media-server-brand'
 
-type ServerType = 'emby' | 'jellyfin'
+type ServerType = 'emby' | 'jellyfin' | 'onyx'
 
 interface SetupConfigureFormProps {
   formData: {
@@ -12,6 +12,7 @@ interface SetupConfigureFormProps {
     emby_api_key: string
     jellyfin_url: string
     jellyfin_api_key: string
+    onyx_url: string
   }
   loading: boolean
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
@@ -27,6 +28,8 @@ export function SetupConfigureForm({
   onServerTypeChange,
 }: SetupConfigureFormProps) {
   const isJellyfin = formData.server_type === 'jellyfin'
+  const isOnyx = formData.server_type === 'onyx'
+  const brand = isOnyx ? ONYX_BRAND : BRAND[isJellyfin ? 'jellyfin' : 'emby']
   const urlField = isJellyfin ? 'jellyfin_url' : 'emby_url'
   const apiKeyField = isJellyfin ? 'jellyfin_api_key' : 'emby_api_key'
   const urlValue = isJellyfin ? formData.jellyfin_url : formData.emby_url
@@ -47,12 +50,12 @@ export function SetupConfigureForm({
         <label className="block text-sm font-medium text-gray-300 ml-1">
           Type de serveur
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <button
             type="button"
             onClick={() => onServerTypeChange('emby')}
             className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
-              !isJellyfin
+              formData.server_type === 'emby'
                 ? `border-transparent ${BRAND.emby.selected}`
                 : 'border-white/10 bg-white/5 text-gray-400 hover:bg-white/10'
             }`}
@@ -72,8 +75,47 @@ export function SetupConfigureForm({
             <MonitorPlay className="h-4 w-4" />
             Jellyfin
           </button>
+          <button
+            type="button"
+            onClick={() => onServerTypeChange('onyx')}
+            className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
+              isOnyx
+                ? `border-transparent ${ONYX_BRAND.selected}`
+                : 'border-white/10 bg-white/5 text-gray-400 hover:bg-white/10'
+            }`}
+          >
+            <Play className="h-4 w-4" />
+            Onyx
+          </button>
         </div>
       </div>
+
+      {isOnyx ? (
+      <div className="space-y-4">
+        <div className="border rounded-xl p-4 mb-4 bg-white/5 border-white/15">
+          <p className="text-sm text-gray-200">
+            Onyx suffit : connectez-vous ensuite avec votre compte Onyx, le premier compte devient administrateur.
+            Reliez alors le compte de service Onyx (Réglages, Médias) pour importer les utilisateurs et afficher la bibliothèque.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-300 ml-1 mb-2">URL du serveur Onyx</label>
+          <input
+            type="url"
+            name="onyx_url"
+            required
+            value={formData.onyx_url}
+            onChange={onChange}
+            className="block w-full rounded-xl border-white/10 bg-white/5 text-white placeholder:text-gray-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-3"
+            placeholder="http://onyx:8080"
+          />
+          <p className="text-xs text-gray-500 mt-1 ml-1">
+            L&apos;adresse accessible par le serveur MediaHub
+          </p>
+        </div>
+      </div>
+      ) : (
 
       <div className="space-y-4">
         <div className={`border rounded-xl p-4 mb-4 ${
@@ -124,13 +166,14 @@ export function SetupConfigureForm({
           </p>
         </div>
       </div>
+      )}
 
       <div className="pt-4 border-t border-white/10">
         <button
           type="submit"
           disabled={loading}
           className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-xl text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-[scale,filter] duration-300 ease-onyx active:scale-[0.98] ${
-            BRAND[isJellyfin ? 'jellyfin' : 'emby'].solid
+            brand.solid
           }`}
         >
           {loading ? (

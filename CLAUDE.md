@@ -51,3 +51,8 @@ En tant qu'assistant de code, tu dois **strictement** respecter les règles suiv
   ```
   // Mets ici le code précis que je dois écrire, et indique dans quel fichier
   ```
+## 4. Économie de tokens (graphify)
+
+* Avant toute exploration du code, lis `next-app/graphify-out/GRAPH_REPORT.md` pour repérer l'architecture et les fichiers concernés.
+* Utilise `graph.json` pour localiser les dépendances. Ne lis que les fichiers ciblés ensuite.
+* Après des changements structurels importants, régénère le graphe avec la commande `graphify`.

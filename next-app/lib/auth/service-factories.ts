@@ -68,24 +68,47 @@ export async function getMediaServerServiceForUser() {
   return new EmbyService(s.jellyfin_url, s.jellyfin_api_key)
 }
 
-/** Plateformes dont MediaHub sait afficher la bibliothèque (Jellyfin via l'API compatible Emby) */
+/** Plateformes lues par l'API Emby (Jellyfin via l'API compatible) */
 export type LibrarySource = 'emby' | 'jellyfin'
 
-/**
- * Plateforme dont « Ma médiathèque » affiche la bibliothèque : celle choisie dans les réglages
- * (library_source) si elle est configurée, sinon la seule configurée (Emby avant Jellyfin).
- */
-export async function getLibraryServer(): Promise<{ service: EmbyService; type: LibrarySource } | null> {
-  const s = await readSettings(['library_source', 'emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key'])
+/** Plateformes dont MediaHub sait afficher la bibliothèque : Onyx passe par la clé d'intégration */
+export type LibraryPlatform = LibrarySource | 'onyx'
+
+const LIBRARY_KEYS = ['library_source', 'emby_url', 'emby_api_key', 'jellyfin_url', 'jellyfin_api_key', 'onyx_url', 'player_integration_api_key'] as const
+
+function resolveLibrary(s: Record<(typeof LIBRARY_KEYS)[number], string>) {
   const embyUrl = s.emby_url || process.env.EMBY_URL
   const embyApiKey = s.emby_api_key || process.env.EMBY_API_KEY
   const emby = embyUrl && embyApiKey ? { service: new EmbyService(embyUrl, embyApiKey), type: 'emby' as const } : null
   const jellyfin = s.jellyfin_url
     ? { service: new EmbyService(s.jellyfin_url, s.jellyfin_api_key), type: 'jellyfin' as const }
     : null
-  if (s.library_source === 'jellyfin' && jellyfin) return jellyfin
-  if (s.library_source === 'emby' && emby) return emby
-  return emby || jellyfin
+  const onyx = !!(s.onyx_url && (s.player_integration_api_key || process.env.PLAYER_INTEGRATION_API_KEY))
+  let platform: LibraryPlatform | null
+  if (s.library_source === 'onyx' && onyx) platform = 'onyx'
+  else if (s.library_source === 'jellyfin' && jellyfin) platform = 'jellyfin'
+  else if (s.library_source === 'emby' && emby) platform = 'emby'
+  else platform = emby ? 'emby' : jellyfin ? 'jellyfin' : onyx ? 'onyx' : null
+  return { platform, emby, jellyfin }
+}
+
+/**
+ * Plateforme dont « Ma médiathèque » affiche la bibliothèque : celle choisie dans les réglages
+ * (library_source) si elle est configurée, sinon la seule configurée (Emby, Jellyfin, puis Onyx).
+ */
+export async function getLibraryPlatform(): Promise<LibraryPlatform | null> {
+  return resolveLibrary(await readSettings(LIBRARY_KEYS)).platform
+}
+
+/**
+ * Serveur Emby ou Jellyfin de la médiathèque. Null quand c'est Onyx : son catalogue se lit par
+ * lib/services/onyx-directory.ts, et l'historique ou les favoris d'Emby n'y correspondraient pas.
+ */
+export async function getLibraryServer(): Promise<{ service: EmbyService; type: LibrarySource } | null> {
+  const { platform, emby, jellyfin } = resolveLibrary(await readSettings(LIBRARY_KEYS))
+  if (platform === 'emby') return emby
+  if (platform === 'jellyfin') return jellyfin
+  return null
 }
 
 /** Compte de l'utilisateur sur la plateforme de la bibliothèque (l'autre en secours, comme avant) */

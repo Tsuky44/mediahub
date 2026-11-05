@@ -43,6 +43,12 @@ export interface SettingsFormData {
     auth_onyx_enabled: boolean
     auth_onyx_auto_create: boolean
     onyx_url: string
+    /** Clé d'intégration partagée avec Onyx (vide : PLAYER_INTEGRATION_API_KEY) */
+    player_integration_api_key: string
+    /** Compte MediaHub utilisé quand Onyx ne dit pas qui appelle (vide : PLAYER_INTEGRATION_USER_EMAIL) */
+    player_integration_user_email: string
+    /** URL des évènements vers Onyx (vide : déduite de onyx_url) */
+    onyx_webhook_url: string
     /** Plateforme affichée dans « Ma médiathèque » (vide : la seule configurée) */
     library_source: string
     auth_local_enabled: boolean
