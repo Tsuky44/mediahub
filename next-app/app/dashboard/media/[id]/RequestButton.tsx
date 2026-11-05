@@ -20,6 +20,8 @@ interface RequestButtonProps {
   canRequest?: boolean
   requestAllSeasonsEnabled?: boolean
   tvdbId?: number
+  /** Plateforme de connexion de l'utilisateur, nommée dans « Disponible sur … » */
+  platformName: string
 }
 
 export default function RequestButton({
@@ -33,6 +35,7 @@ export default function RequestButton({
   canRequest = false,
   requestAllSeasonsEnabled = false,
   tvdbId,
+  platformName,
 }: RequestButtonProps) {
   const router = useRouter()
   const [showStatusModal, setShowStatusModal] = useState(false)
@@ -86,6 +89,7 @@ export default function RequestButton({
         canRequest={canRequest}
         hasUnrequestedSeasons={hasUnrequestedSeasons}
         isTv={isTv}
+        platformName={platformName}
         onPrimaryClick={handlePrimaryClick}
         onSeasonClick={() => setShowSeasonModal(true)}
         onStatusClick={() => setShowStatusModal(true)}

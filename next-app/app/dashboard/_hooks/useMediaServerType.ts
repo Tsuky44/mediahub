@@ -41,10 +41,3 @@ function useServerInfo(): ServerInfo {
 export function useMediaServerType() {
   return useServerInfo().serverType
 }
-
-/** Nom à afficher pour « disponible sur … » : Onyx si le compte vient d'Onyx, sinon le serveur média. */
-export function useAvailabilityServerName() {
-  const { serverType, accountOrigin } = useServerInfo()
-  if (accountOrigin === 'onyx') return 'Onyx'
-  return serverType === 'jellyfin' ? 'Jellyfin' : 'Emby'
-}

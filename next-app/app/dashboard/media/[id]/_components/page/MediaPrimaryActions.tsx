@@ -78,6 +78,7 @@ export default function MediaPrimaryActions({
           canRequest={ability.can('create', 'MediaRequest')}
           requestAllSeasonsEnabled={requestAllSeasonsEnabled}
           tvdbId={details.external_ids?.tvdb_id}
+          platformName={platform.name}
         />
         </div>
         {canPlay && (

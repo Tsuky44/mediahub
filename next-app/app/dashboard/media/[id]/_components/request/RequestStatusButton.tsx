@@ -1,7 +1,6 @@
 'use client'
 
 import { CalendarClock, Check, CircleDashed, Download, Plus } from 'lucide-react'
-import { useAvailabilityServerName } from '@/app/dashboard/_hooks/useMediaServerType'
 import { OnyxBeam, OnyxTrack, type OnyxPhase } from '@/components/ui/onyx'
 import { cn } from '@/lib/utils'
 import { formatReleaseDate } from '@/lib/release-date'
@@ -15,6 +14,8 @@ interface RequestStatusButtonProps {
   canRequest: boolean
   hasUnrequestedSeasons: boolean
   isTv: boolean
+  /** Plateforme de connexion de l'utilisateur (« Disponible sur … », comme « Lire dans … ») */
+  platformName: string
   onPrimaryClick: () => void
   onSeasonClick: () => void
   onStatusClick?: () => void
@@ -54,12 +55,11 @@ export function RequestStatusButton({
   canRequest,
   hasUnrequestedSeasons,
   isTv,
+  platformName,
   onPrimaryClick,
   onSeasonClick,
   onStatusClick,
 }: RequestStatusButtonProps) {
-  const serverName = useAvailabilityServerName()
-
   // La confirmation reste affichée avant de laisser place au statut « en cours »
   if (phase === 'idle' || phase === 'error' || !canRequest) {
     if (status === 'partial') {
@@ -80,7 +80,7 @@ export function RequestStatusButton({
           <button type="button" onClick={onStatusClick} className={cn(pill, statusPill)}>
             <OnyxBeam />
             <Check className="h-5 w-5 text-green-400" />
-            Disponible sur {serverName}
+            Disponible sur {platformName}
           </button>
           {canRequest && hasUnrequestedSeasons && <SecondaryButton onClick={onSeasonClick} label="Demander plus" />}
         </div>
