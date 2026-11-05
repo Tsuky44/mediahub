@@ -15,7 +15,7 @@ import { getLibraryPreview, type LibraryPreviewData } from '../preview-actions'
 const OPEN_MS = 520
 /** Survol avant de demander les infos au serveur (prêtes à l'ouverture) */
 const FETCH_MS = 160
-/** Aperçu déjà ouvert, pointeur sur une autre affiche : il y glisse, plus vite qu'une ouverture */
+/** Aperçu déjà ouvert, pointeur sur une autre affiche : fondu vers le nouveau, plus vite qu'une ouverture */
 const SWITCH_MS = 240
 const MARGIN = 12
 
@@ -72,8 +72,8 @@ function PreviewActions({ item }: { item: any }) {
 interface Open {
   index: number
   rect: DOMRect
-  /** Position de l'aperçu précédent : il glisse de là jusqu'à la nouvelle affiche */
-  from?: { left: number; top: number }
+  /** Remplace un aperçu ouvert : l'ancien s'efface sur place pendant que le nouveau apparaît */
+  switched?: boolean
 }
 
 type Shown = LibraryPreviewData & { endsAt?: string }
@@ -132,7 +132,8 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
     clear('open', 'fetch', 'close')
     hovered.current = null
     leaving.current = true
-    panel.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-out', fill: 'forwards' })
+    // Sous le calque de l'envol : son voile l'assombrit avec la page, la bannière s'agrandit par-dessus
+    panel.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 380, easing: 'ease-out', fill: 'forwards' })
     // Navigation annulée : l'aperçu se referme pour de bon
     window.setTimeout(() => {
       if (!leaving.current) return
@@ -168,11 +169,26 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
     timers.current.fetch = window.setTimeout(() => void load(embyId), FETCH_MS)
     timers.current.open = window.setTimeout(() => {
       if (hovered.current !== hit.index || !hit.card.isConnected) return
+      // Fondu enchaîné : une copie de l'aperçu courant s'efface sur place, le nouveau apparaît
       const el = panel.current
-      const from = switching && el ? { left: parseFloat(el.style.left), top: parseFloat(el.style.top) } : undefined
+      if (switching && el) {
+        const ghost = el.cloneNode(true) as HTMLElement
+        ghost.removeAttribute('role')
+        ghost.removeAttribute('data-onyx-preview')
+        ghost.setAttribute('aria-hidden', 'true')
+        ghost.style.pointerEvents = 'none'
+        document.body.appendChild(ghost)
+        const fade = ghost.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.97)' }], {
+          duration: 240,
+          easing: 'ease-out',
+          fill: 'forwards',
+        })
+        fade.onfinish = () => ghost.remove()
+        fade.oncancel = () => ghost.remove()
+      }
       setClosing(false)
       setData(ready.has(embyId) ? withEnd(ready.get(embyId)) : undefined)
-      setOpen({ index: hit.index, rect: hit.card.getBoundingClientRect(), from })
+      setOpen({ index: hit.index, rect: hit.card.getBoundingClientRect(), switched: switching })
       load(embyId).then((d) => {
         if (hovered.current === hit.index) setData(withEnd(d))
       })
@@ -214,18 +230,19 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
     const cx = rect.left + rect.width / 2
     const cy = rect.top + rect.height / 2
     const left = Math.min(Math.max(MARGIN, cx - width / 2), window.innerWidth - width - MARGIN)
-    const top = Math.min(Math.max(MARGIN, cy - height / 2), Math.max(MARGIN, window.innerHeight - height - MARGIN))
+    // Jamais sous la barre de navigation
+    const minTop = (document.querySelector('nav')?.getBoundingClientRect().bottom ?? 0) + MARGIN
+    const top = Math.min(Math.max(minTop, cy - height / 2), Math.max(minTop, window.innerHeight - height - MARGIN))
     el.style.left = `${left}px`
     el.style.top = `${top}px`
     el.style.transformOrigin = `${cx - left}px ${cy - top}px`
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    // Passage d'une affiche à l'autre : l'aperçu glisse jusqu'à la nouvelle, son contenu se fond
-    if (open.from) {
-      const easing = 'cubic-bezier(0.16, 1, 0.3, 1)'
-      el.animate([{ transform: `translate(${open.from.left - left}px, ${open.from.top - top}px)` }, { transform: 'none' }], { duration: 340, easing })
-      el.querySelectorAll<HTMLElement>('[data-preview-part]').forEach((part) =>
-        part.animate([{ opacity: 0.25 }, { opacity: 1 }], { duration: 260, easing: 'ease-out' })
-      )
+    // Passage d'une affiche à l'autre : le nouvel aperçu apparaît en fondu, sur place
+    if (open.switched) {
+      el.animate([{ opacity: 0, transform: 'scale(0.97)' }, { opacity: 1, transform: 'scale(1)' }], {
+        duration: 280,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      })
       return
     }
     const from = Math.max(0.45, rect.width / width)
@@ -287,10 +304,12 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
               hovered.current = null
               if (!leaving.current) timers.current.close = window.setTimeout(close, 180)
             }}
-            style={{ position: 'fixed', top: -9999, left: -9999, zIndex: 70 }}
+            // Sous la barre de navigation (50) et sous l'envol (45, motion.css) : le voile de l'envol
+            // l'assombrit avec la page pendant que la bannière s'agrandit par-dessus
+            style={{ position: 'fixed', top: -9999, left: -9999, zIndex: 44 }}
             className="onyx-preview overflow-hidden rounded-2xl border border-white/[0.08] bg-[#161717] shadow-[0_30px_70px_-20px_rgb(0_0_0/0.9)]"
           >
-            <div className="relative" data-preview-part>
+            <div className="relative">
             <PreviewActions item={item} />
             {/* Bannière : au clic, c'est elle qui se retourne et s'envole vers la fiche (MotionDirector) */}
             <Link href={href} data-onyx-backdrop={backdrop} data-onyx-preview-banner onClick={leave} className="relative block aspect-video overflow-hidden bg-gray-900">
@@ -304,7 +323,7 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
             </Link>
             </div>
 
-            <div className="space-y-3 px-4 pb-4 pt-2" data-preview-part>
+            <div className="space-y-3 px-4 pb-4 pt-2">
               <div>
                 <Link href={href} data-onyx-backdrop={backdrop} onClick={leave} className="block truncate text-lg font-bold text-white hover:text-gray-200">
                   {title}

@@ -157,7 +157,6 @@ function dissolveHero(restore = false) {
 const BACKDROP = { focusY: 0.25, zoom: 1.1, ratio: 16 / 9 }
 /** Temps forts (ms) : la carte se retourne, l'image fonce à sa place, s'y écrase et rebondit */
 const FLY = { turn: 420, flight: 430, squash: 520 }
-const LAND = FLY.turn + FLY.flight
 
 interface FlyGhost {
   layer: HTMLElement
@@ -218,6 +217,11 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   const W = document.documentElement.clientWidth
   const H = backdropHeight()
   const poster = frame.querySelector('img')?.currentSrc || undefined
+  // Bannière de l'aperçu (médiathèque) : c'est déjà l'image de fond de la fiche, elle s'agrandit
+  // directement, sans se retourner
+  const flip = !frame.hasAttribute('data-onyx-preview-banner')
+  const turnMs = flip ? FLY.turn : 0
+  const land = turnMs + FLY.flight
 
   const layer = document.createElement('div')
   layer.className = 'onyx-hero-layer onyx-fly-layer'
@@ -270,14 +274,14 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   squash.append(...placeholder(poster, img), img, flash)
   flight.append(squash)
 
-  layer.append(dim, card, flight)
+  layer.append(...(flip ? [dim, card, flight] : [dim, flight]))
   document.body.appendChild(layer)
   frame.style.visibility = 'hidden'
 
   dim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 380, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'both' })
   // Les coins s'effacent pendant que la carte se retourne : l'image qui prend le relais n'a pas de
   // coins arrondis à recalculer à chaque image
-  card.animate(
+  if (flip) card.animate(
     [
       { scale: 1, borderRadius: `${radius}px` },
       { scale: 1.08, borderRadius: `${radius}px`, offset: 0.55 },
@@ -285,14 +289,14 @@ function launchFly(frame: HTMLElement, backdrop: string) {
     ],
     { duration: FLY.turn, easing: 'ease-in-out', fill: 'both' }
   )
-  shade.animate([{ opacity: 0 }, { opacity: 1, offset: 0.55 }, { opacity: 0.6 }], { duration: FLY.turn, easing: 'ease-in-out', fill: 'both' })
-  turn.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(180deg)' }], {
+  if (flip) shade.animate([{ opacity: 0 }, { opacity: 1, offset: 0.55 }, { opacity: 0.6 }], { duration: FLY.turn, easing: 'ease-in-out', fill: 'both' })
+  if (flip) turn.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(180deg)' }], {
     duration: FLY.turn,
     easing: 'cubic-bezier(0.45, 0, 0.2, 1)',
     fill: 'both',
   })
   // Relais : retournée, la carte montre exactement ce que montre l'image plein écran à cet instant
-  const relay: KeyframeAnimationOptions = { duration: 1, delay: FLY.turn, fill: 'both' }
+  const relay: KeyframeAnimationOptions = { duration: 1, delay: turnMs, fill: 'both' }
   card.animate([{ opacity: 1 }, { opacity: 0 }], relay)
   flight.animate([{ opacity: 0 }, { opacity: 1 }], relay)
 
@@ -315,20 +319,20 @@ function launchFly(frame: HTMLElement, backdrop: string) {
     // La fiche montre son image à 80 % sur le fond de la page
     inner.push({ transform: `translate(${tx}px, ${ty}px) scale(${k / sx}, ${k / sy})`, opacity: 1 - 0.2 * p })
   }
-  const trip: KeyframeAnimationOptions = { duration: FLY.flight, delay: FLY.turn, easing: 'cubic-bezier(0.5, 0, 0.75, 0.3)', fill: 'both' }
+  const trip: KeyframeAnimationOptions = { duration: FLY.flight, delay: turnMs, easing: 'cubic-bezier(0.5, 0, 0.75, 0.3)', fill: 'both' }
   const landing = flight.animate(outer, trip)
   img.animate(inner, trip)
 
   // Étirée par la vitesse, écrasée à l'arrivée, un rebond, posée ; un éclat de lumière à l'impact.
   // Rebond joué partout, mode allégé compris (demande explicite : c'est la signature de l'envol)
-  const total = LAND + FLY.squash
+  const total = land + FLY.squash
   const bounce = squash.animate(
     [
       { scale: '1 1', offset: 0 },
-      { scale: '1 1', offset: FLY.turn / total },
-      { scale: '0.99 1.035', offset: LAND / total },
-      { scale: '1.024 0.952', offset: (LAND + 140) / total },
-      { scale: '0.996 1.012', offset: (LAND + 290) / total },
+      { scale: '1 1', offset: turnMs / total },
+      { scale: '0.99 1.035', offset: land / total },
+      { scale: '1.024 0.952', offset: (land + 140) / total },
+      { scale: '0.996 1.012', offset: (land + 290) / total },
       { scale: '1 1', offset: 1 },
     ].map((kf) => ({ ...kf, easing: 'ease-in-out' })),
     { duration: total, fill: 'both' }
@@ -336,8 +340,8 @@ function launchFly(frame: HTMLElement, backdrop: string) {
   flash.animate(
     [
       { opacity: 0, offset: 0 },
-      { opacity: 0, offset: LAND / total },
-      { opacity: 1, offset: (LAND + 40) / total },
+      { opacity: 0, offset: land / total },
+      { opacity: 1, offset: (land + 40) / total },
       { opacity: 0, offset: 1 },
     ].map((kf) => ({ ...kf, easing: 'ease-out' })),
     { duration: total, fill: 'both' }
