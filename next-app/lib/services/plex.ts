@@ -94,6 +94,38 @@ export class PlexService {
     }
   }
 
+  /**
+   * Lien vers la page d'un média dans l'app Plex (web) : recherche par titre sur le serveur, puis
+   * app.plex.tv/desktop#!/server/<machineIdentifier>/details?key=/library/metadata/<ratingKey>.
+   * null si le serveur ne répond pas ou ne trouve rien.
+   */
+  async findWebLink(titles: string[], year: number | undefined, type: 'movie' | 'show'): Promise<string | null> {
+    const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+    try {
+      const client = await this.getClient(6000);
+      const identity = await client.get('/identity');
+      const machineId: string | undefined = identity.data?.MediaContainer?.machineIdentifier;
+      if (!machineId) return null;
+      for (const title of [...new Set(titles.filter(Boolean))]) {
+        const search = await client.get('/hubs/search', { params: { query: title, limit: 10 } });
+        const hubs: Array<{ type?: string; Metadata?: Array<{ title?: string; year?: number; ratingKey?: string | number }> }> =
+          search.data?.MediaContainer?.Hub ?? [];
+        const items = hubs.filter((h) => h.type === type).flatMap((h) => h.Metadata ?? []);
+        const sameYear = (y?: number) => !year || !y || Math.abs(y - year) <= 1;
+        const match =
+          items.find((m) => m.title && norm(m.title) === norm(title) && sameYear(m.year)) ??
+          items.find((m) => sameYear(m.year));
+        if (match?.ratingKey != null) {
+          return `https://app.plex.tv/desktop/#!/server/${machineId}/details?key=${encodeURIComponent(`/library/metadata/${match.ratingKey}`)}`;
+        }
+      }
+      return null;
+    } catch (e: any) {
+      error('[PlexService] findWebLink failed:', e.message);
+      return null;
+    }
+  }
+
   async getItemDetails(ratingKey: string) {
     try {
       const client = await this.getClient();

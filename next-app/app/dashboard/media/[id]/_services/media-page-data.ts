@@ -1,6 +1,7 @@
 import 'server-only'
 import { defineAbilityFor } from '@/lib/ability'
-import { getCurrentUser, getTmdbServiceForUser } from '@/lib/auth'
+import { getCurrentUser, getPlaybackPlatform, getTmdbServiceForUser } from '@/lib/auth'
+import type { PlaybackPlatform } from '@/lib/playback-platform'
 import { getSetting } from '@/lib/settings'
 import { getMediaAvailability } from '@/lib/services/media-status'
 import { isInWatchLater } from '../../watch-later-actions'
@@ -24,6 +25,8 @@ export interface MediaPageExtras {
   embyUrl: string | null
   progress: MediaEmbyProgress
   requestAllSeasonsEnabled: boolean
+  /** Plateforme de connexion (bouton « Lire dans … ») */
+  platform: PlaybackPlatform
 }
 
 export interface MediaPageData {
@@ -69,6 +72,7 @@ export async function loadMediaPageData(params: {
     embyUrl: quiet(getSetting('emby_url')),
     jellyfinUrl: quiet(getSetting('jellyfin_url')),
     requestAllSeasons: quiet(getSetting('request_all_seasons_enabled')),
+    platform: quiet(getPlaybackPlatform()),
   }
 
   const details = await tmdbService.getDetails(tmdbId, mediaType)
@@ -100,14 +104,16 @@ export async function loadMediaPageData(params: {
     early.embyUrl,
     early.jellyfinUrl,
     early.requestAllSeasons,
+    early.platform,
   ]).then(
-    ([availability, isWatchLaterItem, isSubscribed, progress, embyUrlSetting, jellyfinUrlSetting, requestAllSeasons]) => ({
+    ([availability, isWatchLaterItem, isSubscribed, progress, embyUrlSetting, jellyfinUrlSetting, requestAllSeasons, platform]) => ({
       availability,
       isWatchLaterItem,
       isSubscribed,
       embyUrl: (embyUrlSetting || jellyfinUrlSetting) ?? null,
       progress,
       requestAllSeasonsEnabled: requestAllSeasons === 'true',
+      platform,
     })
   )
   // Attendue par les blocs Suspense de la page ; une erreur y remonte, sans rejet orphelin ici

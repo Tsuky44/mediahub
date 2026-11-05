@@ -13,6 +13,8 @@ declare module "next-auth" {
       whatsappNumber: string | null
       image: string | null
       isImpersonated?: boolean
+      /** Fournisseur utilisé pour se connecter (emby, jellyfin, plex, onyx, local) */
+      loginProvider?: string | null
       originalRole?: string
       permissions?: Array<{ action: string; subject: string; conditions?: string | null }>
     } & DefaultSession["user"]
@@ -36,5 +38,6 @@ declare module "next-auth/jwt" {
     jellyfinUserId: string | null
     discordUserId: string | null
     whatsappNumber: string | null
+    loginProvider?: string | null
   }
 }

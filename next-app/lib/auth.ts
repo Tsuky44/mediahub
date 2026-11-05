@@ -24,6 +24,8 @@ export {
   getProwlarrServiceForUser,
 } from './auth/service-factories'
 
+export { getPlaybackPlatform } from './auth/playback-platform'
+
 // Re-export providers for direct access if needed
 export { localProvider } from './auth/providers/local'
 export { embyProvider } from './auth/providers/emby'

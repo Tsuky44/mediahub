@@ -96,7 +96,9 @@ export const authOptions: NextAuthOptions = {
     }
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
+      // Plateforme utilisée pour se connecter : les boutons « Lire dans … » s'y adressent
+      if (account?.provider) token.loginProvider = account.provider
       if (user) {
         token.embyUserId = user.embyUserId
         token.plexUserId = user.plexUserId
@@ -115,6 +117,7 @@ export const authOptions: NextAuthOptions = {
         session.user.jellyfinUserId = token.jellyfinUserId ?? null
         session.user.discordUserId = token.discordUserId ?? null
         session.user.whatsappNumber = token.whatsappNumber ?? null
+        session.user.loginProvider = token.loginProvider ?? null
 
         // Force refresh user from DB to get latest role and permissions
         try {

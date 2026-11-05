@@ -504,6 +504,36 @@ export class EmbyService {
     }
   }
 
+  /**
+   * Aperçu de la médiathèque : un élément vu par un compte (année, durée, genres, note, saisons,
+   * progression). Une erreur remonte (l'aperçu se contente alors de ce qu'il sait déjà).
+   */
+  async getPreviewItem(userId: string, itemId: string) {
+    const client = await this.getClient(4000)
+    const response = await client.get(`/Users/${userId}/Items/${itemId}`, {
+      params: { Fields: 'Overview,Genres,ProductionYear,EndDate,Status,CommunityRating,OfficialRating,ChildCount,UserData' },
+    })
+    return response.data
+  }
+
+  /** Épisode commencé d'une série (lecture en cours), ou null */
+  async getSeriesResume(userId: string, seriesId: string) {
+    const client = await this.getClient(4000)
+    const response = await client.get(`/Users/${userId}/Items/Resume`, {
+      params: { ParentId: seriesId, Recursive: true, IncludeItemTypes: 'Episode', Limit: 1, Fields: 'UserData' },
+    })
+    return response.data?.Items?.[0] ?? null
+  }
+
+  /** Prochain épisode à regarder d'une série, ou null */
+  async getNextUp(userId: string, seriesId: string) {
+    const client = await this.getClient(4000)
+    const response = await client.get('/Shows/NextUp', {
+      params: { UserId: userId, SeriesId: seriesId, Limit: 1, Fields: 'UserData' },
+    })
+    return response.data?.Items?.[0] ?? null
+  }
+
   async getItemDetails(itemId: string, userId?: string) {
     try {
       const client = await this.getClient(3000)

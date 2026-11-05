@@ -1,8 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Play } from 'lucide-react'
-import { useIsOnyxAccount, useMediaServerType } from '@/app/dashboard/_hooks/useMediaServerType'
+import { PlayInPlatformButton } from '@/components/global/PlayInPlatformButton'
+import type { PlaybackPlatform } from '@/lib/playback-platform'
 
 interface PlayButtonProps {
     embyUrl: string | null
@@ -10,56 +9,26 @@ interface PlayButtonProps {
     serverId: string | null
     tmdbId: number
     mediaType: 'movie' | 'tv'
+    /** Plateforme de connexion : « Lire dans Emby », « Lire dans Plex »… */
+    platform: PlaybackPlatform
+    title: string
+    originalTitle?: string
+    year?: number
 }
 
-export function PlayButton({ embyUrl, embyItemId, serverId, tmdbId, mediaType }: PlayButtonProps) {
-    const [showWebOption, setShowWebOption] = useState(false)
-    const serverType = useMediaServerType()
-    const isOnyx = useIsOnyxAccount()
-    const isJellyfin = serverType === 'jellyfin'
-    const serverName = isOnyx ? 'Onyx' : isJellyfin ? 'Jellyfin' : 'Emby'
-    const appScheme = isJellyfin ? 'jellyfin://' : 'emby://'
-
-    // Sans réglage du serveur média, seul un compte Onyx peut lire (l'app Onyx reprend là où on s'est arrêté)
-    if (!isOnyx && (!embyUrl || !serverId)) return null
-
-    const webUrl = embyUrl && serverId
-        ? `${embyUrl}/web/index.html#!/item?id=${embyItemId}&serverId=${serverId}`
-        : null
-
-    const handlePlay = () => {
-        if (isOnyx) {
-            window.location.href = `onyx://play?tmdbId=${tmdbId}&type=${mediaType}`
-            return
-        }
-        if (!webUrl) return
-        window.location.href = webUrl.replace(/^https?:\/\//, appScheme)
-        setShowWebOption(true)
-    }
-
-    const openWeb = (e: React.MouseEvent) => {
-        e.stopPropagation()
-        if (webUrl) window.open(webUrl, '_blank')
-    }
-
+/** Bouton « Lire dans … » de la fiche (le nom de la plateforme se masque sur téléphone) */
+export function PlayButton({ embyUrl, embyItemId, serverId, tmdbId, mediaType, platform, title, originalTitle, year }: PlayButtonProps) {
     return (
-        <div className="flex flex-col items-stretch sm:items-start gap-2">
-            <button
-                onClick={handlePlay}
-                className="flex items-center justify-center gap-2 rounded-full bg-indigo-600/90 px-5 py-2.5 sm:px-6 sm:py-3 text-sm font-semibold text-white shadow-[0_0_15px_rgba(232,230,228,0.16)] transition-all hover:bg-indigo-500 hover:scale-105 hover:shadow-[0_0_25px_rgba(232,230,228,0.24)] backdrop-blur-sm"
-            >
-                <Play className="h-4 w-4 fill-current" />
-                <span>Lire<span className="hidden sm:inline">{` sur ${serverName}`}</span></span>
-            </button>
-
-            {showWebOption && !isOnyx && (
-                <button
-                    onClick={openWeb}
-                    className="ml-2 text-xs text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
-                >
-                    Ouvrir le lecteur web si l'app ne se lance pas
-                </button>
-            )}
-        </div>
+        <PlayInPlatformButton
+            platform={platform}
+            serverUrl={embyUrl}
+            serverId={serverId}
+            itemId={embyItemId}
+            tmdbId={tmdbId}
+            mediaType={mediaType}
+            title={title}
+            originalTitle={originalTitle}
+            year={year}
+        />
     )
 }

@@ -5,6 +5,7 @@ import { TrailerButton } from '../TrailerButton'
 import MediaActionsRow from './MediaActionsRow'
 import { MediaDownloadProgressBar } from './MediaDownloadProgressBar'
 import type { MediaType } from '../../_types/media-page'
+import type { PlaybackPlatform } from '@/lib/playback-platform'
 
 interface MediaPrimaryActionsProps {
   tmdbId: number
@@ -30,6 +31,8 @@ interface MediaPrimaryActionsProps {
   canManageSettings: boolean
   canTriggerSearch: boolean
   canInteractiveSearch: boolean
+  /** Plateforme de connexion (bouton « Lire dans … ») */
+  platform: PlaybackPlatform
 }
 
 export default function MediaPrimaryActions({
@@ -52,9 +55,12 @@ export default function MediaPrimaryActions({
   canManageSettings,
   canTriggerSearch,
   canInteractiveSearch,
+  platform,
 }: MediaPrimaryActionsProps) {
   // Les comptes Onyx lisent via l'app Onyx : PlayButton se masque seul si ni Onyx ni serveur média ne conviennent
   const canPlay = Boolean(embyItem)
+  // Année de sortie : aide à retrouver le média sur Plex (bouton « Lire dans Plex »)
+  const releaseYear = parseInt(String(details.release_date || details.first_air_date || '').slice(0, 4)) || undefined
   return (
     <div className="flex flex-col gap-3 sm:gap-5 pt-4 border-t border-white/5 w-full">
       {/* Téléphone : « Lire » (ou « Demander »), bande-annonce et menu sur la première
@@ -82,6 +88,10 @@ export default function MediaPrimaryActions({
               serverId={embyServerId}
               tmdbId={tmdbId}
               mediaType={mediaType}
+              platform={platform}
+              title={title}
+              originalTitle={details.original_title || details.original_name}
+              year={releaseYear}
             />
           </div>
         )}

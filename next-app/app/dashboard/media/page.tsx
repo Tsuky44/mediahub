@@ -1,8 +1,7 @@
-import { fetchEmbyMedia, fetchRecentlyWatchedItems, type LibraryPage } from './actions'
+import { fetchEmbyMedia, type LibraryPage } from './actions'
 import { InfiniteEmbyList } from './InfiniteEmbyList'
 import { SearchInput } from '@/components/global/SearchInput'
 import { Suspense } from 'react'
-import { RecentlyWatched } from './RecentlyWatched'
 import { getSession } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 import { redirect } from 'next/navigation'
@@ -26,26 +25,9 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
   const isWatchLaterOnly = watchLater === 'true'
   
   let initialData: LibraryPage = { results: [], total_pages: 0 }
-  let recentlyWatchedItems: any[] = []
-  
-  const showRecentlyWatched = currentType === 'all' && !query && !isFavoritesOnly && !isWatchLaterOnly
 
   try {
-    const promises: Promise<any>[] = []
-    
-    promises.push(fetchEmbyMedia(1, currentType as 'movie' | 'tv' | 'all', query, isFavoritesOnly, isWatchLaterOnly))
-
-    if (showRecentlyWatched) {
-        promises.push(fetchRecentlyWatchedItems())
-    }
-
-    const results = await Promise.all(promises)
-    
-    initialData = results[0]
-
-    if (showRecentlyWatched) {
-        recentlyWatchedItems = results[results.length - 1]
-    }
+    initialData = await fetchEmbyMedia(1, currentType as 'movie' | 'tv' | 'all', query, isFavoritesOnly, isWatchLaterOnly)
   } catch (e) {
       console.error('Failed to fetch media', e)
   }
@@ -81,23 +63,17 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
             isWatchLaterOnly={isWatchLaterOnly}
           />
 
-          <>
-              {showRecentlyWatched && recentlyWatchedItems.length > 0 && (
-                <RecentlyWatched items={recentlyWatchedItems} />
-              )}
-
-              <InfiniteEmbyList 
-                 initialItems={initialData.results} 
-                 problem={initialData.problem}
-                 detail={initialData.detail}
-                 serverWide={initialData.serverWide}
-                 source={initialData.source}
-                 type={currentType as 'all' | 'movie' | 'tv'} 
-                 query={query} 
-                 favoritesOnly={isFavoritesOnly} 
-                 watchLaterOnly={isWatchLaterOnly}
-               />
-          </>
+          <InfiniteEmbyList
+            initialItems={initialData.results}
+            problem={initialData.problem}
+            detail={initialData.detail}
+            serverWide={initialData.serverWide}
+            source={initialData.source}
+            type={currentType as 'all' | 'movie' | 'tv'}
+            query={query}
+            favoritesOnly={isFavoritesOnly}
+            watchLaterOnly={isWatchLaterOnly}
+          />
       </div>
   )
 }

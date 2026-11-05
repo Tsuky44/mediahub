@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useInView } from 'react-intersection-observer'
 import { MediaCard } from '@/components/global/MediaCard'
+import { LibraryHoverPreview } from './_components/LibraryHoverPreview'
 import { fetchEmbyMedia, type LibraryProblem } from './actions'
 import { preloadPosters } from '@/components/global/media-card/preloadPosters'
 import { Loader2, Library, RotateCw } from 'lucide-react'
@@ -151,11 +152,14 @@ export function InfiniteEmbyList({ initialItems, problem, detail, serverWide, so
             {SOURCE_NAME[source ?? 'emby']} refuse la bibliothèque de votre compte{detail ? ` (${detail})` : ''} : voici celle de tout le serveur, sans vos favoris. Reconnectez-vous avec votre compte {SOURCE_NAME[source ?? 'emby']} pour la retrouver.
           </p>
         )}
-        <div className="onyx-stagger grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-6">
-        {items.map((item) => (
-          <MediaCard key={item.id} item={item} showFavoriteButton={true} />
-        ))}
-      </div>
+        {/* Survol d'une affiche (souris) : aperçu avec la progression et « Lire dans … » */}
+        <LibraryHoverPreview items={items}>
+          <div className="onyx-stagger grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-6">
+            {items.map((item) => (
+              <MediaCard key={item.id} item={item} showFavoriteButton={true} />
+            ))}
+          </div>
+        </LibraryHoverPreview>
         
         {hasMore && (
             <div ref={ref} className="flex justify-center p-8">
