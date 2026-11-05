@@ -16,6 +16,7 @@ import MediaCastAndFacts from './MediaCastAndFacts'
 import MediaRelatedSliders from './MediaRelatedSliders'
 import { getCountdown } from '../../_utils/media-countdown'
 import { ageRating } from '../../_utils/media-labels'
+import { getPublicDomain } from '../../_utils/media-public-domain'
 import type { MediaPageData } from '../../_services/media-page-data'
 import type { MediaType } from '../../_types/media-page'
 
@@ -55,6 +56,8 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
   const rating = ageRating(details, mediaType)
   const today = new Date().toISOString().slice(0, 10)
   const countdown = getCountdown(details, mediaType, today)
+  // « Libre de droits » : mot-clé TMDB, sinon œuvre publiée il y a plus de 95 ans
+  const publicDomain = getPublicDomain(details, mediaType, today)
   const runtime = details.runtime || details.episode_run_time?.[0]
 
   const logos = details.images?.logos || []
@@ -93,6 +96,7 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
                   runtime={runtime}
                   genres={details.genres}
                   logoPath={logoPath}
+                  publicDomain={publicDomain}
                 />
                 <MediaHeroFacts details={details} watchProviders={watchProviders} />
                 <MediaLede overview={overview} />
@@ -153,6 +157,7 @@ export function MediaPageContent({ data, id, tmdbId, mediaType }: MediaPageConte
             writers={writers}
             editors={editors}
             keywords={keywords}
+            publicDomain={publicDomain}
           />
           <MediaRelatedSliders
             recommendations={recommendations}
