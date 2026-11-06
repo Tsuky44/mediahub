@@ -1,12 +1,13 @@
 'use server'
 
 import { eq } from 'drizzle-orm'
-import { findPlayTarget, getCurrentUser, getLibraryServer, getLibraryUserId, getPlaybackPlatform, withLinkedAccounts } from '@/lib/auth'
+import { getCurrentUser, getLibraryServer, getTmdbServiceForUser, withLinkedAccounts } from '@/lib/auth'
 import { createMemoCache } from '@/lib/cache'
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
 import { getSetting } from '@/lib/settings'
-import type { PlaybackPlatform } from '@/lib/playback-platform'
+import { playbackPlatform, type PlaybackPlatform } from '@/lib/playback-platform'
+import { findOnyxLibraryItem, type OnyxLibraryItem } from '@/lib/services/onyx-directory'
 
 /** Où en est l'utilisateur avec ce média */
 export interface PreviewStatus {
@@ -92,7 +93,8 @@ const episodeLabel = (ep: any) =>
 /**
  * Données de l'aperçu d'un média de la médiathèque (survol d'une affiche) : où l'on en est
  * (épisode en cours et temps restant, épisode suivant, vu), infos utiles et lien de lecture
- * sur la plateforme de connexion. null si le serveur média ne répond pas.
+ * sur le serveur de la médiathèque (Emby ou Jellyfin, jamais un autre). null si le serveur ne
+ * répond pas.
  */
 export async function getLibraryPreview(embyId: string): Promise<LibraryPreviewData | null> {
   const user = await getCurrentUser()
@@ -100,17 +102,19 @@ export async function getLibraryPreview(embyId: string): Promise<LibraryPreviewD
   const library = await getLibraryServer()
   if (!library) return null
   const dbUser = await withLinkedAccounts(await db.query.users.findFirst({ where: eq(users.email, user.email) }))
-  const userId = getLibraryUserId(dbUser, library.type)
+  // Compte propre au serveur de la médiathèque : jamais celui de l'autre serveur
+  const userId = (library.type === 'jellyfin' ? dbUser?.jellyfinUserId : dbUser?.embyUserId) ?? null
   if (!userId) return null
   const service = library.service
 
   try {
     return await previews.get(`${library.type}:${userId}:${embyId}`, async () => {
-      const [item, serverId, url, platform] = await Promise.all([
+      // Médiathèque Emby -> lecture Emby, Jellyfin -> Jellyfin : jamais une autre plateforme
+      const platform = playbackPlatform(library.type)
+      const [item, serverId, url] = await Promise.all([
         service.getPreviewItem(userId, embyId),
         service.getServerId(),
         getSetting(library.type === 'jellyfin' ? 'jellyfin_url' : 'emby_url'),
-        getPlaybackPlatform(),
       ])
       const isSeries = item.Type === 'Series'
       const data = item.UserData ?? {}
@@ -178,23 +182,11 @@ export async function getLibraryPreview(embyId: string): Promise<LibraryPreviewD
         item.OfficialRating || undefined,
       ].filter((v): v is string => Boolean(v))
 
-      // Connecté sur l'autre serveur que celui de la médiathèque : l'identifiant ci-dessus n'y existe
-      // pas. Le média se retrouve par son identifiant TMDB (page du film ou de la série) ; sans
-      // équivalent, pas de lien plutôt qu'un lien vers un autre serveur.
-      let play: LibraryPreviewData['play'] = {
+      const play: LibraryPreviewData['play'] = {
         serverUrl: url ? url.split('/web/')[0].replace(/\/$/, '') : null,
         serverId,
         itemId: playItemId,
         resume,
-      }
-      if ((platform.id === 'emby' || platform.id === 'jellyfin') && platform.id !== library.type) {
-        const tmdbId = Number(item.ProviderIds?.Tmdb)
-        const target = tmdbId
-          ? await findPlayTarget(platform.id, dbUser, tmdbId, isSeries ? 'tv' : 'movie').catch(() => null)
-          : null
-        play = target
-          ? { ...target, resume: false }
-          : { serverUrl: null, serverId: null, itemId: '', resume: false }
       }
 
       return {
@@ -211,6 +203,103 @@ export async function getLibraryPreview(embyId: string): Promise<LibraryPreviewD
           : undefined,
         tagline: Array.isArray(item.Taglines) && item.Taglines[0] ? String(item.Taglines[0]) : undefined,
         studio: Array.isArray(item.Studios) && item.Studios[0]?.Name ? String(item.Studios[0].Name) : undefined,
+      }
+    })
+  } catch {
+    return null
+  }
+}
+
+const pluralize = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`
+
+/** Où en est le compte Onyx avec ce titre (progression rendue par la bibliothèque Onyx) */
+function onyxStatus(item: OnyxLibraryItem): { status: PreviewStatus; resume: boolean } {
+  if (item.type === 'movie') {
+    const total = item.duration ? Math.max(1, Math.round(item.duration / 60)) : undefined
+    if (item.is_finished) return { status: { kind: 'watched', line: 'Vu', minutes: total }, resume: false }
+    const pos = item.current_position_seconds ?? 0
+    if (pos > 0 && item.duration) {
+      const left = Math.max(1, Math.round((item.duration - pos) / 60))
+      return {
+        status: { kind: 'resume', line: `${left} min restantes`, progress: Math.min(1, pos / item.duration), minutes: left },
+        resume: true,
+      }
+    }
+    return { status: { kind: 'new', line: 'Pas encore vu', minutes: total }, resume: false }
+  }
+  const available = item.available_episode_count ?? 0
+  const watched = item.watched_episode_count ?? 0
+  const started = item.started_episode_count ?? 0
+  if (available > 0 && watched >= available) return { status: { kind: 'watched', line: 'Série vue en entier' }, resume: false }
+  if (watched > 0 || started > 0) {
+    const unplayed = Math.max(0, available - watched)
+    return {
+      status: { kind: 'next', line: 'Série commencée', unplayed, progress: available ? watched / available : undefined },
+      resume: true,
+    }
+  }
+  return {
+    status: { kind: 'new', line: available ? `${pluralize(available, 'épisode')} à découvrir` : 'Pas encore commencée', unplayed: available || undefined },
+    resume: false,
+  }
+}
+
+/**
+ * Aperçu d'un titre de la médiathèque Onyx (survol d'une affiche) : progression du compte Onyx,
+ * infos de la fiche TMDB et lecture dans Onyx. Rien n'est lu sur Emby, Jellyfin ou Plex. null si
+ * Onyx ne répond pas ou n'a pas le titre.
+ */
+export async function getOnyxPreview(onyxId: number): Promise<LibraryPreviewData | null> {
+  const user = await getCurrentUser()
+  if (!user?.email || !Number.isInteger(onyxId) || onyxId <= 0) return null
+  const dbUser = await withLinkedAccounts(await db.query.users.findFirst({ where: eq(users.email, user.email) }))
+  const playerId = dbUser?.onyxUserId ?? null
+
+  try {
+    return await previews.get(`onyx:${playerId ?? '-'}:${onyxId}`, async () => {
+      const item = await findOnyxLibraryItem({ id: onyxId }, playerId)
+      if (!item) return null
+      const mediaType = item.type === 'movie' ? 'movie' : 'tv'
+      const tmdb = item.tmdb_id
+        ? await getTmdbServiceForUser().then((t) => t?.getDetails(item.tmdb_id!, mediaType) ?? null).catch(() => null)
+        : null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = (tmdb ?? {}) as any
+      const { status, resume } = onyxStatus(item)
+
+      // Infos utiles : TMDB, sinon ce qu'Onyx en sait
+      const startYear =
+        parseInt(String(d.release_date || d.first_air_date || item.release_date || '').slice(0, 4)) || undefined
+      const endYear = parseInt(String(d.last_air_date || '').slice(0, 4)) || undefined
+      const years = mediaType === 'tv' && startYear && d.status === 'Ended' && endYear && endYear !== startYear
+        ? `${startYear} – ${endYear}`
+        : startYear ? `${startYear}` : undefined
+      const runtime = Number(d.runtime) || (item.duration ? Math.round(item.duration / 60) : 0)
+      const seasons = Number(d.number_of_seasons) || 0
+      const meta = [
+        years,
+        mediaType === 'tv'
+          ? seasons ? pluralize(seasons, 'saison') : undefined
+          : runtime ? duration(runtime * TICKS_PER_MINUTE) : undefined,
+        Array.isArray(d.genres) && d.genres.length ? d.genres.slice(0, 2).map((g: { name: string }) => g.name).join(', ') : undefined,
+        d.vote_average ? `★ ${Number(d.vote_average).toLocaleString('fr-FR', { maximumFractionDigits: 1 })}` : undefined,
+      ].filter((v): v is string => Boolean(v))
+
+      // Médiathèque Onyx -> lecture dans Onyx, par l'id Onyx du titre
+      const platform = playbackPlatform('onyx')
+      const play: LibraryPreviewData['play'] = { serverUrl: null, serverId: null, itemId: String(item.id), resume }
+
+      const company = mediaType === 'tv' ? d.networks?.[0]?.name : d.production_companies?.[0]?.name
+      return {
+        meta,
+        status,
+        platform,
+        play,
+        originalTitle: d.original_title || d.original_name || undefined,
+        year: startYear,
+        badges: [],
+        tagline: d.tagline || undefined,
+        studio: company ? String(company) : undefined,
       }
     })
   } catch {

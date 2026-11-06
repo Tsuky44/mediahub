@@ -9,7 +9,10 @@ import { getOnyxLink, getPlexLink } from '@/app/dashboard/media/play-actions'
 interface PlayInPlatformButtonProps {
   /** Plateforme de connexion de l'utilisateur (lib/auth/playback-platform) */
   platform: PlaybackPlatform
-  /** Emby / Jellyfin : adresse du serveur, son identifiant et l'élément à ouvrir (film ou épisode) */
+  /**
+   * Emby / Jellyfin : adresse du serveur, son identifiant et l'élément à ouvrir (film ou épisode).
+   * Plex : ratingKey de l'élément ; Onyx : id du titre dans la bibliothèque Onyx.
+   */
   serverUrl?: string | null
   serverId?: string | null
   itemId?: string | null
@@ -82,7 +85,9 @@ export function PlayInPlatformButton({
         window.location.href = `onyx://play?tmdbId=${tmdbId}&type=${mediaType}`
         return
       }
-      await openInNewTab(() => getOnyxLink({ tmdbId, mediaType }))
+      // Id Onyx connu (fiche, médiathèque Onyx) : lien direct, sans recherche par TMDB
+      const onyxId = itemId && /^\d+$/.test(itemId) ? Number(itemId) : undefined
+      await openInNewTab(() => getOnyxLink({ tmdbId, mediaType, onyxId }))
       return
     }
     if (platform.id === 'plex') {

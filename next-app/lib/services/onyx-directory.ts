@@ -153,6 +153,22 @@ export class OnyxDirectory {
   }
 }
 
+/**
+ * Film ou série de la bibliothèque Onyx, par son id Onyx ou par son id TMDB (avec la progression du
+ * compte Onyx `playerId`). Null si Onyx n'est pas configuré ou n'a pas le titre.
+ */
+export async function findOnyxLibraryItem(
+  target: { id: number } | { tmdbId: number; mediaType: 'movie' | 'tv' },
+  playerId?: string | null
+): Promise<OnyxLibraryItem | null> {
+  const directory = await getOnyxDirectory()
+  if (!directory) return null
+  const items = await directory.listLibrary(playerId)
+  if ('id' in target) return items.find((i) => i.id === target.id) ?? null
+  const type = target.mediaType === 'movie' ? 'movie' : 'show'
+  return items.find((i) => i.type === type && i.tmdb_id === target.tmdbId) ?? null
+}
+
 /** Client d'Onyx, ou null sans adresse Onyx ou sans clé d'intégration. */
 export async function getOnyxDirectory(): Promise<OnyxDirectory | null> {
   const config = await getOnyxIntegrationConfig()

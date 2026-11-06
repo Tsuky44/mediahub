@@ -7,7 +7,7 @@ import { Check, Heart, Info, Loader2, Tv } from 'lucide-react'
 import { PlayInPlatformButton } from '@/components/global/PlayInPlatformButton'
 import { getPosterUrl } from '@/components/global/media-card/getPosterUrl'
 import { useMediaCardActions } from '@/components/global/media-card/useMediaCardActions'
-import { getLibraryPreview, type LibraryPreviewData } from '../preview-actions'
+import { getLibraryPreview, getOnyxPreview, type LibraryPreviewData } from '../preview-actions'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -22,16 +22,21 @@ const MARGIN = 12
 // Infos déjà reçues (ou en cours) : un second survol s'ouvre complet aussitôt
 const cache = new Map<string, Promise<LibraryPreviewData | null>>()
 const ready = new Map<string, LibraryPreviewData | null>()
-const load = (embyId: string) => {
-  let pending = cache.get(embyId)
+/** Clé d'aperçu d'un élément : « onyx:ID » pour la médiathèque Onyx, sinon l'id Emby / Jellyfin */
+const previewKey = (item: any): string | null =>
+  item?.onyx_id != null ? `onyx:${item.onyx_id}` : item?.emby_id || item?.id ? String(item.emby_id ?? item.id) : null
+
+const load = (key: string) => {
+  let pending = cache.get(key)
   if (!pending) {
-    pending = getLibraryPreview(embyId).catch(() => null)
-    pending.then((d) => ready.set(embyId, d))
-    cache.set(embyId, pending)
+    // Chaque médiathèque a sa propre source : Onyx ne passe jamais par Emby ou Jellyfin
+    pending = (key.startsWith('onyx:') ? getOnyxPreview(Number(key.slice(5))) : getLibraryPreview(key)).catch(() => null)
+    pending.then((d) => ready.set(key, d))
+    cache.set(key, pending)
     // Oublié au bout d'une minute : la progression a pu changer
     setTimeout(() => {
-      cache.delete(embyId)
-      ready.delete(embyId)
+      cache.delete(key)
+      ready.delete(key)
     }, 60_000)
   }
   return pending
@@ -164,8 +169,8 @@ export function LibraryHoverPreview({ items, children }: { items: any[]; childre
     clear('open', 'fetch', 'close')
     hovered.current = hit.index
     const item = items[hit.index]
-    if (!item?.emby_id && !item?.id) return
-    const embyId = String(item.emby_id ?? item.id)
+    const embyId = previewKey(item)
+    if (!embyId) return
     timers.current.fetch = window.setTimeout(() => void load(embyId), FETCH_MS)
     timers.current.open = window.setTimeout(() => {
       if (hovered.current !== hit.index || !hit.card.isConnected) return

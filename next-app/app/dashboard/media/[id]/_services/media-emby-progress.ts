@@ -2,8 +2,10 @@ import 'server-only'
 import { db } from '@/lib/db/drizzle'
 import { users, userCalendarEvents } from '@/lib/db/schema'
 import { eq, and } from 'drizzle-orm'
-import { findPlayTarget, getMediaServerUserId, getPlexServiceForUser, getUserMediaServer, withLinkedAccounts } from '@/lib/auth'
+import { findPlayTarget, getPlexServiceForUser, withLinkedAccounts } from '@/lib/auth'
+import { getPlatformServer } from '@/lib/auth/service-factories'
 import type { PlaybackPlatformId, PlayTarget } from '@/lib/playback-platform'
+import { findOnyxLibraryItem, type OnyxLibraryItem } from '@/lib/services/onyx-directory'
 import type {
   MediaEmbyProgress,
   MediaType,
@@ -60,28 +62,30 @@ interface ProgressParams {
  *
  * Emby / Jellyfin : le média se retrouve sur le serveur avec lequel l'utilisateur s'est connecté,
  * avec son compte et son adresse. Plex : dans la bibliothèque du serveur Plex (élément ouvert dans
- * l'app Plex). Onyx ouvre son app : il suffit de savoir que le média est dans la bibliothèque.
+ * l'app Plex). Onyx : dans la bibliothèque Onyx (id Onyx, fiche ouverte dans l'app web d'Onyx).
  */
 export async function fetchMediaEmbyProgress(
   params: ProgressParams & { platform: PlaybackPlatformId }
 ): Promise<MediaEmbyProgress> {
   const { platform, ...progressParams } = params
-  const isServerPlatform = platform === 'emby' || platform === 'jellyfin'
 
-  const [progress, serverPlay] = await Promise.all([
-    loadProgress(progressParams),
-    isServerPlatform
-      ? findServerPlay(platform, progressParams)
-      : platform === 'plex'
-        ? findPlexPlay(progressParams)
-        : Promise.resolve(null),
+  // Chaque plateforme se suffit : progression et lecture viennent de la même, jamais d'une autre
+  if (platform === 'onyx') {
+    const [base, onyx] = await Promise.all([loadProgress(progressParams, null), findOnyxPlay(progressParams)])
+    return {
+      ...base,
+      userProgress: onyx ? onyxProgress(onyx) : null,
+      play: onyx ? { serverUrl: null, serverId: null, itemId: String(onyx.id) } : null,
+    }
+  }
+  if (platform === 'plex') {
+    const [base, play] = await Promise.all([loadProgress(progressParams, null), findPlexPlay(progressParams)])
+    return { ...base, play }
+  }
+  const [progress, play] = await Promise.all([
+    loadProgress(progressParams, platform),
+    findServerPlay(platform, progressParams),
   ])
-
-  const play: PlayTarget | null = isServerPlatform || platform === 'plex'
-    ? serverPlay
-    : progress.embyItem
-      ? { serverUrl: null, serverId: progress.embyServerId, itemId: String(progress.embyItem.Id) }
-      : null
   return { ...progress, play }
 }
 
@@ -96,6 +100,43 @@ async function findServerPlay(
   } catch (e) {
     errorLog('Failed to resolve play target', e)
     return null
+  }
+}
+
+/** Titre de la bibliothèque Onyx (avec la progression du compte Onyx), ou null : Onyx non configuré, ou média absent */
+async function findOnyxPlay({ userEmail, tmdbId, mediaType }: ProgressParams): Promise<OnyxLibraryItem | null> {
+  try {
+    const account = userEmail
+      ? await withLinkedAccounts(await db.query.users.findFirst({ where: eq(users.email, userEmail) }))
+      : null
+    return await findOnyxLibraryItem({ tmdbId, mediaType }, account?.onyxUserId)
+  } catch (e) {
+    errorLog('Failed to find Onyx item', e)
+    return null
+  }
+}
+
+/** Progression du compte Onyx sur un titre, au format de la fiche */
+function onyxProgress(item: OnyxLibraryItem): UserProgress | null {
+  if (item.type === 'movie') {
+    const pos = item.current_position_seconds ?? 0
+    if (!item.is_finished && pos <= 0) return null
+    return {
+      played: !!item.is_finished,
+      playedPercentage: item.is_finished ? 100 : item.duration ? Math.min(100, (pos / item.duration) * 100) : 0,
+      unplayedItemCount: 0,
+      // Ticks Emby (100 ns) : le format attendu par la fiche
+      playbackPositionTicks: Math.round(pos * 10_000_000),
+    }
+  }
+  const available = item.available_episode_count ?? 0
+  const watched = item.watched_episode_count ?? 0
+  if (available <= 0 || (watched === 0 && !(item.started_episode_count ?? 0))) return null
+  return {
+    played: watched >= available,
+    playedPercentage: Math.min(100, (watched / available) * 100),
+    unplayedItemCount: Math.max(0, available - watched),
+    totalEpisodes: available,
   }
 }
 
@@ -115,7 +156,10 @@ async function findPlexPlay({ tmdbId, mediaType }: ProgressParams): Promise<Play
  * Recupere la progression Emby (et le statut calendrier) pour l'utilisateur courant.
  * Effectue silencieusement un fallback en cas d'echec sur Emby.
  */
-async function loadProgress(params: ProgressParams): Promise<Omit<MediaEmbyProgress, 'play'>> {
+async function loadProgress(
+  params: ProgressParams,
+  server: 'emby' | 'jellyfin' | null
+): Promise<Omit<MediaEmbyProgress, 'play'>> {
   const { userEmail, tmdbId, mediaType, details } = params
   if (!userEmail) return EMPTY_PROGRESS
 
@@ -134,9 +178,12 @@ async function loadProgress(params: ProgressParams): Promise<Omit<MediaEmbyProgr
   })
   const isInCalendar = !!calendarEvent
 
-  // Serveur de la médiathèque du compte (connexion Jellyfin -> Jellyfin) et compte sur ce serveur
-  const mediaService = await getUserMediaServer()
-  const mediaUserId = getMediaServerUserId(dbUser, mediaService?.flavor)
+  // Onyx, Plex : rien à lire sur Emby ou Jellyfin
+  if (!server) return { ...EMPTY_PROGRESS, isInCalendar }
+
+  // Serveur de la plateforme et compte propre à ce serveur (jamais celui de l'autre)
+  const mediaService = (await getPlatformServer(server))?.service ?? null
+  const mediaUserId = (server === 'jellyfin' ? dbUser.jellyfinUserId : dbUser.embyUserId) ?? null
   if (!mediaUserId) {
     return { ...EMPTY_PROGRESS, isInCalendar }
   }
