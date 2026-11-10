@@ -99,7 +99,7 @@ function itemSize(item: Record<string, unknown>): number {
     return sources.reduce((acc, src) => acc + ((src.Size as number) || 0), 0)
 }
 
-function toTimestamp(value: unknown): number | null {
+export function toTimestamp(value: unknown): number | null {
     if (!value) return null
     const ms = new Date(value as string).getTime()
     return isNaN(ms) ? null : ms
@@ -238,7 +238,7 @@ export function removeFromStorageCache(itemId: string, type: MediaType | 'Season
 
 // --- Dates « Regardé » / « Demandé » ----------------------------------------
 
-interface DateMaps {
+export interface DateMaps {
     lastPlayed: Map<string, string | null>
     requested: Map<string, string | null>
 }
@@ -251,7 +251,15 @@ export function invalidateStorageDates(): void {
     delete dateIndexes.Series
 }
 
-async function buildRequestedDateMap(type: MediaType, rows: LibraryRow[]): Promise<Map<string, string | null>> {
+/**
+ * Date de la dernière demande de chaque média. `matchEmbyItemId` : les ids sont ceux d'Emby (les
+ * demandes en gardent un) ; les ids d'Onyx ne correspondent qu'au TMDB.
+ */
+export async function buildRequestedDateMap(
+    type: MediaType,
+    rows: Array<Pick<LibraryRow, 'id' | 'tmdbId'>>,
+    matchEmbyItemId = true
+): Promise<Map<string, string | null>> {
     const result = new Map<string, string | null>()
     if (!rows.length) return result
 
@@ -271,7 +279,7 @@ async function buildRequestedDateMap(type: MediaType, rows: LibraryRow[]): Promi
     for (const r of requests) {
         const ms = toTimestamp(r.requestedAt)
         if (ms == null) continue
-        if (r.embyItemId) {
+        if (matchEmbyItemId && r.embyItemId) {
             const cur = reqByEmbyId.get(r.embyItemId)
             if (cur === undefined || ms > cur) reqByEmbyId.set(r.embyItemId, ms)
         }
@@ -364,7 +372,7 @@ function toPageItem(type: MediaType, row: LibraryRow): Record<string, unknown> {
         : { ...row.item, _size: row.size, _episodesCount: row.episodesCount }
 }
 
-function pickDates(rows: LibraryRow[], dates: DateMaps) {
+function pickDates(rows: Array<{ id: string }>, dates: DateMaps) {
     const lastPlayed: Record<string, string | null> = {}
     const requested: Record<string, string | null> = {}
     for (const r of rows) {
@@ -374,21 +382,34 @@ function pickDates(rows: LibraryRow[], dates: DateMaps) {
     return { lastPlayed, requested }
 }
 
-/** Tri, filtres et pagination sur toute la bibliothèque (depuis la mémoire). */
-async function fetchLibraryPage(emby: EmbyService, type: MediaType, options: StoragePageOptions): Promise<StoragePageResult> {
+/** Ligne triable et filtrable du stockage, quelle que soit la source (Emby, Onyx). */
+export interface StorageQueryRow {
+    id: string
+    name: string
+    size: number
+    addedMs: number | null
+}
+
+export interface StorageQueryResult<R> {
+    slice: R[]
+    total: number
+    totalSize: number
+    lastPlayed: Record<string, string | null>
+    requested: Record<string, string | null>
+}
+
+/**
+ * Tri, filtres et pagination sur toute la bibliothèque. `libraryDates` n'est lu que si un filtre ou
+ * le tri porte sur une date ; sinon seules les dates de la page sont lues (`pageDates`).
+ */
+export async function queryStorageRows<R extends StorageQueryRow>(
+    library: R[],
+    options: StoragePageOptions,
+    dates: { library: () => Promise<DateMaps>; page: (rows: R[]) => Promise<DateMaps> }
+): Promise<StorageQueryResult<R>> {
     const { filters, page, pageSize } = options
     const sortKey = options.sortKey ?? 'size'
     const sortDir = options.sortDir ?? 'desc'
-
-    let library: LibraryRow[]
-    let episodeToSeries = new Map<string, string>()
-    if (type === 'Movie') {
-        library = await movies.get(emby)
-    } else {
-        const [items, sizes] = await Promise.all([seriesItems.get(emby), seriesSizes.get(emby)])
-        library = seriesRows(items, sizes)
-        episodeToSeries = sizes.episodeToSeries
-    }
 
     const now = Date.now()
     const q = options.search?.trim().toLowerCase()
@@ -400,7 +421,7 @@ async function fetchLibraryPage(emby: EmbyService, type: MediaType, options: Sto
     )
 
     const needsDates = filters.watched.mode !== 'any' || filters.requested.mode !== 'any' || sortKey !== 'size'
-    const libraryDates = needsDates ? await getLibraryDates(type, library, episodeToSeries) : null
+    const libraryDates = needsDates ? await dates.library() : null
 
     if (libraryDates) {
         rows = rows.filter(r =>
@@ -412,20 +433,40 @@ async function fetchLibraryPage(emby: EmbyService, type: MediaType, options: Sto
     if (sortKey === 'size') {
         rows.sort((a, b) => compareSortValues(a.size, b.size, sortDir))
     } else {
-        const dates = sortKey === 'lastPlayed' ? libraryDates!.lastPlayed : libraryDates!.requested
-        rows.sort((a, b) => compareSortValues(sortTimestamp(dates.get(a.id)), sortTimestamp(dates.get(b.id)), sortDir))
+        const sortDates = sortKey === 'lastPlayed' ? libraryDates!.lastPlayed : libraryDates!.requested
+        rows.sort((a, b) => compareSortValues(sortTimestamp(sortDates.get(a.id)), sortTimestamp(sortDates.get(b.id)), sortDir))
     }
 
     let totalSize = 0
     for (const r of rows) totalSize += r.size
 
     const slice = rows.slice((page - 1) * pageSize, page * pageSize)
-    const pageDates = libraryDates ?? await computeDates(type, slice, episodeToSeries)
+    const pageDates = libraryDates ?? await dates.page(slice)
+    return { slice, total: rows.length, totalSize, ...pickDates(slice, pageDates) }
+}
+
+/** Tri, filtres et pagination sur toute la bibliothèque Emby (depuis la mémoire). */
+async function fetchLibraryPage(emby: EmbyService, type: MediaType, options: StoragePageOptions): Promise<StoragePageResult> {
+    let library: LibraryRow[]
+    let episodeToSeries = new Map<string, string>()
+    if (type === 'Movie') {
+        library = await movies.get(emby)
+    } else {
+        const [items, sizes] = await Promise.all([seriesItems.get(emby), seriesSizes.get(emby)])
+        library = seriesRows(items, sizes)
+        episodeToSeries = sizes.episodeToSeries
+    }
+
+    const result = await queryStorageRows(library, options, {
+        library: () => getLibraryDates(type, library, episodeToSeries),
+        page: slice => computeDates(type, slice, episodeToSeries),
+    })
     return {
-        items: slice.map(r => toPageItem(type, r)),
-        total: rows.length,
-        totalSize,
-        ...pickDates(slice, pageDates),
+        items: result.slice.map(r => toPageItem(type, r)),
+        total: result.total,
+        totalSize: result.totalSize,
+        lastPlayed: result.lastPlayed,
+        requested: result.requested,
     }
 }
 

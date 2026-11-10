@@ -64,6 +64,66 @@ export interface OnyxLibraryCounts {
   episodes: number
 }
 
+/** Ligne du gestionnaire de stockage (GET /api/integrations/mediahub/storage, ADR-0114 d'Onyx) */
+export interface OnyxStorageItem {
+  id: number
+  type: 'movie' | 'show'
+  title: string
+  tmdb_id?: number
+  path: string
+  /** Octets ; série : somme de ses épisodes avec fichier */
+  size: number
+  episode_count?: number
+  added_at?: string
+  /** Dernière lecture tous comptes confondus (RFC 3339) */
+  last_played_at?: string
+}
+
+export interface OnyxStorageList {
+  movies: OnyxStorageItem[]
+  shows: OnyxStorageItem[]
+}
+
+export interface OnyxStorageSeason {
+  id: number
+  number: number
+  title: string
+  size: number
+  episode_count: number
+  path: string
+}
+
+export interface OnyxStorageViewer {
+  user_id: number
+  username: string
+  finished: boolean
+  last_played_at?: string
+  position_seconds: number
+  duration_seconds: number
+  watched_episodes?: number
+  total_episodes?: number
+  seasons?: Array<{ number: number; total: number; watched: number }>
+}
+
+/** Détail d'un film ou d'une série (GET /api/integrations/mediahub/storage/:id) */
+export interface OnyxStorageDetails {
+  id: number
+  type: 'movie' | 'show'
+  title: string
+  overview?: string
+  release_date?: string
+  duration?: number
+  path?: string
+  seasons: OnyxStorageSeason[]
+  viewers: OnyxStorageViewer[]
+}
+
+/** Ce que DELETE /api/integrations/mediahub/storage/:id a retiré du disque */
+export interface OnyxDeleteReport {
+  files_removed: number
+  bytes_freed: number
+}
+
 /** État de la liaison vu d'Onyx (GET|PUT /api/integrations/mediahub/link) */
 export interface OnyxLinkState {
   mediahub_url: string
@@ -73,6 +133,8 @@ export interface OnyxLinkState {
 
 const BASE = '/api/integrations/mediahub'
 const TIMEOUT_MS = 15_000
+// Supprimer un dossier sur un partage réseau peut être long
+const DELETE_TIMEOUT_MS = 120_000
 
 // Catalogue entier : Onyx le rend d'un bloc, MediaHub le pagine. Relu en arrière-plan passé 1 min.
 // Une entrée par compte Onyx : la progression diffère d'un compte à l'autre.
@@ -86,7 +148,7 @@ export function isOnyxAdmin(user: Pick<OnyxUser, 'is_owner' | 'permissions'>) {
 export class OnyxDirectory {
   constructor(readonly baseUrl: string, private readonly apiKey: string) {}
 
-  private async request<T>(method: 'GET' | 'PUT', path: string, body?: unknown, playerId?: string): Promise<T> {
+  private async request<T>(method: 'GET' | 'PUT' | 'DELETE', path: string, body?: unknown, playerId?: string): Promise<T> {
     let res: Response
     try {
       res = await fetch(`${this.baseUrl}${BASE}${path}`, {
@@ -97,7 +159,7 @@ export class OnyxDirectory {
           ...(playerId ? { 'X-Player-Id': playerId } : {}),
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(method === 'DELETE' ? DELETE_TIMEOUT_MS : TIMEOUT_MS),
         redirect: 'error',
         cache: 'no-store',
       })
@@ -109,11 +171,12 @@ export class OnyxDirectory {
     if (res.status === 401) {
       throw new OnyxDirectoryError("Onyx refuse la clé d'intégration : enregistrez la même clé dans les réglages d'Onyx (MediaHub)", 401)
     }
-    if (res.status === 404 || res.status === 405) {
+    // Route inconnue d'Onyx : texte brut. Un média introuvable : 404 avec un message JSON.
+    const message = data && typeof data.error === 'string' ? data.error : null
+    if ((res.status === 404 && !message) || res.status === 405) {
       throw new OnyxDirectoryError("Onyx est trop ancien pour la liaison par clé : mettez-le à jour", 404)
     }
-    const message = data && typeof data.error === 'string' ? data.error : `HTTP ${res.status}`
-    throw new OnyxDirectoryError(`Onyx refuse la requête : ${message}`, res.status)
+    throw new OnyxDirectoryError(`Onyx refuse la requête : ${message ?? `HTTP ${res.status}`}`, res.status)
   }
 
   link() {
@@ -136,6 +199,20 @@ export class OnyxDirectory {
   /** Totaux de la bibliothèque (accueil) */
   counts() {
     return this.request<OnyxLibraryCounts>('GET', '/counts')
+  }
+
+  /** Films et séries avec leur taille et leur dernière lecture (gestionnaire de stockage) */
+  storage() {
+    return this.request<OnyxStorageList>('GET', '/storage')
+  }
+
+  storageDetails(id: string | number) {
+    return this.request<OnyxStorageDetails>('GET', `/storage/${encodeURIComponent(String(id))}`)
+  }
+
+  /** Supprime du disque et d'Onyx le film, la série ou la saison */
+  deleteStorage(id: string | number) {
+    return this.request<OnyxDeleteReport>('DELETE', `/storage/${encodeURIComponent(String(id))}`)
   }
 
   /** Films et séries d'Onyx rangés par titre, avec la progression du compte Onyx `playerId` */

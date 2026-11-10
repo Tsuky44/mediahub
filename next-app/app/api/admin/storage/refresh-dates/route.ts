@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getRealUser } from '@/lib/auth'
+import { getLibraryPlatform, getRealUser } from '@/lib/auth'
 import { defineAbilityFor } from '@/lib/ability'
 import { getSetting } from '@/lib/settings'
 import { EmbyService } from '@/lib/services/emby'
@@ -33,6 +33,11 @@ export async function POST(request: Request) {
             }
         } catch {
             // corps vide
+        }
+
+        // Onyx rend la dernière lecture avec sa liste : rien à reconstruire
+        if ((await getLibraryPlatform()) === 'onyx') {
+            return NextResponse.json({ success: true, refreshed: 0, source: 'onyx' })
         }
 
         const embyUrl = await getSetting('emby_url')

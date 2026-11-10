@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getSession } from '@/lib/auth'
+import { getLibraryPlatform, getSession } from '@/lib/auth'
+import { getOnyxDirectory } from '@/lib/services/onyx-directory'
+import { findOnyxStorageId, toItemDetails } from '@/lib/services/storage-onyx'
 import { getSetting } from '@/lib/settings'
 import { EmbyService } from '@/lib/services/emby'
 import { defineAbilityFor } from '@/lib/ability'
@@ -47,6 +49,18 @@ export async function GET(request: Request) {
     let itemId = searchParams.get('itemId')
     const type = searchParams.get('type')
     const tmdbId = searchParams.get('tmdbId')
+
+    // Onyx est la médiathèque : fiche, saisons et activité des comptes viennent d'Onyx
+    if ((await getLibraryPlatform()) === 'onyx') {
+      const onyx = await getOnyxDirectory()
+      if (!onyx) return NextResponse.json({ error: 'Onyx not configured' }, { status: 500 })
+      const mediaType = type === 'Series' || type === 'tv' ? 'Series' : 'Movie'
+      const onyxId = itemId || (tmdbId ? await findOnyxStorageId(onyx, parseInt(tmdbId, 10), mediaType) : null)
+      if (!onyxId) {
+        return NextResponse.json({ error: 'Item ID is required or not found' }, { status: 400 })
+      }
+      return NextResponse.json(toItemDetails(await onyx.storageDetails(onyxId)))
+    }
 
     // Initialize Emby Service
     const embyUrl = await getSetting('emby_url')

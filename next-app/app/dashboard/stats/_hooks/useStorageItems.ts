@@ -292,6 +292,8 @@ export function useStorageItems(
                 type: season ? 'Season' : item.type,
                 deleteFromArr,
                 providerId: item.type === 'Movie' ? item.tmdbId : item.tvdbId,
+                // Onyx n'a pas l'id TVDB : Sonarr retrouve alors la série par son TMDB
+                tmdbId: item.tmdbId,
                 seasonNumber: season ? season.index : undefined,
             }
 
@@ -367,6 +369,7 @@ export function useStorageItems(
                     type: item.type,
                     deleteFromArr,
                     providerId: item.type === 'Movie' ? item.tmdbId : item.tvdbId,
+                    tmdbId: item.tmdbId,
                 }
 
                 const res = await fetch('/api/admin/storage', {

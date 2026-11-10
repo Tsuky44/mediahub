@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getRealUser } from '@/lib/auth'
+import { getLibraryPlatform, getRealUser } from '@/lib/auth'
+import { getOnyxDirectory, type OnyxDirectory } from '@/lib/services/onyx-directory'
+import { fetchOnyxStoragePage, removeFromOnyxStorage } from '@/lib/services/storage-onyx'
 import { EmbyService } from '@/lib/services/emby'
 import { SonarrService } from '@/lib/services/sonarr'
 import { RadarrService } from '@/lib/services/radarr'
@@ -42,6 +44,20 @@ function parseSort(
     return { sortKey, sortDir: dir }
 }
 
+/** Client d'Onyx quand Onyx est la plateforme de la médiathèque, sinon null (Emby/Jellyfin). */
+async function getStorageOnyx(): Promise<OnyxDirectory | null> {
+    if ((await getLibraryPlatform()) !== 'onyx') return null
+    return getOnyxDirectory()
+}
+
+/** Série Sonarr par TVDB (Emby), sinon par TMDB (Onyx ne connaît pas l'id TVDB). */
+async function findSonarrSeries(sonarr: SonarrService, tvdbId?: number, tmdbId?: number) {
+    if (tvdbId) return sonarr.getSeriesByTvdbId(tvdbId)
+    if (!tmdbId) return null
+    const all = await sonarr.getSeries()
+    return all.find(s => s.tmdbId === Number(tmdbId)) ?? null
+}
+
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
@@ -69,6 +85,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const filters = parseFilterParams(searchParams)
+
+    // Onyx est la médiathèque : sa liste à lui, mêmes tri, filtres et pagination qu'avec Emby
+    const onyx = await getStorageOnyx()
+    if (onyx) {
+      const onyxPage = await fetchOnyxStoragePage(onyx, typeFilter, { page, pageSize: limit, search, sortKey, sortDir, filters })
+      const onyxPages = Math.max(1, Math.ceil(onyxPage.total / limit))
+      return NextResponse.json({
+        items: onyxPage.items,
+        totals: onyxPage.totals,
+        cacheReady: { movies: true, series: true, totals: true },
+        pagination: { page, limit, total: onyxPage.total, totalPages: onyxPages, hasMore: page < onyxPages },
+        matchedSize: onyxPage.totalSize,
+      })
+    }
+
     const embyUrl = await getSetting('emby_url')
     const embyApiKey = await getSetting('emby_api_key')
 
@@ -87,7 +119,7 @@ export async function GET(request: Request) {
       search,
       sortKey,
       sortDir,
-      filters: parseFilterParams(searchParams),
+      filters,
     })
 
     const totals = getStorageTotalsIfCached() ?? { all: 0, movies: 0, series: 0 }
@@ -147,23 +179,27 @@ export async function DELETE(request: Request) {
     }
 
     const body = await request.json()
-    const { itemId, type, deleteFromArr, providerId, seasonNumber } = body
+    const { itemId, type, deleteFromArr, providerId, seasonNumber, tmdbId } = body
 
     if (!itemId) {
         return NextResponse.json({ error: 'Item ID is required' }, { status: 400 })
     }
 
-    const embyUrl = await getSetting('emby_url')
-    const embyApiKey = await getSetting('emby_api_key')
-    
-    if (!embyUrl || !embyApiKey) {
-        return NextResponse.json({ error: 'Emby not configured' }, { status: 500 })
+    const onyx = await getStorageOnyx()
+    let embyService: EmbyService | null = null
+    if (!onyx) {
+        const embyUrl = await getSetting('emby_url')
+        const embyApiKey = await getSetting('emby_api_key')
+        if (!embyUrl || !embyApiKey) {
+            return NextResponse.json({ error: 'Emby not configured' }, { status: 500 })
+        }
+        embyService = new EmbyService(embyUrl, embyApiKey)
     }
 
-    const embyService = new EmbyService(embyUrl, embyApiKey)
-
-    const itemInfo = await embyService.getItemDetails(itemId)
+    const itemInfo = embyService ? await embyService.getItemDetails(itemId) : null
     const parentId = itemInfo?.SeriesId || itemInfo?.ParentId
+    // Série : Emby donne son TMDB ; Onyx n'a que celui envoyé par la page
+    const seriesTmdbId = itemInfo?.ProviderIds?.Tmdb ?? tmdbId
 
     if (deleteFromArr) {
         if (type === 'Movie') {
@@ -185,10 +221,10 @@ export async function DELETE(request: Request) {
              const sonarrUrl = await getSetting('sonarr_url')
              const sonarrApiKey = await getSetting('sonarr_api_key')
              
-             if (sonarrUrl && sonarrApiKey && providerId) {
+             if (sonarrUrl && sonarrApiKey && (providerId || tmdbId)) {
                  const sonarrService = new SonarrService(sonarrUrl, sonarrApiKey)
                  try {
-                     const series = await sonarrService.getSeriesByTvdbId(providerId)
+                     const series = await findSonarrSeries(sonarrService, providerId, tmdbId)
                      if (series && series.id) {
                          await sonarrService.deleteSeries(series.id, true)
                      }
@@ -200,10 +236,10 @@ export async function DELETE(request: Request) {
             const sonarrUrl = await getSetting('sonarr_url')
             const sonarrApiKey = await getSetting('sonarr_api_key')
              
-             if (sonarrUrl && sonarrApiKey && providerId && seasonNumber !== undefined) {
+             if (sonarrUrl && sonarrApiKey && (providerId || tmdbId) && seasonNumber !== undefined) {
                  const sonarrService = new SonarrService(sonarrUrl, sonarrApiKey)
                  try {
-                     const series = await sonarrService.getSeriesByTvdbId(providerId)
+                     const series = await findSonarrSeries(sonarrService, providerId, tmdbId)
                      if (series && series.id) {
                          await sonarrService.unmonitorSeason(series.id, seasonNumber)
                          
@@ -227,23 +263,29 @@ export async function DELETE(request: Request) {
         }
     }
 
-    try {
-        if (type === 'Season' && parentId && seasonNumber !== undefined) {
-            await embyService.deleteEpisodesBySeasonNumber(parentId, seasonNumber)
-        }
-        await embyService.deleteItem(itemId)
-    } catch (e) {
-        error('Failed to delete item from Emby:', e)
-    }
-
-    if (parentId) {
-        log(`Refreshing parent item ${parentId} in Emby`)
-        await embyService.refreshItem(parentId)
-    }
-
-    if (type === 'Movie' && providerId) {
+    if (onyx) {
+        // Onyx supprime fichiers et dossier ; un échec se dit, l'élément reste dans la liste
+        await onyx.deleteStorage(itemId)
+    } else if (embyService) {
         try {
-            const tmdbIdStr = String(providerId)
+            if (type === 'Season' && parentId && seasonNumber !== undefined) {
+                await embyService.deleteEpisodesBySeasonNumber(parentId, seasonNumber)
+            }
+            await embyService.deleteItem(itemId)
+        } catch (e) {
+            error('Failed to delete item from Emby:', e)
+        }
+
+        if (parentId) {
+            log(`Refreshing parent item ${parentId} in Emby`)
+            await embyService.refreshItem(parentId)
+        }
+    }
+
+    const movieTmdbId = providerId ?? tmdbId
+    if (type === 'Movie' && movieTmdbId) {
+        try {
+            const tmdbIdStr = String(movieTmdbId)
             await db.delete(mediaRequests).where(eq(mediaRequests.tmdbId, tmdbIdStr))
             await db.delete(episodeBatches).where(eq(episodeBatches.tmdbId, tmdbIdStr))
             try {
@@ -253,10 +295,10 @@ export async function DELETE(request: Request) {
         } catch (e) {
             error('Failed to delete local requests for movie:', e)
         }
-    } else if ((type === 'Series') && providerId) {
+    } else if (type === 'Series' && (providerId || seriesTmdbId)) {
         try {
-            if (itemInfo?.ProviderIds?.Tmdb) {
-                const tmdbIdStr = String(itemInfo.ProviderIds.Tmdb)
+            if (seriesTmdbId) {
+                const tmdbIdStr = String(seriesTmdbId)
                 await db.delete(mediaRequests).where(eq(mediaRequests.tmdbId, tmdbIdStr))
                 await db.delete(episodeBatches).where(eq(episodeBatches.tmdbId, tmdbIdStr))
                 try {
@@ -269,7 +311,8 @@ export async function DELETE(request: Request) {
         }
     }
 
-    removeFromStorageCache(String(itemId), type)
+    if (onyx) removeFromOnyxStorage(String(itemId), type)
+    else removeFromStorageCache(String(itemId), type)
 
     return NextResponse.json({ success: true })
 
