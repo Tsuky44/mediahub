@@ -249,6 +249,19 @@ export class SorraaService {
     return found ? this.call<SorraaMedia>('GET', `/media/${found.id}`) : null
   }
 
+  /**
+   * Retire le titre de la bibliotheque avec ses demandes, ses telechargements et sa recherche.
+   * Sans deleteFiles, les fichiers restent la ou ils sont : celui qui appelle les supprime.
+   */
+  async removeMedia(mediaId: number, opts: { deleteFiles?: boolean } = {}): Promise<void> {
+    await this.call('DELETE', `/media/${mediaId}?deleteFiles=${opts.deleteFiles ? 'true' : 'false'}`)
+  }
+
+  /** La serie reste ; la saison n'est plus cherchee et quitte les demandes. */
+  async removeSeason(mediaId: number, season: number, opts: { deleteFiles?: boolean } = {}): Promise<void> {
+    await this.call('DELETE', `/media/${mediaId}/seasons/${season}?deleteFiles=${opts.deleteFiles ? 'true' : 'false'}`)
+  }
+
   /** Ajoute le titre a la bibliotheque sans rien chercher : la recherche interactive choisira. */
   async addMedia(kind: SorraaKind, tmdbId: number): Promise<SorraaMedia> {
     try {

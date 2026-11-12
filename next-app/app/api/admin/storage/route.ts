@@ -3,13 +3,9 @@ import { getLibraryPlatform, getRealUser } from '@/lib/auth'
 import { getOnyxDirectory, type OnyxDirectory } from '@/lib/services/onyx-directory'
 import { fetchOnyxStoragePage, removeFromOnyxStorage } from '@/lib/services/storage-onyx'
 import { EmbyService } from '@/lib/services/emby'
-import { SonarrService } from '@/lib/services/sonarr'
-import { RadarrService } from '@/lib/services/radarr'
+import { forgetMedia, ForgetError } from '@/lib/services/media-forget'
 import { getSetting } from '@/lib/settings'
 import { defineAbilityFor } from '@/lib/ability'
-import { db } from '@/lib/db/drizzle'
-import { mediaRequests, episodeBatches } from '@/lib/db/schema'
-import { eq } from 'drizzle-orm'
 import type { StorageSortDir, StorageSortKey } from '@/app/dashboard/stats/_types/storage'
 import { parseFilterParams } from '@/app/dashboard/stats/_utils/storage-filters'
 import {
@@ -48,14 +44,6 @@ function parseSort(
 async function getStorageOnyx(): Promise<OnyxDirectory | null> {
     if ((await getLibraryPlatform()) !== 'onyx') return null
     return getOnyxDirectory()
-}
-
-/** Série Sonarr par TVDB (Emby), sinon par TMDB (Onyx ne connaît pas l'id TVDB). */
-async function findSonarrSeries(sonarr: SonarrService, tvdbId?: number, tmdbId?: number) {
-    if (tvdbId) return sonarr.getSeriesByTvdbId(tvdbId)
-    if (!tmdbId) return null
-    const all = await sonarr.getSeries()
-    return all.find(s => s.tmdbId === Number(tmdbId)) ?? null
 }
 
 export const dynamic = 'force-dynamic'
@@ -201,66 +189,23 @@ export async function DELETE(request: Request) {
     // Série : Emby donne son TMDB ; Onyx n'a que celui envoyé par la page
     const seriesTmdbId = itemInfo?.ProviderIds?.Tmdb ?? tmdbId
 
-    if (deleteFromArr) {
-        if (type === 'Movie') {
-            const radarrUrl = await getSetting('radarr_url')
-            const radarrApiKey = await getSetting('radarr_api_key')
-            
-            if (radarrUrl && radarrApiKey && providerId) {
-                const radarrService = new RadarrService(radarrUrl, radarrApiKey)
-                try {
-                    const movie = await radarrService.getMovieByTmdbId(providerId)
-                    if (movie && movie.id) {
-                         await radarrService.deleteMovie(movie.id, true)
-                    }
-                } catch (e) {
-                    error('Failed to delete from Radarr:', e)
-                }
-            }
-        } else if (type === 'Series') {
-             const sonarrUrl = await getSetting('sonarr_url')
-             const sonarrApiKey = await getSetting('sonarr_api_key')
-             
-             if (sonarrUrl && sonarrApiKey && (providerId || tmdbId)) {
-                 const sonarrService = new SonarrService(sonarrUrl, sonarrApiKey)
-                 try {
-                     const series = await findSonarrSeries(sonarrService, providerId, tmdbId)
-                     if (series && series.id) {
-                         await sonarrService.deleteSeries(series.id, true)
-                     }
-                 } catch (e) {
-                     error('Failed to delete Series from Sonarr:', e)
-                 }
-             }
-        } else if (type === 'Season') {
-            const sonarrUrl = await getSetting('sonarr_url')
-            const sonarrApiKey = await getSetting('sonarr_api_key')
-             
-             if (sonarrUrl && sonarrApiKey && (providerId || tmdbId) && seasonNumber !== undefined) {
-                 const sonarrService = new SonarrService(sonarrUrl, sonarrApiKey)
-                 try {
-                     const series = await findSonarrSeries(sonarrService, providerId, tmdbId)
-                     if (series && series.id) {
-                         await sonarrService.unmonitorSeason(series.id, seasonNumber)
-                         
-                         try {
-                             const files = await sonarrService.getEpisodeFiles(series.id)
-                             const seasonFiles = files.filter(f => f.seasonNumber === seasonNumber)
-                             
-                             log(`Deleting ${seasonFiles.length} files for Season ${seasonNumber} of series ${series.title}`)
-                             
-                             for (const file of seasonFiles) {
-                                 await sonarrService.deleteEpisodeFile(file.id)
-                             }
-                         } catch (fileError) {
-                             error('Failed to delete season files:', fileError)
-                         }
-                    }
-                } catch (e) {
-                    error('Failed to unmonitor/delete Season from Sonarr:', e)
-                }
-            }
-        }
+    // Le gestionnaire (sorraa ou Radarr/Sonarr) d'abord : s'il echoue, rien ne part du disque,
+    // sinon il retelechargerait le titre. Les demandes partent avec, qu'on retire du gestionnaire ou non.
+    const forgetType = type === 'Movie' ? 'movie' : 'tv'
+    const forgetTmdbId = Number(type === 'Movie' ? (providerId ?? tmdbId) : seriesTmdbId) || 0
+    try {
+        await forgetMedia({
+            tmdbId: forgetTmdbId,
+            mediaType: forgetType,
+            season: type === 'Season' && seasonNumber !== undefined ? Number(seasonNumber) : undefined,
+            // Onyx efface ses fichiers lui-meme ; avec Emby, le gestionnaire s'en charge
+            deleteFiles: !onyx,
+            tvdbId: type !== 'Movie' && providerId ? Number(providerId) : undefined,
+            skipManager: !deleteFromArr,
+        })
+    } catch (e) {
+        if (e instanceof ForgetError) return NextResponse.json({ error: e.message }, { status: 502 })
+        throw e
     }
 
     if (onyx) {
@@ -279,35 +224,6 @@ export async function DELETE(request: Request) {
         if (parentId) {
             log(`Refreshing parent item ${parentId} in Emby`)
             await embyService.refreshItem(parentId)
-        }
-    }
-
-    const movieTmdbId = providerId ?? tmdbId
-    if (type === 'Movie' && movieTmdbId) {
-        try {
-            const tmdbIdStr = String(movieTmdbId)
-            await db.delete(mediaRequests).where(eq(mediaRequests.tmdbId, tmdbIdStr))
-            await db.delete(episodeBatches).where(eq(episodeBatches.tmdbId, tmdbIdStr))
-            try {
-                const { purgeNotifDedupForTmdbId } = await import('@/lib/notifications-v2/bootstrap')
-                await purgeNotifDedupForTmdbId(tmdbIdStr)
-            } catch (e) { /* ignore */ }
-        } catch (e) {
-            error('Failed to delete local requests for movie:', e)
-        }
-    } else if (type === 'Series' && (providerId || seriesTmdbId)) {
-        try {
-            if (seriesTmdbId) {
-                const tmdbIdStr = String(seriesTmdbId)
-                await db.delete(mediaRequests).where(eq(mediaRequests.tmdbId, tmdbIdStr))
-                await db.delete(episodeBatches).where(eq(episodeBatches.tmdbId, tmdbIdStr))
-                try {
-                    const { purgeNotifDedupForTmdbId } = await import('@/lib/notifications-v2/bootstrap')
-                    await purgeNotifDedupForTmdbId(tmdbIdStr)
-                } catch (e) { /* ignore */ }
-            }
-        } catch (e) {
-            error('Failed to delete local requests for series:', e)
         }
     }
 

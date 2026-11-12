@@ -45,6 +45,7 @@ Erreur : `{ "error": "message", "code": "unauthorized|forbidden|not_found|bad_re
 | `DELETE /requests/:id` | `delete MediaRequest` | Supprime la demande dans MediaHub (Radarr et Sonarr ne sont pas touchés) |
 | `GET /requests/feed?after=<curseur>&limit=` | `read MediaRequest` | Nouvelles demandes de tous les comptes, du plus ancien au plus récent (`request_feed.json`). `cursor` est à repasser dans `after`. Sans `after`, la réponse ne contient que le curseur courant (`requests` vide). Sondage de secours si le webhook manque |
 | `GET /releases?tmdbId=&type=movie\|tv&season=&episode=` | `interactive_search` (sur `Media` ou `Downloads`) | Recherche interactive pour un film, une saison (`season` seule) ou un épisode (`season` et `episode`) : `{ manager, releases }` (`releases.json`, `releases_arr.json`) |
+| `POST /library/removals` | `delete_media` sur `Stats`, ou administrateur | Onyx va supprimer un titre de son disque : `{ tmdbId, mediaType: movie\|tv, season? }`. MediaHub le retire de sorraa ou de Radarr/Sonarr (gestionnaire choisi pour ce type) sans toucher aux fichiers, puis supprime ses demandes (une saison : la saison quitte ses demandes). `{ manager: sorraa\|arr, managerRemoved, requestsRemoved }` ; `502` (`manager_failed`) si le gestionnaire a refusé : Onyx ne supprime alors rien |
 | `POST /releases` | `interactive_search` | Envoie la release choisie au téléchargement (`release_grab.json`, `release_grab_arr.json`). `{ success: true }` |
 
 ### Recherche interactive
