@@ -65,8 +65,8 @@ export default function MediaPrimaryActions({
       {/* Téléphone : « Lire » (ou « Demander »), bande-annonce et menu sur la première
           ligne ; le statut et « Compléter » passent dessous */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-        <div className={canPlay ? 'order-last w-full sm:order-none sm:w-auto' : 'min-w-0 flex-1 sm:flex-none'}>
         <RequestButton
+          className={canPlay ? 'order-last w-full sm:order-none sm:w-auto' : 'min-w-0 flex-1 sm:flex-none'}
           tmdbId={tmdbId}
           mediaType={mediaType}
           title={title}
@@ -79,7 +79,6 @@ export default function MediaPrimaryActions({
           tvdbId={details.external_ids?.tvdb_id}
           platformName={platform.name}
         />
-        </div>
         {play && (
           <div className="min-w-0 flex-1 sm:flex-none">
             <PlayButton

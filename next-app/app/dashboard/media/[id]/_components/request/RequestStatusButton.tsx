@@ -10,7 +10,6 @@ interface RequestStatusButtonProps {
   /** Date de sortie attendue (statut « unreleased ») */
   releaseDate?: string
   phase: OnyxPhase
-  error: string | null
   canRequest: boolean
   hasUnrequestedSeasons: boolean
   isTv: boolean
@@ -51,7 +50,6 @@ export function RequestStatusButton({
   status,
   releaseDate,
   phase,
-  error,
   canRequest,
   hasUnrequestedSeasons,
   isTv,
@@ -120,7 +118,7 @@ export function RequestStatusButton({
 
   const busy = phase === 'sending' || phase === 'done'
   return (
-    <div className="relative w-full sm:w-auto">
+    <div className="w-full sm:w-auto">
       <button
         type="button"
         onClick={onPrimaryClick}
@@ -145,15 +143,26 @@ export function RequestStatusButton({
         </span>
         {phase === 'sending' && <OnyxTrack className="absolute inset-x-8 bottom-1.5" />}
       </button>
-      {phase === 'error' && (
-        // Sous le bouton, hors du flux : les boutons voisins ne bougent pas
-        <p role="alert" className="absolute left-2 top-full mt-2 w-max max-w-[min(24rem,80vw)] text-sm leading-snug animate-fade-in">
-          <span className="font-semibold text-red-300">Demande non envoyée.</span>{' '}
-          <span className="text-gray-400">
-            {error ? `${error}. ` : ''}Rien n&apos;a été ajouté, vous pouvez réessayer.
-          </span>
-        </p>
-      )}
     </div>
+  )
+}
+
+/** Statuts montrés par une pastille : le bouton « Demander » n'est alors pas affiché */
+const PILL_STATUSES = ['partial', 'available', 'unreleased', 'pending', 'processing']
+
+/**
+ * Échec de la demande, à rendre comme élément de la rangée de boutons (frère du bouton).
+ * Dans le flux et sur toute la largeur : il passe seul à la ligne sous les boutons, qui ne
+ * bougent pas, et repousse le contenu suivant au lieu de le recouvrir.
+ */
+export function RequestErrorMessage({ status, phase, error }: { status: string; phase: OnyxPhase; error: string | null }) {
+  if (phase !== 'error' || PILL_STATUSES.includes(status)) return null
+  return (
+    <p role="alert" className="order-last w-full px-2 text-sm leading-snug animate-fade-in sm:-mt-2">
+      <span className="font-semibold text-red-300">Demande non envoyée.</span>{' '}
+      <span className="text-gray-400">
+        {error ? `${error}. ` : ''}Rien n&apos;a été ajouté, vous pouvez réessayer.
+      </span>
+    </p>
   )
 }

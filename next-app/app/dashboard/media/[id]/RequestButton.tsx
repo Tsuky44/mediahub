@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRequestStatus } from './_components/request/useRequestStatus'
-import { RequestStatusButton } from './_components/request/RequestStatusButton'
+import { RequestErrorMessage, RequestStatusButton } from './_components/request/RequestStatusButton'
 import { SeasonSelectorModal } from './_components/SeasonSelectorModal'
 import { useRouter } from 'next/navigation'
 import { requestAllSeasons } from './actions'
@@ -22,6 +22,8 @@ interface RequestButtonProps {
   tvdbId?: number
   /** Plateforme de connexion de l'utilisateur, nommée dans « Disponible sur … » */
   platformName: string
+  /** Place du bouton dans la rangée d'actions (le message d'erreur est rendu à côté, pas dedans) */
+  className?: string
 }
 
 export default function RequestButton({
@@ -36,6 +38,7 @@ export default function RequestButton({
   requestAllSeasonsEnabled = false,
   tvdbId,
   platformName,
+  className,
 }: RequestButtonProps) {
   const router = useRouter()
   const [showStatusModal, setShowStatusModal] = useState(false)
@@ -81,46 +84,48 @@ export default function RequestButton({
 
   return (
     <>
-      <RequestStatusButton
-        status={status}
-        releaseDate={releaseDate}
-        phase={phase}
-        error={error}
-        canRequest={canRequest}
-        hasUnrequestedSeasons={hasUnrequestedSeasons}
-        isTv={isTv}
-        platformName={platformName}
-        onPrimaryClick={handlePrimaryClick}
-        onSeasonClick={() => setShowSeasonModal(true)}
-        onStatusClick={() => setShowStatusModal(true)}
-      />
-      
-      <DownloadStatusModal
-        isOpen={showStatusModal}
-        onClose={() => setShowStatusModal(false)}
-        tmdbId={tmdbId}
-        mediaType={mediaType}
-        tvdbId={tvdbId}
-        title={title}
-        mediaStatus={status}
-        releaseDate={releaseDate}
-      />
-      {isTv && seasons && seasonStatuses && (
-        <SeasonSelectorModal
-          isOpen={showSeasonModal}
-          onClose={() => setShowSeasonModal(false)}
-          title={title}
-          tmdbId={tmdbId}
-          seasons={seasons}
-          seasonStatuses={seasonStatuses}
-          onSuccess={() => {
-            if (status === 'not_available' || status === 'unknown') {
-              setStatus('processing')
-            }
-            router.refresh()
-          }}
+      <div className={className}>
+        <RequestStatusButton
+          status={status}
+          releaseDate={releaseDate}
+          phase={phase}
+          canRequest={canRequest}
+          hasUnrequestedSeasons={hasUnrequestedSeasons}
+          isTv={isTv}
+          platformName={platformName}
+          onPrimaryClick={handlePrimaryClick}
+          onSeasonClick={() => setShowSeasonModal(true)}
+          onStatusClick={() => setShowStatusModal(true)}
         />
-      )}
+
+        <DownloadStatusModal
+          isOpen={showStatusModal}
+          onClose={() => setShowStatusModal(false)}
+          tmdbId={tmdbId}
+          mediaType={mediaType}
+          tvdbId={tvdbId}
+          title={title}
+          mediaStatus={status}
+          releaseDate={releaseDate}
+        />
+        {isTv && seasons && seasonStatuses && (
+          <SeasonSelectorModal
+            isOpen={showSeasonModal}
+            onClose={() => setShowSeasonModal(false)}
+            title={title}
+            tmdbId={tmdbId}
+            seasons={seasons}
+            seasonStatuses={seasonStatuses}
+            onSuccess={() => {
+              if (status === 'not_available' || status === 'unknown') {
+                setStatus('processing')
+              }
+              router.refresh()
+            }}
+          />
+        )}
+      </div>
+      <RequestErrorMessage status={status} phase={phase} error={error} />
     </>
   )
 }
