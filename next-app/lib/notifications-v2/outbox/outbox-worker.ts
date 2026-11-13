@@ -16,6 +16,7 @@ import {
   markDeliveryFailed,
   isEventFullyDispatched,
   markEventDispatched,
+  describeRecipients,
 } from '../store'
 
 const WORKER_INTERVAL_MS = 5000
@@ -153,7 +154,8 @@ export class OutboxWorker {
       const result = await provider.send({ to: delivery.recipient, text, mediaUrl })
 
       if (result.success) {
-        logger.info(`${tag} Sent successfully to ${delivery.recipient} (attempts=${delivery.attempts})`)
+        const [to] = await describeRecipients([delivery.recipient])
+        logger.info(`${tag} Sent successfully to ${to} (attempts=${delivery.attempts})`)
         await markDeliverySent(delivery.id)
 
         // Check if event fully dispatched

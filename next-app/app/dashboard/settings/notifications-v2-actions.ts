@@ -7,6 +7,7 @@ import { ConfigStore } from '@/lib/notifications-v2'
 import type { NotificationsV2Config, NotificationEvent, WebhookConfig } from '@/lib/notifications-v2'
 import { notificationBus, NOTIFICATION_EVENTS } from '@/lib/notifications-v2'
 import { WebhookProvider, DEFAULT_WEBHOOK_PAYLOAD } from '@/lib/notifications-v2/providers/webhook-provider'
+import { maskNumber } from '@/lib/notifications-v2/utils/mask-number'
 
 /** Only admins can manage config. */
 async function assertAdmin() {
@@ -27,7 +28,7 @@ export async function saveNotificationsV2Config(cfg: NotificationsV2Config) {
   await assertAdmin()
   await ConfigStore.save(cfg)
   console.log(
-    `[NotificationsV2][Save] enabled=${cfg.enabled}, evolution.apiUrl=${!!cfg.evolution.apiUrl}, evolution.instance="${cfg.evolution.instance}", defaultNumber="${cfg.evolution.defaultNumber}"`
+    `[NotificationsV2][Save] enabled=${cfg.enabled}, evolution.apiUrl=${!!cfg.evolution.apiUrl}, evolution.instance="${cfg.evolution.instance}", defaultNumber=${maskNumber(cfg.evolution.defaultNumber)}`
   )
   return { success: true }
 }

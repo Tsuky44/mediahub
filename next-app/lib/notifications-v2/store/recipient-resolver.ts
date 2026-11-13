@@ -5,7 +5,8 @@
 
 import { db } from '@/lib/db/drizzle'
 import { users } from '@/lib/db/schema'
-import { inArray, eq } from 'drizzle-orm'
+import { inArray, eq, isNotNull } from 'drizzle-orm'
+import { maskNumber } from '../utils/mask-number'
 import type { ConfigStore } from '../config/config-store'
 import type { NotificationsV2Config, NotificationEvent, RequesterInfo } from '../types'
 
@@ -107,17 +108,42 @@ export async function resolveRecipients(
 
   const logInfo = [
     `targetUserIds=[${route.targetUserIds?.join(',') ?? ''}]`,
-    `targetNumbers=[${route.targetNumbers?.join(',') ?? ''}]`,
+    `targetNumbers=[${route.targetNumbers?.map((n) => maskNumber(n)).join(',') ?? ''}]`,
     `notifyRequester=${route.notifyRequester}`,
     `requesterId=${requesterId ?? ''}`,
     `requesterAlreadyCovered=${requesterAlreadyCovered}`,
     `requesterHasNumber=${!!requesterNumber}`,
     `requesterNumberFromDb=${requesterNumberFromDb}`,
     `fallbackUsed=${usedFallback}`,
-    `resolved=${Array.from(recipients).join(',')}`,
+    `resolved=${(await describeRecipients(recipients)).join(',')}`,
   ].join(' ')
 
   return { recipients, logInfo }
+}
+
+/**
+ * Destinataires pour les logs : numéro masqué suivi de son utilisateur,
+ * ex. `tel:33*******78 (#12 Alice)`, pour retrouver la personne sans afficher le numéro.
+ */
+export async function describeRecipients(numbers: Iterable<string>): Promise<string[]> {
+  const owners = new Map<string, string[]>()
+  try {
+    const withNumber = await db.query.users.findMany({
+      where: isNotNull(users.whatsappNumber),
+      columns: { id: true, name: true, whatsappNumber: true },
+    })
+    for (const u of withNumber) {
+      const key = normalizeNumber(u.whatsappNumber ?? '')
+      if (!key) continue
+      owners.set(key, [...(owners.get(key) ?? []), `#${u.id}${u.name ? ` ${u.name}` : ''}`])
+    }
+  } catch {
+    // Base indisponible : le numéro masqué seul
+  }
+  return Array.from(numbers, (n) => {
+    const who = owners.get(normalizeNumber(n))
+    return `${maskNumber(n)} (${who ? who.join(', ') : 'aucun utilisateur'})`
+  })
 }
 
 /** Normalise un numéro de téléphone : extrait uniquement les chiffres pour une déduplication parfaite. */

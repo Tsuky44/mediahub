@@ -16,6 +16,7 @@ import type {
   SendMessageResult,
 } from '../types'
 import { withRetry } from './retry'
+import { maskNumberIn } from '../utils/mask-number'
 
 export class EvolutionProvider implements MessageProvider {
   readonly name = 'evolution'
@@ -46,7 +47,7 @@ export class EvolutionProvider implements MessageProvider {
           onRetry: (err, attempt, delay) => {
             console.warn(
               `[NotificationsV2][Evolution] Retry ${attempt} in ${delay}ms:`,
-              summarizeError(err)
+              maskNumberIn(summarizeError(err), to)
             )
           },
         }
@@ -56,7 +57,8 @@ export class EvolutionProvider implements MessageProvider {
       return {
         success: false,
         attempts: this.retry.maxAttempts,
-        error: summarizeError(err),
+        // La réponse d'Evolution peut reprendre le numéro : il part dans les logs et en base
+        error: maskNumberIn(summarizeError(err), to),
       }
     }
   }
