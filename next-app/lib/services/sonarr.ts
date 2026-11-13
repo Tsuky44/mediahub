@@ -150,6 +150,22 @@ export interface SonarrQueueItem {
   };
 }
 
+/** Résultat de /series/lookup : la série, ou la raison pour laquelle Sonarr ne l'a pas donnée */
+export type SonarrLookupResult =
+  | { series: SonarrSeries }
+  | { series: null; reason: string; /** Sonarr a répondu, sans aucune série */ notFound?: boolean }
+
+/** Cause d'un échec de /series/lookup, en clair : refus de Sonarr (statut et message) ou Sonarr injoignable */
+function describeLookupFailure(e: unknown): string {
+  const err = e as { response?: { status?: number; data?: unknown }; code?: string; message?: string }
+  if (err.response) {
+    const detail = (err.response.data as { message?: unknown } | null)?.message
+    return `Sonarr a refusé la recherche de la série (erreur ${err.response.status}${detail ? ` : ${String(detail).slice(0, 160)}` : ''})`
+  }
+  if (err.message?.startsWith('Circuit breaker')) return 'Sonarr ne répond plus, nouvel essai possible dans 30 secondes'
+  return `Sonarr ne répond pas (${err.code || err.message || 'erreur réseau'})`
+}
+
 export class SonarrService {
   private client: ReturnType<typeof createAxiosClient>
 
@@ -331,30 +347,38 @@ export class SonarrService {
     }
   }
 
-  async lookupSeriesByTvdbId(tvdbId: number): Promise<SonarrSeries | null> {
+  /** Recherche d'une série par identifiant TVDB ; en cas d'échec, `reason` dit pourquoi (affichable tel quel) */
+  async lookupSeriesByTvdbId(tvdbId: number): Promise<SonarrLookupResult> {
     const client = this.getClient()
-    if (!client) return null
     try {
       const response = await client.get('/series/lookup', {
         params: { term: `tvdb:${tvdbId}` }
       })
       if (!response.data || response.data.length === 0) {
-        return null
+        logger.warn(`[Sonarr] /series/lookup ne renvoie aucune série pour tvdb:${tvdbId}`)
+        return { series: null, notFound: true, reason: `Sonarr ne trouve aucune série pour l'identifiant TVDB ${tvdbId}` }
       }
       // Un corps qui n'est pas la liste JSON attendue (page d'un proxy, JSON tronqué) n'est pas une série
       const series = Array.isArray(response.data) ? response.data[0] : null
       if (!series || typeof series !== 'object') {
         logger.error(`[Sonarr] Réponse inattendue de /series/lookup pour tvdb:${tvdbId} : ${JSON.stringify(response.data).slice(0, 200)}`)
-        return null
+        const isPage = typeof response.data === 'string' && response.data.trimStart().startsWith('<')
+        return {
+          series: null,
+          reason: isPage
+            ? "L'adresse de Sonarr renvoie une page web au lieu de ses données (adresse ou proxy à vérifier dans les réglages)"
+            : 'Sonarr a renvoyé une réponse illisible à la recherche de la série',
+        }
       }
       if (!Array.isArray(series.seasons)) {
         logger.warn(`[Sonarr] /series/lookup pour tvdb:${tvdbId} sans liste de saisons (champs reçus : ${Object.keys(series).join(', ').slice(0, 300)})`)
         series.seasons = []
       }
-      return series as SonarrSeries
+      return { series: series as SonarrSeries }
     } catch (e) {
-      logger.error(`[Sonarr] Failed to lookup series metadata ${tvdbId}:`, (e as Error).message)
-      return null
+      const reason = describeLookupFailure(e)
+      logger.error(`[Sonarr] Failed to lookup series metadata ${tvdbId}: ${reason}`, (e as Error).message)
+      return { series: null, reason }
     }
   }
 
@@ -386,10 +410,11 @@ export class SonarrService {
     // Les écritures Sonarr (ajout + recherche) peuvent être lentes selon l'instance
     const writeTimeout = 60_000
     try {
-      const lookupSeries = await this.lookupSeriesByTvdbId(options.tvdbid)
-      if (!lookupSeries) {
-        return { success: false, message: 'Series not found in Sonarr lookup' }
+      const lookup = await this.lookupSeriesByTvdbId(options.tvdbid)
+      if (!lookup.series) {
+        return { success: false, message: lookup.reason }
       }
+      const lookupSeries = lookup.series
 
       let series: SonarrSeries | null = null
       if (lookupSeries.id && lookupSeries.id > 0) {

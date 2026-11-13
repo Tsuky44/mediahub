@@ -55,8 +55,9 @@ export class ArrDownloadManager implements DownloadManager {
       return { ok: false, status: 500, error: 'Sonarr configuration incomplete (profiles/root folders missing)' }
     }
 
-    const lookup = await sonarrService.lookupSeriesByTvdbId(tvdbId)
-    if (!lookup) return { ok: false, status: 404, error: 'Series not found in Sonarr lookup' }
+    const found = await sonarrService.lookupSeriesByTvdbId(tvdbId)
+    if (!found.series) return { ok: false, status: found.notFound ? 404 : 502, error: found.reason }
+    const lookup = found.series
     const allSeasons = (lookup.seasons ?? []).map((s: { seasonNumber: number }) => s.seasonNumber)
 
     let seasonsToRequest: number[] = []
