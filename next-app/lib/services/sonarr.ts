@@ -341,7 +341,17 @@ export class SonarrService {
       if (!response.data || response.data.length === 0) {
         return null
       }
-      return response.data[0] as SonarrSeries
+      // Un corps qui n'est pas la liste JSON attendue (page d'un proxy, JSON tronqué) n'est pas une série
+      const series = Array.isArray(response.data) ? response.data[0] : null
+      if (!series || typeof series !== 'object') {
+        logger.error(`[Sonarr] Réponse inattendue de /series/lookup pour tvdb:${tvdbId} : ${JSON.stringify(response.data).slice(0, 200)}`)
+        return null
+      }
+      if (!Array.isArray(series.seasons)) {
+        logger.warn(`[Sonarr] /series/lookup pour tvdb:${tvdbId} sans liste de saisons (champs reçus : ${Object.keys(series).join(', ').slice(0, 300)})`)
+        series.seasons = []
+      }
+      return series as SonarrSeries
     } catch (e) {
       logger.error(`[Sonarr] Failed to lookup series metadata ${tvdbId}:`, (e as Error).message)
       return null

@@ -57,7 +57,7 @@ export class ArrDownloadManager implements DownloadManager {
 
     const lookup = await sonarrService.lookupSeriesByTvdbId(tvdbId)
     if (!lookup) return { ok: false, status: 404, error: 'Series not found in Sonarr lookup' }
-    const allSeasons = lookup.seasons.map((s: { seasonNumber: number }) => s.seasonNumber)
+    const allSeasons = (lookup.seasons ?? []).map((s: { seasonNumber: number }) => s.seasonNumber)
 
     let seasonsToRequest: number[] = []
     if (seasons && seasons.length > 0) {

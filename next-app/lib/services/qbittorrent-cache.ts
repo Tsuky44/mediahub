@@ -60,6 +60,20 @@ const SLOW_REFRESH_INTERVAL_MS = 60_000
 /** qBittorrent injoignable : les tentatives s'espacent (x2 à chaque échec) jusqu'à 5 min */
 const MAX_BACKOFF_MS = 5 * 60_000
 
+/** sync/maindata illisible : torrents/info prend le relais, maindata est retenté 1 tour sur 12 */
+const MAINDATA_RETRY_TICKS = 12
+
+/** Ce que qBittorrent a renvoyé à la place de l'objet JSON attendu (taille, cause, début du corps) */
+function describePayload(data: unknown): string {
+  if (typeof data !== 'string') return `type ${typeof data}`
+  const trimmed = data.trim()
+  let cause = 'pas du JSON'
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try { JSON.parse(data) } catch (e) { cause = `JSON invalide : ${(e as Error).message.slice(0, 200)}` }
+  }
+  return `${data.length} caractères, ${cause}, début : ${JSON.stringify(trimmed.slice(0, 200))}`
+}
+
 /** Cause lisible d'un échec (statut HTTP ou code réseau) */
 function describeFailure(err: unknown): string {
   if (axios.isAxiosError(err)) {
@@ -75,6 +89,8 @@ export class QBittorrentCache {
   private fastIntervalMs = DEFAULT_POLL_INTERVAL_MS
   /** Échecs consécutifs (qBittorrent injoignable) */
   private failures = 0
+  /** Tours écoulés depuis que sync/maindata renvoie autre chose qu'un objet JSON (0 = lisible) */
+  private badPayloads = 0
   /** Boucle en cours : une boucle d'avant un stop()/start() s'arrête d'elle-même */
   private loop = 0
   private slowTimer: NodeJS.Timeout | null = null
@@ -244,6 +260,11 @@ export class QBittorrentCache {
       }
       if (!qbt) return
 
+      if (this.badPayloads && this.badPayloads++ % MAINDATA_RETRY_TICKS !== 0) {
+        await this.refreshFromTorrentList(qbt)
+        return
+      }
+
       let data
       try { data = await qbt.getSyncMainData(this.state.rid) }
       catch (err) {
@@ -264,9 +285,20 @@ export class QBittorrentCache {
       this.markSuccess()
       if (!data) return
       if (typeof data !== 'object') {
-        logger.error('[QBittorrentCache] fastTick: unexpected non-object response, resetting rid')
+        // Un seul message par épisode (pas un par tour), un autre au retour
+        if (!this.badPayloads) {
+          this.badPayloads = 1
+          logger.warn(
+            `[QBittorrentCache] sync/maindata illisible (${describePayload(data)}) : torrents lus via torrents/info en attendant, message non répété jusqu'au retour`
+          )
+        }
         this.state.rid = 0
+        await this.refreshFromTorrentList(qbt)
         return
+      }
+      if (this.badPayloads) {
+        this.badPayloads = 0
+        logger.info('[QBittorrentCache] sync/maindata de nouveau lisible')
       }
 
       try { this.updateMainData(data) } catch (e) { logger.error('[QBittorrentCache] updateMainData error:', e) }
@@ -275,6 +307,26 @@ export class QBittorrentCache {
     } finally {
       this.isFastTicking = false
     }
+  }
+
+  /** Secours quand sync/maindata est illisible : liste complète via torrents/info */
+  private async refreshFromTorrentList(qbt: NonNullable<typeof this.qbtService>): Promise<void> {
+    let list
+    try { list = await qbt.getTorrents('all') }
+    catch (err) {
+      this.markFailure(err)
+      return
+    }
+    this.markSuccess()
+    if (!Array.isArray(list)) return
+
+    const torrents: Record<string, Torrent> = {}
+    for (const t of list) {
+      if (t?.hash) torrents[t.hash] = normalizeTorrent(t.hash, t as unknown as Record<string, unknown>)
+    }
+    this.state.torrents = torrents
+    this.state.lastUpdate = Date.now()
+    this.notifyListeners()
   }
 
   private updateMainData(data: Record<string, unknown>): void {
