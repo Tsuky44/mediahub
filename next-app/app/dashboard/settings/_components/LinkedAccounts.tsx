@@ -31,7 +31,7 @@ export default function LinkedAccounts() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h3 className="text-xl font-bold text-white">Comptes Liés</h3>
                     <p className="text-gray-400 text-sm mt-1">
@@ -40,7 +40,7 @@ export default function LinkedAccounts() {
                 </div>
                 <button
                     onClick={() => setCreating(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
+                    className="flex min-h-11 shrink-0 items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors"
                 >
                     <Plus size={18} />
                     Nouveau Groupe

@@ -32,7 +32,8 @@ export default function SettingsTabsNav({
                 <button
                     type="button"
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    className="w-full flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-left shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    aria-expanded={isMobileMenuOpen}
+                    className="w-full flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-left shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                     <div className="flex items-center gap-3">
                         {ActiveIcon && <ActiveIcon size={20} className="text-indigo-400" />}
@@ -50,7 +51,7 @@ export default function SettingsTabsNav({
                             className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm" 
                             onClick={() => setIsMobileMenuOpen(false)}
                         />
-                        <div className="absolute left-0 right-0 mt-2 z-40 bg-gray-900 border border-white/10 rounded-2xl shadow-2xl p-2 max-h-[70vh] overflow-y-auto space-y-4">
+                        <div className="absolute left-0 right-0 mt-2 z-40 bg-gray-900 border border-white/10 rounded-2xl shadow-2xl p-2 max-h-[calc(100dvh-10rem)] overflow-y-auto overscroll-contain space-y-4">
                             {SETTINGS_CATEGORIES.map(category => {
                                 // Filter tabs user actually has permission to see
                                 const visibleTabs = category.tabs.filter(tabId => {
@@ -99,7 +100,7 @@ export default function SettingsTabsNav({
             </div>
 
             {/* Desktop Vertical Sidebar */}
-            <div className="hidden lg:flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-2xl p-4 shadow-xl">
+            <div className="hidden lg:flex flex-col gap-6 bg-white/[0.02] border border-white/5 rounded-2xl p-4 shadow-xl max-h-[calc(100vh-11rem)] overflow-y-auto">
                 {SETTINGS_CATEGORIES.map(category => {
                     const visibleTabs = category.tabs.filter(tabId => {
                         const def = SETTINGS_TABS.find(t => t.id === tabId)

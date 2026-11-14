@@ -8,7 +8,7 @@ interface RoleListHeaderProps {
 
 export function RoleListHeader({ onAdd }: RoleListHeaderProps) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h3 className="text-xl font-bold text-white flex items-center gap-2">
           <Shield className="w-5 h-5 text-indigo-400" />
@@ -20,7 +20,7 @@ export function RoleListHeader({ onAdd }: RoleListHeaderProps) {
       </div>
       <button
         onClick={onAdd}
-        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-500/20"
+        className="flex min-h-11 shrink-0 items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-500/20"
       >
         <Plus size={16} />
         Nouveau rôle

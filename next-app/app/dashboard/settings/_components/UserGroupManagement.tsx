@@ -25,7 +25,7 @@ export default function UserGroupManagement({ initialGroups, users, roles }: Use
     } = useUserGroups(initialGroups)
 
     return (
-        <div className="flex flex-col md:flex-row gap-6 min-h-[600px]">
+        <div className="flex flex-col md:flex-row gap-6 md:min-h-[600px]">
             <UserGroupList
                 groups={groups}
                 roles={roles}
@@ -46,7 +46,7 @@ export default function UserGroupManagement({ initialGroups, users, roles }: Use
                         onRemoveMember={removeMember}
                     />
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
+                    <div className="flex-1 flex flex-col items-center justify-center py-8 text-center text-gray-500 max-md:hidden">
                         <Users className="w-16 h-16 mb-4 opacity-20" />
                         <p>Sélectionnez un groupe pour voir les détails</p>
                     </div>

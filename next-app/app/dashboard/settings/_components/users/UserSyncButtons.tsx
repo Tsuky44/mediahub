@@ -29,7 +29,7 @@ const SYNC_BUTTONS: SyncButtonConfig[] = [
  */
 export function UserSyncButtons({ syncingProvider, readOnly, onSync, onOpenCreate }: UserSyncButtonsProps) {
     return (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 [&>button]:min-h-10 [&>button]:justify-center max-sm:grid max-sm:grid-cols-2 max-sm:[&>button:first-child]:col-span-2">
             <button
                 onClick={onOpenCreate}
                 disabled={readOnly}

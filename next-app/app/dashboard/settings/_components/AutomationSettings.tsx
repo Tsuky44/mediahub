@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { KeyRound, Copy, Check, RefreshCw } from 'lucide-react'
 import { ArrSection } from './automation-settings/ArrSection'
-import { SectionHeader } from './SharedComponents'
+import { SectionHeader, SECTIONS_GRID, SECTION_WIDE } from './SharedComponents'
 import { SettingsFormData } from './types'
 
 interface Props {
@@ -58,7 +58,7 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
     ]
 
     return (
-        <div className="space-y-6">
+        <div className={SECTIONS_GRID}>
             <ArrSection
                 title="Radarr"
                 description="Automatisation des films"
@@ -82,7 +82,7 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
             />
 
             {/* Section Webhooks Entrants sécurisés */}
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
+            <div className={`rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl ${SECTION_WIDE}`}>
                 <SectionHeader 
                     icon={KeyRound} 
                     title="Authentification des Webhooks Entrants" 

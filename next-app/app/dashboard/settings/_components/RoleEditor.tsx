@@ -97,7 +97,7 @@ export default function RoleEditor({ role, onSave, onCancel }: RoleEditorProps) 
                 <div className="border-t border-white/10 pt-6">
                     <RoleTabsNav tabs={ROLE_TABS} activeTab={activeTab} onChange={setActiveTab} />
 
-                    <div className="bg-black/20 rounded-xl p-6 min-h-[200px] border border-white/5">
+                    <div className="bg-black/20 rounded-xl p-4 sm:p-6 min-h-[200px] border border-white/5">
                         {currentTabConfig ? (
                             <RolePermissionsPanel
                                 tab={currentTabConfig}

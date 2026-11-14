@@ -16,7 +16,7 @@ interface EmbySettingsProps {
 
 export function EmbySettings({ formData, updateField, loading, result, onTest, readOnly }: EmbySettingsProps) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
+    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl">
       <SectionHeader icon={Tv} title="Emby" description="Configuration du serveur Emby principal" />
       <div className="mb-6">
         <CheckboxField

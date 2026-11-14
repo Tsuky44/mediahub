@@ -2,6 +2,11 @@ import { LucideIcon, Loader2, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-
 import clsx from 'clsx'
 import { useState } from 'react'
 
+/** Liste de sections d'un onglet : une colonne, deux sur très grand écran pour occuper la largeur */
+export const SECTIONS_GRID = 'grid items-start gap-4 sm:gap-6 2xl:grid-cols-2 [&>*]:min-w-0'
+/** Section qui garde toute la largeur de la grille */
+export const SECTION_WIDE = '2xl:col-span-2'
+
 export interface InputFieldProps {
     label: string
     value: string
@@ -78,10 +83,13 @@ export const CheckboxField = ({
         </div>
         <button
             type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-label={label}
             disabled={readOnly}
             onClick={() => onChange(!checked)}
             className={clsx(
-                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-950 disabled:opacity-50 disabled:cursor-not-allowed",
+                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out before:absolute before:-inset-3 before:content-[''] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-950 disabled:opacity-50 disabled:cursor-not-allowed",
                 checked ? "bg-indigo-600" : "bg-white/10"
             )}
         >
@@ -96,11 +104,11 @@ export const CheckboxField = ({
 )
 
 export const SectionHeader = ({ icon: Icon, title, description }: { icon: LucideIcon, title: string, description: string }) => (
-    <div className="mb-6 flex items-start gap-4 border-b border-white/5 pb-5">
-        <div className="rounded-xl bg-indigo-500/10 p-3 text-indigo-400 border border-indigo-500/10 shadow-inner shrink-0">
-            <Icon className="h-6 w-6" />
+    <div className="mb-4 flex items-start gap-3 border-b border-white/5 pb-4 sm:mb-6 sm:gap-4 sm:pb-5">
+        <div className="rounded-xl bg-indigo-500/10 p-2.5 text-indigo-400 border border-indigo-500/10 shadow-inner shrink-0 sm:p-3">
+            <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
         </div>
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
             <h2 className="text-lg font-bold text-white tracking-wide">{title}</h2>
             <p className="text-sm text-white/60 leading-relaxed">{description}</p>
         </div>
@@ -128,7 +136,7 @@ export const TestButton = ({
             type="button"
             onClick={onClick}
             disabled={loading}
-            className="flex items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10 active:scale-95 disabled:opacity-50 transition-all duration-200"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10 active:scale-95 disabled:opacity-50 transition-all duration-200"
         >
             {loading ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : null}
             {label}

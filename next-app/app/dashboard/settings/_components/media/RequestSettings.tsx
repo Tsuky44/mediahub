@@ -12,7 +12,7 @@ interface RequestSettingsProps {
 
 export function RequestSettings({ formData, updateField, readOnly }: RequestSettingsProps) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
+    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl">
       <SectionHeader
         icon={FileQuestion}
         title="Demandes de médias"

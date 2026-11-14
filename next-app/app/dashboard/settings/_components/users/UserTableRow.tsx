@@ -47,7 +47,7 @@ function NotificationsBadges({ user, readOnly, onEdit }: { user: User; readOnly:
     const hasAny = user.whatsappNumber || user.telegramChatId || user.discordUserId || user.discordWebhook || user.customWebhook
     return (
         <div
-            className="flex gap-1 flex-wrap cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
+            className="flex min-h-8 items-center gap-1 flex-wrap cursor-pointer hover:bg-white/5 p-1 rounded transition-colors"
             onClick={() => !readOnly && onEdit()}
             title={readOnly ? '' : 'Cliquez pour modifier les notifications de cet utilisateur'}
         >
@@ -67,9 +67,53 @@ function NotificationsBadges({ user, readOnly, onEdit }: { user: User; readOnly:
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" title="Configuré">Webhook</span>
             )}
             {!hasAny && (
-                <span className="text-xs text-gray-600 hover:text-gray-400">Ajouter...</span>
+                <span className="text-xs text-gray-500 hover:text-gray-300">Ajouter...</span>
             )}
         </div>
+    )
+}
+
+function UserAvatar({ user }: { user: User }) {
+    return (
+        <div className="relative size-10 shrink-0 overflow-hidden rounded-full bg-gray-700">
+            {user.image ? (
+                <Image src={user.image} alt={user.name || ''} fill className="object-cover" />
+            ) : (
+                <div className="flex size-full items-center justify-center font-bold text-gray-400">
+                    {user.name?.[0]?.toUpperCase()}
+                </div>
+            )}
+        </div>
+    )
+}
+
+function RoleSelect({ user, roles, disabled, onChange, className }: {
+    user: User
+    roles: UserRole[]
+    disabled: boolean
+    onChange: (value: string) => void
+    className?: string
+}) {
+    return (
+        <select
+            value={user.role === 'admin' ? 'admin' : (user.roleId || '')}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            aria-label={`Rôle de ${user.name}`}
+            className={`bg-black/20 border border-white/10 rounded-lg px-3 text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 ${className ?? ''}`}
+        >
+            <option value="">Aucun rôle</option>
+            <optgroup label="Système">
+                <option value="admin">Administrateur (Accès complet)</option>
+            </optgroup>
+            {roles.length > 0 && (
+                <optgroup label="Rôles personnalisés">
+                    {roles.map(role => (
+                        <option key={role.id} value={role.id}>{role.name}</option>
+                    ))}
+                </optgroup>
+            )}
+        </select>
     )
 }
 
@@ -96,25 +140,17 @@ export function UserTableRow({
                     className="rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
                 />
             </td>
-            <td className="py-4">
+            <td className="py-4 pr-4">
                 <div className="flex items-center gap-3">
-                    <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-700">
-                        {user.image ? (
-                            <Image src={user.image} alt={user.name || ''} fill className="object-cover" />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold">
-                                {user.name?.[0]?.toUpperCase()}
-                            </div>
-                        )}
-                    </div>
+                    <UserAvatar user={user} />
                     <span className="font-medium text-white">{user.name}</span>
                 </div>
             </td>
-            <td className="py-4 text-gray-300">{user.email}</td>
-            <td className="py-4">
+            <td className="py-4 pr-4 text-gray-300">{user.email}</td>
+            <td className="py-4 pr-4">
                 <ProviderBadges user={user} />
             </td>
-            <td className="py-4">
+            <td className="py-4 pr-4">
                 {isEditingNotifications ? (
                     <NotificationsEditor user={user} onUpdate={onUpdateNotification} onStop={onStopEditNotifications} />
                 ) : (
@@ -122,25 +158,71 @@ export function UserTableRow({
                 )}
             </td>
             <td className="py-4 pr-6">
-                <select
-                    value={user.role === 'admin' ? 'admin' : (user.roleId || '')}
-                    onChange={(e) => onRoleChange(e.target.value)}
+                <RoleSelect
+                    user={user}
+                    roles={roles}
                     disabled={readOnly || isUpdating}
-                    className="bg-black/20 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 min-w-[200px]"
-                >
-                    <option value="">Aucun rôle</option>
-                    <optgroup label="Système">
-                        <option value="admin">Administrateur (Accès complet)</option>
-                    </optgroup>
-                    {roles.length > 0 && (
-                        <optgroup label="Rôles personnalisés">
-                            {roles.map(role => (
-                                <option key={role.id} value={role.id}>{role.name}</option>
-                            ))}
-                        </optgroup>
-                    )}
-                </select>
+                    onChange={onRoleChange}
+                    className="min-w-[200px] py-1.5"
+                />
             </td>
         </tr>
+    )
+}
+
+/** Même utilisateur en carte, pour téléphone : tout tient dans la largeur, sans défilement horizontal */
+export function UserMobileCard({
+    user,
+    roles,
+    isSelected,
+    isUpdating,
+    readOnly,
+    isEditingNotifications,
+    onToggleSelect,
+    onRoleChange,
+    onStartEditNotifications,
+    onStopEditNotifications,
+    onUpdateNotification,
+}: UserTableRowProps) {
+    return (
+        <li className={`space-y-3 p-4 ${isSelected ? 'bg-indigo-500/5' : ''}`}>
+            <div className="flex items-center gap-3">
+                <UserAvatar user={user} />
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                        <span className="truncate font-medium text-white">{user.name}</span>
+                        <ProviderBadges user={user} />
+                    </div>
+                    <p className="truncate text-sm text-gray-400">{user.email}</p>
+                </div>
+                {/* Zone tactile de 44 px autour de la case */}
+                <label className="-mr-2 flex size-11 shrink-0 cursor-pointer items-center justify-center">
+                    <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={onToggleSelect}
+                        aria-label={`Sélectionner ${user.name}`}
+                        className="size-5 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
+                    />
+                </label>
+            </div>
+            <RoleSelect
+                user={user}
+                roles={roles}
+                disabled={readOnly || isUpdating}
+                onChange={onRoleChange}
+                className="min-h-11 w-full py-2"
+            />
+            <div className="flex items-start gap-2">
+                <span className="pt-1.5 text-xs text-gray-500">Notifications</span>
+                <div className="min-w-0 flex-1">
+                    {isEditingNotifications ? (
+                        <NotificationsEditor user={user} onUpdate={onUpdateNotification} onStop={onStopEditNotifications} />
+                    ) : (
+                        <NotificationsBadges user={user} readOnly={readOnly} onEdit={onStartEditNotifications} />
+                    )}
+                </div>
+            </div>
+        </li>
     )
 }

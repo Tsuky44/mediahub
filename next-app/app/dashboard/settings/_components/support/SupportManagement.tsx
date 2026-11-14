@@ -11,9 +11,9 @@ export default function SupportManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-xl font-bold text-white">Support & Tickets</h3>
-        <div className="flex bg-white/5 rounded-lg p-1 border border-white/10">
+        <div className="flex bg-white/5 rounded-lg p-1 border border-white/10 [&>button]:min-h-10 [&>button]:flex-1">
           <button
             onClick={() => setSubTab('categories')}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${

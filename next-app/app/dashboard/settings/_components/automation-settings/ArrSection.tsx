@@ -23,7 +23,7 @@ export function ArrSection({
   placeholder,
 }: ArrSectionProps) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
+    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl">
       <SectionHeader icon={Bot} title={title} description={description} />
       <div className="grid gap-6 md:grid-cols-2">
         <InputField

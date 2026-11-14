@@ -16,7 +16,7 @@ export function DefaultRoleSelector({
   onSetDefault,
 }: DefaultRoleSelectorProps) {
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-6">
+    <div className="bg-white/5 rounded-xl border border-white/10 p-4 sm:p-6">
       <h3 className="text-xl font-bold text-white mb-4">Rôle par défaut</h3>
       <p className="text-gray-400 mb-4">
         Le rôle par défaut est attribué aux nouveaux utilisateurs.

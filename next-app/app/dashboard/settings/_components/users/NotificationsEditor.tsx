@@ -11,7 +11,7 @@ interface NotificationsEditorProps {
 /** Formulaire inline d'edition des notifications (onBlur pour chaque champ). */
 export function NotificationsEditor({ user, onUpdate, onStop }: NotificationsEditorProps) {
     return (
-        <div className="flex flex-col gap-2 min-w-[200px]">
+        <div className="flex flex-col gap-2 min-w-[200px] max-md:[&>input]:min-h-10 max-md:[&>input]:px-3 max-md:[&>button]:min-h-9">
             <input
                 type="text"
                 placeholder="WhatsApp (ex: +33612...)"

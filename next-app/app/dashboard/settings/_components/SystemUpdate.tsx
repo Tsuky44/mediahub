@@ -49,8 +49,8 @@ export const SystemUpdate = () => {
     }, [updating])
 
     return (
-        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl mt-6 space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl space-y-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
                         <RefreshCw size={24} />
@@ -65,7 +65,7 @@ export const SystemUpdate = () => {
                     <button
                         onClick={() => checkUpdate(true)}
                         disabled={loading || updating}
-                        className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer text-sm"
+                        className="px-4 py-2 min-h-11 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer text-sm"
                     >
                         {loading ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
                         Vérifier

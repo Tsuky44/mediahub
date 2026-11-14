@@ -45,7 +45,7 @@ export function BackupExportCard({
     }[color]
 
     return (
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 sm:p-6">
             <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                 <Download className={iconColor} />
                 {title}

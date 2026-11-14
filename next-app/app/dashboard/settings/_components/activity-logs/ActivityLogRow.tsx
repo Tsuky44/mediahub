@@ -29,7 +29,7 @@ export default function ActivityLogRow({ log }: ActivityLogRowProps) {
     const browser = formatUserAgent(log.userAgent || (typeof details.userAgent === 'string' ? details.userAgent : null))
 
     return (
-        <tr className="hover:bg-white/5 transition-colors">
+        <tr className="hover:bg-white/5 transition-colors max-md:grid max-md:grid-cols-[minmax(0,1fr)_auto] max-md:items-center max-md:gap-x-3 max-md:gap-y-2 max-md:px-4 max-md:py-3 max-md:[&>td]:p-0">
             <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
                     {log.user?.image ? (
@@ -67,8 +67,8 @@ export default function ActivityLogRow({ log }: ActivityLogRowProps) {
                     {getActionLabel(log.action)}
                 </span>
             </td>
-            <td className="px-4 py-3 text-gray-300 max-w-md">
-                <p className="truncate" title={formatLogDetails(log, details)}>
+            <td className="px-4 py-3 text-gray-300 max-w-md max-md:col-span-2 max-md:max-w-none">
+                <p className="truncate max-md:whitespace-normal max-md:break-words" title={formatLogDetails(log, details)}>
                     {formatLogDetails(log, details)}
                 </p>
             </td>
@@ -81,7 +81,7 @@ export default function ActivityLogRow({ log }: ActivityLogRowProps) {
                     </p>
                 )}
             </td>
-            <td className="px-4 py-3 text-gray-400 whitespace-nowrap">
+            <td className="px-4 py-3 text-gray-400 whitespace-nowrap max-md:text-right max-md:text-xs">
                 {format(new Date(log.createdAt), "d MMM yyyy 'à' HH:mm", { locale: fr })}
             </td>
         </tr>

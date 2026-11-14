@@ -19,8 +19,8 @@ export default function SettingsForm({ settings, readOnly = false }: SettingsFor
     useSettingsForm(settings)
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
-      <div className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+      <div>
         {activeTab === 'media' && <MediaSettings formData={formData} updateField={updateField} readOnly={readOnly} />}
         {activeTab === 'downloads' && (
           <DownloadSettings formData={formData} updateField={updateField} readOnly={readOnly} />
@@ -36,7 +36,9 @@ export default function SettingsForm({ settings, readOnly = false }: SettingsFor
         )}
       </div>
 
-      <SettingsFormFooter readOnly={readOnly} loading={loading} statusMessage={statusMessage} />
+      {activeTab !== 'maintenance' && (
+        <SettingsFormFooter readOnly={readOnly} loading={loading} statusMessage={statusMessage} />
+      )}
     </form>
   )
 }

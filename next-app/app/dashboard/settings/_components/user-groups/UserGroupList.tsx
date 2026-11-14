@@ -74,7 +74,7 @@ export function UserGroupList({ groups, roles, selectedGroupId, onSelect, onCrea
     }
 
     return (
-        <div className="w-full md:w-1/3 flex flex-col gap-4 border-r border-white/10 pr-6">
+        <div className="w-full md:w-1/3 md:max-w-sm flex flex-col gap-4 border-white/10 max-md:border-b max-md:pb-6 md:border-r md:pr-6">
             <div className="flex items-center justify-between mb-2">
                 <h3 className="text-xl font-bold text-white flex items-center gap-2">
                     <Users className="w-5 h-5 text-indigo-400" />
@@ -82,8 +82,9 @@ export function UserGroupList({ groups, roles, selectedGroupId, onSelect, onCrea
                 </h3>
                 <button
                     onClick={() => setIsCreating(true)}
-                    className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+                    className="flex size-11 items-center justify-center bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
                     title="Créer un groupe"
+                    aria-label="Créer un groupe"
                 >
                     <Plus className="w-4 h-4" />
                 </button>
@@ -97,7 +98,7 @@ export function UserGroupList({ groups, roles, selectedGroupId, onSelect, onCrea
                 />
             )}
 
-            <div className="flex flex-col gap-2 overflow-y-auto max-h-[500px]">
+            <div className="flex flex-col gap-2 overflow-y-auto md:max-h-[500px]">
                 {groups.length === 0 && !isCreating && (
                     <div className="text-center py-8 text-gray-500 text-sm italic">Aucun groupe créé</div>
                 )}

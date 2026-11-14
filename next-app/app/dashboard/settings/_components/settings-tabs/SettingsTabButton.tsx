@@ -22,9 +22,11 @@ export default function SettingsTabButton({
 }: SettingsTabButtonProps) {
     return (
         <button
+            type="button"
             onClick={onClick}
+            aria-current={isActive ? 'page' : undefined}
             className={clsx(
-                "w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 border active:scale-[0.98]",
+                "w-full flex items-center justify-between px-4 py-3 lg:py-2.5 rounded-xl text-base lg:text-sm font-medium text-left transition-all duration-150 border active:scale-[0.98]",
                 isActive
                     ? "bg-indigo-600/15 text-indigo-400 border-indigo-500/30 shadow-sm shadow-indigo-500/5 font-semibold"
                     : "text-white/60 hover:text-white hover:bg-white/5 border-transparent"

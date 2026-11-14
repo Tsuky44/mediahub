@@ -19,6 +19,9 @@ import type {
     SettingsTabsProps,
 } from '../../_types/settings-tabs'
 
+/** Onglets sans cartes propres : leur contenu est tenu par un panneau */
+const PANEL_TABS: ReadonlySet<SettingsTabId> = new Set(['groups', 'requests', 'linking', 'logs', 'roles', 'support', 'backup'])
+
 interface SettingsTabsContentProps
     extends Pick<SettingsTabsProps, 'dbUsers' | 'settings' | 'roles' | 'userGroups' | 'accountRequests'> {
     activeTab: SettingsTabId
@@ -38,8 +41,11 @@ export default function SettingsTabsContent({
     userGroups,
     accountRequests,
 }: SettingsTabsContentProps) {
+    // Les onglets faits de cartes se posent directement sur la page (pas de carte dans une carte,
+    // qui mangeait la largeur sur téléphone) ; les autres gardent un panneau.
+    const hasPanel = PANEL_TABS.has(activeTab)
     return (
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 shadow-2xl">
+        <div className={hasPanel ? 'rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl sm:p-6' : undefined}>
             {(activeTab === 'services' || activeTab === 'media' || activeTab === 'downloads' || activeTab === 'automation' || activeTab === 'storage' || activeTab === 'maintenance') && (
                 <SettingsForm settings={settings} readOnly={!canManageSettings} />
             )}

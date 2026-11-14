@@ -13,7 +13,7 @@ interface Props {
 
 export const MaintenanceSettings = ({ formData, updateField, readOnly }: Props) => {
     return (
-        <div className="space-y-8">
+        <div className="space-y-4 sm:space-y-6">
             <SystemUpdate />
             <StuckImportsManager />
             {/* <NotificationTest /> // V1 notifications supprimées */}

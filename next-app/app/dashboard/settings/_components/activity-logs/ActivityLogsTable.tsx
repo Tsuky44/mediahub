@@ -13,8 +13,8 @@ interface ActivityLogsTableProps {
 export default function ActivityLogsTable({ logs, loading }: ActivityLogsTableProps) {
     return (
         <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-                <thead className="bg-black/40 text-gray-400">
+            <table className="w-full text-left text-sm max-md:block">
+                <thead className="bg-black/40 text-gray-400 max-md:hidden">
                     <tr>
                         <th className="px-4 py-3 font-medium">Utilisateur</th>
                         <th className="px-4 py-3 font-medium">Action</th>
@@ -23,7 +23,7 @@ export default function ActivityLogsTable({ logs, loading }: ActivityLogsTablePr
                         <th className="px-4 py-3 font-medium">Date</th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-white/5 max-md:block [&>tr>td[colspan]]:max-md:block">
                     {loading && logs.length === 0 ? (
                         <tr>
                             <td colSpan={5} className="px-4 py-8 text-center text-gray-400">

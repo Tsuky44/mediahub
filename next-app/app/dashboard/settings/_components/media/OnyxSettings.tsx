@@ -166,7 +166,7 @@ export function OnyxSettings({ formData, updateField, readOnly }: OnyxSettingsPr
   const link = status?.link
 
   return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
+    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl">
       <SectionHeader icon={Play} title="Onyx" description="Connexion, utilisateurs et bibliothèque d'un serveur Onyx" />
 
       <div className="mb-6 space-y-4">

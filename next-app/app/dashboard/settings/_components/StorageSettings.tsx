@@ -3,6 +3,7 @@ import { useStorageTests } from './storage/useStorageTests'
 import { StorageConnectionForm } from './storage/StorageConnectionForm'
 import { LegacySmbMigration } from './storage/LegacySmbMigration'
 import { UnraidSettings } from './storage/UnraidSettings'
+import { SECTIONS_GRID } from './SharedComponents'
 
 interface Props {
   formData: SettingsFormData
@@ -36,7 +37,7 @@ export const StorageSettings = ({ formData, updateField }: Props) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={SECTIONS_GRID}>
       <StorageConnectionForm
         formData={formData}
         protocol={protocol}

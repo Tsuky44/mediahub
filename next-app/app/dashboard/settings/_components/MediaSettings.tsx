@@ -7,6 +7,7 @@ import { OnyxSettings } from './media/OnyxSettings'
 import { LibrarySourceSettings } from './media/LibrarySourceSettings'
 import { RequestSettings } from './media/RequestSettings'
 import type { SettingsFormData } from './types'
+import { SECTIONS_GRID } from './SharedComponents'
 
 interface Props {
   formData: SettingsFormData
@@ -38,7 +39,7 @@ export const MediaSettings = ({ formData, updateField, readOnly }: Props) => {
   )
 
   return (
-    <div className="space-y-6">
+    <div className={SECTIONS_GRID}>
       <RequestSettings formData={formData} updateField={updateField} readOnly={readOnly} />
       <LibrarySourceSettings formData={formData} updateField={updateField} readOnly={readOnly} />
       <LocalAuthSection formData={formData} updateField={updateField} readOnly={readOnly} />

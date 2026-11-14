@@ -19,7 +19,7 @@ interface ProviderFilterTabsProps {
 
 export function ProviderFilterTabs({ value, onChange }: ProviderFilterTabsProps) {
     return (
-        <div className="flex gap-2 bg-black/20 p-1 rounded-lg">
+        <div className="flex max-w-full gap-1 overflow-x-auto bg-black/20 p-1 rounded-lg [&>button]:min-h-9 [&>button]:shrink-0 max-sm:[&>button]:flex-1 max-sm:[&>button]:px-2">
             {PROVIDERS.map(provider => (
                 <button
                     key={provider.id}

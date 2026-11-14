@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Download, Globe } from 'lucide-react'
-import { InputField, SectionHeader, TestButton, TestResult } from './SharedComponents'
+import { InputField, SectionHeader, TestButton, TestResult, SECTIONS_GRID } from './SharedComponents'
 import { SettingsFormData } from './types'
 import { testProwlarrConnectionAction, testQBittorrentConnectionAction, testSorraaConnectionAction } from '../actions'
 
@@ -78,9 +78,9 @@ export const DownloadSettings = ({ formData, updateField, readOnly }: Props) => 
     }
 
     return (
-        <div className="space-y-6">
+        <div className={SECTIONS_GRID}>
             {/* QBittorrent Section */}
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl">
                 <SectionHeader 
                     icon={Download} 
                     title="QBittorrent" 
@@ -124,7 +124,7 @@ export const DownloadSettings = ({ formData, updateField, readOnly }: Props) => 
             </div>
 
             {/* sorraa Section */}
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl">
                 <SectionHeader
                     icon={Download}
                     title="sorraa"
@@ -163,7 +163,7 @@ export const DownloadSettings = ({ formData, updateField, readOnly }: Props) => 
             </div>
 
             {/* Prowlarr Section */}
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl">
                 <SectionHeader 
                     icon={Globe} 
                     title="Prowlarr" 

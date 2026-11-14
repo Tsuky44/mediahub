@@ -24,7 +24,7 @@ export function StorageConnectionForm({
   result,
 }: StorageConnectionFormProps) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 shadow-xl">
+    <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl">
       <SectionHeader
         icon={protocol === 'ftp' ? Globe : protocol === 'local' ? FolderOpen : HardDrive}
         title={protocol === 'local' ? 'Dossier Local' : `Partage ${protocol.toUpperCase()}`}

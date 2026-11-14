@@ -6,7 +6,7 @@ import { useUserManagement } from './users/useUserManagement'
 import { UserSyncButtons } from './users/UserSyncButtons'
 import { ProviderFilterTabs } from './users/ProviderFilterTabs'
 import { UserBulkActionBar } from './users/UserBulkActionBar'
-import { UserTableRow } from './users/UserTableRow'
+import { UserMobileCard, UserTableRow } from './users/UserTableRow'
 import { CreateUserModal } from './users/CreateUserModal'
 
 interface UserManagementProps {
@@ -47,9 +47,9 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
     } = useUserManagement(users, readOnly)
 
     return (
-        <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden">
-            <div className="flex flex-col gap-4 p-6 border-b border-white/10">
-                <div className="flex items-center justify-between">
+        <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+            <div className="flex flex-col gap-4 p-4 sm:p-6 border-b border-white/10">
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                     <h3 className="text-xl font-bold text-white">Gestion des utilisateurs</h3>
                     <UserSyncButtons
                         syncingProvider={syncingProvider}
@@ -74,10 +74,41 @@ export default function UserManagement({ initialUsers, roles, readOnly = false }
                 </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Téléphone : une carte par utilisateur */}
+            <div className="md:hidden">
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 border-b border-white/10 px-4 text-sm text-gray-400">
+                    <input
+                        type="checkbox"
+                        onChange={handleSelectAll}
+                        checked={selectedUserIds.length > 0 && selectedUserIds.length === filteredUsers.length}
+                        className="size-5 rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
+                    />
+                    Tout sélectionner ({filteredUsers.length})
+                </label>
+                <ul className="divide-y divide-white/5">
+                    {filteredUsers.map((user) => (
+                        <UserMobileCard
+                            key={user.id}
+                            user={user}
+                            roles={roles}
+                            isSelected={selectedUserIds.includes(user.id)}
+                            isUpdating={updatingId === user.id}
+                            readOnly={readOnly}
+                            isEditingNotifications={editingNotifsId === user.id}
+                            onToggleSelect={() => handleToggleSelect(user.id)}
+                            onRoleChange={(value) => updateUserRole(user.id, value)}
+                            onStartEditNotifications={() => setEditingNotifsId(user.id)}
+                            onStopEditNotifications={() => setEditingNotifsId(null)}
+                            onUpdateNotification={(field, value) => updateUserNotifications(user.id, field, value)}
+                        />
+                    ))}
+                </ul>
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
                 <table className="w-full">
                     <thead>
-                        <tr className="text-left border-b border-white/10">
+                        <tr className="text-left border-b border-white/10 [&>th]:pt-4">
                             <th className="pb-4 pl-6 w-10">
                                 <input
                                     type="checkbox"

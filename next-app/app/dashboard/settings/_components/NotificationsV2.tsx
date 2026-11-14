@@ -33,7 +33,7 @@ export default function NotificationsV2Settings() {
   return (
     <div className="space-y-6">
       {/* Onglets internes */}
-      <div className="flex border-b border-white/5 space-x-1 pb-1">
+      <div className="flex gap-1 border-b border-white/5 pb-2 [&>button]:min-h-11 max-sm:[&>button]:flex-1 max-sm:[&>button]:justify-center">
         <button
           onClick={() => setActiveTab('config')}
           className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
