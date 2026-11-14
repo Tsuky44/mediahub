@@ -40,7 +40,7 @@ export default function SystemMessageManagement() {
           <hr className="border-white/10" />
 
           {/* Côte à côte sur très grand écran, pour occuper la largeur */}
-          <div className="grid items-start gap-8 2xl:grid-cols-2 [&>*]:min-w-0">
+          <div className="grid gap-8 2xl:grid-cols-2 [&>*]:min-w-0">
           <PopupMessageSection
             enabled={enabled}
             onToggle={() => setEnabled(!enabled)}

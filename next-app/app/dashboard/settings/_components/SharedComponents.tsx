@@ -2,8 +2,12 @@ import { LucideIcon, Loader2, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-
 import clsx from 'clsx'
 import { useState } from 'react'
 
-/** Liste de sections d'un onglet : une colonne, deux sur très grand écran pour occuper la largeur */
-export const SECTIONS_GRID = 'grid items-start gap-4 sm:gap-6 2xl:grid-cols-2 [&>*]:min-w-0'
+/**
+ * Liste de sections d'un onglet : une colonne, deux sur très grand écran pour occuper la largeur.
+ * Les deux boîtes d'une même ligne ont la même hauteur (pas de vide sous la plus courte) et une
+ * boîte seule sur sa ligne prend toute la largeur.
+ */
+export const SECTIONS_GRID = 'grid gap-4 sm:gap-6 2xl:grid-cols-2 [&>*]:min-w-0 2xl:[&>*:last-child:nth-child(odd)]:col-span-2'
 /** Section qui garde toute la largeur de la grille */
 export const SECTION_WIDE = '2xl:col-span-2'
 
