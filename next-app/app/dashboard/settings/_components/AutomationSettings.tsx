@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { KeyRound, Copy, Check, RefreshCw } from 'lucide-react'
 import { ArrSection } from './automation-settings/ArrSection'
+import { ManagerSwitch, getManagerMode } from './automation-settings/ManagerSwitch'
+import { SorraaSection } from './automation-settings/SorraaSection'
 import { SectionHeader, SECTIONS_GRID, SECTION_WIDE } from './SharedComponents'
 import { SettingsFormData } from './types'
 
@@ -32,6 +34,11 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
         setTimeout(() => setCopiedService(null), 2000)
     }
 
+    // Gestionnaire choisi : seules ses sections sont affichées (une configuration mixte montre les deux)
+    const mode = getManagerMode(formData)
+    const showArr = mode !== 'sorraa'
+    const showSorraa = mode !== 'arr'
+
     const webhookServices = [
         {
             id: 'sonarr',
@@ -55,10 +62,13 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
             endpoint: '/api/webhooks/sorraa',
             signed: true,
         },
-    ]
+    ].filter(service => (service.id === 'sorraa' ? showSorraa : showArr))
 
     return (
         <div className={SECTIONS_GRID}>
+            <ManagerSwitch formData={formData} updateField={updateField} readOnly={readOnly} />
+
+            {showArr && (
             <ArrSection
                 title="Radarr"
                 description="Automatisation des films"
@@ -69,7 +79,9 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
                 placeholder="http://localhost:7878"
                 readOnly={readOnly}
             />
+            )}
 
+            {showArr && (
             <ArrSection
                 title="Sonarr"
                 description="Automatisation des séries"
@@ -80,13 +92,16 @@ export const AutomationSettings = ({ formData, updateField, readOnly }: Props) =
                 placeholder="http://localhost:8989"
                 readOnly={readOnly}
             />
+            )}
+
+            {showSorraa && <SorraaSection formData={formData} updateField={updateField} />}
 
             {/* Section Webhooks Entrants sécurisés */}
             <div className={`rounded-2xl border border-white/5 bg-white/[0.02] p-4 sm:p-6 shadow-xl ${SECTION_WIDE}`}>
                 <SectionHeader 
                     icon={KeyRound} 
                     title="Authentification des Webhooks Entrants" 
-                    description="Génère des clés de sécurité pour authentifier les notifications envoyées par Sonarr et Radarr vers MediaHub." 
+                    description={`Génère des clés de sécurité pour authentifier les notifications envoyées par ${mode === 'sorraa' ? 'sorraa' : mode === 'arr' ? 'Sonarr et Radarr' : 'Sonarr, Radarr et sorraa'} vers MediaHub.`}
                 />
                 
                 <div className="space-y-6">
